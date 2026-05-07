@@ -1,6 +1,13 @@
-from fastapi import APIRouter
+from __future__ import annotations
 
-from app.models.schemas import KGImportRequest
+import logging
+
+from fastapi import APIRouter
+from fastapi import HTTPException, status
+
+from app.schemas import KGImportRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -100,42 +107,77 @@ async def get_agent_graph():
 
 
 @router.get("/rag-process")
-async def get_rag_process_demo(query: str, collection: str = "general"):
-    """RAG检索过程可视化数据"""
-    from app.rag.retriever import rewrite_query, retrieve_with_scores
+async def get_rag_process_demo(query: str, collection: str = "data_structure"):
+    """RAG检索过程可视化数据（统一检索管线）"""
+    from app.rag.retriever import build_rag_context, _kg_context_supplement
+    from app.rag.trace import retrieve_documents_with_trace
 
-    original_query = query
-    rewritten_query = rewrite_query(query)
-    results = retrieve_with_scores(rewritten_query, collection_name=collection, k=5)
+    try:
+        docs, trace = retrieve_documents_with_trace(query=query, collection_name=collection, k=5, use_rerank=True)
+        kg_supplement = ""
+        try:
+            kg_supplement = _kg_context_supplement(query)
+        except Exception:
+            logger.debug("KG context supplement failed for query=%s", query[:30])
+        result_text = build_rag_context(docs, query=query, kg_supplement=kg_supplement) if docs else ""
 
-    steps = [
-        {
-            "step": 1,
-            "name": "原始查询",
-            "data": original_query,
-            "type": "input",
-        },
-        {
-            "step": 2,
-            "name": "查询改写",
-            "data": rewritten_query,
-            "type": "transform",
-        },
-        {
-            "step": 3,
-            "name": "向量检索",
-            "data": f"在 {collection} 集合中检索 Top-5 相似文档",
-            "type": "search",
-        },
-        {
-            "step": 4,
-            "name": "检索结果",
-            "data": results[:5],
-            "type": "results",
-        },
-    ]
+        # 提取源文档节点
+        source_nodes = []
+        for doc in docs[:5]:
+            source_nodes.append({
+                "content": doc.page_content[:200] if doc.page_content else "",
+                "score": float(doc.metadata.get("rerank_score", 0.0)),
+                "metadata": doc.metadata,
+            })
 
-    return {"steps": steps, "total_chunks": len(results)}
+        steps = [
+            {
+                "step": 1,
+                "name": "原始查询",
+                "data": query,
+                "type": "input",
+            },
+            {
+                "step": 2,
+                "name": "多路召回+BM25+KG扩展",
+                "data": (
+                    f"实际搜索集合: {', '.join(trace['collections'])}\n"
+                    f"粗召回K: {trace['policy']['coarse_k']}；阈值: {trace['policy']['threshold']:.2f}\n"
+                    f"路由数: {len(trace['routes'])}；原始合并结果: {trace['counts']['raw']} 条"
+                ),
+                "type": "search",
+            },
+            {
+                "step": 3,
+                "name": "Reranker重排+层级展开",
+                "data": source_nodes[:5],
+                "type": "results",
+            },
+            {
+                "step": 4,
+                "name": "上下文构建",
+                "data": (
+                    f"阶段统计: 去重后 {trace['counts']['after_dedup']} 条 → "
+                    f"阈值过滤后 {trace['counts']['after_threshold']} 条 → "
+                    f"重排后 {trace['counts']['after_rerank']} 条 → "
+                    f"层级展开后 {trace['counts']['after_expand']} 条 → "
+                    f"最终上下文 {trace['counts']['final']} 条\n\n"
+                    f"{result_text[:500] if result_text else '未构建上下文：当前集合中没有检索到相关内容，请确认知识库已入库，或切换到匹配的408科目集合。'}"
+                ),
+                "type": "output",
+            },
+        ]
+
+        return {"steps": steps, "total_chunks": len(source_nodes), "trace": trace}
+    except Exception as e:
+        logger.error("RAG process visualization failed: %s", e, exc_info=True)
+        return {
+            "steps": [
+                {"step": 1, "name": "原始查询", "data": query, "type": "input"},
+                {"step": 2, "name": "错误", "data": str(e), "type": "error"},
+            ],
+            "total_chunks": 0,
+        }
 
 
 @router.get("/agent-status")
@@ -177,57 +219,75 @@ async def get_agent_status():
 
 
 @router.get("/knowledge-graph")
-async def get_knowledge_graph(category: str = None):
+async def get_knowledge_graph(category: str | None = None):
     """获取知识图谱可视化数据（节点+边）"""
-    from app.rag.knowledge_graph import kg_manager
-    return kg_manager.get_graph_data(category=category)
+    try:
+        from app.rag.knowledge_graph import get_kg_manager
+        return get_kg_manager().get_graph_data(category=category)
+    except Exception as e:
+        logger.error("Knowledge graph fetch failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"知识图谱查询失败: {e}")
 
 
 @router.post("/knowledge-graph/import")
 async def import_knowledge_graph(request: KGImportRequest):
     """批量导入知识点和关系到知识图谱"""
-    from app.rag.knowledge_graph import kg_manager
-    nodes_data = [n.model_dump() for n in request.nodes]
-    edges_data = [e.model_dump() for e in request.edges]
-    kg_manager.import_from_data(nodes_data, edges_data)
-    return {"success": True, "nodes": len(request.nodes), "edges": len(request.edges)}
+    try:
+        from app.rag.knowledge_graph import get_kg_manager
+        nodes_data = [n.model_dump() for n in request.nodes]
+        edges_data = [e.model_dump() for e in request.edges]
+        get_kg_manager().import_from_data(nodes_data, edges_data)
+        return {"success": True, "nodes": len(request.nodes), "edges": len(request.edges)}
+    except Exception as e:
+        logger.error("Knowledge graph import failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"知识图谱导入失败: {e}")
 
 
 DEMO_NODES = [
-    {"name": "Python基础", "category": "programming", "description": "Python语法基础"},
-    {"name": "数据类型", "category": "programming", "description": "数字、字符串、列表、字典等"},
-    {"name": "控制流", "category": "programming", "description": "条件判断与循环"},
-    {"name": "函数", "category": "programming", "description": "函数定义与调用"},
-    {"name": "面向对象", "category": "programming", "description": "类与对象、继承、多态"},
-    {"name": "装饰器", "category": "programming", "description": "函数装饰器与类装饰器"},
-    {"name": "生成器", "category": "programming", "description": "yield与迭代器"},
-    {"name": "机器学习基础", "category": "ml", "description": "ML基本概念与流程"},
-    {"name": "数据预处理", "category": "ml", "description": "数据清洗与特征工程"},
-    {"name": "线性回归", "category": "ml", "description": "回归分析基础"},
-    {"name": "神经网络", "category": "dl", "description": "前馈网络与反向传播"},
-    {"name": "深度学习", "category": "dl", "description": "CNN/RNN/Transformer"},
+    {"name": "数据结构", "category": "data_structure", "description": "数据结构基础概念"},
+    {"name": "线性表", "category": "data_structure", "description": "顺序表与链表"},
+    {"name": "树与二叉树", "category": "data_structure", "description": "二叉树遍历、BST、AVL、红黑树"},
+    {"name": "图", "category": "data_structure", "description": "图的存储、遍历、最短路径、最小生成树"},
+    {"name": "查找", "category": "data_structure", "description": "顺序查找、折半查找、B树、散列表"},
+    {"name": "排序", "category": "data_structure", "description": "插入/交换/选择/归并/基数排序"},
+    {"name": "数据的表示和运算", "category": "computer_organization", "description": "定点数、浮点数、ALU"},
+    {"name": "存储系统", "category": "computer_organization", "description": "主存、Cache、虚拟存储器"},
+    {"name": "指令系统", "category": "computer_organization", "description": "指令格式、寻址方式、CISC/RISC"},
+    {"name": "CPU", "category": "computer_organization", "description": "数据通路、控制器、流水线"},
+    {"name": "进程管理", "category": "operating_system", "description": "进程与线程、调度、同步与互斥、死锁"},
+    {"name": "内存管理", "category": "operating_system", "description": "分区、分页、分段、虚拟内存"},
+    {"name": "数据链路层", "category": "computer_network", "description": "差错控制、流量控制、CSMA/CD"},
+    {"name": "网络层", "category": "computer_network", "description": "IP协议、路由算法、NAT"},
+    {"name": "传输层", "category": "computer_network", "description": "TCP/UDP、拥塞控制"},
+    {"name": "应用层", "category": "computer_network", "description": "DNS、HTTP、FTP、电子邮件"},
 ]
 
 DEMO_EDGES = [
-    {"source": "Python基础", "target": "数据类型", "relation": "PREREQUISITE_OF"},
-    {"source": "数据类型", "target": "控制流", "relation": "PREREQUISITE_OF"},
-    {"source": "控制流", "target": "函数", "relation": "PREREQUISITE_OF"},
-    {"source": "函数", "target": "面向对象", "relation": "PREREQUISITE_OF"},
-    {"source": "函数", "target": "装饰器", "relation": "PREREQUISITE_OF"},
-    {"source": "面向对象", "target": "生成器", "relation": "PREREQUISITE_OF"},
-    {"source": "Python基础", "target": "机器学习基础", "relation": "PREREQUISITE_OF"},
-    {"source": "机器学习基础", "target": "数据预处理", "relation": "PREREQUISITE_OF"},
-    {"source": "数据预处理", "target": "线性回归", "relation": "PREREQUISITE_OF"},
-    {"source": "线性回归", "target": "神经网络", "relation": "PREREQUISITE_OF"},
-    {"source": "神经网络", "target": "深度学习", "relation": "PREREQUISITE_OF"},
-    {"source": "装饰器", "target": "生成器", "relation": "RELATED_TO"},
-    {"source": "面向对象", "target": "装饰器", "relation": "RELATED_TO"},
+    {"source": "数据结构", "target": "线性表", "relation": "PREREQUISITE_OF"},
+    {"source": "线性表", "target": "树与二叉树", "relation": "PREREQUISITE_OF"},
+    {"source": "树与二叉树", "target": "图", "relation": "PREREQUISITE_OF"},
+    {"source": "图", "target": "查找", "relation": "PREREQUISITE_OF"},
+    {"source": "查找", "target": "排序", "relation": "PREREQUISITE_OF"},
+    {"source": "数据的表示和运算", "target": "存储系统", "relation": "PREREQUISITE_OF"},
+    {"source": "存储系统", "target": "指令系统", "relation": "PREREQUISITE_OF"},
+    {"source": "指令系统", "target": "CPU", "relation": "PREREQUISITE_OF"},
+    {"source": "数据链路层", "target": "网络层", "relation": "PREREQUISITE_OF"},
+    {"source": "网络层", "target": "传输层", "relation": "PREREQUISITE_OF"},
+    {"source": "传输层", "target": "应用层", "relation": "PREREQUISITE_OF"},
+    {"source": "排序", "target": "进程管理", "relation": "RELATED_TO"},
+    {"source": "CPU", "target": "进程管理", "relation": "RELATED_TO"},
+    {"source": "进程管理", "target": "内存管理", "relation": "PREREQUISITE_OF"},
+    {"source": "内存管理", "target": "存储系统", "relation": "RELATED_TO"},
 ]
 
 
 @router.post("/knowledge-graph/seed")
 async def seed_knowledge_graph():
     """一键导入示例知识图谱数据"""
-    from app.rag.knowledge_graph import kg_manager
-    kg_manager.import_from_data(DEMO_NODES, DEMO_EDGES)
-    return {"success": True, "nodes": len(DEMO_NODES), "edges": len(DEMO_EDGES)}
+    try:
+        from app.rag.knowledge_graph import get_kg_manager
+        get_kg_manager().import_from_data(DEMO_NODES, DEMO_EDGES)
+        return {"success": True, "nodes": len(DEMO_NODES), "edges": len(DEMO_EDGES)}
+    except Exception as e:
+        logger.error("Knowledge graph seed failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"示例数据导入失败: {e}")

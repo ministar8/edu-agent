@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+
+# Data (mounted as volumes)
+chroma_db/
+knowledge/
+
+# Env
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/

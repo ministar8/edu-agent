@@ -3,6 +3,11 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 *.egg
+dist/
+build/
+venv/
+.venv/
+*.pyc
 
 # Environment
 .env
@@ -30,3 +35,47 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Database
+*.db
+*.sqlite3
+
+# Build artifacts
+tsconfig.tsbuildinfo
+
+# Metrics data
+backend/data/
+
+# PDF textbooks (large files)
+*.pdf
+
+# Temp scripts
+_*.py
+
+# OS
+Desktop.ini
+
+# Cloned repositories (content already in knowledge/)
+408/
+408-CS-master/
+CS-Basic-SelfLearning/
+CS-Notes/
+CSPostgraduate-408-master/
+ComputerOrganizationNote/
+Postgraduate-408-old-exam/
+learn-network/
+
+# Knowledge content (tracked via gitkeep only)
+knowledge/general/*.md
+knowledge/questions/*.md
+knowledge/questions/*.pdf
+knowledge/questions/*.txt
+knowledge/questions/*.docx
+knowledge/answers/*.md
+knowledge/answers/*.pdf
+knowledge/answers/*.txt
+knowledge/answers/*.docx
+knowledge/learning_paths/*.md
+knowledge/learning_paths/*.pdf
+knowledge/learning_paths/*.txt
+knowledge/learning_paths/*.docx

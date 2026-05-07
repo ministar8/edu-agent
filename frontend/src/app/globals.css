@@ -13,27 +13,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-/* React Flow custom styles */
-.react-flow__node-supervisor {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: 2px solid #5a67d8;
-  border-radius: 12px;
-  padding: 16px 24px;
-  font-weight: 600;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-}
-
-.react-flow__node-agent {
-  background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
-  color: #1a202c;
-  border: 2px solid #38b2ac;
-  border-radius: 12px;
-  padding: 12px 20px;
-  font-weight: 500;
-  box-shadow: 0 4px 15px rgba(56, 249, 215, 0.3);
-}
-
 .react-flow__edge-path {
   stroke-width: 2;
 }
@@ -47,14 +26,4 @@ body {
 .chat-message-agent {
   background: #f7fafc;
   border: 1px solid #e2e8f0;
-}
-
-/* RAG process animation */
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 5px rgba(59, 130, 246, 0.5); }
-  50% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.8); }
-}
-
-.rag-step-active {
-  animation: pulse-glow 1.5s ease-in-out infinite;
 }

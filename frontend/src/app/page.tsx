@@ -1,73 +1,70 @@
-"use client";
+﻿"use client";
 
-import { useState } from "react";
-import AgentFlow from "@/components/AgentFlow";
-import ChatPanel from "@/components/ChatPanel";
-import KnowledgePanel from "@/components/KnowledgePanel";
-import RAGProcessPanel from "@/components/RAGProcessPanel";
-import KnowledgeGraphPanel from "@/components/KnowledgeGraphPanel";
-import QuestionPanel from "@/components/QuestionPanel";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
-type TabType = "chat" | "questions" | "agents" | "knowledge" | "rag" | "kgraph";
-
-const tabs: { id: TabType; label: string; icon: string }[] = [
-  { id: "chat", label: "智能问答", icon: "💬" },
-  { id: "questions", label: "题目生成", icon: "📝" },
-  { id: "agents", label: "Agent协作", icon: "🤖" },
-  { id: "knowledge", label: "知识库管理", icon: "📚" },
-  { id: "rag", label: "RAG过程", icon: "🔍" },
-  { id: "kgraph", label: "知识图谱", icon: "🕸️" },
-];
+import { Sidebar } from "@/components/app-shell/Sidebar";
+import { WorkspaceContent } from "@/components/app-shell/WorkspaceContent";
+import { WorkspaceHeader } from "@/components/app-shell/WorkspaceHeader";
+import { useAuth } from "@/lib/auth";
+import type { ChatPanelState } from "@/types/chat";
+import type { TabType } from "@/types/navigation";
+import type { QuestionPanelState } from "@/types/question";
 
 export default function Home() {
+  const { user, loading, logout } = useAuth();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("chat");
+  const [questionState, setQuestionState] = useState<QuestionPanelState>({
+    topic: "",
+    count: 1,
+    difficulty: "mixed",
+    loading: false,
+    result: "",
+    resultTopic: "",
+  });
+  const [chatState, setChatState] = useState<ChatPanelState>({
+    messages: [],
+    input: "",
+    loading: false,
+    streamingText: "",
+    streamingAgent: "",
+    activeTool: null,
+    streamingGovernance: null,
+    threadId: `session-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  });
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [loading, user, router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-slate-500">加载中...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-4 shadow-lg">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">智能教学辅导多Agent系统</h1>
-            <p className="text-blue-100 text-sm mt-1">
-              LangChain + LangGraph | RAG + 知识图谱
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="bg-green-500 text-white text-xs px-2 py-1 rounded-full">
-              系统在线
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* Tab Navigation */}
-      <nav className="bg-white border-b px-6 flex gap-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <span className="mr-1">{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-hidden">
-        {activeTab === "chat" && <ChatPanel />}
-        {activeTab === "questions" && <QuestionPanel />}
-        {activeTab === "agents" && <AgentFlow />}
-        {activeTab === "knowledge" && <KnowledgePanel />}
-        {activeTab === "rag" && <RAGProcessPanel />}
-        {activeTab === "kgraph" && <KnowledgeGraphPanel />}
-      </main>
+    <div className="flex h-screen bg-[#eef3f8] p-4 text-slate-800">
+      <Sidebar activeTab={activeTab} user={user} onTabChange={setActiveTab} onLogout={logout} />
+      <div className="ml-4 flex min-w-0 flex-1 flex-col rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+        <WorkspaceHeader activeTab={activeTab} />
+        <WorkspaceContent
+          activeTab={activeTab}
+          chatState={chatState}
+          setChatState={setChatState}
+          questionState={questionState}
+          setQuestionState={setQuestionState}
+        />
+      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -10,6 +11,56 @@ import {
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+
+import { http } from "@/lib/http";
+
+export default function AgentFlow() {
+  const [nodes, setNodes] = useState<Node[]>([]);
+  const [edges, setEdges] = useState<Edge[]>([]);
+
+  useEffect(() => {
+    http.get("/api/visualization/agent-graph")
+      .then((res) => {
+        const data = res.data as { nodes: Node[]; edges: Edge[] };
+        setNodes(data.nodes);
+        setEdges(data.edges);
+      })
+      .catch(() => {
+        setNodes(defaultNodes);
+        setEdges(defaultEdges);
+      });
+  }, []);
+
+  const displayNodes = nodes.length > 0 ? nodes : defaultNodes;
+  const displayEdges = edges.length > 0 ? edges : defaultEdges;
+
+  return (
+    <div className="w-full h-full">
+      <div className="p-4 bg-white border-b">
+        <h2 className="text-lg font-bold text-slate-800">多Agent协作流程图</h2>
+        <p className="text-sm text-slate-500">
+          Supervisor调度 → 子Agent处理 → RAG检索增强，实时展示Agent间协作关系
+        </p>
+      </div>
+      <div className="w-full" style={{ height: "calc(100vh - 200px)" }}>
+        <ReactFlow
+          nodes={displayNodes}
+          edges={displayEdges}
+          fitView
+          attributionPosition="bottom-left"
+        >
+          <Background color="#e2e8f0" gap={20} />
+          <Controls />
+          <MiniMap
+            nodeStrokeColor="#667eea"
+            nodeColor="#667eea"
+            maskColor="rgba(102, 126, 234, 0.1)"
+          />
+        </ReactFlow>
+      </div>
+    </div>
+  );
+}
 
 const defaultNodes: Node[] = [
   {
@@ -206,32 +257,3 @@ const defaultEdges: Edge[] = [
     markerEnd: { type: MarkerType.ArrowClosed, color: "#d53f8c" },
   },
 ];
-
-export default function AgentFlow() {
-  return (
-    <div className="w-full h-full">
-      <div className="p-4 bg-white border-b">
-        <h2 className="text-lg font-bold text-gray-800">多Agent协作流程图</h2>
-        <p className="text-sm text-gray-500">
-          Supervisor调度 → 子Agent处理 → RAG检索增强，实时展示Agent间协作关系
-        </p>
-      </div>
-      <div className="w-full" style={{ height: "calc(100vh - 200px)" }}>
-        <ReactFlow
-          nodes={defaultNodes}
-          edges={defaultEdges}
-          fitView
-          attributionPosition="bottom-left"
-        >
-          <Background color="#e2e8f0" gap={20} />
-          <Controls />
-          <MiniMap
-            nodeStrokeColor="#667eea"
-            nodeColor="#667eea"
-            maskColor="rgba(102, 126, 234, 0.1)"
-          />
-        </ReactFlow>
-      </div>
-    </div>
-  );
-}
