@@ -52,9 +52,9 @@ export default function AgentFlow() {
           <Background color="#e2e8f0" gap={20} />
           <Controls />
           <MiniMap
-            nodeStrokeColor="#667eea"
-            nodeColor="#667eea"
-            maskColor="rgba(102, 126, 234, 0.1)"
+            nodeStrokeColor="#059669"
+            nodeColor="#059669"
+            maskColor="rgba(5, 150, 105, 0.1)"
           />
         </ReactFlow>
       </div>
@@ -76,9 +76,9 @@ const defaultNodes: Node[] = [
       ),
     },
     style: {
-      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+      background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
       color: "white",
-      border: "2px solid #5a67d8",
+      border: "2px solid #047857",
       borderRadius: "12px",
       padding: "12px 24px",
       width: 220,

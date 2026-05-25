@@ -4,6 +4,7 @@ import KnowledgeGraphPanel from "@/components/knowledge-graph/KnowledgeGraphPane
 import KnowledgePanel from "@/components/knowledge/KnowledgePanel";
 import QuestionPanel from "@/components/questions/QuestionPanel";
 import RAGProcessPanel from "@/components/rag/RAGProcessPanel";
+import TrackingPanel from "@/components/tracking/TrackingPanel";
 import type { ChatPanelState } from "@/types/chat";
 import type { TabType } from "@/types/navigation";
 import type { QuestionPanelState } from "@/types/question";
@@ -24,13 +25,14 @@ export function WorkspaceContent({
   setQuestionState,
 }: WorkspaceContentProps) {
   return (
-    <main className="min-h-0 flex-1 overflow-hidden bg-[#fbfcfe]">
+    <main className="min-h-0 flex-1 overflow-hidden bg-stone-50">
       {activeTab === "chat" && <ChatPanel state={chatState} setState={setChatState} />}
       {activeTab === "questions" && <QuestionPanel state={questionState} setState={setQuestionState} />}
       {activeTab === "agents" && <AgentFlow />}
       {activeTab === "knowledge" && <KnowledgePanel />}
       {activeTab === "rag" && <RAGProcessPanel />}
       {activeTab === "kgraph" && <KnowledgeGraphPanel />}
+      {activeTab === "tracking" && <TrackingPanel />}
     </main>
   );
 }

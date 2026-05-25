@@ -1,7 +1,0 @@
-__pycache__/
-*.pyc
-.venv/
-venv/
-chroma_db/
-knowledge/
-.env

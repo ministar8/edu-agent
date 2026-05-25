@@ -1,6 +1,6 @@
 """检索后处理模块
 
-职责：RRF 合并、同 section 去重、层级上下文展开、连续补齐
+职责：RRF 合并、同 section 去重、Sentence Window 上下文展开
 """
 
 from __future__ import annotations
@@ -9,34 +9,60 @@ import logging
 
 from langchain_core.documents import Document
 
+from app.rag.query_classifier import QueryCategory
+
 logger = logging.getLogger(__name__)
 
-# RRF 常数 k
-_RRF_K = 60
+# RRF 常数 k 基准值（RAG 场景每路 5-20 条结果，k=20 平衡排名区分度与多路融合）
+_RRF_K_BASE = 20
 
-# 层级展开字符预算
-_EXPAND_MAX_CHARS = 3000
+
+def _dynamic_rrf_k(route_count: int) -> int:
+    """按路由数动态调整 RRF k 值
+
+    路由多时 k 需更大（降低排名区分度，让多路融合更平滑），
+    路由少时 k 更小（增强区分度，让 top-1 信号更强）。
+    经验值：k ≈ 10 × sqrt(route_count)
+    """
+    import math
+    return max(10, min(60, int(_RRF_K_BASE * math.sqrt(route_count) / math.sqrt(4))))
 
 
 # ── RRF 合并 ──────────────────────────────────────────
 
 def merge_route_results(
     route_results: list[tuple[str, list[tuple[Document, float]]]],
+    cat: QueryCategory | None = None,
 ) -> list[tuple[Document, float]]:
     """RRF (Reciprocal Rank Fusion) 合并多路检索结果
 
-    各路由结果按排名贡献 1/(k+rank) 分数，同一文档跨路由累加。
+    加权 RRF：不同路由按查询类型赋予不同权重。
+    公式：score(d) = Σ w(route, cat) / (k + rank_i(d))
     优点：
     - 对异常高分不敏感（排名 1 和 2 的差距是 1/(k+1)-1/(k+2)）
     - 跨路由重复文档自然获得更高分数
+    - 精准路由（metadata 过滤）权重高于宽泛路由（semantic）
     """
+    from app.rag.recall import get_route_weight
+    # 动态 k：路由多时 k 更大，让多路融合更平滑
+    k = _dynamic_rrf_k(len(route_results))
     merged: dict[str, tuple[Document, float, set[str], dict[str, float]]] = {}
     raw_count = sum(len(results) for _, results in route_results)
 
     for route_name, results in route_results:
+        w = get_route_weight(route_name, cat)
         for rank, (doc, original_score) in enumerate(results, 1):
-            key = str(doc.metadata.get("content_hash") or f"{doc.metadata.get('source_file', '')}:{doc.page_content}")
-            rrf_contribution = 1.0 / (_RRF_K + rank)
+            # 去重 key 加入集合来源，防止跨集合同名文档被误合并
+            # 例如 "栈的定义" 在 data_structure 和 computer_organization 都出现
+            collection = doc.metadata.get("_collection", "")
+            content_hash = doc.metadata.get("content_hash")
+            if not content_hash:
+                import hashlib
+                content_hash = hashlib.sha256(doc.page_content[:200].encode()).hexdigest()[:16]
+            else:
+                content_hash = str(content_hash)
+            key = f"{collection}::{content_hash}"
+            rrf_contribution = w / (k + rank)
 
             existing = merged.get(key)
             if existing is None:
@@ -57,8 +83,8 @@ def merge_route_results(
 
     ranked.sort(key=lambda item: item[1], reverse=True)
     logger.info(
-        "RRF merge k=%d raw_hits=%d merged_hits=%d top_scores=%s multi_route=%d",
-        _RRF_K,
+        "RRF merge k=%d routes=%d raw_hits=%d merged_hits=%d top_scores=%s multi_route=%d",
+        k, len(route_results),
         raw_count,
         len(ranked),
         [round(score, 6) for _, score in ranked[:5]],
@@ -67,29 +93,95 @@ def merge_route_results(
     return ranked
 
 
+# ── 加权 RRF 合并（查询分解用） ──────────────────────────────
+
+
+def weighted_rrf_merge(
+    grouped_results: list[tuple[str, list[tuple[Document, float]]]],
+    weights: dict[str, float],
+    k: int = 0,
+    cat: QueryCategory | None = None,
+) -> list[tuple[Document, float]]:
+    """加权 RRF 合并：不同来源（原始查询/子查询）可赋予不同权重
+
+    标准 RRF: score(d) = Σ 1/(k + rank_i(d))
+    加权 RRF: score(d) = Σ w_source × w_route / (k + rank_i(d))
+
+    w_source: 原始查询 1.5，子查询 1.0，确保原始语境信号更强。
+    w_route: 从 recall_routes metadata 提取路由名，按 get_route_weight 加权，
+             使分解路径与非分解路径的 RRF 分数分布归一化到同一尺度。
+    去重 key 使用 content_hash + collection（与 merge_route_results 一致，避免同前缀误合并）。
+    """
+    from app.rag.recall import get_route_weight
+    # 动态 k：k=0 时按路由数自动计算
+    if k <= 0:
+        total_routes = sum(len(results) for _, results in grouped_results)
+        k = _dynamic_rrf_k(max(1, total_routes // max(1, len(grouped_results))))
+    merged: dict[str, tuple[Document, float, set[str]]] = {}
+    raw_count = sum(len(results) for _, results in grouped_results)
+
+    for label, results in grouped_results:
+        w_source = weights.get(label, 1.0)
+        for rank, (doc, _original_score) in enumerate(results, 1):
+            # 路由级加权：从 recall_routes metadata 提取路由名
+            route_str = doc.metadata.get("recall_routes", "")
+            route_names = [r.strip() for r in route_str.split(",") if r.strip()]
+            if route_names and cat is not None:
+                w_route = max(get_route_weight(r, cat) for r in route_names)
+            else:
+                w_route = 1.0
+            # 去重 key 用 content_hash + collection，避免同 section 不同 chunk 前100字相同被误合并
+            collection = doc.metadata.get("_collection", "")
+            content_hash = doc.metadata.get("content_hash")
+            if not content_hash:
+                import hashlib
+                content_hash = hashlib.sha256(doc.page_content[:200].encode()).hexdigest()[:16]
+            else:
+                content_hash = str(content_hash)
+            key = f"{collection}::{content_hash}"
+            rrf_contribution = w_source * w_route / (k + rank)
+
+            existing = merged.get(key)
+            if existing is None:
+                copied = Document(page_content=doc.page_content, metadata=dict(doc.metadata))
+                copied.metadata["_decompose_weight"] = w_source
+                merged[key] = (copied, rrf_contribution, {label})
+            else:
+                doc_obj, prev_score, labels = existing
+                merged[key] = (doc_obj, prev_score + rrf_contribution, labels | {label})
+
+    ranked: list[tuple[Document, float]] = []
+    for doc, rrf_score, labels in merged.values():
+        doc.metadata["recall_score"] = round(rrf_score, 6)
+        doc.metadata["_decompose_labels"] = ", ".join(sorted(labels))
+        ranked.append((doc, rrf_score))
+
+    ranked.sort(key=lambda item: item[1], reverse=True)
+    logger.info(
+        "Weighted RRF merge k=%d weights=%s raw_hits=%d merged_hits=%d top_scores=%s multi_label=%d",
+        k, weights, raw_count, len(ranked),
+        [round(score, 6) for _, score in ranked[:5]],
+        sum(1 for _, _, labels in merged.values() if len(labels) >= 2),
+    )
+    return ranked
+
+
 # ── 同 section 去重 ────────────────────────────────────
 
 def dedup_same_section(
     results: list[tuple[Document, float]],
-    max_per_section: int = 2,
+    max_per_section: int = 3,
 ) -> list[tuple[Document, float]]:
-    """同 section 去重：避免 QA/Detail/Summary 同 section 多个 chunk 全部送给 LLM
+    """同 section 去重：所有 chunk 均为 detail 角色，按分数取 Top-N
 
-    策略：
-    1. 按 section.id 分组
-    2. 同 section 内按角色优先级选最佳 chunk：qa > detail > summary
-    3. 同角色多 chunk 保留得分最高的
-    4. 每个 section 最多保留 max_per_section 个 chunk
-    5. 跨 section 保留全局排序
+    改造后所有 chunk 同为 detail 角色，无需角色优先级逻辑，
+    简化为基础的分组 + 高分选取。
     """
-    _ROLE_PRIORITY = {"qa": 0, "detail": 1, "summary": 2}
-
     section_groups: dict[str, list[tuple[Document, float]]] = {}
     for doc, score in results:
         sec_id = str(doc.metadata.get("section.id") or "")
         if not sec_id:
-            section_groups.setdefault("__no_section__", []).append((doc, score))
-            continue
+            sec_id = "__no_section__"
         section_groups.setdefault(sec_id, []).append((doc, score))
 
     deduped: list[tuple[Document, float]] = []
@@ -97,35 +189,10 @@ def dedup_same_section(
         if sec_id == "__no_section__" or len(group) <= max_per_section:
             deduped.extend(group)
             continue
+        sorted_group = sorted(group, key=lambda x: x[1], reverse=True)
+        deduped.extend(sorted_group[:max_per_section])
 
-        def _sort_key(item: tuple[Document, float]) -> tuple:
-            doc, score = item
-            role = str(doc.metadata.get("section.chunk_role") or "detail")
-            priority = _ROLE_PRIORITY.get(role, 3)
-            return (priority, -score)
-
-        sorted_group = sorted(group, key=_sort_key)
-
-        seen_roles: set[str] = set()
-        selected: list[tuple[Document, float]] = []
-        for doc, score in sorted_group:
-            if len(selected) >= max_per_section:
-                break
-            role = str(doc.metadata.get("section.chunk_role") or "detail")
-            if role in seen_roles:
-                continue
-            seen_roles.add(role)
-            selected.append((doc, score))
-
-        # 如果角色去重后不足 max_per_section，补充剩余最高分
-        if len(selected) < max_per_section:
-            remaining = [(doc, score) for doc, score in sorted_group
-                         if not any(doc is s_doc for s_doc, _ in selected)]
-            selected.extend(remaining[:max_per_section - len(selected)])
-
-        deduped.extend(selected)
-
-    deduped.sort(key=lambda item: item[1], reverse=True)
+    deduped.sort(key=lambda x: x[1], reverse=True)
 
     removed = len(results) - len(deduped)
     if removed > 0:
@@ -133,308 +200,260 @@ def dedup_same_section(
     return deduped
 
 
-# ── 层级上下文展开 ────────────────────────────────────
+# ── Sentence Window 上下文展开 ──────────────────────────
 
-def expand_hierarchical_context(
-    docs: list[Document],
-    collection_name: str = "data_structure",
-    max_expand: int = 3,
-) -> list[Document]:
-    """层级上下文展开：QA/Summary 命中时，全量展开同 section 的 detail chunk
 
-    核心原则：**连续优先，预算控制**
+_WINDOW_SIZE = 2            # 命中 chunk 左右各展开的 chunk 数
+_WINDOW_TOKEN_BUDGET = 6000  # 每 section token 预算（≈4000 中文字 / 24000 英文词）
+_GLOBAL_WINDOW_TOKEN_BUDGET = 12000  # 全局 token 预算上限（多 section 叠加后总量可控）
 
-    策略：
-    1. 全量查询该 section 所有 detail chunk
-    2. 按 chunk_index 排序（保证原文顺序）
-    3. 滑动窗口选择：以命中 chunk 为锚点，向前后扩展
-       构建最长的连续窗口，总字符数 ≤ _EXPAND_MAX_CHARS
-    4. 如果原始结果中已有同 section 的 detail chunk，合并后统一处理
-    """
+
+from app.rag.rag_utils import estimate_tokens as _estimate_tokens
+
+
+def _parent_window_expand(docs: list[Document], global_budget: int) -> list[Document]:
     if not docs:
         return docs
 
-    expanded: list[Document] = []
+    result: list[Document] = list(docs)
+    seen_parent_ids: set[str] = set()
+    seen_texts: set[str] = {d.page_content for d in docs}
+    total_tokens = sum(_estimate_tokens(d.page_content) for d in result)
+
+    for doc in docs:
+        parent_text = str(doc.metadata.get("section.parent_text") or "").strip()
+        if not parent_text:
+            continue
+
+        parent_id = str(
+            doc.metadata.get("section.parent_id_index")
+            or doc.metadata.get("section.id")
+            or ""
+        )
+        if parent_id and parent_id in seen_parent_ids:
+            continue
+        if parent_text in seen_texts:
+            continue
+        if len(parent_text) <= len(doc.page_content.strip()) + 40:
+            continue
+
+        parent_tokens = _estimate_tokens(parent_text)
+        if total_tokens + parent_tokens > global_budget:
+            continue
+
+        parent_meta = dict(doc.metadata)
+        parent_meta["_parent_expanded"] = True
+        parent_meta["_parent_anchor_chunk_id"] = str(doc.metadata.get("section.chunk_id") or "")
+        parent_meta["section.chunk_role"] = "parent_window"
+        parent_doc = Document(page_content=parent_text, metadata=parent_meta)
+        result.append(parent_doc)
+        seen_texts.add(parent_text)
+        if parent_id:
+            seen_parent_ids.add(parent_id)
+        total_tokens += parent_tokens
+
+    if len(result) > len(docs):
+        logger.info(
+            "Parent window expand added=%d total_docs=%d tokens≈%d",
+            len(result) - len(docs), len(result), total_tokens,
+        )
+    return result
+
+
+def sentence_window_expand(
+    docs: list[Document],
+    collection_name: str = "data_structure",
+    window_size: int = _WINDOW_SIZE,
+    budget: int = _WINDOW_TOKEN_BUDGET,
+    global_budget: int = _GLOBAL_WINDOW_TOKEN_BUDGET,
+) -> list[Document]:
+    """Sentence Window: 对命中的 detail chunk 展开上下文窗口
+
+    策略（window_size 控制扩展量）:
+    - window_size=0: 不扩展，直接返回原文档
+    - window_size>0: 先走 ChromaDB sentence window（主路径，受 window_size 控制），
+      再对 sentence window 无法展开的 section 走 parent window 兜底
+
+    执行顺序:
+    1. sentence window (primary): 从 ChromaDB 查同 section 相邻 detail chunk，
+       以锚点为中心取 window_size 窗口，标记 _window_expanded
+    2. parent window (fallback): 对 sentence window 未覆盖的 section，
+       用 section.parent_text 补充完整 section 上下文，标记 _parent_expanded
+
+    Args:
+        docs: 检索命中的文档列表（已排序）
+        collection_name: 向量集合名
+        window_size: 左右窗口大小（0=不扩展）
+        budget: 每 section token 预算上限
+        global_budget: 全局 token 预算上限
+
+    Returns:
+        展开后的文档列表（原始命中 + 窗口上下文）
+    """
+    if not docs or window_size <= 0:
+        return docs
+
+    # ── Stage 1: Sentence window expand（主路径，受 window_size 控制）──
+    if not collection_name:
+        result = list(docs)
+    else:
+        result = _chroma_window_expand(docs, collection_name, window_size, budget, global_budget)
+
+    # ── Stage 2: Parent window fallback（对 sentence window 未覆盖的 section）──
+    # 收集已被 sentence window 展开的 section.id
+    sw_expanded_sections: set[str] = set()
+    for doc in result:
+        if doc.metadata.get("_window_expanded"):
+            sid = str(doc.metadata.get("section.id") or "")
+            if sid:
+                sw_expanded_sections.add(sid)
+
+    # 找出未被 sentence window 覆盖的锚点文档
+    needs_parent = [
+        doc for doc in docs
+        if str(doc.metadata.get("section.id") or "") not in sw_expanded_sections
+    ]
+
+    if needs_parent:
+        parent_added = _parent_window_expand(needs_parent, global_budget)
+        if len(parent_added) > len(needs_parent):
+            existing_keys = {
+                str(d.metadata.get("section.chunk_id") or d.page_content[:80])
+                for d in result
+            }
+            current_tokens = sum(_estimate_tokens(d.page_content) for d in result)
+            for doc in parent_added:
+                if doc.metadata.get("_parent_expanded"):
+                    key = str(doc.metadata.get("section.chunk_id") or doc.page_content[:80])
+                    if key not in existing_keys:
+                        doc_tokens = _estimate_tokens(doc.page_content)
+                        if current_tokens + doc_tokens <= global_budget:
+                            result.append(doc)
+                            existing_keys.add(key)
+                            current_tokens += doc_tokens
+
+    return result
+
+
+def _chroma_window_expand(
+    docs: list[Document],
+    collection_name: str,
+    window_size: int = _WINDOW_SIZE,
+    budget: int = _WINDOW_TOKEN_BUDGET,
+    global_budget: int = _GLOBAL_WINDOW_TOKEN_BUDGET,
+) -> list[Document]:
+    """ChromaDB Sentence Window 扩展：从向量库查询同 section 相邻 chunk"""
+    from app.rag.vectorstore import get_vector_store_manager
+
+    # 按 section.id 分组原始命中
+    section_hits: dict[str, Document] = {}
+    for doc in docs:
+        sec_id = str(doc.metadata.get("section.id") or "")
+        if not sec_id:
+            continue
+        if sec_id not in section_hits:
+            section_hits[sec_id] = doc
+
+    if not section_hits:
+        return docs
+
+    result: list[Document] = []
     seen_chunk_ids: set[str] = set()
     for doc in docs:
         cid = str(doc.metadata.get("section.chunk_id") or "")
         if cid:
             seen_chunk_ids.add(cid)
+        result.append(doc)
 
-    from app.rag.vectorstore import get_vector_store_manager
-    store = get_vector_store_manager().get_store(collection_name)
-
-    for doc in docs:
-        expanded.append(doc)
-        role = str(doc.metadata.get("section.chunk_role") or "detail")
-
-        if role not in ("qa", "summary"):
-            continue
-
-        sec_id = str(doc.metadata.get("section.id") or "")
-        if not sec_id:
-            continue
-
-        try:
-            detail_results = store.similarity_search_with_score(
-                "",
-                k=50,
-                filter={
-                    "$and": [
-                        {"section.id": sec_id},
-                        {"section.chunk_role": "detail"},
-                    ]
-                },
+    # 批量查询：合并所有 section 为单次 $or 查询，避免 N 次串行调用
+    sec_ids = list(section_hits.keys())
+    all_section_details: dict[str, list[tuple[int, Document]]] = {sid: [] for sid in sec_ids}
+    try:
+        raw_collection = get_vector_store_manager().client.get_collection(collection_name)
+        for batch_start in range(0, len(sec_ids), 50):
+            batch_ids = sec_ids[batch_start:batch_start + 50]
+            or_conditions = [
+                {"$and": [{"section.id": sid}, {"section.chunk_role": "detail"}]}
+                for sid in batch_ids
+            ]
+            batch_result = raw_collection.get(
+                where={"$or": or_conditions} if len(or_conditions) > 1 else or_conditions[0],
+                include=["documents", "metadatas"],
             )
-        except Exception:
-            continue
+            texts = batch_result.get("documents", []) or []
+            metas = batch_result.get("metadatas", []) or []
+            for text, meta in zip(texts, metas):
+                if meta is None:
+                    continue
+                sid = str(meta.get("section.id", ""))
+                idx = meta.get("section.chunk_index")
+                if sid in all_section_details and idx is not None and isinstance(idx, int) and idx >= 0:
+                    d = Document(page_content=text or "", metadata=dict(meta))
+                    all_section_details[sid].append((idx, d))
+    except Exception as e:
+        logger.warning("Sentence window ChromaDB query failed: %s", e)
 
-        all_details: list[tuple[int, Document]] = []
-        for detail_doc, _ in detail_results:
-            idx = detail_doc.metadata.get("section.chunk_index")
-            if idx is not None and isinstance(idx, int) and idx >= 0:
-                all_details.append((idx, detail_doc))
-        all_details.sort(key=lambda x: x[0])
-
+    for sec_id, anchor_doc in section_hits.items():
+        all_details = all_section_details.get(sec_id, [])
         if not all_details:
             continue
+        all_details.sort(key=lambda x: x[0])
 
-        existing_indices: set[int] = set()
-        for d in docs:
-            if (str(d.metadata.get("section.id") or "") == sec_id
-                    and str(d.metadata.get("section.chunk_role") or "detail") == "detail"):
-                idx = d.metadata.get("section.chunk_index")
-                if idx is not None and isinstance(idx, int) and idx >= 0:
-                    existing_indices.add(idx)
+        anchor_idx = anchor_doc.metadata.get("section.chunk_index")
+        if anchor_idx is None or not isinstance(anchor_idx, int) or anchor_idx < 0:
+            anchor_idx = 0
 
-        anchor_indices = sorted(existing_indices) if existing_indices else [0]
+        anchor_pos = 0
+        for pos, (idx, _) in enumerate(all_details):
+            if idx == anchor_idx:
+                anchor_pos = pos
+                break
 
-        detail_chars = {idx: len(d.page_content) for idx, d in all_details}
-        idx_to_doc = {idx: d for idx, d in all_details}
-        all_indices = [idx for idx, _ in all_details]
+        lo = max(0, anchor_pos - window_size)
+        hi = min(len(all_details) - 1, anchor_pos + window_size)
 
-        best_window: list[int] = []
-        for anchor in anchor_indices:
-            if anchor not in idx_to_doc:
-                continue
-            window = _build_contiguous_window(anchor, all_indices, detail_chars, _EXPAND_MAX_CHARS)
-            if len(window) > len(best_window):
-                best_window = window
+        window_tokens = 0
+        for idx, d in all_details[lo:hi + 1]:
+            window_tokens += _estimate_tokens(d.page_content)
 
-        if not best_window and all_indices:
-            best_window = _build_contiguous_window(all_indices[0], all_indices, detail_chars, _EXPAND_MAX_CHARS)
+        while window_tokens > budget and (hi - lo) > 0:
+            # Always keep the anchor chunk in the window
+            if lo < anchor_pos:
+                window_tokens -= _estimate_tokens(all_details[lo][1].page_content)
+                lo += 1
+            elif hi > anchor_pos:
+                window_tokens -= _estimate_tokens(all_details[hi][1].page_content)
+                hi -= 1
+            else:
+                # lo == anchor_pos == hi: only anchor remains, stop trimming
+                break
 
         added = 0
-        for idx in best_window:
-            detail_doc = idx_to_doc[idx]
-            detail_cid = str(detail_doc.metadata.get("section.chunk_id") or "")
-            if detail_cid in seen_chunk_ids:
+        for idx, d in all_details[lo:hi + 1]:
+            chunk_id = str(d.metadata.get("section.chunk_id") or "")
+            if chunk_id in seen_chunk_ids:
                 continue
-            detail_doc.metadata["_expanded_from"] = str(doc.metadata.get("section.chunk_id") or "")
-            expanded.append(detail_doc)
-            seen_chunk_ids.add(detail_cid)
+            d.metadata["_window_expanded"] = True
+            d.metadata["_window_anchor_chunk_id"] = str(anchor_doc.metadata.get("section.chunk_id") or "")
+            result.append(d)
+            seen_chunk_ids.add(chunk_id)
             added += 1
 
         if added > 0:
             logger.info(
-                "Hierarchical expand sec=%s added=%d window=%s total_chars=%d",
-                sec_id, added, best_window,
-                sum(detail_chars.get(i, 0) for i in best_window),
+                "Sentence window expand sec=%s anchor=%d window=[%d,%d] added=%d tokens≈%d",
+                sec_id, anchor_idx, lo, hi, added, window_tokens,
             )
 
-    if len(expanded) > len(docs):
-        logger.info("Hierarchical expand total: before=%d after=%d", len(docs), len(expanded))
-    return expanded
-
-
-def _build_contiguous_window(
-    anchor: int,
-    all_indices: list[int],
-    char_lengths: dict[int, int],
-    budget: int,
-) -> list[int]:
-    """从锚点出发，贪心构建连续窗口，字符预算内最大化覆盖"""
-    if anchor not in char_lengths:
-        return []
-
-    used = char_lengths[anchor]
-    lo = anchor
-    hi = anchor
-
-    try:
-        anchor_pos = all_indices.index(anchor)
-    except ValueError:
-        return [anchor]
-
-    left_pos = anchor_pos - 1
-    right_pos = anchor_pos + 1
-
-    while left_pos >= 0 or right_pos < len(all_indices):
-        if right_pos < len(all_indices):
-            next_idx = all_indices[right_pos]
-            cost = char_lengths.get(next_idx, 0)
-            if used + cost <= budget:
-                hi = next_idx
-                used += cost
-                right_pos += 1
-            else:
-                right_pos = len(all_indices)
-
-        if left_pos >= 0:
-            prev_idx = all_indices[left_pos]
-            cost = char_lengths.get(prev_idx, 0)
-            if used + cost <= budget:
-                lo = prev_idx
-                used += cost
-                left_pos -= 1
-            else:
-                left_pos = -1
-
-        if right_pos >= len(all_indices) and left_pos < 0:
-            break
-        if left_pos < 0 and right_pos >= len(all_indices):
-            break
-
-    return [i for i in all_indices if lo <= i <= hi]
-
-
-# ── 连续补齐 ──────────────────────────────────────────
-
-def contiguous_fill(
-    docs: list[Document],
-    collection_name: str = "data_structure",
-    max_gap_fill: int = 5,
-) -> list[Document]:
-    """滑动窗口拼接：补充同 section 内 detail chunk 之间的空缺，保证文本连续
-
-    问题：命中 Detail_5 和 Detail_8，中间缺 Detail_6、Detail_7
-          → LLM 看到断章取义的内容
-
-    策略：
-    1. 按 section.id 分组，仅处理 detail 角色
-    2. 按 section.chunk_index 排序，检测缺口
-    3. 从向量库按 section.id + chunk_role="detail" 查询全量 detail
-    4. 填补缺口中的 chunk，标记 _filled_gap=True
-    5. 非 detail chunk（QA/Summary）保持原位不动
-    6. 最终按 section.id 分组输出：每组内 detail 连续，非 detail 插回原位
-    """
-    if not docs:
-        return docs
-
-    detail_map: dict[str, dict[int, Document]] = {}
-    non_detail: list[tuple[int, Document]] = []
-
-    for i, doc in enumerate(docs):
-        role = str(doc.metadata.get("section.chunk_role") or "detail")
-        sec_id = str(doc.metadata.get("section.id") or "")
-        chunk_idx = doc.metadata.get("section.chunk_index")
-
-        if role == "detail" and sec_id and chunk_idx is not None and isinstance(chunk_idx, int) and chunk_idx >= 0:
-            detail_map.setdefault(sec_id, {})[chunk_idx] = doc
-        else:
-            non_detail.append((i, doc))
-
-    gaps_to_fill: dict[str, list[int]] = {}
-
-    for sec_id, idx_map in detail_map.items():
-        indices = sorted(idx_map.keys())
-        if len(indices) < 2:
-            continue
-        for j in range(len(indices) - 1):
-            for missing in range(indices[j] + 1, indices[j + 1]):
-                gaps_to_fill.setdefault(sec_id, []).append(missing)
-
-    if not gaps_to_fill:
-        return docs
-
-    total_gaps = sum(len(v) for v in gaps_to_fill.values())
-    if total_gaps > max_gap_fill:
-        sorted_sections = sorted(
-            gaps_to_fill.keys(),
-            key=lambda s: len(detail_map.get(s, {})),
-            reverse=True,
-        )
-        capped_gaps: dict[str, list[int]] = {}
-        remaining = max_gap_fill
-        for sec_id in sorted_sections:
-            if remaining <= 0:
-                break
-            take = min(len(gaps_to_fill[sec_id]), remaining)
-            capped_gaps[sec_id] = gaps_to_fill[sec_id][:take]
-            remaining -= take
-        gaps_to_fill = capped_gaps
-
-    from app.rag.vectorstore import get_vector_store_manager
-    store = get_vector_store_manager().get_store(collection_name)
-    filled: dict[str, dict[int, Document]] = {}
-
-    for sec_id, missing_indices in gaps_to_fill.items():
-        try:
-            section_details = store.similarity_search_with_score(
-                "",
-                k=50,
-                filter={
-                    "$and": [
-                        {"section.id": sec_id},
-                        {"section.chunk_role": "detail"},
-                    ]
-                },
-            )
-        except Exception:
-            continue
-
-        for detail_doc, _ in section_details:
-            doc_idx = detail_doc.metadata.get("section.chunk_index")
-            if doc_idx is not None and isinstance(doc_idx, int) and doc_idx in missing_indices:
-                doc_cid = str(detail_doc.metadata.get("section.chunk_id") or "")
-                already_present = any(
-                    str(d.metadata.get("section.chunk_id") or "") == doc_cid
-                    for d in docs
-                )
-                if not already_present:
-                    detail_doc.metadata["_filled_gap"] = True
-                    filled.setdefault(sec_id, {})[doc_idx] = detail_doc
-
-    # 重组结果列表
-    section_ordered: dict[str, list[Document]] = {}
-    for sec_id in detail_map:
-        merged = {**detail_map[sec_id], **filled.get(sec_id, {})}
-        for idx in sorted(merged.keys()):
-            section_ordered.setdefault(sec_id, []).append(merged[idx])
-
-    section_first_pos: dict[str, int] = {}
-    for i, doc in enumerate(docs):
-        sec_id = str(doc.metadata.get("section.id") or "")
-        if sec_id and sec_id not in section_first_pos:
-            section_first_pos[sec_id] = i
-
-    result: list[Document] = []
-    placed_sections: set[str] = set()
-
-    all_items: list[tuple[int, str, Document | None]] = []
-
-    for sec_id, ordered_docs in section_ordered.items():
-        pos = section_first_pos.get(sec_id, 0)
-        all_items.append((pos, "section", ordered_docs))
-
-    for pos, doc in non_detail:
-        all_items.append((pos, "non_section", doc))
-
-    all_items.sort(key=lambda x: x[0])
-
-    for pos, item_type, item_data in all_items:
-        if item_type == "section":
-            sec_id = str(item_data[0].metadata.get("section.id") or "") if item_data else ""
-            if sec_id not in placed_sections:
-                result.extend(item_data)
-                placed_sections.add(sec_id)
-        else:
-            result.append(item_data)
-
-    filled_count = sum(len(v) for v in filled.values())
-    if filled_count > 0:
+    # 全局 token 预算控制：从尾部（低优先级 window chunk）开始裁剪
+    total_tokens = sum(_estimate_tokens(d.page_content) for d in result)
+    if total_tokens > global_budget:
+        while total_tokens > global_budget and len(result) > len(docs):
+            removed_doc = result.pop()
+            total_tokens -= _estimate_tokens(removed_doc.page_content)
         logger.info(
-            "Contiguous fill added=%d gaps=%d before=%d after=%d",
-            filled_count, total_gaps, len(docs), len(result),
+            "Sentence window global budget trim: total_tokens=%d > global_budget=%d, trimmed to %d docs",
+            total_tokens, global_budget, len(result),
         )
+
     return result

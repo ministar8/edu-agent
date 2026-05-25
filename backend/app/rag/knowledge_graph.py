@@ -28,6 +28,14 @@ def _char_jaccard(a: str, b: str) -> float:
     return len(set_a & set_b) / len(union) if union else 0.0
 
 
+def _safe_depth(value: int, default: int = 2, max_depth: int = 5) -> int:
+    try:
+        depth = int(value)
+    except (TypeError, ValueError):
+        depth = default
+    return max(1, min(depth, max_depth))
+
+
 class KnowledgeGraphManager:
     """Neo4j 知识图谱管理器"""
 
@@ -289,6 +297,7 @@ class KnowledgeGraphManager:
         自动将 target 通过模糊匹配解析为 KG 中实际节点名。
         结果会缓存 5 分钟。
         """
+        max_depth = _safe_depth(max_depth, default=5)
         resolved = self.resolve_topic(target)
         if not resolved:
             return []
@@ -298,14 +307,14 @@ class KnowledgeGraphManager:
             return cached
         with self._session() as s:
             query = (
-                "MATCH path = (start:Knowledge)-[:PREREQUISITE_OF*1..$max_depth]->"
+                f"MATCH path = (start:Knowledge)-[:PREREQUISITE_OF*1..{max_depth}]->"
                 "(target:Knowledge {name: $target}) "
                 "RETURN [node IN nodes(path) | node.name] AS names, "
                 "       [node IN nodes(path) | node.description] AS descriptions "
                 "ORDER BY length(path) "
                 "LIMIT 3"
             )
-            result = s.run(query, target=resolved, max_depth=max_depth)
+            result = s.run(query, target=resolved)
             paths = []
             for record in result:
                 names = record["names"]
@@ -316,50 +325,133 @@ class KnowledgeGraphManager:
             self._cache_set(cache_key, paths)
             return paths
 
-    def get_next_topics(self, current: str) -> list[dict]:
-        """查询学完当前知识点后可以学的后续知识
+    def get_next_topics(self, current: str, depth: int = 1) -> list[dict]:
+        """查询学完当前知识点后可以学的后续知识（支持 n-hop）
 
         自动将 current 通过模糊匹配解析为 KG 中实际节点名。
         结果会缓存 5 分钟。
+
+        Args:
+            current: 当前知识点名称
+            depth: 跳数（1=直接后续，2=后续的后续，依此类推）
         """
+        depth = _safe_depth(depth, default=1)
         resolved = self.resolve_topic(current)
         if not resolved:
             return []
-        cache_key = self._cache_key("next", resolved)
+        cache_key = self._cache_key("next", resolved, str(depth))
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
-        with self._session() as s:
-            result = s.run(
-                "MATCH (current:Knowledge {name: $current})-[:PREREQUISITE_OF]->(next:Knowledge) "
-                "RETURN next.name AS name, next.description AS description, next.category AS category",
-                current=resolved,
-            )
-            self._cache_set(cache_key, [dict(record) for record in result])
-            return [dict(record) for record in result]
+        if depth <= 1:
+            with self._session() as s:
+                result = s.run(
+                    "MATCH (current:Knowledge {name: $current})-[:PREREQUISITE_OF]->(next:Knowledge) "
+                    "RETURN next.name AS name, next.description AS description, next.category AS category",
+                    current=resolved,
+                )
+                result_list = [dict(record) for record in result]
+        else:
+            with self._session() as s:
+                result = s.run(
+                    f"MATCH (current:Knowledge {{name: $current}})-[:PREREQUISITE_OF*1..{depth}]->(next:Knowledge) "
+                    "RETURN DISTINCT next.name AS name, next.description AS description, next.category AS category "
+                    "LIMIT 20",
+                    current=resolved,
+                )
+                result_list = [dict(record) for record in result]
+        self._cache_set(cache_key, result_list)
+        return result_list
 
-    def get_prerequisites(self, topic: str) -> list[dict]:
-        """查询某知识点的前置知识
+    def get_prerequisites(self, topic: str, depth: int = 1) -> list[dict]:
+        """查询某知识点的前置知识（支持 n-hop）
 
         自动将 topic 通过模糊匹配解析为 KG 中实际节点名。
         结果会缓存 5 分钟。
+
+        Args:
+            topic: 知识点名称
+            depth: 跳数（1=直接前置，2=前置的前置，依此类推）
         """
+        depth = _safe_depth(depth, default=1)
         resolved = self.resolve_topic(topic)
         if not resolved:
             return []
-        cache_key = self._cache_key("prereq", resolved)
+        cache_key = self._cache_key("prereq", resolved, str(depth))
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+        if depth <= 1:
+            with self._session() as s:
+                result = s.run(
+                    "MATCH (pre:Knowledge)-[:PREREQUISITE_OF]->(topic:Knowledge {name: $topic}) "
+                    "RETURN pre.name AS name, pre.description AS description",
+                    topic=resolved,
+                )
+                result_list = [dict(record) for record in result]
+        else:
+            with self._session() as s:
+                result = s.run(
+                    f"MATCH (pre:Knowledge)-[:PREREQUISITE_OF*1..{depth}]->(topic:Knowledge {{name: $topic}}) "
+                    "RETURN DISTINCT pre.name AS name, pre.description AS description "
+                    "LIMIT 20",
+                    topic=resolved,
+                )
+                result_list = [dict(record) for record in result]
+        self._cache_set(cache_key, result_list)
+        return result_list
+
+    def get_subgraph(self, topic: str, depth: int = 2) -> dict:
+        """获取以 topic 为中心的子图（n-hop 双向展开）
+
+        返回 topic 的前置链（深度 depth）和后续链（深度 depth），
+        以及这些节点之间的 PREREQUISITE_OF 边。
+
+        Args:
+            topic: 中心知识点名称
+            depth: 展开跳数（默认 2-hop）
+
+        Returns:
+            {"nodes": [...], "edges": [...], "center": str}
+        """
+        depth = _safe_depth(depth, default=2)
+        resolved = self.resolve_topic(topic)
+        if not resolved:
+            return {"nodes": [], "edges": [], "center": topic}
+        cache_key = self._cache_key("subgraph", resolved, str(depth))
         cached = self._cache_get(cache_key)
         if cached is not None:
             return cached
         with self._session() as s:
+            # 获取 n-hop 范围内所有节点
             result = s.run(
-                "MATCH (pre:Knowledge)-[:PREREQUISITE_OF]->(topic:Knowledge {name: $topic}) "
-                "RETURN pre.name AS name, pre.description AS description",
-                topic=resolved,
+                f"MATCH path = (pre:Knowledge)-[:PREREQUISITE_OF*1..{depth}]->(center:Knowledge {{name: $center}})"
+                f"-[:PREREQUISITE_OF*1..{depth}]->(post:Knowledge) "
+                "WITH DISTINCT pre, center, post "
+                "RETURN pre.name AS name, pre.description AS description, pre.category AS category "
+                "UNION "
+                f"MATCH path = (center:Knowledge {{name: $center}})-[:PREREQUISITE_OF*1..{depth}]->(post:Knowledge) "
+                "RETURN post.name AS name, post.description AS description, post.category AS category "
+                "UNION "
+                f"MATCH path = (pre:Knowledge)-[:PREREQUISITE_OF*1..{depth}]->(center:Knowledge {{name: $center}}) "
+                "RETURN pre.name AS name, pre.description AS description, pre.category AS category "
+                "LIMIT 30",
+                center=resolved,
             )
-            result_list = [dict(record) for record in result]
-            self._cache_set(cache_key, result_list)
-            return result_list
+            nodes = [dict(record) for record in result]
+            # 获取范围内的边
+            result = s.run(
+                f"MATCH (a:Knowledge)-[r:PREREQUISITE_OF]->(b:Knowledge) "
+                f"WHERE EXISTS {{ MATCH (a)-[:PREREQUISITE_OF*0..{depth}]-(:Knowledge {{name: $center}}) }} "
+                f"  AND EXISTS {{ MATCH (b)-[:PREREQUISITE_OF*0..{depth}]-(:Knowledge {{name: $center}}) }} "
+                "RETURN a.name AS source, b.name AS target, type(r) AS relation "
+                "LIMIT 40",
+                center=resolved,
+            )
+            edges = [dict(record) for record in result]
+        subgraph = {"nodes": nodes, "edges": edges, "center": resolved}
+        self._cache_set(cache_key, subgraph)
+        return subgraph
 
     # ========== 可视化数据 ==========
 
@@ -584,9 +676,3 @@ def get_kg_manager() -> KnowledgeGraphManager:
         _kg_manager = KnowledgeGraphManager()
     return _kg_manager
 
-
-def __getattr__(name):
-    """兼容旧代码 from app.rag.knowledge_graph import kg_manager"""
-    if name == "kg_manager":
-        return get_kg_manager()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

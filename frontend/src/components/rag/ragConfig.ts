@@ -8,10 +8,10 @@ export const stepIcons: Record<string, string> = {
 };
 
 export const stepColors: Record<string, string> = {
-  input: "border-blue-400 bg-blue-50",
+  input: "border-emerald-400 bg-emerald-50",
   transform: "border-yellow-400 bg-yellow-50",
   search: "border-green-400 bg-green-50",
-  results: "border-purple-400 bg-purple-50",
+  results: "border-stone-400 bg-stone-50",
 };
 
 export const stepDescriptions: Record<string, string> = {

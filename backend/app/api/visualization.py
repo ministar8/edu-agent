@@ -33,7 +33,7 @@ async def get_agent_graph():
             "data": {
                 "label": "知识点检索Agent",
                 "description": "RAG检索教材，生成带引用的讲解",
-                "tools": ["search_knowledge_base"],
+                "tools": ["knowledge_search", "text_search", "kg_search"],
                 "status": "idle",
             },
         },
@@ -109,17 +109,21 @@ async def get_agent_graph():
 @router.get("/rag-process")
 async def get_rag_process_demo(query: str, collection: str = "data_structure"):
     """RAG检索过程可视化数据（统一检索管线）"""
-    from app.rag.retriever import build_rag_context, _kg_context_supplement
+    from app.rag.fusion import fuse_documents
+    from app.rag.context import kg_context_supplement as _kg_context_supplement
     from app.rag.trace import retrieve_documents_with_trace
 
     try:
         docs, trace = retrieve_documents_with_trace(query=query, collection_name=collection, k=5, use_rerank=True)
+
+        # 用 fuse_documents 生成最终上下文（复用 trace 的 docs，避免重复检索）
         kg_supplement = ""
         try:
             kg_supplement = _kg_context_supplement(query)
-        except Exception:
-            logger.debug("KG context supplement failed for query=%s", query[:30])
-        result_text = build_rag_context(docs, query=query, kg_supplement=kg_supplement) if docs else ""
+        except Exception as e:
+            logger.debug("KG supplement skipped for visualization: %s", e)
+        fused = fuse_documents(docs, query=query, kg_supplement=kg_supplement)
+        result_text = fused.final_context
 
         # 提取源文档节点
         source_nodes = []

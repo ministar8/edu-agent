@@ -1,10 +1,10 @@
 export const agentColors: Record<string, string> = {
   knowledge_agent: "bg-green-50 border-green-200",
   question_agent: "bg-pink-50 border-pink-200",
-  grading_agent: "bg-purple-50 border-purple-200",
-  path_agent: "bg-orange-50 border-orange-200",
-  supervisor: "bg-blue-50 border-blue-200",
-  prefetch_knowledge: "bg-cyan-50 border-cyan-200",
+  grading_agent: "bg-emerald-50 border-emerald-200",
+  path_agent: "bg-amber-50 border-amber-200",
+  supervisor: "bg-stone-100 border-stone-300",
+  prefetch_knowledge: "bg-teal-50 border-teal-200",
 };
 
 export const agentLabels: Record<string, string> = {

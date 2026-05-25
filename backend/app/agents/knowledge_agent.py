@@ -4,82 +4,159 @@ import logging
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
-from app.rag.retriever import get_llm, retrieve_documents, build_rag_context, _kg_context_supplement
-from app.agents.kg_tools import aquery_knowledge_graph
+from app.rag.retriever import retrieve_evidence
+from app.rag.rag_utils import get_llm
+from app.rag.query_classifier import TEXT_ONLY_DEPTH
+from app.agents.kg_tools import aquery_knowledge_graph, akg_search
 
 logger = logging.getLogger(__name__)
 
 
-@tool("search_knowledge_base")
-async def asearch_knowledge_base(query: str) -> str:
-    """搜索教材知识库（多路召回+BM25+KG扩展+Reranker），检索与问题相关的知识点内容。当学生询问知识点、概念解释时使用此工具。"""
+# -- Tool 1: Pure text retrieval (no KG) --
+
+@tool("text_search")
+async def atext_search(query: str) -> str:
+    """Pure textbook text retrieval (multi-recall + BM25 + Reranker + CRAG compress).
+    No knowledge graph involved. Use for quick concept definitions, principle explanations.
+    For knowledge dependencies or learning paths, use kg_search instead."""
     try:
-        docs = await asyncio.to_thread(retrieve_documents, query=query, k=6, use_rerank=True)
-        kg_supplement = ""
-        try:
-            kg_supplement = await asyncio.wait_for(asyncio.to_thread(_kg_context_supplement, query), timeout=5)
-        except Exception:
-            logger.debug("KG supplement timeout or failed for query=%s", query[:30])
-        if not docs:
-            return "未在知识库中找到相关内容。"
-        return build_rag_context(docs, query=query, kg_supplement=kg_supplement or "")
+        fused = await asyncio.to_thread(
+            retrieve_evidence, query=query, k=5, use_rerank=True,
+            depth=TEXT_ONLY_DEPTH,
+        )
+        if not fused.final_context:
+            return "No relevant textbook content found."
+        result = fused.final_context
+        if fused.sources:
+            result += f"\n\nSources: {', '.join(fused.sources[:5])}"
+        return result
     except Exception as e:
-        logger.error("Knowledge base search failed: %s", e, exc_info=True)
-        return f"知识库检索失败: {e}"
+        logger.error("Text search failed: %s", e, exc_info=True)
+        return f"Text search failed: {e}"
 
 
-KNOWLEDGE_AGENT_PROMPT = """你是一个面向学生的知识点检索与讲解Agent，任务是基于知识库进行RAG回答，而不是直接凭空作答。
+# -- Tool 2: Aggregate retrieval (text + KG) --
 
-【核心目标】
-1. 优先通过检索工具获取与学生问题最相关的教材内容。
-2. 基于检索结果进行解释、归纳和举例。
-3. 明确区分"知识库依据"与"模型补充说明"。
+@tool("knowledge_search")
+async def aknowledge_search(query: str) -> str:
+    """Aggregate knowledge base search (text + knowledge graph).
+    One-stop retrieval for both textbook content and knowledge relationships.
+    Best for most queries needing both concept explanation and dependency context.
+    For text-only, use text_search. For KG-only, use kg_search."""
+    try:
+        fused = await asyncio.to_thread(retrieve_evidence, query=query, k=5, use_rerank=True)
+        if not fused.final_context:
+            return "No relevant content found in knowledge base."
+        result = fused.final_context
+        if fused.sources:
+            result += f"\n\nSources: {', '.join(fused.sources[:5])}"
+        return result
+    except Exception as e:
+        logger.error("Knowledge search failed: %s", e, exc_info=True)
+        return f"Knowledge search failed: {e}"
 
-【工具使用规则】
-1. 只要是知识解释、概念说明、原理分析类问题，必须先调用检索工具。
-2. **检索工具选择策略**：
-   - 知识点查询 → search_knowledge_base（多路召回+BM25+KG扩展+Reranker）
-   - 分析知识依赖、前置知识、概念关联 → query_knowledge_graph（知识图谱）
-3. 若首次检索结果不足，可换用其他检索工具重试。
-4. 可以做适度归纳总结，但不要编造知识库中不存在的来源或结论。
-5. 若使用模型常识做补充，必须明确标注"补充说明（非知识库直接内容）"。
 
-【回答边界】
-1. 不要声称自己看到了不存在的教材章节、页码或实验结果。
-2. 不要把推测说成事实。
-3. 若问题超出知识库覆盖范围，先说明检索情况，再给出保守回答。
-4. 只输出最终结果内容，不要寒暄，不要自我介绍，不要出现“当然可以”“下面我来回答”“作为一个Agent”等废话。
+# -- Agent Prompts --
 
-【输出格式】
-请尽量按以下结构输出：
-1. 概念解释：用通俗中文解释问题。
-2. 核心要点：用 2-4 条列出关键原理/特点。
-3. 示例说明：给出一个简短例子；若不适合举例可省略。
-4. 来源依据：列出检索到的来源文件名或来源片段。
-5. 补充说明：仅在知识库不足但需要补充时出现，并明确标注不是直接来源于知识库。
+KNOWLEDGE_AGENT_PROMPT = """You are a knowledge retrieval and explanation agent for students. Your task is RAG-based answering using the knowledge base -- never fabricate answers without retrieval.
 
-【示例】
-用户：什么是进程死锁？
-你的做法：先调用 search_knowledge_base 检索"进程死锁"。
-输出风格示例：
-概念解释：进程死锁是指两个或两个以上的进程在执行过程中，因争夺资源而造成的一种互相等待的僵局。
-核心要点：
-- 产生死锁的四个必要条件：互斥、占有并等待、非抢占、循环等待。
-- 常见的死锁预防策略包括破坏四个必要条件之一。
-示例说明：例如进程A持有资源R1等待R2，进程B持有R2等待R1，两者都无法继续执行。
-来源依据：xxx.md
+[Core Goals]
+1. Always retrieve relevant textbook content before answering.
+2. Explain, summarize, and give examples based on retrieval results.
+3. Clearly distinguish "knowledge base evidence" from "model supplementary explanation".
+
+[Tool Selection Strategy]
+You have THREE retrieval tools. Choose based on the student's need:
+
+1. knowledge_search (aggregate, default first choice)
+   - Searches both textbook text + knowledge graph
+   - Use for: most queries needing both concept explanation and dependency context
+   - Examples: "What is process deadlock?", "Difference between TCP and UDP"
+
+2. text_search (text only)
+   - Searches only textbook text (faster, no KG overhead)
+   - Use for: quick definitions, confirming algorithm steps, pure concept lookup
+   - Examples: "Define virtual memory", "Steps of Dijkstra's algorithm"
+
+3. kg_search (KG only)
+   - Queries only the knowledge graph for dependencies and paths
+   - Use for: analyzing prerequisites, chapter progression, learning planning
+   - Examples: "What should I learn after process management?", "Prerequisites for banker's algorithm"
+
+[Retrieval Strategy]
+- Default: start with knowledge_search; if results are sufficient, answer directly.
+- If knowledge_search results are insufficient: identify whether you need more text detail (use text_search) or more relationship info (use kg_search), then supplement.
+- Never invent sources or conclusions not in the knowledge base.
+- If using model common sense as supplement, mark it as "[Supplementary note, not directly from knowledge base]".
+
+[Answer Boundaries]
+1. Do not claim to have seen textbook chapters, page numbers, or experimental results that do not exist.
+2. Do not present speculation as fact.
+3. If the question exceeds knowledge base coverage, explain the retrieval situation first, then give a conservative answer.
+4. Output only the final result. No greetings, no self-introductions, no filler phrases.
+
+[Output Format]
+1. Concept explanation: Explain in plain language.
+2. Key points: 2-4 bullet points of core principles/characteristics.
+3. Example: A brief example; omit if not applicable.
+4. Sources: List the source filenames or snippets retrieved.
+5. Supplementary note: Only when KB is insufficient, clearly marked as not from KB.
+
+[Example]
+Student: What is process deadlock?
+Your approach: First call knowledge_search for "process deadlock".
+Output style:
+Concept explanation: Process deadlock is a situation where two or more processes are unable to proceed because each is waiting for resources held by the other.
+Key points:
+- Four necessary conditions: mutual exclusion, hold and wait, no preemption, circular wait.
+- Prevention strategies involve breaking one of the four conditions.
+Example: Process A holds R1 waiting for R2, Process B holds R2 waiting for R1 -- neither can proceed.
+Sources: operating_system.md
+"""
+
+TEXT_RETRIEVAL_PROMPT = """You are a textbook-focused retrieval agent. Your ONLY tool is text_search.
+
+[Core Goal]
+Find and explain concepts, definitions, and principles from textbook content.
+You do NOT have access to the knowledge graph -- focus purely on text-based explanations.
+
+[Tool Usage]
+- You have exactly ONE tool: text_search
+- Always call text_search before answering any question
+- If text_search returns no results, state "No relevant textbook content found" and stop
+
+[Answer Requirements]
+1. Base your answer strictly on the retrieved textbook content
+2. Quote or paraphrase the textbook -- do not fabricate
+3. If the content is insufficient, say so explicitly
+4. Output in well-structured Chinese Markdown
+5. No greetings, no self-introductions, no filler phrases
 """
 
 
 def create_knowledge_agent():
-    """创建知识点检索Agent"""
+    """Create knowledge agent with 3-tool layered retrieval."""
     llm = get_llm()
     agent = create_react_agent(
         model=llm,
         tools=[
-            asearch_knowledge_base,
+            aknowledge_search,
+            atext_search,
+            akg_search,
             aquery_knowledge_graph,
         ],
         prompt=KNOWLEDGE_AGENT_PROMPT,
+    )
+    return agent
+
+
+def create_text_retrieval_agent():
+    """Create a text-only retrieval agent (for Planner parallel dispatch).
+    Only has access to text_search -- no KG, no aggregate search."""
+    llm = get_llm()
+    agent = create_react_agent(
+        model=llm,
+        tools=[atext_search],
+        prompt=TEXT_RETRIEVAL_PROMPT,
     )
     return agent

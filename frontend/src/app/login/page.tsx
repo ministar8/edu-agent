@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
+import { getErrorMessage } from "@/lib/errors";
 
 export default function LoginPage() {
   const { login, register, user, loading } = useAuth();
@@ -33,7 +34,7 @@ export default function LoginPage() {
         await login(username, password);
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "操作失败");
+      setError(getErrorMessage(err, "操作失败"));
     } finally {
       setSubmitting(false);
     }

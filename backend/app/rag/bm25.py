@@ -9,8 +9,13 @@ import logging
 import math
 
 from langchain_core.documents import Document
+import time
 
 logger = logging.getLogger(__name__)
+
+# Cache avgdl per collection (5 min TTL) to avoid 500-doc sample on every query
+_avgdl_cache: dict[str, tuple[float, float]] = {}
+_AVGDL_CACHE_TTL = 300
 
 
 def bm25_search(
@@ -40,11 +45,17 @@ def bm25_search(
     if total_docs == 0:
         return []
 
-    # 估算平均文档长度
-    sample_size = min(total_docs, 200)
-    sample_result = collection.get(limit=sample_size, include=["documents"])
-    sample_docs = sample_result.get("documents") or []
-    avgdl = sum(len(d) for d in sample_docs) / len(sample_docs) if sample_docs else 100.0
+    # 平均文档长度（缓存 5min，避免每次查询采样 500 篇文档）
+    now = time.monotonic()
+    cached = _avgdl_cache.get(collection_name)
+    if cached and now - cached[0] < _AVGDL_CACHE_TTL:
+        avgdl = cached[1]
+    else:
+        sample_size = min(total_docs, 500)
+        sample_result = collection.get(limit=sample_size, include=["documents"])
+        sample_docs = sample_result.get("documents") or []
+        avgdl = sum(len(d) for d in sample_docs) / len(sample_docs) if sample_docs else 100.0
+        _avgdl_cache[collection_name] = (now, avgdl)
 
     # BM25 参数
     b = 0.75

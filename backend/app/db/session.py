@@ -32,6 +32,33 @@ def init_db() -> None:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE conversations ADD COLUMN summary TEXT DEFAULT ''"))
 
+    # ── knowledge_point_registry: 确保 (name, category) 唯一索引 ──
+    if "knowledge_point_registry" in inspector.get_table_names():
+        idx_names = {idx["name"] for idx in inspector.get_indexes("knowledge_point_registry")}
+        if "ix_kp_name_category" not in idx_names:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_kp_name_category "
+                    "ON knowledge_point_registry (name, category)"
+                ))
+        # 迁移：添加 difficulty_source 列
+        kp_columns = {column["name"] for column in inspector.get_columns("knowledge_point_registry")}
+        if "difficulty_source" not in kp_columns:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "ALTER TABLE knowledge_point_registry ADD COLUMN difficulty_source VARCHAR(10) DEFAULT 'auto'"
+                ))
+
+    # ── student_knowledge_state: 确保 (user_id, knowledge_point_id) 唯一索引 ──
+    if "student_knowledge_state" in inspector.get_table_names():
+        idx_names = {idx["name"] for idx in inspector.get_indexes("student_knowledge_state")}
+        if "ix_sks_user_kp" not in idx_names:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_sks_user_kp "
+                    "ON student_knowledge_state (user_id, knowledge_point_id)"
+                ))
+
 
 def get_db():
     db = SessionLocal()

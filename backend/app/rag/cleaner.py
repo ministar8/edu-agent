@@ -47,6 +47,33 @@ _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 _FENCE_RE = re.compile(r"^\s*(```+|~~~+)")
 
+_WEB_NOISE_MARKERS = (
+    ".choice-container",
+    ".choice-option",
+    ".choice-inline",
+    ".choice-text",
+    ".explanation",
+    ".feedback-area",
+    ".multiple-choice-hint",
+    "@media(",
+    "@keyframes",
+    "document.addEventListener",
+    "querySelector",
+    "localStorage",
+    "window.quizChoiceFlag",
+    "setupChoiceEventListeners",
+    "restoreChoices()",
+    "saveChoiceToLocalStorage",
+)
+
+_WEB_NOISE_LINE_RE = re.compile(
+    r"(?:querySelector|addEventListener|localStorage|document\.|window\.|"
+    r"choice-container|choice-option|feedback-area|multiple-choice-hint|"
+    r"@media|@keyframes)"
+)
+
+_INLINE_EXAM_HEADING_RE = re.compile(r"(?<!\n)(#{4,5}\s*\d+\s*)")
+
 # ── PDF 断行修复 ──────────────────────────────────
 # 句子终结标点（行尾出现这些说明是自然断行，不需要合并）
 _SENT_END_PUNCTS = set("。！？；：…—.!?;:")
@@ -117,8 +144,12 @@ def clean_text(text: str) -> str:
 
 
 def _get_source_ext(doc: Document) -> str:
-    source = doc.metadata.get("source_path") or doc.metadata.get("source_file") or ""
+    source = doc.metadata.get("source_path") or doc.metadata.get("source_file") or doc.metadata.get("source") or ""
     return Path(str(source)).suffix.lower()
+
+
+def _get_source_path(doc: Document) -> str:
+    return str(doc.metadata.get("source_path") or doc.metadata.get("source_file") or doc.metadata.get("source") or "")
 
 
 def _normalize_text(text: str) -> str:
@@ -158,6 +189,68 @@ def _clean_markdown_text(text: str) -> str:
             continue
         cleaned_lines.append(stripped)
     return "\n".join(_collapse_blank_lines(cleaned_lines)).strip()
+
+
+def _is_exam_markdown_source(source: str) -> bool:
+    normalized = source.replace("\\", "/").lower()
+    return "/questions/" in normalized or normalized.endswith("_408_exam.md")
+
+
+def _remove_exam_web_noise(text: str) -> tuple[str, int]:
+    if not text or not text.strip():
+        return text, 0
+
+    removed = 0
+    cleaned_lines: list[str] = []
+    in_fence = False
+
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _FENCE_RE.match(stripped):
+            in_fence = not in_fence
+            cleaned_lines.append(line)
+            continue
+        if in_fence:
+            cleaned_lines.append(line)
+            continue
+
+        cut_pos = -1
+        for marker in _WEB_NOISE_MARKERS:
+            pos = line.find(marker)
+            if pos >= 0 and (cut_pos < 0 or pos < cut_pos):
+                cut_pos = pos
+
+        if cut_pos >= 0:
+            prefix = line[:cut_pos].rstrip(" -`},;")
+            if prefix:
+                cleaned_lines.append(prefix)
+            removed += len(line) - len(prefix)
+            continue
+
+        if len(stripped) > 160 and _WEB_NOISE_LINE_RE.search(stripped):
+            removed += len(line)
+            continue
+
+        if len(stripped) > 300 and (
+            stripped.count("{") + stripped.count("}") >= 4
+            or stripped.count("=>") >= 2
+            or stripped.count("`") >= 4
+        ):
+            removed += len(line)
+            continue
+
+        cleaned_lines.append(line)
+
+    cleaned = "\n".join(_collapse_blank_lines(cleaned_lines)).strip()
+    return cleaned, removed
+
+
+def _normalize_exam_question_headings(text: str) -> str:
+    if not text or not text.strip():
+        return text
+    normalized = _INLINE_EXAM_HEADING_RE.sub(r"\n\1\n", text)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
 
 
 def _edge_lines(text: str) -> list[str]:
@@ -452,43 +545,35 @@ def _clean_plain_text(text: str) -> str:
     return cleaned.strip()
 
 
-def clean_documents(documents: list[Document], *, quality_report: bool = False, dedup: bool = True, fuzzy_dedup: bool = True, fuzzy_threshold: float = 0.9) -> list[Document] | tuple[list[Document], "QualityReport", "QualityReport"]:
+def clean_documents(documents: list[Document], *, dedup: bool = True, fuzzy_dedup: bool = True, fuzzy_threshold: float = 0.9) -> list[Document]:
     """清洗文档集合
 
     Args:
         documents: 待清洗文档列表
-        quality_report: 是否返回清洗前后质量报告
         dedup: 是否启用精确去重（MD5）
         fuzzy_dedup: 是否启用模糊去重（MinHash + LSH）
         fuzzy_threshold: 模糊去重相似度阈值，默认 0.9
 
     Returns:
-        若 quality_report=False: 返回清洗后文档列表
-        若 quality_report=True: 返回 (清洗后文档, 清洗前报告, 清洗后报告)
+        清洗后文档列表
     """
-    # ── 清洗前质量评估 ──
-    start = time.perf_counter()
-    before_report = None
-    original_total_chars = sum(len(doc.page_content or "") for doc in documents)
-    if quality_report:
-        from app.tools.quality_metrics import evaluate_documents
-        before_report, _ = evaluate_documents(documents)
-        logger.info("清洗前质量: %s", before_report.summary())
-        metrics.emit_quality_summary(
-            stage="cleaner.before",
-            report=before_report,
-            values={"input_docs": len(documents)},
-        )
-
     # ── 执行清洗 ──
+    start = time.perf_counter()
+    original_total_chars = sum(len(doc.page_content or "") for doc in documents)
     cleaned: list[Document] = []
     dropped_docs = 0
     pdf_edge_map = _dedupe_pdf_edges([doc for doc in documents if _get_source_ext(doc) == ".pdf"])
     for doc in documents:
         original_len = len(doc.page_content)
         ext = _get_source_ext(doc)
+        source_path = _get_source_path(doc)
         if ext == ".md":
             doc.page_content = _clean_markdown_text(doc.page_content)
+            if _is_exam_markdown_source(source_path):
+                doc.page_content, removed_noise = _remove_exam_web_noise(doc.page_content)
+                doc.page_content = _normalize_exam_question_headings(doc.page_content)
+                if removed_noise:
+                    doc.metadata["exam_web_noise_removed_chars"] = removed_noise
         elif ext == ".pdf":
             source_key = str(doc.metadata.get("source_path") or doc.metadata.get("source_file") or id(doc))
             doc.page_content = _clean_pdf_text(doc.page_content, pdf_edge_map.get(source_key, set()))
@@ -553,47 +638,6 @@ def clean_documents(documents: list[Document], *, quality_report: bool = False, 
     stat_anomaly_count = sum(1 for r in anomaly_records if r.actions_taken)
     if stat_anomaly_count:
         logger.info("异常检测[阶段2/统计层]: %d 篇文档存在异常", stat_anomaly_count)
-
-    # ── 清洗后质量评估 ──
-    if quality_report and before_report is not None:
-        from app.tools.quality_metrics import evaluate_documents, compare_reports
-        after_report, _ = evaluate_documents(cleaned)
-        improvement = compare_reports(before_report, after_report)
-        logger.info("清洗后质量: %s", after_report.summary())
-        logger.info("清洗提升: 完整性+%.1f%% 准确性+%.1f%% 一致性+%.1f%%",
-                    improvement["completeness"] * 100,
-                    improvement["accuracy"] * 100,
-                    improvement["consistency"] * 100)
-        metrics.emit_quality_summary(
-            stage="cleaner.after",
-            report=after_report,
-            values={
-                "input_docs": len(documents),
-                "output_docs": len(cleaned),
-                "improvement": improvement,
-            },
-        )
-        cleaned_total_chars = sum(len(doc.page_content or "") for doc in cleaned)
-        retention_ratio = cleaned_total_chars / original_total_chars if original_total_chars else 0.0
-        metrics.emit(
-            event="clean_documents",
-            stage="cleaner",
-            duration_ms=round((time.perf_counter() - start) * 1000, 3),
-            values={
-                "input_docs": len(documents),
-                "output_docs": len(cleaned),
-                "dropped_docs": dropped_docs,
-                "normalized_docs": len(norm_log),
-                "imputed_docs": len(impute_log),
-                "content_anomaly_docs": content_anomaly_count,
-                "stat_anomaly_docs": stat_anomaly_count,
-                "dedup_removed": len(dup_records),
-                "retention_ratio": round(retention_ratio, 6),
-                "original_total_chars": original_total_chars,
-                "cleaned_total_chars": cleaned_total_chars,
-            },
-        )
-        return cleaned, before_report, after_report
 
     cleaned_total_chars = sum(len(doc.page_content or "") for doc in cleaned)
     retention_ratio = cleaned_total_chars / original_total_chars if original_total_chars else 0.0

@@ -17,14 +17,6 @@ class ChatResponse(BaseModel):
     agent_steps: list[dict] = Field(default_factory=list)
 
 
-class AgentStep(BaseModel):
-    agent_name: str
-    action: str
-    input_data: str
-    output_data: str
-    timestamp: float
-
-
 # ── 对话历史 schemas ──────────────────────────
 
 

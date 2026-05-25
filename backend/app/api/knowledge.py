@@ -123,24 +123,21 @@ async def delete_collection(collection_name: str):
 @router.get("/search")
 async def search_knowledge(query: str, collection: str = "data_structure", k: int = 5):
     """搜索知识库（统一检索管线，用于可视化展示检索过程）"""
-    from app.rag.retriever import retrieve_documents, build_rag_context, _kg_context_supplement
+    from app.rag.retriever import retrieve_evidence
 
     try:
-        docs = retrieve_documents(query=query, collection_name=collection, k=k, use_rerank=True)
-        kg_supplement = ""
-        try:
-            kg_supplement = _kg_context_supplement(query)
-        except Exception:
-            logger.debug("KG context supplement failed for query=%s", query[:30])
-        result_text = build_rag_context(docs, query=query, kg_supplement=kg_supplement) if docs else ""
+        fused = await asyncio.to_thread(
+            retrieve_evidence, query=query, collection_name=collection, k=k, use_rerank=True
+        )
+        result_text = fused.final_context
 
-        # 获取源文档节点信息
+        # 获取源文档节点信息（从 TextEvidence 提取）
         source_nodes = []
-        for doc in docs[:k]:
+        for ev in fused.text_evidences[:k]:
             source_nodes.append({
-                "content": doc.page_content[:200] if doc.page_content else "",
-                "score": float(doc.metadata.get("rerank_score", 0.0)),
-                "metadata": doc.metadata,
+                "content": ev.content[:200] if ev.content else "",
+                "score": float(ev.rerank_score if ev.rerank_score > 0 else (ev.recall_score if ev.recall_score > 0 else ev.score) or 0.0),
+                "metadata": ev.metadata,
             })
 
         return {

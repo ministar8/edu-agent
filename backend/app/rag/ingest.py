@@ -14,18 +14,15 @@ import os
 import time
 
 from app.config import settings
-from app.rag.loader import load_single_file
+from app.rag.loader import load_single_file, SUPPORTED_EXTENSIONS
 from app.rag.cleaner import clean_documents
 from app.rag.splitter import split_documents
 from app.rag.enhancer import enhance_documents
 from app.rag.graph_builder import build_graph_from_documents
+from app.rag.knowledge_tagger import tag_chunks_with_knowledge_points
 from app.rag.vectorstore import get_vector_store_manager
 from app.rag.knowledge_graph import get_kg_manager
 from app.rag.metrics import metrics
-from app.tools.quality_metrics import evaluate_documents, compare_reports, suggest_cleaning_priority
-
-
-SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx"}
 DEFAULT_CATEGORIES = ["data_structure", "computer_organization", "operating_system", "computer_network", "questions", "learning_paths"]
 
 
@@ -33,7 +30,6 @@ def ingest_category(
     category: str,
     rebuild: bool = False,
     build_graph: bool = True,
-    quality_report: bool = True,
 ) -> dict:
     """处理单个分类目录
 
@@ -82,35 +78,24 @@ def ingest_category(
             start = time.perf_counter()
             graph_success = not build_graph
 
-            # ETL Pipeline（带质量评估）
+            # ETL Pipeline
             documents = load_single_file(filepath)
-
-            # 清洗前质量评估
-            if quality_report:
-                before_report, _ = evaluate_documents(documents)
-                priority_list = suggest_cleaning_priority(documents)
-                if priority_list and priority_list[0]["priority"] <= 2:
-                    print(f"    [WARN] 质量预警: {filename} 优先级={priority_list[0]['priority']} 问题={', '.join(priority_list[0]['issues'])}")
 
             documents = clean_documents(
                 documents,
-                quality_report=quality_report,
                 dedup=True,
-                fuzzy_dedup=True,
+                fuzzy_dedup=False,
                 fuzzy_threshold=0.9,
             )
-
-            # 解包清洗结果
-            if quality_report and isinstance(documents, tuple):
-                documents, before_rpt, after_rpt = documents
-                improvement = compare_reports(before_rpt, after_rpt)
-                print(f"    [STAT] 清洗效果: 完整性+{improvement['completeness']:.1%} 准确性+{improvement['accuracy']:.1%} 一致性+{improvement['consistency']:.1%}")
 
             chunks = split_documents(documents)
             chunks = enhance_documents(chunks)
 
             for chunk in chunks:
                 chunk.metadata["category"] = category
+
+            # 知识点标签：从 heading_path 提取并写入 Registry + chunk metadata
+            chunks = tag_chunks_with_knowledge_points(chunks, fallback_category=category)
 
             ids = vector_store_manager.add_documents(chunks, collection_name=category)
             total_chunks += len(chunks)
@@ -191,7 +176,6 @@ def ingest_all(
     categories: list[str] | None = None,
     rebuild: bool = False,
     build_graph: bool = True,
-    quality_report: bool = True,
 ) -> None:
     """一键重建全量索引"""
     if categories is None:
@@ -201,7 +185,6 @@ def ingest_all(
     print("  智能教学系统 - 全量索引构建")
     print(f"  模式: {'全量重建' if rebuild else '增量入库'}")
     print(f"  知识图谱: {'开启' if build_graph else '关闭'}")
-    print(f"  质量评估: {'开启' if quality_report else '关闭'}")
     print(f"  分类: {', '.join(categories)}")
     print("=" * 60)
 
@@ -214,7 +197,7 @@ def ingest_all(
 
     for category in categories:
         print(f"\n[DIR] 处理分类: {category}")
-        result = ingest_category(category, rebuild=rebuild, build_graph=build_graph, quality_report=quality_report)
+        result = ingest_category(category, rebuild=rebuild, build_graph=build_graph)
 
         if result.get("skipped"):
             print(f"  [SKIP] 目录不存在，跳过")
@@ -262,6 +245,13 @@ def ingest_all(
         info = vector_store_manager.get_collection_info(name)
         print(f"  {name}: {info.get('count', 0)} 条文档")
 
+    # 缓存预热
+    if build_graph:  # 仅全量模式时预热（增量模式跳过的知识图谱也跳过预热）
+        print("\n[WARMUP] 预热查询缓存...")
+        from app.rag.retriever import warmup_query_cache
+        warmup_result = warmup_query_cache(quiet=True)
+        print(f"  {warmup_result['succeeded']}/{warmup_result['total']} 条预热成功, "
+              f"耗时 {warmup_result['elapsed_ms']:.0f} ms")
 
 def main():
     parser = argparse.ArgumentParser(description="智能教学系统 - 全量索引构建")
@@ -283,12 +273,6 @@ def main():
         default=False,
         help="跳过知识图谱构建（加速入库）",
     )
-    parser.add_argument(
-        "--no-quality",
-        action="store_true",
-        default=False,
-        help="跳过质量评估（加速入库）",
-    )
     args = parser.parse_args()
 
     categories = [args.category] if args.category else None
@@ -296,7 +280,6 @@ def main():
         categories=categories,
         rebuild=args.rebuild,
         build_graph=not args.no_graph,
-        quality_report=not args.no_quality,
     )
 
 

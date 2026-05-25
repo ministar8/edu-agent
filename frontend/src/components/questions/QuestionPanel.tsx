@@ -7,7 +7,7 @@ import { QuestionResult } from "./QuestionResult";
 import { QuestionStrategyCard } from "./QuestionStrategyCard";
 
 export default function QuestionPanel({ state, setState }: QuestionPanelProps) {
-  const { generate, updateState } = useQuestionGeneration({ state, setState });
+  const { generate, updateState, gradeQuestion, updateQuestionAnswer, loadWrongQuestions, weakPointPractice } = useQuestionGeneration({ state, setState });
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6 text-slate-800">
@@ -15,7 +15,14 @@ export default function QuestionPanel({ state, setState }: QuestionPanelProps) {
         <QuestionForm state={state} onChange={updateState} onGenerate={() => void generate()} />
         <QuestionStrategyCard />
       </div>
-      <QuestionResult state={state} />
+      <QuestionResult
+        state={state}
+        onGradeQuestion={(i) => void gradeQuestion(i)}
+        onUpdateAnswer={updateQuestionAnswer}
+        onLoadWrong={() => void loadWrongQuestions()}
+        onWeakPointPractice={() => void weakPointPractice()}
+        onSwitchTab={(tab) => updateState({ activeTab: tab })}
+      />
     </div>
   );
 }

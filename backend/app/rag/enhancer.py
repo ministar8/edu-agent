@@ -81,29 +81,7 @@ def _extract_heading_keywords(heading: str) -> List[str]:
     return parts
 
 
-def _detect_content_type(text: str, metadata: dict) -> str:
-    stripped = text.strip()
-    if not stripped:
-        return "empty"
-
-    heading_title = str(metadata.get("heading_title") or "").lower()
-    source_ext = str(metadata.get("source_ext") or "").lower()
-
-    if "```" in stripped or "~~~" in stripped:
-        return "code_mixed"
-    if re.search(r"(^|\n)\s{4,}\S", text):
-        return "code_mixed"
-    if re.search(r"(^|\n)#{1,4}\s+", text):
-        return "section"
-    if re.search(r"(^|\n)\s*[-*+]\s+", text) or re.search(r"(^|\n)\s*\d+[.)、]\s+", text):
-        return "list"
-    if source_ext == ".md" and "题" in heading_title:
-        return "exercise"
-    if source_ext == ".md" and any(token in heading_title for token in ["答案", "解析"]):
-        return "answer"
-    if re.search(r"def |class |import |from .* import |if __name__ == ['\"]__main__['\"]", text):
-        return "code_mixed"
-    return "text"
+from app.rag.rag_utils import detect_content_type as _detect_content_type
 
 
 def _normalize_keyword_list(values: List[str]) -> List[str]:
@@ -177,18 +155,15 @@ def enhance_documents(documents: List[Document]) -> List[Document]:
         doc.metadata["source_type"] = doc.metadata.get("source_type") or source_ext.lstrip(".") or "unknown"
         doc.metadata["content_type"] = content_type
         doc.metadata["keywords"] = ", ".join(keywords)
-        doc.metadata["keyword_list"] = keywords
-        doc.metadata["heading_keywords"] = ", ".join(heading_keywords)
-        doc.metadata["heading_keyword_list"] = heading_keywords
+        doc.metadata["heading_keywords"] = ", ".join(heading_keywords) if heading_keywords else ""
         doc.metadata["heading_slug"] = _build_heading_slug(str(doc.metadata.get("heading_path") or heading))
         doc.metadata["has_heading"] = bool(heading)
         doc.metadata["has_code_block"] = "```" in doc.page_content or "~~~" in doc.page_content or bool(re.search(r"(^|\n)\s{4,}\S", doc.page_content))
         doc.metadata["line_count"] = len(doc.page_content.splitlines())
         doc.metadata["estimated_tokens"] = _estimate_token_count(doc.page_content)
-        doc.metadata["is_structured"] = content_type in {"section", "list", "exercise", "answer", "code_mixed"}
+        doc.metadata["is_structured"] = content_type in {"section", "list", "exercise", "answer", "code_mixed", "merged_qa"}
 
-        # ── Chroma 不支持 list 类型，keyword_list 等仅内存使用 ──
-        # 入库时由 sanitize_for_chroma() 过滤
+        # ── Chroma 仅支持 str/int/float/bool，无 list 类型 ──
 
     logger.info("Enhanced %d documents with keywords", len(documents))
     return documents

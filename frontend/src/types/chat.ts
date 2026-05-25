@@ -22,7 +22,8 @@ export type ChatPanelState = {
   streamingAgent: string;
   activeTool: string | null;
   streamingGovernance: Governance | null;
-  threadId: string;
+  baseThreadId: string;
+  conversationId: number | null;
 };
 
 export type ChatPanelProps = {

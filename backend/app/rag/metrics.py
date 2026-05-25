@@ -89,23 +89,6 @@ class MetricsWriter:
     def timer(self, event: str, stage: str, tags: dict[str, Any] | None = None) -> MetricsTimer:
         return MetricsTimer(self, event=event, stage=stage, tags=tags)
 
-    def emit_quality_summary(self, *, stage: str, report: Any, values: dict[str, Any] | None = None, tags: dict[str, Any] | None = None) -> None:
-        payload = dict(values or {})
-        payload.update({
-            "total_docs": getattr(report, "total_docs", 0),
-            "evaluated_docs": getattr(report, "evaluated_docs", 0),
-            "avg_completeness": getattr(report, "avg_completeness", 0.0),
-            "avg_accuracy": getattr(report, "avg_accuracy", 0.0),
-            "avg_consistency": getattr(report, "avg_consistency", 0.0),
-            "avg_overall": getattr(report, "avg_overall", 0.0),
-            "docs_with_garbage": getattr(report, "docs_with_garbage", 0),
-            "docs_with_encoding_issues": getattr(report, "docs_with_encoding_issues", 0),
-            "docs_with_duplicates": getattr(report, "docs_with_duplicates", 0),
-            "docs_missing_metadata": getattr(report, "docs_missing_metadata", 0),
-            "docs_missing_heading": getattr(report, "docs_missing_heading", 0),
-        })
-        self.emit(event="quality_report", stage=stage, tags=tags, values=payload)
-
     def emit_ingest_file_summary(self, *, file: str, category: str, elapsed_ms: float, values: dict[str, Any] | None = None, status: str = "ok") -> None:
         tags = {"file": file, "category": category}
         self.emit(event="ingest_file_summary", stage="ingest", status=status, duration_ms=elapsed_ms, tags=tags, values=values)
@@ -130,3 +113,32 @@ class MetricsWriter:
 
 
 metrics = MetricsWriter()
+
+
+# ── 查询分解统计 ──────────────────────────────────────────
+
+_decompose_triggered = 0
+_decompose_success = 0
+_decompose_total_sub = 0
+
+
+def record_decompose(triggered: bool, sub_count: int = 0) -> None:
+    global _decompose_triggered, _decompose_success, _decompose_total_sub
+    if triggered:
+        _decompose_triggered += 1
+    if sub_count >= 2:
+        _decompose_success += 1
+        _decompose_total_sub += sub_count
+
+
+def get_decompose_stats() -> dict[str, int | float]:
+    return {
+        "decompose_triggered": _decompose_triggered,
+        "decompose_success": _decompose_success,
+        "decompose_success_rate": (
+            _decompose_success / _decompose_triggered if _decompose_triggered else 0
+        ),
+        "decompose_avg_sub_count": (
+            _decompose_total_sub / _decompose_success if _decompose_success else 0
+        ),
+    }

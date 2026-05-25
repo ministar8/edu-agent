@@ -24,7 +24,7 @@ function StreamingMessageComponent({ streamingAgent, activeTool, streamingGovern
         )}
 
         {activeTool && (
-          <div className="text-xs text-blue-500 mb-2 flex items-center gap-1">
+          <div className="text-xs text-emerald-600 mb-2 flex items-center gap-1">
             <span className="animate-spin">⚙</span>
             {toolLabels[activeTool] || activeTool}...
           </div>

@@ -1,61 +1,52 @@
-# Python
+# ── Python ──────────────────────────────────────────────
 __pycache__/
 *.py[cod]
+*.pyc
 *.egg-info/
 *.egg
 dist/
 build/
 venv/
 .venv/
-*.pyc
 
-# Environment
+# ── Environment ────────────────────────────────────────
 .env
 .env.local
 .env.*.local
 
-# IDE
+# ── IDE ────────────────────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# ChromaDB
-chroma_db/
-
-# Node
+# ── Node / Frontend ────────────────────────────────────
 node_modules/
 .next/
 out/
-.nuxt/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Database
-*.db
-*.sqlite3
-
-# Build artifacts
 tsconfig.tsbuildinfo
 
-# Metrics data
+# ── Database ────────────────────────────────────────────
+*.db
+*.sqlite3
+chroma_db/
+
+# ── Data & Logs ────────────────────────────────────────
 backend/data/
+*.log
 
-# PDF textbooks (large files)
-*.pdf
-
-# Temp scripts
-_*.py
-
-# OS
+# ── OS ─────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
 Desktop.ini
 
-# Cloned repositories (content already in knowledge/)
+# ── Knowledge content (tracked via .gitkeep only) ──────
+knowledge/general/
+knowledge/questions/
+knowledge/answers/
+knowledge/learning_paths/
+
+# ── Cloned repos (content already in knowledge/) ───────
 408/
 408-CS-master/
 CS-Basic-SelfLearning/
@@ -64,18 +55,3 @@ CSPostgraduate-408-master/
 ComputerOrganizationNote/
 Postgraduate-408-old-exam/
 learn-network/
-
-# Knowledge content (tracked via gitkeep only)
-knowledge/general/*.md
-knowledge/questions/*.md
-knowledge/questions/*.pdf
-knowledge/questions/*.txt
-knowledge/questions/*.docx
-knowledge/answers/*.md
-knowledge/answers/*.pdf
-knowledge/answers/*.txt
-knowledge/answers/*.docx
-knowledge/learning_paths/*.md
-knowledge/learning_paths/*.pdf
-knowledge/learning_paths/*.txt
-knowledge/learning_paths/*.docx

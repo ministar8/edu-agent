@@ -36,9 +36,8 @@ _POSITIVE_SIGNALS = [
     "来源依据",
     "来源文件",
     "来源片段",
-    "xxx.md",
     "知识图谱",
-    ".md",
+    "Sources",
     "章节",
     "节选",
     "原文",
@@ -192,14 +191,20 @@ def guarding_context_truncate(context: str, max_chars: int = 3000, query: str = 
     if not chunks or (not query and len(chunks) == 1):
         return context[:max_chars] + "\n\n[...检索结果过长，已截断]"
 
-    # 提取 query 关键词用于相关性评分
+    # 提取 query 关键词用于相关性评分（jieba 分词，替代旧 regex 整句抓取）
     query_terms: set[str] = set()
     if query:
-        for m in re.findall(r"[A-Za-z_][A-Za-z0-9_\.]{1,}|[\u4e00-\u9fff]{2,12}", query.lower()):
-            query_terms.add(m)
-        # 补充原始 query 中的连续片段（2-4字）
-        for m in re.findall(r"[\u4e00-\u9fff]{2,4}", query):
-            query_terms.add(m.lower())
+        try:
+            import jieba
+            # cut_for_search 多粒度分词："进程同步机制" → "进程"、"同步"、"机制"、"进程同步"、"同步机制"
+            for w in jieba.cut_for_search(query):
+                w = w.strip().lower()
+                if w and len(w) >= 2:
+                    query_terms.add(w)
+        except ImportError:
+            # 降级：英文 token + 短中文片段
+            for m in re.findall(r"[A-Za-z_][A-Za-z0-9_\.]{1,}|[\u4e00-\u9fff]{2,4}", query.lower()):
+                query_terms.add(m)
 
     def _relevance_score(chunk: str) -> int:
         """计算片段与 query 的相关性分数"""

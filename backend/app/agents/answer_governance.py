@@ -20,10 +20,10 @@ class GovernanceResult:
 
 # 各 Agent 期望的来源关键词
 _SOURCE_KEYWORDS = {
-    "knowledge_agent": ["来源依据", "来源", "来源文件", "来源片段", "xxx.md"],
+    "knowledge_agent": ["来源", "来源依据", "来源文件", "来源片段", "Sources"],
     "grading_agent": ["评分依据", "依据", "标准答案"],
     "path_agent": ["依据来源", "知识图谱", "学习路径文档"],
-    "question_agent": [],  # 出题不强制来源字段
+    "question_agent": [],  # question generation doesn't require source fields
 }
 
 # 疑似伪造来源的模式
@@ -76,19 +76,20 @@ def _check_format_compliance(answer: str, agent_name: str) -> list[str]:
     warnings = []
 
     if agent_name == "knowledge_agent":
-        required = ["概念解释", "核心要点"]
-        missing = [r for r in required if r not in answer]
-        if missing:
-            warnings.append(f"知识问答缺少必要字段: {', '.join(missing)}")
+        # 检查结构化字段是否作为标题/段落出现（而非仅字符串包含）
+        required_sections = [("概念解释", r"概念解释[：:]"), ("核心要点", r"核心要点[：:]?")]
+        for name, pattern in required_sections:
+            if not re.search(pattern, answer):
+                warnings.append(f"知识问答缺少必要字段: {name}")
 
     elif agent_name == "grading_agent":
-        if "评分" not in answer:
+        if not re.search(r"评分[：:]", answer) and "评分（参考）" not in answer:
             warnings.append("批改结果缺少评分字段")
         if "评分依据" not in answer and "参考评分" not in answer:
             warnings.append("批改结果缺少评分依据字段")
 
     elif agent_name == "path_agent":
-        if "学习路径" not in answer:
+        if not re.search(r"学习路径[：:]", answer) and "学习路径" not in answer:
             warnings.append("学习路径推荐缺少路径字段")
 
     elif agent_name == "question_agent":
@@ -99,10 +100,15 @@ def _check_format_compliance(answer: str, agent_name: str) -> list[str]:
 
 
 def _determine_confidence(
-    has_source: bool, forged_warnings: list[str], format_warnings: list[str]
+    has_source: bool, forged_warnings: list[str], format_warnings: list[str],
+    answer: str = "",
 ) -> str:
-    """根据校验结果判定置信度"""
+    """Determine confidence from governance checks.
+    Semantic evidence overlap is handled by Reflection agent (reflection_agent._rule_signals).
+    """
     if forged_warnings:
+        return "low"
+    if answer and len(answer.strip()) < 20:
         return "low"
     if not has_source or len(format_warnings) >= 2:
         return "medium"
@@ -192,8 +198,7 @@ def govern_answer(answer: str, agent_name: str, tool_outputs: list[str] | None =
                 warnings.append("工具返回无结果，但回答未说明依据不足")
                 flags.append("missing_disclaimer")
 
-    # 6. 判定置信度
-    confidence = _determine_confidence(has_source, forged_warnings, format_warnings)
+    # 6. 判定置信度（增加内容质量信号）
     if "missing_disclaimer" in flags and confidence == "high":
         confidence = "medium"
 

@@ -19,8 +19,8 @@ function KnowledgeGraphCanvasComponent({ nodes, edges, error }: KnowledgeGraphCa
             <Background color="#e2e8f0" gap={20} />
             <Controls />
             <MiniMap
-              nodeStrokeColor="#667eea"
-              nodeColor="#667eea"
+              nodeStrokeColor="#059669"
+              nodeColor="#059669"
               maskColor="rgba(102, 126, 234, 0.1)"
             />
           </ReactFlow>

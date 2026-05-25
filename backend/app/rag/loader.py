@@ -1,364 +1,173 @@
+"""文档加载器 — LangChain 原生 Loader + PyMuPDF4LLM
+
+支持的文件类型：
+  .pdf  → PyMuPDF4LLM（PDF→Markdown，保留表格/公式结构）
+  .txt  → TextLoader（autodetect_encoding=True 自动编码检测）
+  .md   → TextLoader（同上，Markdown 作为纯文本加载）
+  .docx → Docx2txtLoader（原生 DOCX 解析）
+
+PyMuPDF4LLM 相比 PyPDFLoader 的优势：
+  - 表格保留为 Markdown 格式（PyPDFLoader 丢失表格）
+  - 公式/代码块结构保持
+  - 输出 Markdown 文本，与下游 splitter/cleaner 兼容
+  - 轻量高效，无需 GPU
+"""
+
+from __future__ import annotations
+
 import logging
 import os
-import time
-
-from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
+from pathlib import Path
 from langchain_core.documents import Document
+from langchain_community.document_loaders import Docx2txtLoader, TextLoader
+import pymupdf4llm
 
-from app.config import settings
-from app.rag.metrics import metrics
+# ── 编码检测（langchain_community TextLoader.autodetect_encoding 与
+#    charset_normalizer>=3.4 不兼容，自研三级策略替代） ──
+_CN_ENCODINGS = ["utf-8", "utf-8-sig", "gb18030", "gbk", "gb2312", "big5"]
+
+
+def _detect_and_read(filepath: str) -> str:
+    """四级编码检测：UTF-8 严格 → 中文编码候选列表 → cchardet → utf-8 replace
+
+    注意：cchardet 对中文 UTF-8 文件可能误判为 Windows-1252，
+    导致 Mojibake（乱码），因此 UTF-8 严格解码优先于 cchardet。
+    """
+    raw = open(filepath, "rb").read()
+    # 1. UTF-8 严格解码（knowledge base 文件均为 UTF-8）
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    # 2. 中文编码候选列表（utf-8-sig, GB 系列, Big5）
+    for enc in _CN_ENCODINGS[1:]:  # skip utf-8, already tried
+        try:
+            return raw.decode(enc)
+        except (UnicodeDecodeError, LookupError):
+            continue
+    # 3. cchardet / chardet（作为兜底，不优先）
+    try:
+        import cchardet as chardet_mod
+        result = chardet_mod.detect(raw)
+        enc = result.get("encoding")
+        if enc:
+            return raw.decode(enc, errors="replace")
+    except ImportError:
+        try:
+            import chardet as chardet_mod
+            result = chardet_mod.detect(raw)
+            enc = result.get("encoding")
+            if enc:
+                return raw.decode(enc, errors="replace")
+        except ImportError:
+            pass
+    # 4. utf-8 replace 兜底
+    return raw.decode("utf-8", errors="replace")
 
 logger = logging.getLogger(__name__)
+# ── 支持的文件扩展名 ──────────────────────────────────
+SUPPORTED_EXTENSIONS = {".pdf", ".txt", ".md", ".docx"}
 
-
-# ── PDF 表格提取 ──────────────────────────────────────
-
-def _extract_pdf_tables(filepath: str) -> list[Document]:
-    """从 PDF 中提取表格，转换为 Markdown 格式
-
-    优先使用 camelot（基于 PDF 线条检测，表格识别精度高），
-    不可用时回退到 pdfplumber（基于文本坐标推断，精度稍低但无需 Ghostscript）。
-
-    Returns:
-        表格 Document 列表，每个表格为一个 Document，
-        page_content 为 Markdown 表格，metadata 包含页码和表格索引
-    """
-    table_docs: list[Document] = []
-
-    # 尝试 camelot
-    try:
-        import camelot  # type: ignore[import-not-found]
-
-        tables = camelot.read_pdf(filepath, pages="all", flavor="stream")
-        for i, table in enumerate(tables):
-            md = table.df.to_markdown(index=False)
-            if md and len(md.strip()) > 10:
-                table_docs.append(Document(
-                    page_content=md,
-                    metadata={
-                        "source": filepath,
-                        "table_index": i,
-                        "table_page": table.page,
-                        "table_extraction": "camelot",
-                    },
-                ))
-        if table_docs:
-            logger.info("camelot extracted %d tables from %s", len(table_docs), filepath)
-            return table_docs
-    except ImportError:
-        logger.debug("camelot not available, trying pdfplumber")
-    except Exception as e:
-        logger.debug("camelot failed for %s: %s, trying pdfplumber", filepath, e)
-
-    # 回退到 pdfplumber
-    try:
-        import pdfplumber  # type: ignore[import-not-found]
-
-        with pdfplumber.open(filepath) as pdf:
-            for page_num, page in enumerate(pdf.pages, 1):
-                for table_idx, table in enumerate(page.extract_tables()):
-                    if not table or len(table) < 2:
-                        continue
-                    # 转换为 Markdown 表格
-                    header = table[0]
-                    rows = table[1:]
-                    # 清理单元格：去除 None 和多余空白
-                    header = [str(c or "").strip() for c in header]
-                    rows = [[str(c or "").strip() for c in row] for row in rows]
-                    if not any(header):
-                        # 无表头：用第一行做表头
-                        header = rows[0] if rows else []
-                        rows = rows[1:] if rows else []
-                    if not header or not rows:
-                        continue
-                    md_lines = ["| " + " | ".join(header) + " |"]
-                    md_lines.append("| " + " | ".join(["---"] * len(header)) + " |")
-                    for row in rows:
-                        md_lines.append("| " + " | ".join(row) + " |")
-                    md = "\n".join(md_lines)
-                    if len(md.strip()) > 10:
-                        table_docs.append(Document(
-                            page_content=md,
-                            metadata={
-                                "source": filepath,
-                                "table_index": table_idx,
-                                "table_page": page_num,
-                                "table_extraction": "pdfplumber",
-                            },
-                        ))
-        if table_docs:
-            logger.info("pdfplumber extracted %d tables from %s", len(table_docs), filepath)
-    except ImportError:
-        logger.debug("pdfplumber not available, table extraction skipped for %s", filepath)
-    except Exception as e:
-        logger.debug("pdfplumber failed for %s: %s", filepath, e)
-
-    return table_docs
-
-# ── 自动编码检测 ──────────────────────────────────────
-
-# 编码检测优先级：cchardet(C加速) > chardet(纯Python) > 硬编码UTF-8
-_chardet_available: bool | None = None
-
-# 常见中文编码候选列表（检测置信度低时按此顺序尝试）
-_CN_ENCODING_CANDIDATES = [
-    "utf-8",
-    "gbk",
-    "gb2312",
-    "gb18030",
-    "big5",
-    "utf-16",
-]
-
-# 检测时读取的文件头字节数（足够检测编码，避免读整个文件）
-_DETECT_SAMPLE_SIZE = 64 * 1024  # 64KB
-
-
-def _detect_encoding(filepath: str) -> str:
-    """自动检测文件编码
-
-    策略：
-    1. 优先用 cchardet/chardet 检测，置信度 ≥ 0.7 时采用
-    2. 置信度 < 0.7 时，按中文编码候选列表逐一尝试解码
-    3. 全部失败则回退到 utf-8（允许 errors='replace'）
-
-    Returns:
-        检测到的编码名称（如 'gbk', 'utf-8'）
-    """
-    global _chardet_available
-
-    # 1. chardet 检测
-    if _chardet_available is not False:
-        try:
-            import cchardet as chardet  # type: ignore[import-not-found]
-            _chardet_available = True
-        except ImportError:
-            try:
-                import chardet  # type: ignore[import-not-found]
-                _chardet_available = True
-            except ImportError:
-                _chardet_available = False
-
-    if _chardet_available:
-        try:
-            with open(filepath, "rb") as f:
-                raw = f.read(_DETECT_SAMPLE_SIZE)
-            result = chardet.detect(raw)
-            encoding = result.get("encoding", "")
-            confidence = result.get("confidence", 0.0)
-
-            if encoding and confidence >= 0.7:
-                logger.debug(
-                    "Encoding detected: %s (confidence=%.2f) for %s",
-                    encoding, confidence, filepath,
-                )
-                return encoding.lower()
-
-            # 置信度低 → 走候选列表
-            logger.debug(
-                "Low confidence encoding: %s (%.2f) for %s, trying candidates",
-                encoding, confidence, filepath,
-            )
-        except Exception as e:
-            logger.debug("chardet failed for %s: %s", filepath, e)
-
-    # 2. 候选编码逐一尝试
-    for enc in _CN_ENCODING_CANDIDATES:
-        try:
-            with open(filepath, "r", encoding=enc) as f:
-                f.read(_DETECT_SAMPLE_SIZE)
-            logger.debug("Encoding candidate '%s' works for %s", enc, filepath)
-            return enc
-        except (UnicodeDecodeError, UnicodeError):
-            continue
-        except Exception:
-            continue
-
-    # 3. 兜底 utf-8
-    logger.warning("Could not detect encoding for %s, falling back to utf-8", filepath)
-    return "utf-8"
-
-
-def _load_text_with_encoding(filepath: str) -> list[Document]:
-    """加载文本文件，自动检测编码
-
-    流程：
-    1. 先尝试 utf-8（最常见，速度最快）
-    2. utf-8 失败 → 自动检测编码 → 用检测到的编码加载
-    3. 检测到的编码也失败 → utf-8 + errors='replace'（保留内容，替换乱码字符）
-    """
-    # 快速路径：先试 utf-8
-    try:
-        loader = TextLoader(filepath, encoding="utf-8")
-        docs = loader.load()
-        return docs
-    except (UnicodeDecodeError, UnicodeError):
-        pass
-
-    # 慢速路径：自动检测编码
-    detected_enc = _detect_encoding(filepath)
-    try:
-        loader = TextLoader(filepath, encoding=detected_enc)
-        docs = loader.load()
-        # 标记检测到的编码
-        for doc in docs:
-            doc.metadata["detected_encoding"] = detected_enc
-        logger.info("Loaded %s with detected encoding: %s", filepath, detected_enc)
-        return docs
-    except (UnicodeDecodeError, UnicodeError):
-        pass
-
-    # 兜底：utf-8 + replace
-    logger.warning(
-        "Encoding %s failed for %s, loading with utf-8 (errors=replace)",
-        detected_enc, filepath,
-    )
-    try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-        doc = Document(
-            page_content=content,
-            metadata={"source": filepath, "detected_encoding": "utf-8-replaced"},
-        )
-        return [doc]
-    except Exception as e:
-        logger.error("Failed to load %s even with errors=replace: %s", filepath, e)
-        return []
-
-SUPPORTED_EXTENSIONS = {
-    ".pdf": PyPDFLoader,
+# ── Loader 映射 ───────────────────────────────────────
+_PDF_LOADER = "pymupdf4llm"
+_LOADER_MAP: dict[str, type | str] = {
+    ".pdf": _PDF_LOADER,
     ".txt": TextLoader,
     ".md": TextLoader,
     ".docx": Docx2txtLoader,
 }
 
 
-def load_documents(directory: str | None = None) -> list[Document]:
-    """加载目录下所有支持的文档（递归扫描子目录）"""
-    doc_dir = directory or settings.KNOWLEDGE_DIR
-    documents = []
+# ════════════════════════════════════════════════════════
+#  单文件加载
+# ════════════════════════════════════════════════════════
 
-    if not os.path.exists(doc_dir):
-        os.makedirs(doc_dir, exist_ok=True)
-        return documents
+def load_single_file(filepath: str | Path) -> list[Document]:
+    """使用 LangChain 原生 Loader 加载单个文件
 
-    for root, _dirs, files in os.walk(doc_dir):
-        for filename in files:
-            ext = os.path.splitext(filename)[1].lower()
-            if ext not in SUPPORTED_EXTENSIONS:
-                continue
+    Args:
+        filepath: 文件路径
 
-            filepath = os.path.join(root, filename)
-            loader_cls = SUPPORTED_EXTENSIONS[ext]
-
-            try:
-                start = time.perf_counter()
-                if loader_cls is TextLoader:
-                    docs = _load_text_with_encoding(filepath)
-                else:
-                    loader = loader_cls(filepath)
-                    docs = loader.load()
-                for doc in docs:
-                    doc.metadata["source_file"] = filename
-                    doc.metadata["source_path"] = os.path.relpath(filepath, doc_dir)
-                    doc.metadata["source_ext"] = ext
-                    doc.metadata["source_type"] = ext.lstrip(".") or "unknown"
-                documents.extend(docs)
-
-                # PDF 表格提取：额外提取表格为 Markdown 格式 Document
-                if ext == ".pdf":
-                    table_docs = _extract_pdf_tables(filepath)
-                    for doc in table_docs:
-                        doc.metadata["source_file"] = filename
-                        doc.metadata["source_path"] = os.path.relpath(filepath, doc_dir)
-                        doc.metadata["source_ext"] = ext
-                        doc.metadata["source_type"] = "pdf_table"
-                        doc.metadata["section.chunk_role"] = "table"
-                    documents.extend(table_docs)
-                detected_encoding = ""
-                if docs:
-                    detected_encoding = str(docs[0].metadata.get("detected_encoding") or "")
-                metrics.emit(
-                    event="load_file",
-                    stage="loader",
-                    duration_ms=round((time.perf_counter() - start) * 1000, 3),
-                    tags={"file": filepath, "source_ext": ext},
-                    values={
-                        "doc_count": len(docs),
-                        "parse_success": bool(docs),
-                        "detected_encoding": detected_encoding,
-                        "encoding_fallback": detected_encoding == "utf-8-replaced",
-                    },
-                )
-            except Exception as e:
-                metrics.emit(
-                    event="load_file",
-                    stage="loader",
-                    status="error",
-                    tags={"file": filepath, "source_ext": ext},
-                    values={"parse_success": False, "error_type": e.__class__.__name__},
-                )
-                logger.warning("Failed to load %s: %s", filepath, e)
-
-    return documents
-
-
-def load_single_file(filepath: str) -> list[Document]:
-    """加载单个文件"""
+    Returns:
+        Document 列表（PDF 按页拆分，其他格式通常为单个 Document）
+    """
+    filepath = str(filepath)
     ext = os.path.splitext(filepath)[1].lower()
-    if ext not in SUPPORTED_EXTENSIONS:
-        raise ValueError(f"Unsupported file type: {ext}")
 
-    loader_cls = SUPPORTED_EXTENSIONS[ext]
-    start = time.perf_counter()
+    if ext not in _LOADER_MAP:
+        raise ValueError(f"不支持的文件类型: {ext}（支持: {SUPPORTED_EXTENSIONS}）")
+
+    loader_cls = _LOADER_MAP[ext]
+
+    if loader_cls is _PDF_LOADER:
+        # ── PyMuPDF4LLM: PDF → Markdown ──
+        docs = _load_pdf_with_pymupdf(filepath)
+    elif loader_cls is TextLoader:
+        # TextLoader.autodetect_encoding 与 charset_normalizer>=3.4 不兼容
+        # 使用自研三级编码检测
+        text = _detect_and_read(filepath)
+        docs = [Document(page_content=text, metadata={"source": filepath})]
+    else:
+        loader = loader_cls(filepath)
+        docs = loader.load()
+
+    # 注入标准元数据
+    for doc in docs:
+        doc.metadata["source"] = filepath
+        doc.metadata["source_file"] = os.path.basename(filepath)
+        doc.metadata["source_path"] = filepath
+        doc.metadata["file_type"] = ext.lstrip(".")
+
+    logger.debug("Loaded %s: %d documents", filepath, len(docs))
+    return docs
+
+
+# ════════════════════════════════════════════════════════
+#  PyMuPDF4LLM: PDF → Markdown Document
+# ════════════════════════════════════════════════════════
+
+def _load_pdf_with_pymupdf(filepath: str) -> list[Document]:
+    """使用 PyMuPDF4LLM 将 PDF 转为 Markdown Document 列表
+
+    PyMuPDF4LLM 输出 Markdown 文本，表格保留为 Markdown 表格格式，
+    公式/代码块结构保持，与下游 cleaner/splitter 完全兼容。
+
+    按页拆分，每页一个 Document，保留页码元数据。
+    """
     try:
-        if loader_cls is TextLoader:
-            docs = _load_text_with_encoding(filepath)
-        else:
-            loader = loader_cls(filepath)
-            docs = loader.load()
-        for doc in docs:
-            doc.metadata["source_file"] = os.path.basename(filepath)
-            doc.metadata["source_path"] = os.path.basename(filepath)
-            doc.metadata["source_ext"] = ext
-            doc.metadata["source_type"] = ext.lstrip(".") or "unknown"
-
-        # PDF 表格提取
-        table_docs: list[Document] = []
-        if ext == ".pdf":
-            table_docs = _extract_pdf_tables(filepath)
-            for doc in table_docs:
-                doc.metadata["source_file"] = os.path.basename(filepath)
-                doc.metadata["source_path"] = os.path.basename(filepath)
-                doc.metadata["source_ext"] = ext
-                doc.metadata["source_type"] = "pdf_table"
-                doc.metadata["section.chunk_role"] = "table"
-
-        all_docs = docs + table_docs
-        detected_encoding = ""
-        if docs:
-            detected_encoding = str(docs[0].metadata.get("detected_encoding") or "")
-        metrics.emit(
-            event="load_file",
-            stage="loader",
-            duration_ms=round((time.perf_counter() - start) * 1000, 3),
-            tags={"file": filepath, "source_ext": ext},
-            values={
-                "doc_count": len(all_docs),
-                "table_count": len(table_docs),
-                "parse_success": bool(docs),
-                "detected_encoding": detected_encoding,
-                "encoding_fallback": detected_encoding == "utf-8-replaced",
-            },
-        )
-        return all_docs
+        md_pages: list[str] = pymupdf4llm.to_markdown(filepath, page_chunks=True)
     except Exception as e:
-        metrics.emit(
-            event="load_file",
-            stage="loader",
-            status="error",
-            duration_ms=round((time.perf_counter() - start) * 1000, 3),
-            tags={"file": filepath, "source_ext": ext},
-            values={"parse_success": False, "error_type": e.__class__.__name__},
-        )
-        raise
+        logger.warning("PyMuPDF4LLM failed for '%s': %s, fallback to PyPDFLoader", filepath, e)
+        # 回退到 PyPDFLoader
+        from langchain_community.document_loaders import PyPDFLoader
+        return PyPDFLoader(filepath).load()
+
+    docs: list[Document] = []
+    for page_idx, page_text in enumerate(md_pages):
+        if isinstance(page_text, dict):
+            # pymupdf4llm 某些版本返回 dict
+            text = page_text.get("text", "")
+            metadata = {
+                "source": filepath,
+                "page": page_text.get("page", page_idx + 1),
+            }
+        else:
+            text = str(page_text)
+            metadata = {
+                "source": filepath,
+                "source_file": os.path.basename(filepath),
+                "source_path": filepath,
+                "page": page_idx + 1,
+            }
+
+        if text.strip():
+            docs.append(Document(page_content=text, metadata=metadata))
+
+    if not docs:
+        # 空结果回退
+        logger.warning("PyMuPDF4LLM returned empty for '%s', fallback to PyPDFLoader", filepath)
+        from langchain_community.document_loaders import PyPDFLoader
+        return PyPDFLoader(filepath).load()
+
+    return docs
+

@@ -24,7 +24,7 @@ function KnowledgeGraphToolbarComponent({ showImport, onRefresh, onToggleImport 
         </button>
         <button
           onClick={onToggleImport}
-          className="px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+          className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm"
         >
           {showImport ? "收起导入" : "导入示例数据"}
         </button>

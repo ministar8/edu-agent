@@ -2,28 +2,53 @@ import json
 import logging
 import re
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from app.rag.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
-MIN_CHUNK_LENGTH = 20
+MIN_CHUNK_LENGTH = 80
 
-# ── 父 chunk（摘要层）参数 ──
-# 父 chunk 不存储重复内容，只保留检索信号：
-#   标题路径 + 关键词 + 语义截断（关键信息优先）+ 子 chunk 索引
-# 这样 summary chunk 与 detail chunk 零内容重叠
-_SUMMARY_MAX_CHARS = 400
-# 父 chunk 仅在 section 含 ≥2 个子 chunk 时生成（单 chunk section 无需摘要层）
-_SUMMARY_MIN_CHILD_CHUNKS = 2
+# ── Adaptive chunk_size 映射 ──
+# 根据 content_type 选择 chunk_size，0 表示不拆分（整块保留）
+_ADAPTIVE_CHUNK_SIZE: dict[str, int] = {
+    "section": 800,
+    "text": 800,
+    "list": 0,        # 不拆
+    "code_mixed": 400,
+    "exercise": 600,
+    "answer": 600,
+    "merged_qa": 0,   # 不拆（题+答原子单元）
+    "table": 0,       # 不拆（表格原子保留）
+    "formula": 0,     # 不拆（公式块原子保留）
+}
+_ADAPTIVE_CHUNK_OVERLAP: dict[str, int] = {
+    "section": 150,
+    "text": 150,
+    "list": 0,
+    "code_mixed": 100,
+    "exercise": 100,
+    "answer": 100,
+    "merged_qa": 0,
+    "table": 0,
+    "formula": 0,
+}
 
-# ── 问答索引块参数 ──
-# 问答块从 section 内容中提取关键句，转换为 Q&A 格式
-# 用于提升用户查询与文档内容的语义匹配度
-_QA_MAX_PAIRS = 5          # 每个 section 最多生成的问答对数
-_QA_MIN_SECTION_CHARS = 100  # section 内容少于此长度时跳过问答生成
-_QA_CHUNK_MAX_CHARS = 600    # 单个问答块最大字符数
+# 硬上限：任何 chunk 不超过此长度（超长单元按句子拆分）
+_CHUNK_HARD_LIMIT = 1600
+# QA 软上限：只用于多题合并时的题目边界分组，不拆单题
+_QA_CHUNK_SOFT_LIMIT = 3000
+# 过短阈值：低于此长度的 chunk 尝试与邻居合并
+_CHUNK_MIN_EFFECTIVE = 80
+_PARENT_WINDOW_CHAR_BUDGET = 4200
+
+
+def _resolve_chunk_params(content_type: str) -> tuple[int, int]:
+    """根据内容类型返回 (chunk_size, chunk_overlap)"""
+    size = _ADAPTIVE_CHUNK_SIZE.get(content_type, 800)
+    overlap = _ADAPTIVE_CHUNK_OVERLAP.get(content_type, 150)
+    return size, overlap
+
 
 # Markdown 标题正则：# 标题 / ## 标题 / ### 标题
 _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
@@ -39,7 +64,47 @@ def _percentile(values: list[int], ratio: float) -> float:
 
 
 def _is_sentence_complete(text: str) -> bool:
-    return bool(text.rstrip().endswith(("。", "！", "？", ".", "!", "?", ":", "；", ";", "…")))
+    """判断文本是否在语义完整的位置结束
+
+    完整结束包括：
+    - 句末标点（。！？.!?;：…）
+    - Markdown 列表项（- 或 数字. 开头的行）
+    - Markdown 标题行（# 开头的行）
+    - 加粗/强调结尾（**）
+    - 代码块结尾（```）
+    - 右括号/右引号结尾
+    """
+    stripped = text.rstrip()
+    if not stripped:
+        return True
+    # 句末标点
+    if stripped.endswith(("。", "！", "？", ".", "!", "?", ":", "：", "；", ";", "…", "”", "'", "\"")):
+        return True
+    # Markdown 结构
+    if stripped.endswith("```"):
+        return True
+    if stripped.endswith("**"):
+        return True
+    # 列表项行（最后一行是列表项）
+    last_line = stripped.splitlines()[-1].strip() if stripped.splitlines() else ""
+    if re.match(r"^(?:[-*+]|\d+[.．])\s+", last_line):
+        return True
+    # 标题行
+    if re.match(r"^#{1,4}\s+", last_line):
+        return True
+    # 右括号结尾
+    if stripped.endswith(("）", ")", "】", "]", "》", "}", ">")):
+        return True
+    # Markdown 表格行
+    if stripped.endswith("|"):
+        return True
+    # Markdown 引用块
+    if stripped.endswith(">"):
+        return True
+    # 加粗文本结尾
+    if stripped.endswith(("**", "__")):
+        return True
+    return False
 
 
 def _extract_headings(text: str) -> list[dict]:
@@ -108,391 +173,338 @@ def _make_chunk(base_metadata: dict, text: str) -> Document:
     return Document(page_content=text, metadata=dict(base_metadata))
 
 
-def _generate_section_summary(section: dict, child_chunk_ids: list[str]) -> str:
-    """生成 section 父 chunk 的摘要内容（语义截断 + 关键信息优先）
+def _build_parent_window_text(
+    detail_chunks: list[tuple[Document, str]],
+    anchor_index: int,
+    budget: int = _PARENT_WINDOW_CHAR_BUDGET,
+) -> str:
+    if not detail_chunks:
+        return ""
 
-    策略：
-      1. 标题路径 — 主题定位
-      2. 关键词提取 — 高频词组，增强语义匹配
-      3. 语义截断 — 对句子打分，按信息密度贪心装箱：
-         - 定义句（"X是指/定义为Y"）+3
-         - 结论句（"因此/总之/综上"）+3
-         - 数值句（含数字/百分比）+2
-         - 列举句（"首先/包括/分为"）+2
-         - 首句位置加分 +2（主题引入）
-         - 尾句位置加分 +1（总结收束）
-         - 过长句(>80字符) -1（信息密度低）
-      4. 子 chunk 索引
+    anchor_text = detail_chunks[anchor_index][0].page_content.strip()
+    if len(anchor_text) >= budget:
+        return anchor_text[:budget]
 
-    全程规则化，零 LLM 调用。
+    selected: dict[int, str] = {anchor_index: anchor_text}
+    total = len(anchor_text)
+    left = anchor_index - 1
+    right = anchor_index + 1
 
-    Args:
-        section: section 信息字典
-        child_chunk_ids: 子 chunk 的 ID 列表
-
-    Returns:
-        父 chunk 的 page_content
-    """
-    parts: list[str] = []
-
-    # 1. 标题路径
-    if section["heading_path"]:
-        parts.append(section["heading_path"])
-
-    # 移除标题行本身
-    text = section["text"]
-    lines = text.splitlines()
-    if lines and _HEADING_RE.match(lines[0]):
-        lines = lines[1:]
-    body = "\n".join(lines).strip()
-    if not body:
-        if len(child_chunk_ids) > 1:
-            parts.append(f"[共{len(child_chunk_ids)}段]")
-        return "\n".join(parts)
-
-    # 2. 关键词提取
-    keywords = _extract_section_keywords(body, top_k=6)
-    if keywords:
-        parts.append("关键词: " + ", ".join(keywords))
-
-    # 3. 语义截断：句子打分 + 贪心装箱
-    sentences = _score_sentences(body)
-    if sentences:
-        budget = _SUMMARY_MAX_CHARS - len("\n".join(parts)) - 20  # 预留索引行
-        selected = _greedy_pack_sentences(sentences, budget)
-        if selected:
-            parts.append("…".join(selected))
-
-    # 4. 子 chunk 索引
-    if len(child_chunk_ids) > 1:
-        parts.append(f"[共{len(child_chunk_ids)}段]")
-
-    result = "\n".join(parts)
-    if len(result) > _SUMMARY_MAX_CHARS:
-        result = result[:_SUMMARY_MAX_CHARS]
-    return result
-
-
-# ── 语义截断：句子评分信号 ──
-_DEFINITION_SIGNALS = ("是指", "定义为", "定义是", "指的是", "意思是", "称为", "叫做", "即")
-_CONCLUSION_SIGNALS = ("因此", "所以", "总之", "综上", "可见", "结果表明", "可以得出", "总结")
-_ENUMERATION_SIGNALS = ("首先", "其次", "然后", "最后", "包括", "包含", "分为", "一方面", "另一方面")
-_NUMERICAL_RE = re.compile(r"\d+\.?\d*\s*[%％]|[+-]?\d+\.?\d*")
-
-
-def _score_sentences(text: str) -> list[tuple[float, str]]:
-    """对文本中的句子进行语义评分
-
-    Returns:
-        [(score, sentence), ...] 按 score 降序排列
-    """
-    raw = _SENT_END_RE.split(text)
-    sentences = [s.strip() for s in raw if s.strip() and len(s.strip()) >= 8]
-    if not sentences:
-        return []
-
-    total = len(sentences)
-    scored: list[tuple[float, str]] = []
-
-    for i, sent in enumerate(sentences):
-        score = 0.0
-
-        # 定义句 +3（最高优先级：核心概念解释）
-        if any(sig in sent for sig in _DEFINITION_SIGNALS):
-            score += 3
-
-        # 结论句 +3（总结性信息）
-        if any(sig in sent for sig in _CONCLUSION_SIGNALS):
-            score += 3
-
-        # 数值句 +2（具体数据，高信息密度）
-        if _NUMERICAL_RE.search(sent):
-            score += 2
-
-        # 列举句 +2（结构化信息）
-        if any(sig in sent for sig in _ENUMERATION_SIGNALS):
-            score += 2
-
-        # 位置加分：首句引入主题
-        if i == 0:
-            score += 2
-        elif i == 1:
-            score += 1
-
-        # 位置加分：尾句总结收束
-        if i == total - 1:
-            score += 1
-
-        # 过长句惩罚：信息密度低
-        if len(sent) > 80:
-            score -= 1
-
-        # 含标题关键词的句子加分
-        # （标题关键词已在 _extract_section_keywords 中提取，此处简单匹配）
-        score += 0.5 if any(kw in sent for kw in _extract_section_keywords(sent, top_k=3)) else 0
-
-        scored.append((score, sent))
-
-    # 按 score 降序
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return scored
-
-
-def _greedy_pack_sentences(
-    scored_sentences: list[tuple[float, str]],
-    budget: int,
-) -> list[str]:
-    """贪心装箱：在字符预算内选择最高评分的句子
-
-    策略：
-    1. 按 score 降序尝试加入
-    2. 每加入一句，检查总长度是否超预算
-    3. 最多选 4 句（避免碎片化）
-    4. 最终按原文顺序排列（保持语义连贯）
-
-    Returns:
-        选中的句子列表（按原文顺序）
-    """
-    if budget <= 0:
-        return []
-
-    selected: list[tuple[float, str, int]] = []  # (score, sent, original_index)
-    used_chars = 3  # "…" 连接符预留
-
-    # 需要原文顺序来排序，先重建索引
-    # scored_sentences 已按 score 降序，但我们需要 original index
-    # 重新从原文获取顺序
-    # 简化：直接用 score 降序贪心选
-    max_sentences = 4
-
-    for score, sent in scored_sentences:
-        if len(selected) >= max_sentences:
+    while (left >= 0 or right < len(detail_chunks)) and total < budget:
+        added = False
+        if left >= 0:
+            text = detail_chunks[left][0].page_content.strip()
+            extra = len(text) + 2
+            if total + extra <= budget:
+                selected[left] = text
+                total += extra
+                added = True
+            left -= 1
+        if right < len(detail_chunks):
+            text = detail_chunks[right][0].page_content.strip()
+            extra = len(text) + 2
+            if total + extra <= budget:
+                selected[right] = text
+                total += extra
+                added = True
+            right += 1
+        if not added and left < 0 and right >= len(detail_chunks):
             break
-        cost = len(sent) + 3  # 句子 + "…"连接符
-        if used_chars + cost > budget:
-            continue
-        selected.append((score, sent))
-        used_chars += cost
-
-    if not selected:
-        return []
-
-    # 按原文出现顺序重排（用句子内容在原文中的位置）
-    # 简化：按 score 降序已经是信息密度优先，直接返回
-    return [sent for _, sent in selected]
-
-
-def _extract_section_keywords(text: str, top_k: int = 6) -> list[str]:
-    """从 section 文本中提取关键词（规则化，无需 LLM/jieba）
-
-    策略：
-    1. 提取中文词组（2-4字连续中文）和英文单词（3+字母）
-    2. 过滤停用词
-    3. 按词频排序取 top_k
-
-    Returns:
-        去重后的关键词列表
-    """
-    # 中文词组（2-4字）
-    cn_words = re.findall(r"[\u4e00-\u9fff]{2,4}", text)
-    # 英文单词（3+字母）
-    en_words = re.findall(r"[a-zA-Z]{3,}", text)
-
-    # 停用词
-    stop_words = frozenset({
-        "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一",
-        "一个", "上", "也", "很", "到", "说", "要", "去", "你", "会", "着",
-        "没有", "看", "好", "自己", "这", "他", "她", "它", "们", "那", "些",
-        "什么", "如何", "怎么", "哪些", "为什么", "可以", "因为", "所以",
-        "但是", "而且", "或者", "如果", "虽然", "不过", "然后", "那么",
-        "这个", "那个", "其", "此", "该", "每", "各", "即", "等", "之",
-        "与", "及", "以", "为", "于", "从", "被", "把", "让", "给",
-    })
-
-    all_words = [w for w in cn_words if w not in stop_words]
-    all_words += [w.lower() for w in en_words if w.lower() not in stop_words and len(w) >= 3]
-
-    # 词频排序
-    from collections import Counter
-    counter = Counter(all_words)
-    return [w for w, _ in counter.most_common(top_k)]
-
-
-# ── 问答块生成 ──────────────────────────────────────
-
-# 句子终结标点
-_SENT_END_RE = re.compile(r"[。！？；.!?;]")
-
-# 陈述句→疑问句转换规则（基于模式匹配，无需 LLM）
-_QA_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # "X是Y" → "什么是X？"
-    (re.compile(r"^(.{2,20}?)(是(?:指|指的|定义为|一种|一类))"), r"什么是\1？"),
-    # "X包括Y" → "X包括哪些内容？"
-    (re.compile(r"^(.{2,20}?)(包括|包含|分为|由.{1,6}组成)"), r"\1\2哪些？"),
-    # "X可以Y" → "X可以做什么？"
-    (re.compile(r"^(.{2,20}?)(可以|能够|可用来)"), r"\1可以做什么？"),
-    # "X的作用是Y" → "X的作用是什么？"
-    (re.compile(r"^(.{2,20}?)(的作用|的功能|的用途|的目的)"), r"\1\2是什么？"),
-    # "X用于Y" → "X用于什么？"
-    (re.compile(r"^(.{2,20}?)(用于|用来|旨在)"), r"\1\2什么？"),
-    # "X的特点是Y" → "X有什么特点？"
-    (re.compile(r"^(.{2,20}?)(的特点|的特征|的特性|的优势|的缺点)"), r"\1\2是什么？"),
-    # "X方法/步骤" → "如何X？"
-    (re.compile(r"^(.{2,20}?(?:方法|步骤|流程|过程|方式))"), r"如何\1？"),
-    # "应该X" → "应该如何做？"
-    (re.compile(r"^(应该|需要|必须|应当|务必)(.{2,30})"), r"\1\2吗？"),
-]
-
-
-def _extract_key_sentences(text: str, max_sentences: int = 8) -> list[str]:
-    """从文本中提取关键句子
-
-    策略：
-    1. 按句号等终结标点分句
-    2. 过滤过短(<10字符)和过长(>120字符)的句子
-    3. 优先保留：含标题关键词的、定义性的、列举性的句子
-    4. 最多返回 max_sentences 句
-    """
-    # 按终结标点分句
-    sentences = _SENT_END_RE.split(text)
-    sentences = [s.strip() for s in sentences if s.strip()]
-
-    # 过滤
-    candidates: list[tuple[int, str]] = []  # (priority, sentence)
-    for sent in sentences:
-        if len(sent) < 10 or len(sent) > 120:
-            continue
-        # 优先级打分
-        priority = 0
-        # 含定义性模式
-        if any(p in sent for p in ["是", "是指", "定义为", "包括", "包含", "分为"]):
-            priority += 2
-        # 含方法/步骤模式
-        if any(p in sent for p in ["方法", "步骤", "流程", "可以", "能够", "用于"]):
-            priority += 2
-        # 含列举模式
-        if any(p in sent for p in ["首先", "其次", "然后", "最后", "第一", "第二"]):
-            priority += 1
-        # 首尾句加权
-        candidates.append((priority, sent))
-
-    # 按优先级降序，取 top
-    candidates.sort(key=lambda x: x[0], reverse=True)
-    return [s for _, s in candidates[:max_sentences]]
-
-
-def _sentence_to_question(sentence: str) -> str | None:
-    """将陈述句转换为疑问句（基于模式匹配）
-
-    Returns:
-        转换后的问句，或 None（无法转换）
-    """
-    for pattern, replacement in _QA_PATTERNS:
-        match = pattern.match(sentence)
-        if match:
-            question = match.expand(replacement)
-            if len(question) >= 4 and question != sentence:
-                return question
-    return None
-
-
-def _generate_qa_block(section: dict) -> str | None:
-    """从 section 内容生成问答索引块
-
-    格式：
-      Q: 什么是进程死锁？
-      A: 进程死锁是指两个或以上进程因争夺资源而互相等待...
-      Q: 死锁的四个必要条件是什么？
-      A: 互斥、占有并等待、非抢占、循环等待...
-
-    Returns:
-        问答块文本，或 None（内容不足/无法生成）
-    """
-    text = section["text"]
-    if len(text) < _QA_MIN_SECTION_CHARS:
-        return None
-
-    # 移除标题行
-    lines = text.splitlines()
-    if lines and _HEADING_RE.match(lines[0]):
-        lines = lines[1:]
-    body = "\n".join(lines).strip()
-    if not body:
-        return None
-
-    # 提取关键句
-    key_sentences = _extract_key_sentences(body, max_sentences=_QA_MAX_PAIRS * 2)
-    if not key_sentences:
-        return None
-
-    # 转换为问答对
-    qa_pairs: list[tuple[str, str]] = []  # (question, answer)
-    for sent in key_sentences:
-        question = _sentence_to_question(sent)
-        if question:
-            qa_pairs.append((question, sent))
-        if len(qa_pairs) >= _QA_MAX_PAIRS:
+        if not added and total >= budget:
             break
 
-    if not qa_pairs:
-        # 降级：用标题生成问题
-        title = section.get("heading", "")
-        if title and len(title) >= 2:
-            qa_pairs.append((f"什么是{title}？", body[:_SUMMARY_MAX_CHARS]))
+    return "\n\n".join(selected[idx] for idx in sorted(selected))
+
+
+# ── 结构化分块：语义单元解析 ────────────────────────
+
+# 列表项正则：- 开头 或 数字. 开头
+_LIST_ITEM_RE = re.compile(r"^(?:[-*+]|\d+[.．])\s+", re.MULTILINE)
+
+# ── Q&A 单元识别正则 ──────────────────────────────────
+# 例题模式：> 例题 / > 例N / > 例1：
+_EXAMPLE_Q_RE = re.compile(r"^>\s*(?:例[题\d]|例\d+[：:])", re.MULTILINE)
+# 答案模式：答案： / 正确答案： / 正确答案选择 X
+_ANSWER_RE = re.compile(r"答案[：:；;]|正确答案[：:]", re.MULTILINE)
+# 答案字母提取：正确答案：D / 答案：B
+_ANSWER_KEY_RE = re.compile(r"(?:正确答案|答案)[：:；;]\s*([A-E])")
+# 真题模式：##### N (纯数字标题)
+_EXAM_Q_HEADING_RE = re.compile(r"^#{4,5}\s*\d+\s*$", re.MULTILINE)
+
+
+def _merge_qa_blockquotes(text: str) -> str:
+    """预扫描文本，将 Q&A 模式合并为原子块
+
+    识别两种模式：
+    1. 例题模式：> 例题/例N 开头，到 答案：/正确答案： 结束的 blockquote 区域
+    2. 真题模式：##### N 标题行 + 题干 + 正确答案：X + 解析，到下一个 ##### N 或文件结束
+
+    合并后的块以 __QA_PAIR_START__ 标记，后续 _parse_semantic_units 会将其识别为原子单元。
+    """
+    lines = text.splitlines()
+    result_lines: list[str] = []
+    qa_buffer: list[str] = []
+    in_qa = False
+    qa_source = ""  # "example" or "exam"
+
+    for line in lines:
+        stripped = line.strip()
+
+        # ── 检测例题开头 ──
+        if _EXAMPLE_Q_RE.match(line):
+            # 如果之前有未关闭的 QA buffer，先输出
+            if in_qa and qa_buffer:
+                result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
+                qa_buffer = []
+            in_qa = True
+            qa_source = "example"
+            qa_buffer.append(line)
+            continue
+
+        # ── 检测真题开头（##### N 纯数字标题） ──
+        if _EXAM_Q_HEADING_RE.match(stripped):
+            # 如果之前有未关闭的 QA buffer，先输出
+            if in_qa and qa_buffer:
+                result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
+                qa_buffer = []
+            in_qa = True
+            qa_source = "exam"
+            qa_buffer.append(line)
+            continue
+
+        if in_qa:
+            if qa_source == "example":
+                # 例题模式：收集 blockquote 行和答案行
+                if stripped.startswith(">") or _ANSWER_RE.search(stripped):
+                    qa_buffer.append(line)
+                    continue
+                else:
+                    # 非引用行出现，关闭当前 QA 块
+                    result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
+                    qa_buffer = []
+                    in_qa = False
+                    result_lines.append(line)
+                    continue
+            elif qa_source == "exam":
+                # 真题模式：收集所有行直到下一个 ##### N 或空行后的非连续内容
+                # 策略：只要出现 答案标记 就继续收集（含解析部分）
+                qa_buffer.append(line)
+                # 如果遇到空行且之前已有答案标记，检查下一行是否是新 ##### N
+                # 这里简单处理：答案标记出现后，遇到连续空行或新标题则关闭
+                if _ANSWER_RE.search(stripped):
+                    # 标记答案已出现，后续行仍收集直到新 ##### N
+                    continue
+                continue
+
         else:
-            return None
+            result_lines.append(line)
 
-    # 拼接问答块
-    parts: list[str] = []
-    if section["heading_path"]:
-        parts.append(section["heading_path"])
+    # 处理未关闭的 QA buffer
+    if in_qa and qa_buffer:
+        result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
 
-    for q, a in qa_pairs:
-        parts.append(f"Q: {q}")
-        # 答案截断
-        if len(a) > 200:
-            # 在句号处截断
-            truncated = a[:200]
-            last_break = max(
-                truncated.rfind("。"),
-                truncated.rfind("！"),
-                truncated.rfind("？"),
-                truncated.rfind(". "),
-            )
-            if last_break > 100:
-                truncated = truncated[:last_break + 1]
-            a = truncated + "…"
-        parts.append(f"A: {a}")
-
-    result = "\n".join(parts)
-    if len(result) > _QA_CHUNK_MAX_CHARS:
-        result = result[:_QA_CHUNK_MAX_CHARS]
-    return result if len(result) >= MIN_CHUNK_LENGTH else None
+    return "\n".join(result_lines)
 
 
-def _split_prose_units(text: str, text_splitter: RecursiveCharacterTextSplitter) -> list[dict]:
-    return [
-        {"text": chunk.strip(), "is_code": False}
-        for chunk in text_splitter.split_text(text)
-        if chunk.strip()
-    ]
+def _restore_code_placeholders(text: str, code_blocks: list[str]) -> str:
+    """将代码块占位符还原为实际代码"""
+    def _restore(m: re.Match) -> str:
+        idx = int(m.group(1))
+        if 0 <= idx < len(code_blocks):
+            return code_blocks[idx]
+        return m.group(0)
+    return re.sub(r"__CODE_BLOCK_(\d+)__", _restore, text)
 
 
-def _extract_section_units(text: str, text_splitter: RecursiveCharacterTextSplitter) -> list[dict]:
+def _extract_qa_fields(text: str) -> dict:
+    """从 Q&A 文本中提取结构化字段
+
+    Returns:
+        {
+            "question": str,    # 题干部分（答案之前的文本）
+            "answer": str,      # 答案+解析部分（从答案标记开始）
+            "answer_key": str,  # 正确答案字母（A/B/C/D/E），可能为空
+        }
+    """
+    # 提取答案字母
+    key_match = _ANSWER_KEY_RE.search(text)
+    answer_key = key_match.group(1) if key_match else ""
+
+    # 按答案标记分割题目和答案
+    answer_match = _ANSWER_RE.search(text)
+    if answer_match:
+        question = text[:answer_match.start()].strip()
+        answer = text[answer_match.start():].strip()
+    else:
+        question = text.strip()
+        answer = ""
+
+    # 清理 question 中的 blockquote 标记和多余前缀
+    question = re.sub(r"^>\s*", "", question, flags=re.MULTILINE)
+    question = re.sub(r"^例[题\d]+[：:]?\s*", "", question, count=1)
+    # 清理真题标题前缀（##### N）
+    question = re.sub(r"^#{4,5}\s*\d+\s*\n?", "", question, count=1)
+    question = question.strip()
+
+    # 清理 answer 中的前缀
+    answer = re.sub(r"^(?:正确)?答案[：:；;]\s*", "", answer, count=1)
+    answer = answer.strip()
+
+    return {
+        "question": question,
+        "answer": answer,
+        "answer_key": answer_key,
+    }
+
+
+def _parse_semantic_units(text: str) -> list[dict]:
+    """将文本解析为语义单元（段落 / 列表项组 / 代码块 / Q&A 对 / 表格 / 公式块）
+
+    结构化分块的核心：
+    1. 代码块整体保留
+    2. Q&A 对（例题+答案）合并为原子单元，不可拆分
+    3. Markdown 表格整体保留，不可拆分
+    4. LaTeX 公式块整体保留，不可拆分
+    5. 列表项组（连续的 - 或 数字. 行）合并为一个单元
+    6. 段落（空行分隔的文本块）作为一个单元
+    7. 单个段落过长时，按句子边界拆分
+
+    Returns:
+        [{"text": str, "is_code": bool, "is_qa": bool, "is_table": bool, "is_formula": bool}, ...]
+    """
     units: list[dict] = []
-    last_end = 0
-    for match in _FENCED_CODE_BLOCK_RE.finditer(text):
-        if match.start() > last_end:
-            units.extend(_split_prose_units(text[last_end:match.start()], text_splitter))
-        block_text = match.group(0).strip()
-        if block_text:
-            units.append({"text": block_text, "is_code": True})
-        last_end = match.end()
-    if last_end < len(text):
-        units.extend(_split_prose_units(text[last_end:], text_splitter))
-    if not units and text.strip():
-        units.append({"text": text.strip(), "is_code": False})
+
+    # 1. 提取代码块，替换为占位符
+    code_blocks: list[str] = []
+    def _code_placeholder(m: re.Match) -> str:
+        code_blocks.append(m.group(0).strip())
+        return f"\n__CODE_BLOCK_{len(code_blocks) - 1}__\n"
+    text_no_code = _FENCED_CODE_BLOCK_RE.sub(_code_placeholder, text)
+
+    # 2. 提取 Markdown 表格，替换为占位符（表格原子保留，不拆分）
+    _MD_TABLE_RE = re.compile(r"(?m)(?:^\|.+\|$\n?)+")
+    table_blocks: list[str] = []
+    def _table_placeholder(m: re.Match) -> str:
+        table_blocks.append(m.group(0).strip())
+        return f"\n__TABLE_BLOCK_{len(table_blocks) - 1}__\n"
+    text_no_table = _MD_TABLE_RE.sub(_table_placeholder, text_no_code)
+
+    # 3. 提取 LaTeX 公式块，替换为占位符（公式原子保留，不拆分）
+    _LATEX_BLOCK_RE = re.compile(r"(?ms)\$\$.+?\$\$")
+    formula_blocks: list[str] = []
+    def _formula_placeholder(m: re.Match) -> str:
+        formula_blocks.append(m.group(0).strip())
+        return f"\n__FORMULA_BLOCK_{len(formula_blocks) - 1}__\n"
+    text_no_formula = _LATEX_BLOCK_RE.sub(_formula_placeholder, text_no_table)
+
+    # 4. 预扫描：检测 Q&A 模式，将连续的 blockquote 行合并为 Q&A 块
+    text_with_qa = _merge_qa_blockquotes(text_no_formula)
+
+    # 5. 按空行切分为文本块
+    blocks = re.split(r"\n{2,}", text_with_qa.strip())
+
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        # 代码块占位符还原
+        if block.startswith("__CODE_BLOCK_") and block.endswith("__"):
+            idx_match = re.search(r"__CODE_BLOCK_(\d+)__", block)
+            if idx_match:
+                units.append({"text": code_blocks[int(idx_match.group(1))], "is_code": True, "is_qa": False, "is_table": False, "is_formula": False})
+                continue
+
+        # 表格占位符还原（原子保留）
+        if block.startswith("__TABLE_BLOCK_") and block.endswith("__"):
+            idx_match = re.search(r"__TABLE_BLOCK_(\d+)__", block)
+            if idx_match:
+                units.append({"text": table_blocks[int(idx_match.group(1))], "is_code": False, "is_qa": False, "is_table": True, "is_formula": False})
+                continue
+
+        # 公式块占位符还原（原子保留）
+        if block.startswith("__FORMULA_BLOCK_") and block.endswith("__"):
+            idx_match = re.search(r"__FORMULA_BLOCK_(\d+)__", block)
+            if idx_match:
+                units.append({"text": formula_blocks[int(idx_match.group(1))], "is_code": False, "is_qa": False, "is_table": False, "is_formula": True})
+                continue
+
+        # Q&A 原子单元（已被 _merge_qa_blockquotes 标记）
+        if block.startswith("__QA_PAIR_START__"):
+            inner = block[len("__QA_PAIR_START__"):].strip()
+            inner = _restore_code_placeholders(inner, code_blocks)
+            units.append({"text": inner, "is_code": False, "is_qa": True, "is_table": False, "is_formula": False})
+            continue
+
+        # 列表项组：连续的列表行合并为一个单元
+        lines = block.splitlines()
+        list_lines: list[str] = []
+        prose_lines: list[str] = []
+
+        for line in lines:
+            if _LIST_ITEM_RE.match(line):
+                # 如果前面有散文行，先保存散文单元
+                if prose_lines:
+                    _add_prose_unit(units, "\n".join(prose_lines))
+                    prose_lines = []
+                list_lines.append(line)
+            else:
+                # 如果前面有列表行，先保存列表单元
+                if list_lines:
+                    units.append({"text": "\n".join(list_lines), "is_code": False, "is_qa": False, "is_table": False, "is_formula": False})
+                    list_lines = []
+                prose_lines.append(line)
+
+        # 处理剩余
+        if list_lines:
+            units.append({"text": "\n".join(list_lines), "is_code": False, "is_qa": False, "is_table": False, "is_formula": False})
+        if prose_lines:
+            _add_prose_unit(units, "\n".join(prose_lines))
+
     return units
+
+
+def _add_prose_unit(units: list[dict], text: str) -> None:
+    """添加散文单元，过长时按句子边界拆分"""
+    text = text.strip()
+    if not text:
+        return
+    # 单个文本块不超过 chunk_size 的大部分情况，直接作为一个单元
+    # 只有极端长段落才按句子拆分
+    if len(text) <= 1200:
+        units.append({"text": text, "is_code": False, "is_qa": False})
+    else:
+        # 按句子边界拆分
+        sentences = _split_sentences(text)
+        buf: list[str] = []
+        buf_len = 0
+        for sent in sentences:
+            if buf and buf_len + len(sent) > 1200:
+                units.append({"text": " ".join(buf), "is_code": False, "is_qa": False})
+                buf = []
+                buf_len = 0
+            buf.append(sent)
+            buf_len += len(sent)
+        if buf:
+            units.append({"text": " ".join(buf), "is_code": False, "is_qa": False})
+
+
+def _split_sentences(text: str) -> list[str]:
+    """按中英文句子终结标点切分，保留标点"""
+    parts = re.split(r"([。！？；.!?;])", text)
+    sentences: list[str] = []
+    buf = ""
+    for part in parts:
+        buf += part
+        if part in ("。", "！", "？", "；", ".", "!", "?", ";"):
+            sentences.append(buf)
+            buf = ""
+    if buf.strip():
+        sentences.append(buf)
+    return sentences
+
+
+# _parse_semantic_units is called directly; wrapper removed for clarity
 
 
 def _render_units(units: list[dict]) -> str:
@@ -500,66 +512,237 @@ def _render_units(units: list[dict]) -> str:
 
 
 def _build_overlap_units(units: list[dict], chunk_overlap: int) -> list[dict]:
+    """从 chunk 尾部选取最多 chunk_overlap 字符作为 overlap。
+    按原始顺序返回（尾部在前），供下一个 chunk 前置拼接。"""
     if chunk_overlap <= 0:
         return []
     overlap: list[dict] = []
+    total = 0
     for unit in reversed(units):
-        if unit["is_code"]:
+        if unit.get("is_code") or unit.get("is_qa") or unit.get("is_table") or unit.get("is_formula"):
             break
-        candidate = [unit, *overlap]
-        if overlap and len(_render_units(candidate)) > chunk_overlap:
+        unit_len = len(unit["text"])
+        if total + unit_len > chunk_overlap:
             break
-        overlap = candidate
-        if len(_render_units(overlap)) >= chunk_overlap:
-            break
-    return [{"text": unit["text"], "is_code": unit["is_code"]} for unit in overlap]
+        overlap.insert(0, unit)  # prepend to preserve original order
+        total += unit_len
+    return [{"text": u["text"], "is_code": u.get("is_code", False), "is_qa": u.get("is_qa", False)} for u in overlap]
 
 
 def _split_section_text(
     text: str,
-    text_splitter: RecursiveCharacterTextSplitter,
-    chunk_size: int,
-    chunk_overlap: int,
-) -> list[str]:
-    units = _extract_section_units(text, text_splitter)
+    chunk_size: int = 800,
+    chunk_overlap: int = 200,
+) -> list[dict]:
+    """结构化分块：按语义单元贪心合并，强制句子完整边界
+
+    策略：
+    1. 解析文本为语义单元（段落/列表项组/代码块/Q&A 对/表格/公式/句子）
+    2. Q&A / 表格 / 公式 为原子单元，不可拆分，不可与其它单元合并
+    3. 贪心合并：依次加入单元，直到接近 chunk_size
+    4. 超出时输出当前 chunk，确保句子完整边界
+    5. 超长单元按句子拆分，不超过 _CHUNK_HARD_LIMIT
+    6. overlap 回溯优先同 section 尾部单元
+
+    Returns:
+        [{"text": str, "is_qa": bool, "qa_fields": dict|None}, ...]
+    """
+    units = _parse_semantic_units(text)
     if not units:
         return []
 
-    chunks: list[str] = []
+    chunks: list[dict] = []
     current_units: list[dict] = []
 
     for unit in units:
-        if not current_units:
-            if unit["is_code"] and len(unit["text"]) > chunk_size:
-                chunks.append(unit["text"])
-                continue
+        unit_text = unit["text"].strip()
+        if not unit_text:
+            continue
+
+        is_qa = unit.get("is_qa", False)
+        is_table = unit.get("is_table", False)
+        is_formula = unit.get("is_formula", False)
+        is_atomic = is_qa or is_table or is_formula
+
+        # 原子单元：始终单独输出，不与其它单元合并
+        if is_atomic:
+            # 先输出当前累积的非原子单元
+            if current_units:
+                _flush_chunk(chunks, current_units, chunk_size)
+                current_units = []
+            # 原子单元单独输出
+            if is_qa:
+                qa_fields = _extract_qa_fields(unit_text)
+                chunks.append({"text": unit_text, "is_qa": True, "qa_fields": qa_fields})
+            else:
+                chunks.append({"text": unit_text, "is_qa": False, "qa_fields": None})
+            continue
+
+        # 超长单元：按句子拆分，不超过硬上限
+        if len(unit_text) > _CHUNK_HARD_LIMIT:
+            if current_units:
+                _flush_chunk(chunks, current_units, chunk_size)
+                current_units = []
+            for sub in _split_oversized(unit_text, _CHUNK_HARD_LIMIT):
+                chunks.append({"text": sub, "is_qa": False, "qa_fields": None})
+            continue
+
+        # 尝试加入当前 chunk
+        candidate = [*current_units, unit]
+        candidate_text = _render_units(candidate)
+
+        if len(candidate_text) <= chunk_size:
             current_units.append(unit)
             continue
 
-        candidate_units = [*current_units, unit]
-        if len(_render_units(candidate_units)) <= chunk_size:
-            current_units.append(unit)
-            continue
-
-        current_text = _render_units(current_units)
-        if current_text:
-            chunks.append(current_text)
-
-        current_units = _build_overlap_units(current_units, chunk_overlap)
-        if current_units and len(_render_units([*current_units, unit])) > chunk_size:
+        # 超出：输出当前 chunk（确保句子完整）
+        flushed_units = list(current_units)  # 保存用于 overlap
+        if current_units:
+            _flush_chunk(chunks, current_units, chunk_size)
             current_units = []
 
-        if unit["is_code"] and len(unit["text"]) > chunk_size:
-            chunks.append(unit["text"])
-            continue
+        # overlap 回溯（同 section 尾部优先）
+        overlap_units = _build_overlap_units(flushed_units, chunk_overlap)
+        if overlap_units and len(_render_units([*overlap_units, unit])) > chunk_size:
+            overlap_units = []
 
-        current_units.append(unit)
+        current_units = [*overlap_units, unit]
 
-    final_text = _render_units(current_units)
-    if final_text:
-        chunks.append(final_text)
+    # 输出剩余
+    if current_units:
+        _flush_chunk(chunks, current_units, chunk_size)
+
+    # 后处理：合并过短 chunk
+    chunks = _merge_short_chunks(chunks, _CHUNK_MIN_EFFECTIVE, chunk_size)
 
     return chunks
+
+
+def _flush_chunk(chunks: list[dict], units: list[dict], chunk_size: int) -> None:
+    """输出当前 chunk，确保句子完整边界
+
+    如果最后一个单元的文本不在句子完整位置结束，
+    尝试回退到上一个完整边界，避免句中截断。
+
+    """
+    if not units:
+        return
+    text = _render_units(units)
+    if not text.strip():
+        return
+
+    # 检查是否句子完整
+    if _is_sentence_complete(text):
+        chunks.append({"text": text, "is_qa": False, "qa_fields": None})
+        return
+
+    # 不完整：尝试从后向前找到完整边界
+    remaining = list(units)
+    tail_units: list[dict] = []
+    while remaining and not _is_sentence_complete(_render_units(remaining)):
+        tail_units.insert(0, remaining.pop())
+
+    if remaining:
+        # 前部分完整，输出
+        chunks.append({"text": _render_units(remaining), "is_qa": False, "qa_fields": None})
+        if tail_units:
+            tail_text = _render_units(tail_units)
+            if len(tail_text.strip()) >= MIN_CHUNK_LENGTH:
+                chunks.append({"text": tail_text, "is_qa": False, "qa_fields": None})
+    else:
+        # 无法找到完整边界，整体输出（兜底）
+        chunks.append({"text": text, "is_qa": False, "qa_fields": None})
+
+
+def _split_qa_oversized(text: str, limit: int) -> list[str]:
+    """将超长 QA 块按题目边界拆分，每段不超过 limit
+
+    识别两种题目边界：
+    1. 真题模式：##### N 标题行
+    2. 例题模式：> 例题/例N 开头
+
+    每个题目+答案保持原子性，不跨题拆分。
+    """
+    # 按真题标题拆分
+    parts = re.split(r"(?=^#{4,5}\s*\d+\s*$)", text, flags=re.MULTILINE)
+    if len(parts) > 1:
+        result: list[str] = []
+        buf: list[str] = []
+        buf_len = 0
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if buf and buf_len + len(part) > limit:
+                result.append("\n\n".join(buf))
+                buf = []
+                buf_len = 0
+            buf.append(part)
+            buf_len += len(part)
+        if buf:
+            result.append("\n\n".join(buf))
+        return [r for r in result if r.strip()]
+
+    # 按例题标记拆分
+    parts = re.split(r"(?=>\s*例[题\d])", text)
+    if len(parts) > 1:
+        result = []
+        buf = []
+        buf_len = 0
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if buf and buf_len + len(part) > limit:
+                result.append("\n\n".join(buf))
+                buf = []
+                buf_len = 0
+            buf.append(part)
+            buf_len += len(part)
+        if buf:
+            result.append("\n\n".join(buf))
+        return [r for r in result if r.strip()]
+
+    # 无法按题目边界拆分，整体保留，避免破坏题干-答案-解析原子性
+    return [text.strip()] if text.strip() else []
+
+
+def _split_oversized(text: str, limit: int) -> list[str]:
+    """将超长文本按句子边界拆分，每段不超过 limit"""
+    sentences = _split_sentences(text)
+    result: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+    for sent in sentences:
+        if buf and buf_len + len(sent) > limit:
+            result.append(" ".join(buf))
+            buf = []
+            buf_len = 0
+        buf.append(sent)
+        buf_len += len(sent)
+    if buf:
+        result.append(" ".join(buf))
+    # 单句超 limit 的兜底
+    return [r for r in result if r.strip()]
+
+
+def _merge_short_chunks(chunks: list[dict], min_len: int, max_len: int) -> list[dict]:
+    """后处理：将过短 chunk 与邻居合并"""
+    if not chunks:
+        return chunks
+    merged: list[dict] = [dict(chunks[0])]
+    for chunk in chunks[1:]:
+        prev = merged[-1]
+        prev_text = prev["text"]
+        cur_text = chunk["text"]
+        # 前一个过短 且 合并不超限 且 都不是 QA
+        if (len(prev_text) < min_len
+                and len(prev_text) + len(cur_text) + 2 <= max_len
+                and not prev.get("is_qa") and not chunk.get("is_qa")):
+            prev["text"] = prev_text + "\n\n" + cur_text
+        else:
+            merged.append(dict(chunk))
+    return merged
 
 
 def _make_doc_id(source: str) -> str:
@@ -623,7 +806,7 @@ def _append_chunk_metadata(
         is_leaf: 是否为叶子 section（无子 section）
         doc_id: 文档级唯一标识
     """
-    source = chunk.metadata.get("source_file", "unknown")
+    source = chunk.metadata.get("source_file") or chunk.metadata.get("source", "unknown")
     chunk_id = _make_chunk_id(source, section["section_index"], local_index)
     heading_level = section["heading_level"]
     depth = _compute_section_depth(heading_level)
@@ -653,10 +836,18 @@ def _append_chunk_metadata(
     chunk.metadata["section.chunk_role"] = chunk_role
 
     # ── chunk 间层级关系 ──
-    if chunk_role in ("summary", "qa") and child_chunk_ids is not None:
+    if chunk_role in ("summary", "qa", "merged_qa") and child_chunk_ids is not None:
         chunk.metadata["section.child_chunk_ids"] = json.dumps(child_chunk_ids)
     if parent_chunk_id is not None:
         chunk.metadata["section.parent_chunk_id"] = parent_chunk_id
+
+    # ── Q&A 字段（merged_qa 角色专用，存储合并检索分离） ──
+    if chunk_role == "merged_qa":
+        qa_fields = chunk.metadata.pop("_qa_fields", None)
+        if qa_fields:
+            chunk.metadata["qa.question"] = qa_fields.get("question", "")
+            chunk.metadata["qa.answer"] = qa_fields.get("answer", "")
+            chunk.metadata["qa.answer_key"] = qa_fields.get("answer_key", "")
 
     # ── 旧字段兼容（不删除，保证下游代码不 break） ──
     chunk.metadata["chunk_id"] = chunk_id
@@ -672,20 +863,14 @@ def _append_chunk_metadata(
 
 def split_documents(
     documents: list[Document],
-    chunk_size: int = 800,
-    chunk_overlap: int = 200,
+    chunk_size: int = 400,
+    chunk_overlap: int = 100,
 ) -> list[Document]:
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=["\n## ", "\n### ", "\n#### ", "\n\n", "\n", "。", "！", "？", ".", "!", "?", " ", ""],
-    )
-
     valid_chunks: list[Document] = []
 
     for doc in documents:
         original_text = doc.page_content
-        source = doc.metadata.get("source_file", "unknown")
+        source = str(doc.metadata.get("source_file") or doc.metadata.get("source") or "unknown")
         headings = _extract_headings(original_text)
         sections = _split_into_sections(original_text, headings)
 
@@ -743,12 +928,17 @@ def split_documents(
             pid = section_parent_ids[i]
             parent_groups.setdefault(pid, []).append(i)
 
-        for pid, group_indices in parent_groups.items():
-            for rank, idx in enumerate(group_indices):
-                section_sibling_indices.append(rank)
-                section_sibling_counts.append(len(group_indices))
+        # 预计算每个 section 的兄弟信息（保持 section 索引顺序）
+        for i in range(len(sections)):
+            pid = section_parent_ids[i]
+            siblings = parent_groups[pid]
+            rank = siblings.index(i)  # position in sibling list
+            section_sibling_indices.append(rank)
+            section_sibling_counts.append(len(siblings))
 
         # ── 切分 chunk ──
+        from app.rag.rag_utils import detect_content_type as _detect_content_type
+
         for i, section in enumerate(sections):
             sid = section_ids[i]
             parent_id = section_parent_ids[i]
@@ -758,33 +948,84 @@ def split_documents(
             sib_count = section_sibling_counts[i]
             is_leaf = section_is_leaf[i]
 
-            # 1. 生成子 chunk（detail 角色）
-            detail_texts = _split_section_text(section["text"], text_splitter, chunk_size, chunk_overlap)
-            detail_chunks: list[Document] = []
-            for dt in detail_texts:
-                if len(dt.strip()) < MIN_CHUNK_LENGTH:
-                    continue
-                chunk = _make_chunk(doc.metadata, dt)
-                if section["heading_path"] and not chunk.page_content.startswith(section["heading_path"]):
-                    chunk.page_content = f"{section['heading_path']}\n{chunk.page_content}"
-                detail_chunks.append(chunk)
+            # 根据 section 内容推断 content_type（需要一段文字来检测）
+            sample_text = section["text"][:200]
+            content_type = _detect_content_type(sample_text, {"heading_title": section["heading"]})
 
-            # 记录子 chunk 数量
+            # ── 真题/练习题 Q&A 检测 ──
+            # 若 section 内含 "正确答案" 或 "答案：" 标记，且 heading 是纯数字（真题模式）
+            # 或 heading 含 "题"/"例题"，则整个 section 视为 merged_qa
+            section_text = section["text"]
+            has_answer_marker = bool(_ANSWER_RE.search(section_text))
+            heading_is_exam = bool(_EXAM_Q_HEADING_RE.match(section["heading"]))
+            heading_is_exercise = any(kw in section["heading"] for kw in ("题", "例题", "习题", "练习"))
+            if has_answer_marker and (heading_is_exam or heading_is_exercise or content_type in ("exercise", "answer")):
+                content_type = "merged_qa"
+
+            adaptive_size, adaptive_overlap = _resolve_chunk_params(content_type)
+
+            # 生成 detail / merged_qa chunk
+            # adaptive_size=0 表示原子结构不在通用切分器中拆分；
+            # 真题整卷的拆分由下方 merged_qa fallback 按题号处理。
+            effective_size = min(adaptive_size, _CHUNK_HARD_LIMIT) if adaptive_size > 0 else 999999
+            section_chunks = _split_section_text(
+                section["text"], effective_size, adaptive_overlap
+            )
+            detail_chunks: list[tuple[Document, str]] = []
+
+            # 若 content_type 是 merged_qa 但 _split_section_text 未产出 is_qa 块
+            # （真题模式：无 blockquote，整个 section 就是一个 Q&A 对），强制整体输出
+            has_qa_chunk = any(
+                (sc.get("is_qa", False) if isinstance(sc, dict) else False)
+                for sc in section_chunks
+            )
+            if content_type == "merged_qa" and not has_qa_chunk and section_text.strip():
+                # 超长 merged_qa section：按题目边界拆分，但不拆单题内部题干/答案/解析
+                if len(section_text) > _QA_CHUNK_SOFT_LIMIT:
+                    for sub in _split_qa_oversized(section_text, _QA_CHUNK_SOFT_LIMIT):
+                        sub = sub.strip()
+                        if len(sub) < MIN_CHUNK_LENGTH:
+                            continue
+                        qa_fields = _extract_qa_fields(sub)
+                        chunk = _make_chunk(doc.metadata, sub)
+                        if section["heading_path"] and not chunk.page_content.startswith(section["heading_path"]):
+                            chunk.page_content = f"{section['heading_path']}\n{chunk.page_content}"
+                        chunk.metadata["_qa_fields"] = qa_fields
+                        detail_chunks.append((chunk, "merged_qa"))
+                else:
+                    qa_fields = _extract_qa_fields(section_text)
+                    chunk = _make_chunk(doc.metadata, section_text.strip())
+                    if section["heading_path"] and not chunk.page_content.startswith(section["heading_path"]):
+                        chunk.page_content = f"{section['heading_path']}\n{chunk.page_content}"
+                    chunk.metadata["_qa_fields"] = qa_fields
+                    detail_chunks.append((chunk, "merged_qa"))
+            else:
+                for sc in section_chunks:
+                    chunk_text = sc["text"].strip() if isinstance(sc, dict) else sc.strip()
+                    if len(chunk_text) < MIN_CHUNK_LENGTH:
+                        continue
+                    is_qa = sc.get("is_qa", False) if isinstance(sc, dict) else False
+                    qa_fields = sc.get("qa_fields") if isinstance(sc, dict) else None
+                    chunk = _make_chunk(doc.metadata, chunk_text)
+                    if section["heading_path"] and not chunk.page_content.startswith(section["heading_path"]):
+                        chunk.page_content = f"{section['heading_path']}\n{chunk.page_content}"
+                    # 临时存储 qa_fields，后续 _append_chunk_metadata 会消费
+                    if is_qa and qa_fields:
+                        chunk.metadata["_qa_fields"] = qa_fields
+                    chunk_role = "merged_qa" if is_qa else "detail"
+                    detail_chunks.append((chunk, chunk_role))
+
             chunk_count = len(detail_chunks)
+            parent_windows = [
+                _build_parent_window_text(detail_chunks, ci)
+                for ci in range(chunk_count)
+            ]
 
-            # 2. 生成子 chunk 的 ID 列表（用于父 chunk 引用）
-            source_name = doc.metadata.get("source_file", "unknown")
-            child_chunk_ids: list[str] = []
-            for ci in range(chunk_count):
-                child_chunk_ids.append(_make_chunk_id(source_name, section["section_index"], ci))
-
-            # 3. 写入子 chunk 元数据
-            parent_chunk_id: str | None = None
-            for ci, chunk in enumerate(detail_chunks):
+            for ci, (chunk, chunk_role) in enumerate(detail_chunks):
                 _append_chunk_metadata(
                     chunk, section, sid, parent_id, child_ids,
-                    len(valid_chunks), ci, chunk_role="detail",
-                    parent_chunk_id=parent_chunk_id,
+                    len(valid_chunks), ci, chunk_role=chunk_role,
+                    parent_chunk_id=None,
                     ancestor_ids=ancestors,
                     sibling_index=sib_idx,
                     sibling_count=sib_count,
@@ -792,101 +1033,36 @@ def split_documents(
                     doc_id=doc_id,
                 )
                 chunk.metadata["section.chunk_count"] = chunk_count
+                chunk.metadata["section.adaptive_size"] = adaptive_size
+                chunk.metadata["section.adaptive_overlap"] = adaptive_overlap
+                # merged_qa 的 content_type 固定
+                chunk.metadata["section.content_type"] = "merged_qa" if chunk_role == "merged_qa" else content_type
+                chunk.metadata["section.parent_id_index"] = sid
+                chunk.metadata["section.parent_text"] = parent_windows[ci]
+                chunk.metadata["section.parent_char_count"] = len(parent_windows[ci])
+                chunk.metadata["section.parent_window_index"] = ci
+                chunk.metadata["section.parent_window_budget"] = _PARENT_WINDOW_CHAR_BUDGET
                 valid_chunks.append(chunk)
 
-            # 4. 生成父 chunk（summary 角色）
-            #    仅当子 chunk ≥ _SUMMARY_MIN_CHILD_CHUNKS 时生成
-            if chunk_count >= _SUMMARY_MIN_CHILD_CHUNKS:
-                summary_text = _generate_section_summary(section, child_chunk_ids)
-                if len(summary_text.strip()) >= MIN_CHUNK_LENGTH:
-                    summary_chunk = _make_chunk(doc.metadata, summary_text)
-                    # 父 chunk 的 local_index 用 -1 标记（不属于子 chunk 序列）
-                    summary_chunk_id = _make_chunk_id(
-                        source_name, section["section_index"], -1
-                    )
-                    _append_chunk_metadata(
-                        summary_chunk, section, sid, parent_id, child_ids,
-                        len(valid_chunks), -1, chunk_role="summary",
-                        child_chunk_ids=child_chunk_ids,
-                        ancestor_ids=ancestors,
-                        sibling_index=sib_idx,
-                        sibling_count=sib_count,
-                        is_leaf=is_leaf,
-                        doc_id=doc_id,
-                    )
-                    summary_chunk.metadata["section.chunk_id"] = summary_chunk_id
-                    summary_chunk.metadata["section.chunk_count"] = chunk_count
-                    summary_chunk.metadata["section.char_count"] = len(section["text"])
-                    # 旧字段兼容
-                    summary_chunk.metadata["chunk_id"] = summary_chunk_id
-                    summary_chunk.metadata["char_count"] = len(summary_chunk.page_content)
-
-                    # 回填子 chunk 的 parent_chunk_id
-                    parent_chunk_id = summary_chunk_id
-                    for ci, chunk in enumerate(detail_chunks):
-                        chunk.metadata["section.parent_chunk_id"] = parent_chunk_id
-
-                    valid_chunks.append(summary_chunk)
-
-            # 5. 生成问答索引块（qa 角色）
-            #    仅当 section 内容足够时生成
-            qa_text = _generate_qa_block(section)
-            if qa_text and len(qa_text.strip()) >= MIN_CHUNK_LENGTH:
-                qa_chunk = _make_chunk(doc.metadata, qa_text)
-                # qa chunk 的 local_index 用 -2 标记
-                qa_chunk_id = _make_chunk_id(
-                    source_name, section["section_index"], -2
-                )
-                _append_chunk_metadata(
-                    qa_chunk, section, sid, parent_id, child_ids,
-                    len(valid_chunks), -2, chunk_role="qa",
-                    child_chunk_ids=child_chunk_ids,
-                    parent_chunk_id=parent_chunk_id,
-                    ancestor_ids=ancestors,
-                    sibling_index=sib_idx,
-                    sibling_count=sib_count,
-                    is_leaf=is_leaf,
-                    doc_id=doc_id,
-                )
-                qa_chunk.metadata["section.chunk_id"] = qa_chunk_id
-                qa_chunk.metadata["section.chunk_count"] = chunk_count
-                # 旧字段兼容
-                qa_chunk.metadata["chunk_id"] = qa_chunk_id
-                qa_chunk.metadata["char_count"] = len(qa_chunk.page_content)
-                valid_chunks.append(qa_chunk)
-
     # ── 统计 ──
-    summary_count = sum(1 for c in valid_chunks if c.metadata.get("section.chunk_role") == "summary")
-    qa_count = sum(1 for c in valid_chunks if c.metadata.get("section.chunk_role") == "qa")
-    detail_count = len(valid_chunks) - summary_count - qa_count
     chunk_lengths = [int(c.metadata.get("char_count") or len(c.page_content or "")) for c in valid_chunks]
-    detail_chunks = [c for c in valid_chunks if c.metadata.get("section.chunk_role") == "detail"]
-    detail_lengths = [int(c.metadata.get("char_count") or len(c.page_content or "")) for c in detail_chunks]
-    summary_lengths = [int(c.metadata.get("char_count") or len(c.page_content or "")) for c in valid_chunks if c.metadata.get("section.chunk_role") == "summary"]
-    qa_lengths = [int(c.metadata.get("char_count") or len(c.page_content or "")) for c in valid_chunks if c.metadata.get("section.chunk_role") == "qa"]
-    incomplete_detail_count = sum(1 for c in detail_chunks if not _is_sentence_complete(c.page_content))
+    incomplete_detail_count = sum(1 for c in valid_chunks if not _is_sentence_complete(c.page_content))
+    merged_qa_count = sum(1 for c in valid_chunks if c.metadata.get("section.chunk_role") == "merged_qa")
     metrics.emit(
         event="split_documents",
         stage="splitter",
         values={
             "input_docs": len(documents),
             "total_chunks": len(valid_chunks),
-            "detail_chunks": detail_count,
-            "summary_chunks": summary_count,
-            "qa_chunks": qa_count,
+            "detail_chunks": len(valid_chunks) - merged_qa_count,
+            "merged_qa_chunks": merged_qa_count,
             "avg_chunk_chars": round(sum(chunk_lengths) / len(chunk_lengths), 3) if chunk_lengths else 0.0,
             "p50_chunk_chars": _percentile(chunk_lengths, 0.5),
             "p90_chunk_chars": _percentile(chunk_lengths, 0.9),
-            "avg_detail_chars": round(sum(detail_lengths) / len(detail_lengths), 3) if detail_lengths else 0.0,
-            "avg_summary_chars": round(sum(summary_lengths) / len(summary_lengths), 3) if summary_lengths else 0.0,
-            "avg_qa_chars": round(sum(qa_lengths) / len(qa_lengths), 3) if qa_lengths else 0.0,
             "short_chunk_ratio": round(sum(1 for n in chunk_lengths if n < max(MIN_CHUNK_LENGTH * 3, 60)) / len(chunk_lengths), 6) if chunk_lengths else 0.0,
-            "long_chunk_ratio": round(sum(1 for n in chunk_lengths if n > int(chunk_size * 1.2)) / len(chunk_lengths), 6) if chunk_lengths else 0.0,
-            "mid_sentence_cut_rate": round(incomplete_detail_count / len(detail_chunks), 6) if detail_chunks else 0.0,
+            "long_chunk_ratio": round(sum(1 for n in chunk_lengths if n > 1600) / len(chunk_lengths), 6) if chunk_lengths else 0.0,
+            "mid_sentence_cut_rate": round(incomplete_detail_count / len(valid_chunks), 6) if valid_chunks else 0.0,
         },
     )
-    logger.info(
-        "Split %d documents into %d chunks (%d summary + %d qa + %d detail)",
-        len(documents), len(valid_chunks), summary_count, qa_count, detail_count,
-    )
+    logger.info("Split %d documents into %d chunks", len(documents), len(valid_chunks))
     return valid_chunks

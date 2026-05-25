@@ -1,1 +1,1 @@
-﻿# Edu-Agent: Multi-Agent Teaching Assistant System
+# Edu-Agent: Multi-Agent Teaching Assistant System

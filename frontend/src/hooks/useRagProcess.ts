@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { getErrorMessage } from "@/lib/errors";
 import { http } from "@/lib/http";
@@ -10,9 +10,13 @@ export function useRagProcess() {
   const [steps, setSteps] = useState<RAGStep[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeStep, setActiveStep] = useState<number>(0);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const searchRAG = useCallback(async () => {
     if (!query.trim()) return;
+    // Cancel pending timers from previous search
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
     setLoading(true);
     setActiveStep(0);
     setSteps([]);
@@ -24,7 +28,10 @@ export function useRagProcess() {
 
       const resultSteps = res.data.steps as RAGStep[];
       for (let i = 0; i < resultSteps.length; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 600));
+        await new Promise((resolve) => {
+          const id = setTimeout(resolve, 600);
+          timersRef.current.push(id);
+        });
         setSteps(resultSteps.slice(0, i + 1));
         setActiveStep(i + 1);
       }

@@ -4,7 +4,8 @@ import logging
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
-from app.rag.retriever import get_llm, retrieve_documents, build_rag_context, _kg_context_supplement
+from app.rag.retriever import retrieve_evidence
+from app.rag.rag_utils import get_llm
 from app.agents.kg_tools import aquery_knowledge_graph
 
 logger = logging.getLogger(__name__)
@@ -12,17 +13,12 @@ logger = logging.getLogger(__name__)
 
 @tool("search_learning_path")
 async def asearch_learning_path(query: str) -> str:
-    """异步搜索学习路径模板和教材内容（多路召回+BM25+Reranker）。"""
+    """异步搜索学习路径模板和教材内容（多路召回+BM25+KG扩展+CRAG压缩）。"""
     try:
-        docs = await asyncio.to_thread(retrieve_documents, query=query, k=5, use_rerank=True)
-        kg_supplement = ""
-        try:
-            kg_supplement = await asyncio.wait_for(asyncio.to_thread(_kg_context_supplement, query), timeout=5)
-        except Exception:
-            logger.debug("KG supplement timeout or failed for query=%s", query[:30])
-        if not docs:
+        fused = await asyncio.to_thread(retrieve_evidence, query=query, k=4, use_rerank=True)
+        if not fused.final_context:
             return "学习路径库中暂无相关内容。"
-        return build_rag_context(docs, query=query, kg_supplement=kg_supplement or "")
+        return fused.final_context
     except Exception as e:
         logger.error("Learning path search failed: %s", e, exc_info=True)
         return f"学习路径检索失败: {e}"

@@ -24,9 +24,9 @@ function toReactNodes(graphNodes: KnowledgeGraphNode[]): Node[] {
       },
       data: { label: node.id },
       style: {
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
         color: "white",
-        border: "2px solid #5a67d8",
+        border: "2px solid #047857",
         borderRadius: "8px",
         padding: "8px 16px",
         fontSize: "13px",

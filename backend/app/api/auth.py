@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db import User, get_db
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from app.services.auth import create_access_token, decode_access_token, hash_password, verify_password
+from app.services.auth import create_access_token, decode_access_token, hash_password, is_legacy_hash, verify_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -107,7 +107,14 @@ async def register(req: RegisterRequest, db: Session = Depends(get_db)):
 async def login(req: LoginRequest, db: Session = Depends(get_db)):
     """用户登录"""
     user = db.query(User).filter(User.username == req.username).first()
-    if not user or not verify_password(req.password, user.hashed_password):
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码错误",
+        )
+
+    verified, needs_migration = verify_password(req.password, user.hashed_password)
+    if not verified:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
@@ -118,6 +125,11 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账号已禁用",
         )
+
+    # 旧密码自动迁移为 PBKDF2
+    if needs_migration:
+        user.hashed_password = hash_password(req.password)
+        logger.info("Password migrated for user: %s", user.username)
 
     # 更新最后登录时间
     user.last_login = datetime.now(timezone.utc)

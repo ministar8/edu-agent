@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -22,6 +22,11 @@ export default function Home() {
     loading: false,
     result: "",
     resultTopic: "",
+    questions: [],
+    batchId: null,
+    wrongQuestions: [],
+    wrongLoading: false,
+    activeTab: "generate",
   });
   const [chatState, setChatState] = useState<ChatPanelState>({
     messages: [],
@@ -31,7 +36,8 @@ export default function Home() {
     streamingAgent: "",
     activeTool: null,
     streamingGovernance: null,
-    threadId: `session-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    baseThreadId: `session-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    conversationId: null,
   });
 
   useEffect(() => {
@@ -42,20 +48,21 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-slate-500">加载中...</div>
+      <div className="flex h-screen items-center justify-center bg-[#f4f6fb]">
+        <div className="flex items-center gap-3 text-slate-400">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+          <span className="text-sm">加载中...</span>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
-    <div className="flex h-screen bg-[#eef3f8] p-4 text-slate-800">
+    <div className="flex h-screen gap-4 bg-stone-50 p-4">
       <Sidebar activeTab={activeTab} user={user} onTabChange={setActiveTab} onLogout={logout} />
-      <div className="ml-4 flex min-w-0 flex-1 flex-col rounded-[28px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.08)]">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-stone-200/60 bg-white shadow-sm">
         <WorkspaceHeader activeTab={activeTab} />
         <WorkspaceContent
           activeTab={activeTab}
