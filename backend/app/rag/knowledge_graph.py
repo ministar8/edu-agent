@@ -11,7 +11,7 @@ import re
 import time
 from typing import Any
 
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, Query
 
 from app.config import settings
 from app.rag.synonyms import expand_synonyms_for_kg
@@ -36,6 +36,10 @@ def _safe_depth(value: int, default: int = 2, max_depth: int = 5) -> int:
     return max(1, min(depth, max_depth))
 
 
+_KG_QUERY_TIMEOUT = 3.0
+_KG_MAX_RECORDS = 50
+
+
 class KnowledgeGraphManager:
     """Neo4j 知识图谱管理器"""
 
@@ -54,6 +58,10 @@ class KnowledgeGraphManager:
             self._driver = GraphDatabase.driver(
                 settings.NEO4J_URI,
                 auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
+                connection_timeout=1.0,
+                connection_acquisition_timeout=3.0,
+                max_connection_pool_size=20,
+                max_transaction_retry_time=3.0,
             )
         return self._driver
 
@@ -63,7 +71,18 @@ class KnowledgeGraphManager:
             self._driver = None
 
     def _session(self):
-        return self.driver.session()
+        return self.driver.session(fetch_size=50)
+
+    def _run(self, session, query: str, **params):
+        return session.run(Query(query, timeout=_KG_QUERY_TIMEOUT), **params)
+
+    def _collect_records(self, result, limit: int = _KG_MAX_RECORDS) -> list[dict]:
+        rows: list[dict] = []
+        for record in result:
+            rows.append(dict(record))
+            if len(rows) >= limit:
+                break
+        return rows
 
     # ========== 缓存辅助 ==========
 
@@ -152,18 +171,20 @@ class KnowledgeGraphManager:
         """Tier 0/1: 精确匹配"""
         with self._session() as s:
             if category:
-                result = s.run(
+                result = self._run(
+                    s,
                     "MATCH (k:Knowledge {name: $name}) WHERE k.category = $category "
                     "RETURN k.name AS name, k.category AS category, k.description AS description",
                     name=name, category=category,
                 )
             else:
-                result = s.run(
+                result = self._run(
+                    s,
                     "MATCH (k:Knowledge {name: $name}) "
                     "RETURN k.name AS name, k.category AS category, k.description AS description",
                     name=name,
                 )
-            return [dict(r) for r in result]
+            return self._collect_records(result, limit=10)
 
     def _find_contains(self, topic: str, category: str = "", limit: int = 10) -> list[dict]:
         """Tier 2: 子串包含匹配（CONTAINS）"""
@@ -174,15 +195,15 @@ class KnowledgeGraphManager:
                     "RETURN k.name AS name, k.category AS category, k.description AS description "
                     "LIMIT $limit"
                 )
-                result = s.run(query, topic=topic, category=category, limit=limit)
+                result = self._run(s, query, topic=topic, category=category, limit=min(limit, 20))
             else:
                 query = (
                     "MATCH (k:Knowledge) WHERE k.name CONTAINS $topic "
                     "RETURN k.name AS name, k.category AS category, k.description AS description "
                     "LIMIT $limit"
                 )
-                result = s.run(query, topic=topic, limit=limit)
-            return [dict(r) for r in result]
+                result = self._run(s, query, topic=topic, limit=min(limit, 20))
+            return self._collect_records(result, limit=min(limit, 20))
 
     def _find_fulltext(self, topic: str, category: str = "", limit: int = 3,
                        min_score: float = 0.3) -> list[dict]:
@@ -194,11 +215,11 @@ class KnowledgeGraphManager:
         with self._session() as s:
             # 确保全文本索引存在
             try:
-                s.run("CALL db.indexes() YIELD name WHERE name = 'knowledge_name_index' RETURN name")
+                self._run(s, "CALL db.indexes() YIELD name WHERE name = 'knowledge_name_index' RETURN name")
             except Exception:
                 try:
-                    s.run("CREATE FULLTEXT INDEX knowledge_name_index IF NOT EXISTS "
-                          "FOR (k:Knowledge) ON EACH [k.name, k.description]")
+                    self._run(s, "CREATE FULLTEXT INDEX knowledge_name_index IF NOT EXISTS "
+                              "FOR (k:Knowledge) ON EACH [k.name, k.description]")
                 except Exception as e:
                     logger.warning("Failed to create fulltext index: %s", e)
 
@@ -212,8 +233,8 @@ class KnowledgeGraphManager:
                         "       node.description AS description, score AS _score "
                         "LIMIT $limit"
                     )
-                    result = s.run(query, topic=topic, category=category,
-                                   min_score=min_score, limit=limit)
+                    result = self._run(s, query, topic=topic, category=category,
+                                       min_score=min_score, limit=min(limit, 10))
                 else:
                     query = (
                         "CALL db.index.fulltext.queryNodes('knowledge_name_index', $topic) "
@@ -223,8 +244,8 @@ class KnowledgeGraphManager:
                         "       node.description AS description, score AS _score "
                         "LIMIT $limit"
                     )
-                    result = s.run(query, topic=topic, min_score=min_score, limit=limit)
-                return [dict(r) for r in result]
+                    result = self._run(s, query, topic=topic, min_score=min_score, limit=min(limit, 10))
+                return self._collect_records(result, limit=min(limit, 10))
             except Exception as e:
                 logger.warning("Fulltext search failed: %s", e)
                 return []
@@ -251,26 +272,38 @@ class KnowledgeGraphManager:
                 source_file=source_file,
             )
 
-    def add_prerequisite(self, from_name: str, to_name: str) -> None:
-        """添加前置知识关系: from_name 是 to_name 的前置知识"""
+    def add_prerequisite(self, from_name: str, to_name: str, category: str = "") -> None:
+        """添加前置知识关系: from_name 是 to_name 的前置知识
+
+        使用 MERGE 确保端点节点存在（避免 MATCH 找不到节点时边被静默丢弃）。
+        ON CREATE SET 为自动创建的节点补上 category，避免孤立无分类节点。
+        """
         self._cache.clear()
         with self._session() as s:
             s.run(
-                "MATCH (a:Knowledge {name: $from_name}) "
-                "MATCH (b:Knowledge {name: $to_name}) "
+                "MERGE (a:Knowledge {name: $from_name}) "
+                "ON CREATE SET a.category = $category "
+                "MERGE (b:Knowledge {name: $to_name}) "
+                "ON CREATE SET b.category = $category "
                 "MERGE (a)-[:PREREQUISITE_OF]->(b)",
-                from_name=from_name, to_name=to_name,
+                from_name=from_name, to_name=to_name, category=category,
             )
 
-    def add_related(self, name_a: str, name_b: str) -> None:
-        """添加相关知识关系"""
+    def add_related(self, name_a: str, name_b: str, category: str = "") -> None:
+        """添加相关知识关系
+
+        使用 MERGE 确保端点节点存在（避免 MATCH 找不到节点时边被静默丢弃）。
+        ON CREATE SET 为自动创建的节点补上 category，避免孤立无分类节点。
+        """
         self._cache.clear()
         with self._session() as s:
             s.run(
-                "MATCH (a:Knowledge {name: $name_a}) "
-                "MATCH (b:Knowledge {name: $name_b}) "
+                "MERGE (a:Knowledge {name: $name_a}) "
+                "ON CREATE SET a.category = $category "
+                "MERGE (b:Knowledge {name: $name_b}) "
+                "ON CREATE SET b.category = $category "
                 "MERGE (a)-[:RELATED_TO]->(b)",
-                name_a=name_a, name_b=name_b,
+                name_a=name_a, name_b=name_b, category=category,
             )
 
     # ========== 学习路径查询（集成模糊匹配） ==========
@@ -314,9 +347,9 @@ class KnowledgeGraphManager:
                 "ORDER BY length(path) "
                 "LIMIT 3"
             )
-            result = s.run(query, target=resolved)
+            result = self._run(s, query, target=resolved)
             paths = []
-            for record in result:
+            for record in self._collect_records(result, limit=3):
                 names = record["names"]
                 descriptions = record["descriptions"]
                 paths.append([
@@ -345,21 +378,23 @@ class KnowledgeGraphManager:
             return cached
         if depth <= 1:
             with self._session() as s:
-                result = s.run(
+                result = self._run(
+                    s,
                     "MATCH (current:Knowledge {name: $current})-[:PREREQUISITE_OF]->(next:Knowledge) "
                     "RETURN next.name AS name, next.description AS description, next.category AS category",
                     current=resolved,
                 )
-                result_list = [dict(record) for record in result]
+                result_list = self._collect_records(result, limit=20)
         else:
             with self._session() as s:
-                result = s.run(
+                result = self._run(
+                    s,
                     f"MATCH (current:Knowledge {{name: $current}})-[:PREREQUISITE_OF*1..{depth}]->(next:Knowledge) "
                     "RETURN DISTINCT next.name AS name, next.description AS description, next.category AS category "
                     "LIMIT 20",
                     current=resolved,
                 )
-                result_list = [dict(record) for record in result]
+                result_list = self._collect_records(result, limit=20)
         self._cache_set(cache_key, result_list)
         return result_list
 
@@ -383,21 +418,23 @@ class KnowledgeGraphManager:
             return cached
         if depth <= 1:
             with self._session() as s:
-                result = s.run(
+                result = self._run(
+                    s,
                     "MATCH (pre:Knowledge)-[:PREREQUISITE_OF]->(topic:Knowledge {name: $topic}) "
                     "RETURN pre.name AS name, pre.description AS description",
                     topic=resolved,
                 )
-                result_list = [dict(record) for record in result]
+                result_list = self._collect_records(result, limit=20)
         else:
             with self._session() as s:
-                result = s.run(
+                result = self._run(
+                    s,
                     f"MATCH (pre:Knowledge)-[:PREREQUISITE_OF*1..{depth}]->(topic:Knowledge {{name: $topic}}) "
                     "RETURN DISTINCT pre.name AS name, pre.description AS description "
                     "LIMIT 20",
                     topic=resolved,
                 )
-                result_list = [dict(record) for record in result]
+                result_list = self._collect_records(result, limit=20)
         self._cache_set(cache_key, result_list)
         return result_list
 
@@ -424,7 +461,8 @@ class KnowledgeGraphManager:
             return cached
         with self._session() as s:
             # 获取 n-hop 范围内所有节点
-            result = s.run(
+            result = self._run(
+                s,
                 f"MATCH path = (pre:Knowledge)-[:PREREQUISITE_OF*1..{depth}]->(center:Knowledge {{name: $center}})"
                 f"-[:PREREQUISITE_OF*1..{depth}]->(post:Knowledge) "
                 "WITH DISTINCT pre, center, post "
@@ -438,9 +476,10 @@ class KnowledgeGraphManager:
                 "LIMIT 30",
                 center=resolved,
             )
-            nodes = [dict(record) for record in result]
+            nodes = self._collect_records(result, limit=30)
             # 获取范围内的边
-            result = s.run(
+            result = self._run(
+                s,
                 f"MATCH (a:Knowledge)-[r:PREREQUISITE_OF]->(b:Knowledge) "
                 f"WHERE EXISTS {{ MATCH (a)-[:PREREQUISITE_OF*0..{depth}]-(:Knowledge {{name: $center}}) }} "
                 f"  AND EXISTS {{ MATCH (b)-[:PREREQUISITE_OF*0..{depth}]-(:Knowledge {{name: $center}}) }} "
@@ -448,7 +487,7 @@ class KnowledgeGraphManager:
                 "LIMIT 40",
                 center=resolved,
             )
-            edges = [dict(record) for record in result]
+            edges = self._collect_records(result, limit=40)
         subgraph = {"nodes": nodes, "edges": edges, "center": resolved}
         self._cache_set(cache_key, subgraph)
         return subgraph
@@ -457,6 +496,7 @@ class KnowledgeGraphManager:
 
     def get_graph_data(self, category: str | None = None, limit: int = 50) -> dict:
         """获取知识图谱可视化数据（节点+边）"""
+        limit = max(1, min(int(limit), 100))
         with self._session() as s:
             if category:
                 node_query = (
@@ -469,8 +509,8 @@ class KnowledgeGraphManager:
                     "RETURN k1.name AS source, k2.name AS target, type(r) AS relation "
                     "LIMIT $edge_limit"
                 )
-                nodes = [dict(r) for r in s.run(node_query, category=category, limit=limit)]
-                edges = [dict(r) for r in s.run(edge_query, category=category, edge_limit=limit * 2)]
+                nodes = self._collect_records(self._run(s, node_query, category=category, limit=limit), limit=limit)
+                edges = self._collect_records(self._run(s, edge_query, category=category, edge_limit=limit * 2), limit=limit * 2)
             else:
                 node_query = (
                     "MATCH (k:Knowledge) "
@@ -482,8 +522,8 @@ class KnowledgeGraphManager:
                     "RETURN k1.name AS source, k2.name AS target, type(r) AS relation "
                     "LIMIT $edge_limit"
                 )
-                nodes = [dict(r) for r in s.run(node_query, limit=limit)]
-                edges = [dict(r) for r in s.run(edge_query, edge_limit=limit * 2)]
+                nodes = self._collect_records(self._run(s, node_query, limit=limit), limit=limit)
+                edges = self._collect_records(self._run(s, edge_query, edge_limit=limit * 2), limit=limit * 2)
 
         return {"nodes": nodes, "edges": edges}
 
@@ -572,19 +612,21 @@ class KnowledgeGraphManager:
             if category:
                 query = (
                     "MATCH (k:Knowledge) WHERE k.category = $category AND k.source_file <> '' "
-                    "RETURN k.name AS name, k.source_file AS source_file, k.category AS category"
+                    "RETURN k.name AS name, k.source_file AS source_file, k.category AS category "
+                    "LIMIT $limit"
                 )
-                result = s.run(query, category=category)
+                result = self._run(s, query, category=category, limit=_KG_MAX_RECORDS)
             else:
                 query = (
                     "MATCH (k:Knowledge) WHERE k.source_file <> '' "
-                    "RETURN k.name AS name, k.source_file AS source_file, k.category AS category"
+                    "RETURN k.name AS name, k.source_file AS source_file, k.category AS category "
+                    "LIMIT $limit"
                 )
-                result = s.run(query)
+                result = self._run(s, query, limit=_KG_MAX_RECORDS)
             orphans = []
-            for record in result:
+            for record in self._collect_records(result, limit=_KG_MAX_RECORDS):
                 if record["source_file"] not in indexed_files:
-                    orphans.append(dict(record))
+                    orphans.append(record)
             return orphans
 
     def health_check(self, indexed_files: set[str],
@@ -600,12 +642,13 @@ class KnowledgeGraphManager:
         """
         with self._session() as s:
             if category:
-                count_result = s.run(
+                count_result = self._run(
+                    s,
                     "MATCH (k:Knowledge) WHERE k.category = $category RETURN count(k) AS total",
                     category=category,
                 )
             else:
-                count_result = s.run("MATCH (k:Knowledge) RETURN count(k) AS total")
+                count_result = self._run(s, "MATCH (k:Knowledge) RETURN count(k) AS total")
             record = count_result.single()
             total_nodes = record["total"] if record else 0
 

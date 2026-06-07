@@ -42,8 +42,8 @@ def should_trigger_hyde(
     if not query.strip():
         return False
     low_docs = docs_count < settings.HYDE_MIN_DOCS
-    low_score = top_rerank_score < settings.HYDE_RERANK_SCORE_THRESHOLD
-    short_concept = cat.is_concept and (cat.is_short or len(query.strip()) <= 18)
+    low_score = docs_count == 0 and top_rerank_score < settings.HYDE_RERANK_SCORE_THRESHOLD
+    short_concept = docs_count == 0 and cat.is_concept and (cat.is_short or len(query.strip()) <= 18)
     return low_docs or low_score or short_concept
 
 

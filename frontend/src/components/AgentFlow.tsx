@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -18,14 +18,23 @@ export default function AgentFlow() {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
   useEffect(() => {
     http.get("/api/visualization/agent-graph")
       .then((res) => {
+        if (!mountedRef.current) return;
         const data = res.data as { nodes: Node[]; edges: Edge[] };
         setNodes(data.nodes);
         setEdges(data.edges);
       })
       .catch(() => {
+        if (!mountedRef.current) return;
         setNodes(defaultNodes);
         setEdges(defaultEdges);
       });

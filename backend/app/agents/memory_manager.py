@@ -1,5 +1,7 @@
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 
+from app.agents.prompts import SUMMARIZE_PROMPT
+
 
 def _truncate(text: str, limit: int = 200) -> str:
     """截断文本到指定字数"""
@@ -94,15 +96,7 @@ def extract_current_query(messages: list[BaseMessage]) -> str:
 
 # ── 增量合并摘要 ─────────────────────────────────────────────
 
-_SUMMARIZE_PROMPT = """请将以下对话内容合并为一份简洁的摘要。
-保留所有关键知识点、用户关注点和讨论脉络，不超过300字。
-
-{existing_summary}
-
-新增对话内容：
-{new_messages}
-
-请输出合并后的更新摘要："""
+# (prompt content moved to prompts.py)
 
 
 async def summarize_messages(
@@ -125,7 +119,7 @@ async def summarize_messages(
 
     existing_part = f"已有摘要：\n{existing_summary}" if existing_summary else "（这是首次摘要，没有已有摘要）"
 
-    prompt = _SUMMARIZE_PROMPT.format(
+    prompt = SUMMARIZE_PROMPT.format(
         existing_summary=existing_part,
         new_messages=new_text,
     )
@@ -136,6 +130,6 @@ async def summarize_messages(
     return content.strip()
 
 
-def should_trigger_summary(message_count: int, window: int = 12) -> bool:
+def should_trigger_summary(message_count: int, window: int = 16) -> bool:
     """判断是否应触发摘要：每 window 条消息触发一次"""
     return message_count >= window and message_count % window == 0

@@ -21,6 +21,9 @@ import logging
 import re
 from dataclasses import dataclass
 
+from app.config import settings
+from app.agents.prompts import REFLECTION_PROMPT
+
 logger = logging.getLogger(__name__)
 
 
@@ -105,45 +108,22 @@ def _rule_reflection(evidence_text: str, answer: str, query: str) -> ReflectionR
 
 # ── LLM 层（规则不确定时触发） ──────────────────────────
 
-_REFLECTION_PROMPT = """你是一名408考研教学质检助手。请检查以下AI回答是否被检索证据充分支撑。
-
-判定规则：
-1. 回答中的每个关键事实声明，如果在证据中能找到对应内容 → 有支撑
-2. 如果回答添加了证据中没有的细节（如页码、具体数据、实验步骤）→ 存在推断
-3. 如果不同证据片段之间存在矛盾 → 标注矛盾
-4. 如果查询的关键方面未被覆盖 → 标注缺失
-
-请输出 JSON（只输出 JSON，不要其他内容）：
-{{
-  "issues": ["问题1", "问题2"],
-  "evidence_sufficient": true/false,
-  "contradictions": ["矛盾描述"],
-  "confidence": "high/medium/low",
-  "suggestion": "给学生的提醒文字，空字符串表示无需提醒"
-}}
-
-学生查询：{query}
-
-检索证据（前 2000 字）：
-{evidence}
-
-AI 回答：
-{answer}"""
+# (prompt content moved to prompts.py)
 
 
-def _llm_reflection(evidence_text: str, answer: str, query: str) -> ReflectionResult:
-    """LLM 语义层反思"""
+async def _allm_reflection(evidence_text: str, answer: str, query: str) -> ReflectionResult:
+    """LLM 语义层反思（异步，不阻塞事件循环）"""
     try:
         from app.rag.rag_utils import get_llm
         import json as _json
 
-        llm = get_llm(streaming=False, temperature=0.0)
-        prompt = _REFLECTION_PROMPT.format(
+        llm = get_llm(streaming=False, temperature=settings.TEMP_PRECISE)
+        prompt = REFLECTION_PROMPT.format(
             query=query,
-            evidence=evidence_text[:2000],
-            answer=answer[:1500],
+            evidence=evidence_text[:4000],
+            answer=answer[:3000],
         )
-        raw = llm.invoke(prompt)
+        raw = await llm.ainvoke(prompt)
         text = raw.content if hasattr(raw, "content") else str(raw)
         text = str(text or "").strip()
 
@@ -169,7 +149,49 @@ def _llm_reflection(evidence_text: str, answer: str, query: str) -> ReflectionRe
         return _rule_reflection(evidence_text, answer, query)
 
 
+def _llm_reflection(evidence_text: str, answer: str, query: str) -> ReflectionResult:
+    """同步 LLM 反思已禁用；LLM 反思请使用 await areflect()。"""
+    logger.warning("Sync LLM reflection skipped; use areflect() in async context")
+    return _rule_reflection(evidence_text, answer, query)
+
+
 # ── 公开 API ──────────────────────────────────────────
+
+async def areflect(
+    answer: str,
+    evidence_text: str,
+    query: str,
+    agent_name: str = "",
+    use_llm: bool = True,
+) -> ReflectionResult:
+    """异步 Reflection：对 Agent 回答做语义层证据校验"""
+    if agent_name == "question_agent":
+        return ReflectionResult(
+            answer=answer, confidence="high", issues=[],
+            evidence_sufficient=True, contradictions=[], suggestion="",
+        )
+
+    if not answer or not answer.strip():
+        return ReflectionResult(
+            answer=answer, confidence="low",
+            issues=["Agent 未生成回答"],
+            evidence_sufficient=False, contradictions=[], suggestion="",
+        )
+
+    # 1. 规则层
+    rule_result = _rule_reflection(evidence_text, answer, query)
+
+    # 2. 规则置信度足够时跳过 LLM
+    if rule_result.confidence == "high" and not rule_result.issues:
+        logger.info("Reflection: rule confidence=high, skipping LLM for agent=%s", agent_name)
+        return rule_result
+
+    # 3. LLM 层（异步）
+    if use_llm and evidence_text and len(evidence_text) > 50:
+        return await _allm_reflection(evidence_text, answer, query)
+
+    return rule_result
+
 
 def reflect(
     answer: str,

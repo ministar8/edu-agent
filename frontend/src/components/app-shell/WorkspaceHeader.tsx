@@ -1,3 +1,4 @@
+import { API_BASE_URL } from "@/lib/api";
 import { memo, useEffect, useState } from "react";
 import type { TabType } from "@/types/navigation";
 import { tabDescriptions, tabs } from "./navigationConfig";
@@ -14,10 +15,9 @@ function useBackendStatus(intervalMs = 30000) {
 
     const check = async () => {
       try {
-        const res = await fetch("/api/auth/me", { method: "GET" });
-        // 200 = logged in, 401 = backend alive but not authed
-        // 500/502 = Next.js rewrite proxy can't reach backend
-        if (!stopped) setStatus(res.status <= 401 ? "online" : "offline");
+        const res = await fetch(`${API_BASE_URL}/health`, { method: "GET" });
+        // 200 = backend alive; 500/502 = proxy can't reach backend
+        if (!stopped) setStatus(res.ok ? "online" : "offline");
       } catch {
         // Network error = frontend itself down or no connectivity
         if (!stopped) setStatus("offline");

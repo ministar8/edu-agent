@@ -10,11 +10,13 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import re
+from pathlib import Path
 from typing import List
 
 from langchain_core.documents import Document
+
+from app.rag.rag_utils import detect_content_type as _detect_content_type
 
 logger = logging.getLogger(__name__)
 
@@ -79,9 +81,6 @@ def _extract_heading_keywords(heading: str) -> List[str]:
     heading = heading.strip("[]")
     parts = [p.strip() for p in heading.split(">") if p.strip()]
     return parts
-
-
-from app.rag.rag_utils import detect_content_type as _detect_content_type
 
 
 def _normalize_keyword_list(values: List[str]) -> List[str]:

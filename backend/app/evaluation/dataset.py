@@ -28,12 +28,21 @@ class EvalSample:
     answer: str = ""                                      # 生成的答案（评估时填充）
 
     def to_ragas_dict(self) -> dict[str, Any]:
-        """转换为 RAGAS evaluate() 所需格式"""
+        """转换为 RAGAS 0.4.x evaluate() 所需格式
+
+        RAGAS 0.4.x 字段名（SingleTurnSample）：
+        - user_input: 用户提问
+        - reference: 标准答案（ground truth）
+        - retrieved_contexts: 检索到的上下文列表
+        - response: 系统生成的答案
+        """
+        if not self.reference:
+            logger.warning("样本 reference 为空，context_recall 将无法计算: query=%s", self.query[:50])
         return {
-            "question": self.query,
-            "answer": self.answer,
-            "contexts": self.contexts,
-            "ground_truth": self.reference,
+            "user_input": self.query,
+            "response": self.answer,
+            "retrieved_contexts": self.contexts,
+            "reference": self.reference,
         }
 
 

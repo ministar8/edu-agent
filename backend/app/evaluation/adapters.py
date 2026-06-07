@@ -37,14 +37,26 @@ class CurrentRAGRetriever:
         use_rerank: bool = True,
     ) -> list[dict[str, Any]]:
         from app.rag.retriever import retrieve_evidence
+        from app.rag.retrieval_strategy import L2_STANDARD
 
+        # 评估场景：使用 L2_STANDARD depth 确保 k 参数不被 adaptive depth 覆盖
+        # （retrieve_evidence 中 k==5 时会被 depth.k 替换，传固定 depth 阻止此行为）
         fused = retrieve_evidence(
             query=query,
             collection_name=collection_name,
             k=k,
             use_rerank=use_rerank,
+            depth=L2_STANDARD.depth,
         )
         return [{"content": ev.content, "metadata": dict(ev.metadata) if ev.metadata else {}} for ev in fused.text_evidences]
+
+
+# Metadata 路由名称集合（与 diagnosis.py 共享）
+META_ROUTE_NAMES = frozenset({
+    "code_meta", "exercise_meta", "answer_meta",
+    "concept_meta", "structured_meta",
+    "section_meta", "formula_meta", "table_meta", "merged_qa_meta",
+})
 
 
 class CurrentDiagnosticRetriever:
@@ -56,7 +68,7 @@ class CurrentDiagnosticRetriever:
     route_names: list[str] = [
         "semantic", "keyword_bm25", "focus", "expanded", "kg_expand",
         "code_meta", "exercise_meta", "answer_meta",
-        "concept_meta", "comparison_meta", "structured_meta",
+        "concept_meta", "structured_meta",
         "section_meta", "formula_meta", "table_meta", "merged_qa_meta",
     ]
 
@@ -87,7 +99,8 @@ class CurrentDiagnosticRetriever:
         from app.rag.reranker import rerank
         from app.rag.rag_utils import extract_query_terms, normalize_query_text
         from app.rag.retriever import _multi_route_search
-        from app.rag.query_classifier import classify_query, resolve_retrieval_depth, RetrievalDepth
+        from app.rag.query_classifier import classify_query, RetrievalDepth
+        from app.rag.retrieval_strategy import resolve_retrieval_strategy
 
         start = time.perf_counter()
         timing: dict[str, float] = {}
@@ -96,7 +109,8 @@ class CurrentDiagnosticRetriever:
         normalized = normalize_query_text(query)
         terms = extract_query_terms(normalized)
         cat = classify_query(query, terms)
-        depth = resolve_retrieval_depth(cat)
+        strategy = resolve_retrieval_strategy(cat)
+        depth = strategy.depth
 
         # ── 多路召回（委托 _multi_route_search，与主管线一致）──
         t0 = time.perf_counter()
@@ -116,7 +130,7 @@ class CurrentDiagnosticRetriever:
                 )
             # 禁用 metadata 路由时设置 skip_metadata_routes
             meta_routes = {"code_meta", "exercise_meta", "answer_meta",
-                           "concept_meta", "comparison_meta", "structured_meta",
+                           "concept_meta", "structured_meta",
                            "section_meta", "formula_meta", "table_meta", "merged_qa_meta"}
             if any(r in meta_routes for r in disable_routes):
                 effective_depth = RetrievalDepth(
@@ -143,7 +157,10 @@ class CurrentDiagnosticRetriever:
         # ── Reranker ──
         if rerank_flag and filtered:
             t2 = time.perf_counter()
-            filtered = rerank(query, filtered, top_k=k)
+            reranked = rerank(query, filtered, top_k=k)
+            # 双重阈值过滤（与主管线一致），兜底保留 top-2
+            from app.rag.retriever import _apply_rerank_threshold
+            filtered = _apply_rerank_threshold(reranked, min_keep=2)
             timing["rerank_ms"] = (time.perf_counter() - t2) * 1000
         else:
             filtered = filtered[:k]
@@ -157,6 +174,8 @@ class CurrentDiagnosticRetriever:
 
         timing["total_ms"] = (time.perf_counter() - start) * 1000
         timing["query_category"] = str(cat)
+        timing["retrieval_layer"] = strategy.layer
+        timing["route_type"] = strategy.route_type
         return [_doc_to_dict(d) for d in filtered], timing
 
 
@@ -248,24 +267,3 @@ def get_eval_embedding() -> EmbeddingProtocol:
     return _embedding
 
 
-def set_retriever(retriever: RetrieverProtocol) -> None:
-    """注入自定义检索器（用于测试或切换 RAG 引擎）"""
-    global _retriever, _diagnostic_retriever
-    _retriever = retriever
-    if isinstance(retriever, DiagnosticRetrieverProtocol):
-        _diagnostic_retriever = retriever
-
-
-def set_diagnostic_retriever(retriever: DiagnosticRetrieverProtocol) -> None:
-    global _diagnostic_retriever
-    _diagnostic_retriever = retriever
-
-
-def set_decomposer(decomposer: QueryDecomposerProtocol) -> None:
-    global _decomposer
-    _decomposer = decomposer
-
-
-def set_embedding(embedding: EmbeddingProtocol) -> None:
-    global _embedding
-    _embedding = embedding

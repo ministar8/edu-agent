@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.db import User, get_db
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from app.services.auth import create_access_token, decode_access_token, hash_password, is_legacy_hash, verify_password
+from app.services.auth import create_access_token, decode_access_token, hash_password, verify_password
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -55,20 +55,6 @@ async def register(req: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="用户名已存在",
-        )
-
-    # 用户名长度校验
-    if len(req.username) < 3 or len(req.username) > 50:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="用户名长度需在 3-50 之间",
-        )
-
-    # 密码长度校验
-    if len(req.password) < 6:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="密码长度至少 6 位",
         )
 
     # 角色校验

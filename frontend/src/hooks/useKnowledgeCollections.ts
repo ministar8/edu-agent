@@ -11,13 +11,21 @@ export function useKnowledgeCollections() {
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
   const [collectionsError, setCollectionsError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchCollections = useCallback(async () => {
     try {
       const res = await http.get("/api/knowledge/collections");
-      setCollections(res.data.collections);
+      if (!mountedRef.current) return;
+      setCollections(res.data.collections || []);
       setCollectionsError("");
     } catch (error: unknown) {
+      if (!mountedRef.current) return;
       setCollections([]);
       setCollectionsError(getErrorMessage(error, "知识库列表加载失败"));
     }
@@ -41,15 +49,15 @@ export function useKnowledgeCollections() {
     formData.append("category", category);
 
     try {
-      const res = await http.post("/api/knowledge/batch-upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await http.post("/api/knowledge/batch-upload", formData);
+      if (!mountedRef.current) return;
       setUploadResult(res.data);
       void fetchCollections();
     } catch (error: unknown) {
+      if (!mountedRef.current) return;
       setUploadResult({ error: getErrorMessage(error, "上传失败") });
     } finally {
-      setUploading(false);
+      if (mountedRef.current) setUploading(false);
     }
   }, [category, fetchCollections]);
 
@@ -57,10 +65,10 @@ export function useKnowledgeCollections() {
     if (!confirm(`确定删除知识库 "${name}" 吗？`)) return;
 
     try {
-      await http.delete(`/api/knowledge/collections/${name}`);
+      await http.delete(`/api/knowledge/collections/${encodeURIComponent(name)}`);
       void fetchCollections();
     } catch (error: unknown) {
-      setCollectionsError(getErrorMessage(error, "删除知识库失败"));
+      if (mountedRef.current) setCollectionsError(getErrorMessage(error, "删除知识库失败"));
     }
   }, [fetchCollections]);
 

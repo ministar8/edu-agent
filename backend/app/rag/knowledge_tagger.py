@@ -162,16 +162,26 @@ def _tag_single_chunk(
                 source_file=source_file,
             )
             db.add(kp)
-            db.flush()
-        kp_ids.append(kp.id)
-        kp_names.append(kp.name)
+            try:
+                db.flush()
+            except Exception as _e:
+                db.rollback()
+                kp = db.query(KnowledgePointRegistry).filter(
+                    KnowledgePointRegistry.name == topic,
+                    KnowledgePointRegistry.category == category,
+                ).first()
+                if not kp:
+                    logger.warning("tagger: failed to insert/query KP '%s' in '%s': %s", topic, category, _e)
+                    kp = None
+        if kp:
+            kp_ids.append(kp.id)
+            kp_names.append(kp.name)
 
     # 2. 章级标签（用于聚合统计，chapter 非空且与 topic 不同时才记录）
     if chapter and chapter != topic:
         ch_kp = db.query(KnowledgePointRegistry).filter(
             KnowledgePointRegistry.name == chapter,
             KnowledgePointRegistry.category == category,
-            KnowledgePointRegistry.chapter == "",
         ).first()
         if not ch_kp:
             ch_path = heading_path.rsplit(">", 1)[0].strip() if ">" in heading_path else heading_path
@@ -187,9 +197,19 @@ def _tag_single_chunk(
                 source_file=source_file,
             )
             db.add(ch_kp)
-            db.flush()
-        kp_ids.append(ch_kp.id)
-        kp_names.append(ch_kp.name)
+            try:
+                db.flush()
+            except Exception as _e:
+                db.rollback()
+                ch_kp = db.query(KnowledgePointRegistry).filter(
+                    KnowledgePointRegistry.name == chapter,
+                    KnowledgePointRegistry.category == category,
+                ).first()
+                if not ch_kp:
+                    logger.warning("tagger: failed to insert/query chapter KP '%s' in '%s': %s", chapter, category, _e)
+        if ch_kp:
+            kp_ids.append(ch_kp.id)
+            kp_names.append(ch_kp.name)
 
     return kp_ids
 
@@ -212,41 +232,39 @@ def tag_chunks_with_knowledge_points(
     """
     from app.db.session import SessionLocal
 
-    db: Session = SessionLocal()
-    try:
-        tagged_count = 0
-        for chunk in chunks:
-            kp_ids = _tag_single_chunk(chunk, db, fallback_category)
-            if kp_ids:
-                chunk.metadata["knowledge_point_ids"] = json.dumps(kp_ids)
-                # 同时存可读名称 + 难度信息，方便检索时使用
-                kp_names = []
-                kp_difficulties = []
-                from app.db.models import KnowledgePointRegistry
-                for kp_id in kp_ids:
-                    kp = db.get(KnowledgePointRegistry, kp_id)
-                    if kp:
-                        kp_names.append(kp.name)
-                        kp_difficulties.append(kp.difficulty)
-                chunk.metadata["knowledge_point_names"] = json.dumps(kp_names, ensure_ascii=False)
-                # 注入难度到 chunk metadata（供检索时使用）
-                if kp_difficulties:
-                    chunk.metadata["difficulty"] = max(kp_difficulties)
-                    chunk.metadata["difficulty_source"] = "auto"
-                tagged_count += 1
-            else:
-                chunk.metadata["knowledge_point_ids"] = "[]"
-                chunk.metadata["knowledge_point_names"] = "[]"
-        db.commit()
-        logger.info("Tagged %d/%d chunks with knowledge point IDs", tagged_count, len(chunks))
-    except Exception:
-        db.rollback()
-        logger.error("Failed to tag chunks with knowledge points", exc_info=True)
-        # 不中断 ingest 流程，只是标签缺失
-        for chunk in chunks:
-            chunk.metadata.setdefault("knowledge_point_ids", "[]")
-            chunk.metadata.setdefault("knowledge_point_names", "[]")
-    finally:
-        db.close()
+    with SessionLocal() as db:
+        try:
+            tagged_count = 0
+            for chunk in chunks:
+                kp_ids = _tag_single_chunk(chunk, db, fallback_category)
+                if kp_ids:
+                    chunk.metadata["knowledge_point_ids"] = json.dumps(kp_ids)
+                    # 同时存可读名称 + 难度信息，方便检索时使用
+                    kp_names = []
+                    kp_difficulties = []
+                    from app.db.models import KnowledgePointRegistry
+                    for kp_id in kp_ids:
+                        kp = db.get(KnowledgePointRegistry, kp_id)
+                        if kp:
+                            kp_names.append(kp.name)
+                            kp_difficulties.append(kp.difficulty)
+                    chunk.metadata["knowledge_point_names"] = json.dumps(kp_names, ensure_ascii=False)
+                    # 注入难度到 chunk metadata（供检索时使用）
+                    if kp_difficulties:
+                        chunk.metadata["difficulty"] = max(kp_difficulties)
+                        chunk.metadata["difficulty_source"] = "auto"
+                    tagged_count += 1
+                else:
+                    chunk.metadata["knowledge_point_ids"] = "[]"
+                    chunk.metadata["knowledge_point_names"] = "[]"
+            db.commit()
+            logger.info("Tagged %d/%d chunks with knowledge point IDs", tagged_count, len(chunks))
+        except Exception:
+            db.rollback()
+            logger.error("Failed to tag chunks with knowledge points", exc_info=True)
+            # 不中断 ingest 流程，只是标签缺失
+            for chunk in chunks:
+                chunk.metadata.setdefault("knowledge_point_ids", "[]")
+                chunk.metadata.setdefault("knowledge_point_names", "[]")
 
     return chunks

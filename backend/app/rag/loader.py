@@ -33,7 +33,8 @@ def _detect_and_read(filepath: str) -> str:
     注意：cchardet 对中文 UTF-8 文件可能误判为 Windows-1252，
     导致 Mojibake（乱码），因此 UTF-8 严格解码优先于 cchardet。
     """
-    raw = open(filepath, "rb").read()
+    with open(filepath, "rb") as _f:
+            raw = _f.read()
     # 1. UTF-8 严格解码（knowledge base 文件均为 UTF-8）
     try:
         return raw.decode("utf-8")

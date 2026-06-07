@@ -1,15 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Component, type ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Sidebar } from "@/components/app-shell/Sidebar";
 import { WorkspaceContent } from "@/components/app-shell/WorkspaceContent";
 import { WorkspaceHeader } from "@/components/app-shell/WorkspaceHeader";
 import { useAuth } from "@/lib/auth";
+import { generateThreadId } from "@/lib/thread";
 import type { ChatPanelState } from "@/types/chat";
 import type { TabType } from "@/types/navigation";
 import type { QuestionPanelState } from "@/types/question";
+
+class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean; errorMsg: string }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorMsg: "" };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMsg: error.message };
+  }
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || (
+        <div className="flex h-screen items-center justify-center bg-stone-50">
+          <div className="text-center">
+            <p className="text-slate-500 text-sm mb-2">页面加载出错</p>
+            <p className="text-slate-400 text-xs">{this.state.errorMsg}</p>
+            <button onClick={() => this.setState({ hasError: false })} className="mt-3 text-xs text-emerald-600 underline">重试</button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export default function Home() {
   const { user, loading, logout } = useAuth();
@@ -36,7 +61,8 @@ export default function Home() {
     streamingAgent: "",
     activeTool: null,
     streamingGovernance: null,
-    baseThreadId: `session-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    statusLabel: "",
+    baseThreadId: generateThreadId(),
     conversationId: null,
   });
 
@@ -60,6 +86,7 @@ export default function Home() {
   if (!user) return null;
 
   return (
+    <ErrorBoundary>
     <div className="flex h-screen gap-4 bg-stone-50 p-4">
       <Sidebar activeTab={activeTab} user={user} onTabChange={setActiveTab} onLogout={logout} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-stone-200/60 bg-white shadow-sm">
@@ -73,5 +100,6 @@ export default function Home() {
         />
       </div>
     </div>
+    </ErrorBoundary>
   );
 }

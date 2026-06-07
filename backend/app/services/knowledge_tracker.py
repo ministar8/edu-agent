@@ -90,24 +90,22 @@ class KnowledgeTracker:
     def on_event(self, event: TrackingEvent) -> None:
         """处理追踪事件（同步，由 EventBus 调用）"""
         try:
-            db: Session = SessionLocal()
-            try:
-                for kp_id in event.knowledge_point_ids:
-                    self._update_state(
-                        db=db,
-                        user_id=event.user_id,
-                        knowledge_point_id=kp_id,
-                        event_type=event.event_type,
-                        difficulty=event.difficulty,
-                        outcome=event.outcome,
-                        source=self._source_from_event(event.event_type),
-                    )
-                db.commit()
-            except Exception:
-                db.rollback()
-                raise
-            finally:
-                db.close()
+            with SessionLocal() as db:
+                try:
+                    for kp_id in event.knowledge_point_ids:
+                        self._update_state(
+                            db=db,
+                            user_id=event.user_id,
+                            knowledge_point_id=kp_id,
+                            event_type=event.event_type,
+                            difficulty=event.difficulty,
+                            outcome=event.outcome,
+                            source=self._source_from_event(event.event_type),
+                        )
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    raise
         except Exception as e:
             logger.error("KnowledgeTracker.on_event error: %s", e, exc_info=True)
 
@@ -169,7 +167,11 @@ class KnowledgeTracker:
         else:
             # 已有记录：先应用衰减回写，再更新
             now = datetime.now(timezone.utc)
-            hours_since = (now - state.last_interaction_at).total_seconds() / 3600
+            last_at = state.last_interaction_at
+            # DB may return offset-naive datetime; treat as UTC
+            if last_at and last_at.tzinfo is None:
+                last_at = last_at.replace(tzinfo=timezone.utc)
+            hours_since = (now - last_at).total_seconds() / 3600
             decayed = effective_mastery(state.mastery, state.confidence, hours_since)
 
             is_positive = delta >= 0
@@ -189,8 +191,7 @@ class KnowledgeTracker:
 
     def get_student_profile(self, user_id: int) -> dict[str, Any]:
         """获取学生画像：各学科平均掌握度"""
-        db: Session = SessionLocal()
-        try:
+        with SessionLocal() as db:
             states = db.query(StudentKnowledgeState).filter(
                 StudentKnowledgeState.user_id == user_id,
             ).all()
@@ -237,15 +238,12 @@ class KnowledgeTracker:
                 "total_mastered": sum(cs["mastered"] for cs in category_stats.values()),
                 "total_weak": sum(cs["weak"] for cs in category_stats.values()),
             }
-        finally:
-            db.close()
 
     def get_weak_points(
         self, user_id: int, threshold: float = 0.3, limit: int = 10,
     ) -> list[dict]:
         """获取薄弱知识点列表"""
-        db: Session = SessionLocal()
-        try:
+        with SessionLocal() as db:
             states = db.query(StudentKnowledgeState).filter(
                 StudentKnowledgeState.user_id == user_id,
             ).all()
@@ -272,8 +270,6 @@ class KnowledgeTracker:
 
             weak.sort(key=lambda x: x["effective_score"])
             return weak[:limit]
-        finally:
-            db.close()
 
     def get_category_summary(self, user_id: int) -> list[dict]:
         """获取各学科详细统计"""
@@ -323,33 +319,13 @@ class KnowledgeTracker:
 
         return recommendations[:limit]
 
-    def build_profile_text(self, user_id: int, max_weak: int = 5) -> str:
-        """构建学生画像摘要文本，用于注入 RAG context
-
-        Returns:
-            类似 "【学生画像】薄弱知识点：链表(掌握度12%)、进程同步(掌握度25%)..."
-            的文本片段；无数据时返回空字符串。
-        """
-        weak_points = self.get_weak_points(user_id, threshold=0.4, limit=max_weak)
-        if not weak_points:
-            return ""
-
-        parts = ["【学生画像】该学生在以下知识点存在薄弱："]
-        for wp in weak_points:
-            pct = max(0, min(100, round(wp["effective_score"] * 100)))
-            parts.append(f"  - {wp['name']}（{CATEGORY_LABELS.get(wp['category'], wp['category'])}，掌握度{pct}%）")
-        parts.append("请在回答中针对以上薄弱点给出更详细的解释和补充说明。")
-        return "\n".join(parts)
-
     def build_cross_session_context(self, user_id: int, max_weak: int = 5, max_sessions: int = 3) -> str:
         """统一构建跨会话记忆文本，聚合薄弱知识点 + 最近会话摘要
 
-        替代单独的 build_profile_text，提供更丰富的跨会话上下文。
         内部去重：若会话摘要中提到的知识点已在薄弱点列表中，不重复列出。
         无数据时返回空字符串。
         """
         weak_points = self.get_weak_points(user_id, threshold=0.4, limit=max_weak)
-        weak_names = {wp["name"] for wp in weak_points}
 
         parts: list[str] = []
 
@@ -364,8 +340,7 @@ class KnowledgeTracker:
         try:
             from app.db.session import SessionLocal
             from app.db.models import Conversation
-            db = SessionLocal()
-            try:
+            with SessionLocal() as db:
                 recent_convs = (
                     db.query(Conversation)
                     .filter(Conversation.user_id == user_id, Conversation.summary != "")
@@ -383,8 +358,6 @@ class KnowledgeTracker:
                     if trail_parts:
                         parts.append("最近学习轨迹：")
                         parts.append(" → ".join(trail_parts))
-            finally:
-                db.close()
         except Exception as e:
             logger.debug("Recent conversation summary lookup skipped: %s", e)
 

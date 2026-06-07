@@ -162,8 +162,6 @@ async def list_knowledge_points(
     db: Session = Depends(get_db),
 ):
     """列出所有已注册的知识点（可选按学科过滤）"""
-    user = current_user
-
     query = db.query(KnowledgePointRegistry)
     if category:
         query = query.filter(KnowledgePointRegistry.category == category)

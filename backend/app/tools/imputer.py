@@ -22,14 +22,12 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from functools import wraps
 from pathlib import Path
-from typing import Optional
 
 from langchain_core.documents import Document
 
@@ -89,6 +87,11 @@ class _ResourceGuard:
     def degraded_ops(self) -> set[str]:
         return self._degraded.copy()
 
+    def reset(self) -> None:
+        """重置所有计数器和降级状态"""
+        self._counters.clear()
+        self._degraded.clear()
+
     def summary(self) -> str:
         parts = [f"{op}:{cnt}" for op, cnt in sorted(self._counters.items())]
         degraded = ", ".join(sorted(self._degraded)) if self._degraded else "none"
@@ -108,7 +111,7 @@ def _with_timeout(timeout: float):
             try:
                 result = func(*args, **kwargs)
             except Exception as e:
-                logger.debug("Timeout wrapper: %s raised %s", func.__name__, e)
+                logger.warning("Timeout wrapper: %s raised %s", func.__name__, e)
                 return None
             elapsed = time.perf_counter() - start
             if elapsed > timeout:
@@ -127,6 +130,12 @@ _PLACEHOLDER_RE = re.compile(
 
 # 未闭合代码围栏
 _UNCLOSED_FENCE_RE = re.compile(r"^\s*(```+|~~~+)", re.MULTILINE)
+
+# PDF 页码行：单独一行的 "第X页" / "Page X" / "- X -" / 纯数字行
+_PAGE_NUM_RE = re.compile(
+    r"^\s*(?:第\s*\d+\s*页|page\s*\d+|-?\s*\d+\s*-?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 # ── 语义分段配置档案 ────────────────────────────────
 # 不同文档类型的段落粘连度差异很大，需要不同的分段参数：
@@ -279,11 +288,6 @@ _METHOD_CONFIDENCE = {
 _LOW_CONFIDENCE_PREFIX = "[推测]"
 
 
-def clear_heading_cache() -> None:
-    """清空 heading 缓存（入库完成后调用）"""
-    _heading_cache.clear()
-
-
 def get_heading_cache_stats() -> dict:
     """获取缓存统计"""
     return {"size": len(_heading_cache)}
@@ -349,33 +353,23 @@ def _detect_content_status(doc: Document) -> str:
     if _PLACEHOLDER_RE.search(text):
         return "placeholder"
 
-    # 截断检测：未闭合代码围栏
+    # 截断检测：未闭合代码围栏 + 未闭合括号
     fence_matches = _UNCLOSED_FENCE_RE.findall(text)
     if fence_matches and len(fence_matches) % 2 != 0:
         return "truncated"
 
-    return "normal"
-
-
-def _detect_truncation(text: str) -> bool:
-    """检测文本是否被截断"""
-    # 未闭合代码围栏
-    fence_matches = _UNCLOSED_FENCE_RE.findall(text)
-    if fence_matches and len(fence_matches) % 2 != 0:
-        return True
-
-    # 未闭合中文/英文括号
+    # 未闭合中文/英文括号（开括号多于闭括号 → 截断）
     open_paren = len(re.findall(r"[(（]", text))
     close_paren = len(re.findall(r"[)）]", text))
     if open_paren != close_paren and open_paren > close_paren:
-        return True
+        return "truncated"
 
     open_bracket = len(re.findall(r"[\[{【]", text))
     close_bracket = len(re.findall(r"[\]}】]", text))
     if open_bracket != close_bracket and open_bracket > close_bracket:
-        return True
+        return "truncated"
 
-    return False
+    return "normal"
 
 
 # ── 元数据层缺失值 ──────────────────────────────────
@@ -405,7 +399,7 @@ def _non_stopword_ratio(text: str) -> float:
     return result if result is not None else 1.0  # 超时降级为放行
 
 
-def _extract_md_heading(text: str) -> Optional[str]:
+def _extract_md_heading(text: str) -> str | None:
     """从 Markdown 文本中解析第一个标题
 
     优先取 # 级标题，其次 ## 级。
@@ -418,7 +412,7 @@ def _extract_md_heading(text: str) -> Optional[str]:
     return None
 
 
-def _extract_chapter_heading(text: str) -> Optional[str]:
+def _extract_chapter_heading(text: str) -> str | None:
     """从正文中识别章节标记生成 heading
 
     识别 "第X章"、"1."、"一、" 等编号行，取第一个匹配作为文档标题。
@@ -438,7 +432,7 @@ def _extract_chapter_heading(text: str) -> Optional[str]:
     return None
 
 
-def _extract_pdf_heading_by_features(text: str) -> Optional[str]:
+def _extract_pdf_heading_by_features(text: str) -> str | None:
     """基于字体大小/加粗特征检测 PDF 标题（规则方法，不依赖 LLM）
 
     PDF 经 PyPDFLoader 加载后，文本中不直接包含字体信息，
@@ -488,7 +482,7 @@ def _extract_pdf_heading_by_features(text: str) -> Optional[str]:
     return None
 
 
-def _impute_heading(doc: Document, min_confidence: str = "low") -> Optional[tuple[str, str, str]]:
+def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, str, str] | None:
     """标题缺失填充
 
     优先级（从高到低）：
@@ -626,7 +620,7 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> Optional[tupl
     return (heading, method, confidence)
 
 
-def _impute_heading_path(doc: Document, heading: Optional[str]) -> Optional[str]:
+def _impute_heading_path(doc: Document, heading: str | None) -> str | None:
     """标题路径缺失填充"""
     meta = doc.metadata or {}
 
@@ -648,7 +642,7 @@ def _impute_heading_path(doc: Document, heading: Optional[str]) -> Optional[str]
     return None
 
 
-def _impute_category(doc: Document) -> Optional[str]:
+def _impute_category(doc: Document) -> str | None:
     """分类缺失填充：从 source_path 路径推断"""
     meta = doc.metadata or {}
 
@@ -1137,8 +1131,7 @@ def impute_documents(
         填充记录: [{"field": str, "method": str, "source": str, "value": str}]
     """
     # 重置资源监控器（每次入库开始时重置配额）
-    _resource_guard._counters.clear()
-    _resource_guard._degraded.clear()
+    _resource_guard.reset()
 
     filled_docs: list[Document] = []
     impute_log: list[dict] = []

@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import { getErrorMessage } from "@/lib/errors";
 import { http } from "@/lib/http";
@@ -10,13 +10,33 @@ type UseQuestionGenerationParams = {
 };
 
 export function useQuestionGeneration({ state, setState }: UseQuestionGenerationParams) {
+  const generatingRef = useRef(false);
+
   const updateState = useCallback((patch: Partial<QuestionPanelState>) => {
     setState((prev) => ({ ...prev, ...patch }));
   }, [setState]);
 
+  const handleGenerateResult = useCallback((res: { data: { raw?: string; questions?: StructuredQuestion[]; batch_id?: string } }, extraPatch?: Partial<QuestionPanelState>) => {
+    const raw = res.data.raw || "未返回生成结果。";
+    const questions: StructuredQuestion[] = (res.data.questions || []).map(
+      (q: StructuredQuestion) => ({
+        ...q,
+        gradingStatus: "idle" as const,
+        userAnswer: "",
+      })
+    );
+    updateState({
+      result: raw,
+      questions,
+      batchId: res.data.batch_id || null,
+      ...extraPatch,
+    });
+  }, [updateState]);
+
   const generate = useCallback(async () => {
     const currentTopic = state.topic.trim();
-    if (!currentTopic || state.loading) return;
+    if (!currentTopic || generatingRef.current) return;
+    generatingRef.current = true;
 
     updateState({
       loading: true,
@@ -34,43 +54,34 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
       }, {
         timeout: 150000,
       });
-
-      const raw = res.data.raw || "未返回生成结果。";
-      const questions: StructuredQuestion[] = (res.data.questions || []).map(
-        (q: StructuredQuestion) => ({
-          ...q,
-          gradingStatus: "idle" as const,
-          userAnswer: "",
-        })
-      );
-
-      updateState({
-        result: raw,
-        questions,
-        batchId: res.data.batch_id || null,
-      });
+      handleGenerateResult(res);
     } catch (error: unknown) {
       const msg = getErrorMessage(error, "出题请求失败");
       updateState({ result: `出题失败: ${msg}` });
     } finally {
       updateState({ loading: false });
+      generatingRef.current = false;
     }
-  }, [state.count, state.difficulty, state.loading, state.topic, updateState]);
+  }, [state.count, state.difficulty, state.topic, updateState, handleGenerateResult]);
 
   const gradeQuestion = useCallback(async (questionIndex: number) => {
-    let q: StructuredQuestion | undefined;
+    // Use useRef-style pattern to safely get current state before async
+    let qId: number | undefined;
+    let qAnswer: string = "";
     setState((prev) => {
-      q = prev.questions[questionIndex];
-      if (!q || !q.id || q!.gradingStatus === "loading") return prev;
+      const q = prev.questions[questionIndex];
+      if (!q || !q.id || q.gradingStatus === "loading") return prev;
+      qId = q.id;
+      qAnswer = q.userAnswer || "";
       const newQuestions = [...prev.questions];
-      newQuestions[questionIndex] = { ...q!, gradingStatus: "loading" };
+      newQuestions[questionIndex] = { ...q, gradingStatus: "loading" };
       return { ...prev, questions: newQuestions };
     });
-    if (!q || !q.id) return;
+    if (!qId) return;
 
     try {
-      const res = await http.post(`/api/questions/${q.id}/grade`, {
-        user_answer: q.userAnswer || "",
+      const res = await http.post(`/api/questions/${qId}/grade`, {
+        user_answer: qAnswer,
       });
 
       setState((prev) => {
@@ -106,13 +117,15 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
     updateState({ wrongLoading: true });
     try {
       const res = await http.get("/api/questions/wrong", { params: { limit: 20 } });
-      updateState({ wrongQuestions: res.data || [], wrongLoading: false, activeTab: "wrong" });
+      updateState({ wrongQuestions: res.data || [], wrongLoading: false, activeTab: "wrong" as const });
     } catch {
       updateState({ wrongLoading: false });
     }
   }, [updateState]);
 
   const weakPointPractice = useCallback(async () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
     updateState({ loading: true, result: "", questions: [], batchId: null });
 
     try {
@@ -121,29 +134,15 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
       }, {
         timeout: 150000,
       });
-
-      const raw = res.data.raw || "未返回生成结果。";
-      const questions: StructuredQuestion[] = (res.data.questions || []).map(
-        (q: StructuredQuestion) => ({
-          ...q,
-          gradingStatus: "idle" as const,
-          userAnswer: "",
-        })
-      );
-
-      updateState({
-        result: raw,
-        questions,
-        batchId: res.data.batch_id || null,
-        activeTab: "generate",
-      });
+      handleGenerateResult(res, { activeTab: "generate" });
     } catch (error: unknown) {
       const msg = getErrorMessage(error, "薄弱练习失败");
       updateState({ result: `练习题生成失败: ${msg}` });
     } finally {
       updateState({ loading: false });
+      generatingRef.current = false;
     }
-  }, [updateState]);
+  }, [updateState, handleGenerateResult]);
 
   return { generate, updateState, gradeQuestion, updateQuestionAnswer, loadWrongQuestions, weakPointPractice };
 }

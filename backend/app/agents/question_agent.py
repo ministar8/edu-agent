@@ -1,5 +1,3 @@
-import asyncio
-import json
 import logging
 import re
 import threading
@@ -9,12 +7,13 @@ from difflib import SequenceMatcher
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 
-from app.rag.retriever import retrieve_evidence
+from app.config import settings
 from app.rag.evidence import TextEvidence
 from app.rag.rag_utils import get_llm
 from app.rag.schemas import QuestionList
 from app.rag.parse_utils import parse_llm_json
 from app.agents.kg_tools import aquery_knowledge_graph
+from app.agents.prompts import QUESTION_AGENT_SYSTEM_PROMPT as QUESTION_AGENT_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -75,8 +74,7 @@ def _lookup_registry_difficulty(kp_name: str) -> float | None:
     try:
         from app.db.session import SessionLocal
         from app.db.models import KnowledgePointRegistry
-        db = SessionLocal()
-        try:
+        with SessionLocal() as db:
             reg = db.query(KnowledgePointRegistry).filter(
                 KnowledgePointRegistry.name == kp_name,
             ).first()
@@ -85,8 +83,6 @@ def _lookup_registry_difficulty(kp_name: str) -> float | None:
             if reg and _has_difficulty_keyword(reg.heading_path or ""):
                 return reg.difficulty
             return None  # 未标注
-        finally:
-            db.close()
     except Exception:
         return None
 
@@ -143,24 +139,26 @@ def _set_cached_evidences(evidences: list[TextEvidence]) -> None:
 
 @tool("search_question_templates")
 async def asearch_question_templates(query: str) -> str:
-    """异步搜索题库和教材中与指定知识点相关的题目模板、例题和知识点内容（多路召回+Reranker+CRAG压缩完整管线）。"""
+    """异步搜索题库和教材中与指定知识点相关的题目模板、例题和知识点内容（多路召回+Reranker+KG扩展完整管线）。"""
     try:
         subject = _subject_collection(query)
         all_evidences: list[TextEvidence] = []
         context_parts: list[str] = []
 
-        # 学科集合：retrieve_evidence 完整管线（含 KG 补充 + CRAG 压缩）
+        # 学科集合：retrieve_evidence 完整管线（含 KG 补充）
         if subject:
-            subject_fused = await asyncio.to_thread(
-                retrieve_evidence, query=query, collection_name=subject, k=5, use_rerank=True
+            from app.rag.retriever import aretrieve_evidence
+            subject_fused = await aretrieve_evidence(
+                query=query, collection_name=subject, k=5, use_rerank=True
             )
             if subject_fused.final_context:
                 context_parts.append(subject_fused.final_context)
             all_evidences.extend(subject_fused.text_evidences)
 
         # questions 集合：retrieve_evidence 完整管线
-        q_fused = await asyncio.to_thread(
-            retrieve_evidence, query=query, collection_name="questions", k=3, use_rerank=True
+        from app.rag.retriever import aretrieve_evidence as _are
+        q_fused = await _are(
+            query=query, collection_name="questions", k=3, use_rerank=True
         )
         if q_fused.final_context:
             context_parts.append(q_fused.final_context)
@@ -353,6 +351,7 @@ async def generate_questions_with_retrieval(prompt: str) -> QuestionList | str:
         retrieval_context,
         "【用户出题需求】",
         prompt,
+        "请以JSON格式输出。",
     ])
     structured_llm = llm.with_structured_output(QuestionList)
     try:
@@ -396,6 +395,7 @@ async def generate_and_persist_questions(
         retrieval_context,
         "【用户出题需求】",
         prompt,
+        "请以JSON格式输出。",
     ])
     try:
         structured_llm = llm.with_structured_output(QuestionList)
@@ -443,70 +443,36 @@ def _persist_questions(
     from app.db.session import SessionLocal
     from app.db.models import QuestionRecord
 
-    db = SessionLocal()
-    try:
-        for q in questions:
-            record = QuestionRecord(
-                user_id=user_id,
-                conversation_id=conversation_id,
-                batch_id=batch_id,
-                question_type=q.get("question_type", "简答"),
-                difficulty=q.get("difficulty", 1.0),
-                stem=q.get("stem", ""),
-                standard_answer=q.get("answer", ""),
-                explanation=q.get("explanation", ""),
-                source="generated",
-                quality_score=q.get("quality_score"),
-            )
-            db.add(record)
-            db.flush()  # flush to get record.id
-            q["id"] = record.id
-        db.commit()
-    except Exception as e:
-        logger.warning("Failed to persist questions: %s", e)
-        db.rollback()
-    finally:
-        db.close()
+    with SessionLocal() as db:
+        try:
+            for q in questions:
+                record = QuestionRecord(
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    batch_id=batch_id,
+                    question_type=q.get("question_type", "简答"),
+                    difficulty=q.get("difficulty", 1.0),
+                    stem=q.get("stem", ""),
+                    standard_answer=q.get("answer", ""),
+                    explanation=q.get("explanation", ""),
+                    source="generated",
+                    quality_score=q.get("quality_score"),
+                )
+                db.add(record)
+                db.flush()  # flush to get record.id
+                q["id"] = record.id
+            db.commit()
+        except Exception as e:
+            logger.warning("Failed to persist questions: %s", e)
+            db.rollback()
 
 
 # ── Agent 定义 ──────────────────────────────────────────────────
 
-QUESTION_AGENT_PROMPT = """你是一个练习题生成Agent，任务是基于题库模板与知识库内容进行检索增强生成。
-
-【工具使用规则】
-1. 只要用户要求出题、练习、测试、刷题，必须先调用检索工具。
-2. 检索工具选择策略：
-   - 查找题目模板与知识依据 → search_question_templates（统一检索管线会根据查询自动路由到相关集合）
-3. 若检索结果为空或工具返回失败，不要生成题目；必须直接说明无法基于当前知识库生成。
-4. 知识图谱辅助出题：当需要出综合题或关联题时，可先调用 query_knowledge_graph 查询知识点的前置/后续关系。
-5. 若检索结果不足，要明确说明题库模板不足，不要生成保守兜底题目。
-6. 不要编造"来自题库第几套题"之类不存在的信息。
-7. 生成内容应与用户主题高度相关，不要跑题。
-8. 只输出题目结果，不要寒暄，不要自我介绍。
-
-【出题要求】
-1. 支持选择题、填空题、简答题、综合应用题。
-2. 若检索结果中包含难度标注，按标注难度出题；否则按混合难度出题。
-3. 题目应避免与检索模板完全重复，但可以复用考点结构。
-4. 每道题都必须给出标准答案与简明解析。
-5. 综合应用题需给出完整的分析过程与关键步骤。
-
-【输出格式】
-每道题按以下结构输出：
-题目X：
-类型：
-难度：
-题干：
-标准答案：
-解析：
-
-若有多道题，请逐题编号。
-"""
-
 
 def create_question_agent():
     """创建题目生成Agent（ReAct 模式，供 Supervisor 路由使用）"""
-    llm = get_llm()
+    llm = get_llm(temperature=settings.TEMP_CREATIVE, use_fast=True)  # ReAct 工具选择用 fast
     agent = create_react_agent(
         model=llm,
         tools=[

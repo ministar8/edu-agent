@@ -18,14 +18,10 @@ from app.evaluation.reporters import (
 
 logger = logging.getLogger(__name__)
 
-# 学科 → collection_name 映射（与 ingest.py 保持一致）
-_COLLECTION_NAMES = {
-    "data_structure": "data_structure",
-    "computer_organization": "computer_organization",
-    "operating_system": "operating_system",
-    "computer_network": "computer_network",
-    "questions": "questions",
-    "learning_paths": "learning_paths",
+# 合法的 collection 名称（恒等映射，只需检查合法性）
+_VALID_COLLECTIONS = {
+    "data_structure", "computer_organization", "operating_system",
+    "computer_network", "questions", "learning_paths",
 }
 
 
@@ -34,8 +30,8 @@ def _resolve_collection(category: str | None) -> str:
 
     当 category 为空时返回空串，让检索器自动推断学科。
     """
-    if category and category in _COLLECTION_NAMES:
-        return _COLLECTION_NAMES[category]
+    if category and category in _VALID_COLLECTIONS:
+        return category
     return ""
 
 
@@ -208,9 +204,9 @@ def save_report(report: dict[str, Any], output_dir: str, tag: str = "") -> dict[
         {"json": str, "markdown": str} 文件路径
     """
     import os
-    from datetime import datetime
+    from datetime import datetime, timezone
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     suffix = f"_{tag}" if tag else ""
     base_name = f"eval_{ts}{suffix}"
 

@@ -15,11 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import re
 import time
-from typing import Literal
 
 from app.rag.query_classifier import QueryCategory
 from app.rag.schemas import DecomposeResult
@@ -76,7 +74,9 @@ _DECOMPOSE_PROMPT = """\
 问题：比较Cache写回法与虚拟存储器的写回策略的异同
 子问题：["Cache写回法的工作原理", "虚拟存储器写回策略的工作原理", "两者异同对比"]
 
-问题：{query}"""
+问题：{query}
+
+请以JSON格式输出。"""
 
 
 # ── JSON 解析 ──────────────────────────────────────────────
@@ -139,6 +139,27 @@ def _postprocess_subs(query: str, sub_queries: list[str]) -> list[str]:
     return sub_queries[:_MAX_SUB_QUERIES + 1]
 
 
+def _clean_rule_part(text: str) -> str:
+    text = re.sub(r"^(请|帮我|解释|说明|比较|对比|分析|讲解|一下)+", "", text.strip())
+    text = re.sub(r"(的)?(区别|差异|不同|异同|关系|联系|对比|比较)$", "", text.strip())
+    return text.strip("：:，,。？? ")
+
+
+def _rule_decompose(query: str, cat: QueryCategory) -> list[str]:
+    if not cat.is_comparison:
+        return []
+    if len(query) > 80:
+        return []
+    if not re.search(r"(区别|差异|不同|异同|关系|联系|对比|比较)", query):
+        return []
+    parts = [_clean_rule_part(part) for part in re.split(r"\s*(?:和|与|及|以及|、|，|,|\s+vs\s+|\s+VS\s+)\s*", query)]
+    parts = [part for part in parts if len(part) >= 2]
+    if len(parts) < 2 or len(parts) > 3:
+        return []
+    subs = [f"{part}的核心概念" for part in parts[:2]]
+    return [query, *subs]
+
+
 def _llm_decompose_fallback(llm, prompt: str) -> list[str]:
     try:
         raw = llm.invoke(prompt)
@@ -160,6 +181,11 @@ async def decompose(query: str, cat: QueryCategory | None = None) -> list[str]:
     cat = _ensure_cat(query, cat)
     if not should_decompose(query, cat):
         return [query]
+    rule_subs = _rule_decompose(query, cat)
+    if rule_subs:
+        result = _postprocess_subs(query, rule_subs)
+        _set_cached(query, result)
+        return result
 
     from app.rag.rag_utils import get_llm
     llm = get_llm(streaming=False)
@@ -184,11 +210,19 @@ async def decompose(query: str, cat: QueryCategory | None = None) -> list[str]:
     return result
 
 
-# ── sync 桥接 ──────────────────────────────────────────────
+# ── sync 桥接（LEGACY：供非 async 上下文使用，async 上下文请用 decompose()） ──
 
 
 def decompose_sync(query: str, cat: QueryCategory | None = None) -> list[str]:
-    """同步查询分解（FastAPI async handler 中 LLM sync invoke 在线程池执行，不阻塞事件循环）。"""
+    """同步查询分解（LEGACY：在 async 上下文中请使用 await decompose()）。
+
+    此函数使用 llm.invoke() 同步调用 LLM，仅适用于：
+    - 纯 sync 上下文（如 evaluation/adapters.py）
+    - asyncio.to_thread() 包裹的线程池中
+
+    在 async def 内部直接调用此函数是安全的（因为 llm.invoke 是 sync，
+    不涉及 asyncio.run），但推荐使用 await decompose() 以获得真正的异步 I/O。
+    """
     cached = _get_cached(query)
     if cached is not None:
         return cached
@@ -196,6 +230,11 @@ def decompose_sync(query: str, cat: QueryCategory | None = None) -> list[str]:
     cat = _ensure_cat(query, cat)
     if not should_decompose(query, cat):
         return [query]
+    rule_subs = _rule_decompose(query, cat)
+    if rule_subs:
+        result = _postprocess_subs(query, rule_subs)
+        _set_cached(query, result)
+        return result
 
     from app.rag.rag_utils import get_llm
     llm = get_llm(streaming=False)

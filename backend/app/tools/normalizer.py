@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 from langchain_core.documents import Document
 
@@ -32,9 +31,6 @@ logger = logging.getLogger(__name__)
 # ── 正则预编译 ──────────────────────────────────────
 
 # ── 全角数字/字母 → 半角 ──
-_FULLWIDTH_DIGIT_RE = re.compile(r"[\uff10-\uff19]")  # ０-９
-_FULLWIDTH_UPPER_RE = re.compile(r"[\uff21-\uff3a]")  # Ａ-Ｚ
-_FULLWIDTH_LOWER_RE = re.compile(r"[\uff41-\uff5a]")  # ａ-ｚ
 
 # 全角数字/字母到半角的偏移
 _FW_OFFSET = 0xFEE0  # U+FF01 - U+0021
@@ -101,7 +97,6 @@ _VARIANT_MAP = str.maketrans({
     "羣": "群",
     "氹": "凼",
     "牀": "床",
-    "綫": "线",
     "綫": "线",
     "麫": "面",
     "賸": "剩",

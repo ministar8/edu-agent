@@ -24,6 +24,7 @@ function ChatInputComponent({ input, loading, onInputChange, onSubmit }: ChatInp
               }
             }}
             placeholder="输入你的问题..."
+            maxLength={2000}
             className="flex-1 bg-transparent px-2 py-1.5 text-[14px] text-slate-700 outline-none placeholder:text-slate-400"
           />
           <button

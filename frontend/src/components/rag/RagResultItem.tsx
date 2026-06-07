@@ -15,13 +15,13 @@ function RagResultItemComponent({ result, index }: RagResultItemProps) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="line-clamp-3 text-sm leading-6 text-slate-700">
-          {result.content?.slice(0, 200)}...
+          {(result.content || "").slice(0, 200)}{(result.content || "").length > 200 ? "..." : ""}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">
             来源: {result.metadata?.source_file || "未知"}
           </span>
-          {result.score !== undefined && (
+          {typeof result.score === "number" && (
             <span
               className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                 result.score > 0.8

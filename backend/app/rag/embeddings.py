@@ -22,6 +22,15 @@ MAX_TEXT_LENGTH = 3000
 _sparse_probe_cache: dict[str, object] | None = None
 
 
+def _embedding_timeout() -> httpx.Timeout:
+    total = float(settings.EMBEDDING_TIMEOUT or 60)
+    return httpx.Timeout(total, connect=min(5.0, total), read=total, write=total, pool=min(5.0, total))
+
+
+def _embedding_limits() -> httpx.Limits:
+    return httpx.Limits(max_connections=50, max_keepalive_connections=10)
+
+
 class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
     """OpenAI 兼容 Embedding（支持 Ollama / DashScope / 任何 OpenAI 格式 API，自动分批）"""
 
@@ -50,7 +59,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             f"{self.base_url}/embeddings",
             headers=self._build_headers(),
             json={"model": self.model, "input": [s[:MAX_TEXT_LENGTH]]},
-            timeout=30,
+            timeout=_embedding_timeout(),
         )
         if resp.status_code != 200:
             logger.warning("Single embedding failed (%d), using zero vector", resp.status_code)
@@ -92,7 +101,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                     f"{self.base_url}/embeddings",
                     headers=self._build_headers(),
                     json={"model": self.model, "input": truncated},
-                    timeout=60,
+                    timeout=_embedding_timeout(),
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -114,16 +123,17 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
 
             return results
 
-    async def _aembed_single(self, text: str) -> List[float]:
+    async def _aembed_single(self, text: str, client: httpx.AsyncClient | None = None) -> List[float]:
         """单条文本 embedding（异步，用于批量失败时的逐条回退）"""
+        if client is None:
+            async with httpx.AsyncClient(timeout=_embedding_timeout(), limits=_embedding_limits()) as scoped_client:
+                return await self._aembed_single(text, client=scoped_client)
         s = str(text).strip() or " "
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"{self.base_url}/embeddings",
-                headers=self._build_headers(),
-                json={"model": self.model, "input": [s[:MAX_TEXT_LENGTH]]},
-                timeout=30,
-            )
+        resp = await client.post(
+            f"{self.base_url}/embeddings",
+            headers=self._build_headers(),
+            json={"model": self.model, "input": [s[:MAX_TEXT_LENGTH]]},
+        )
         if resp.status_code != 200:
             logger.warning("Async single embedding failed (%d), using zero vector", resp.status_code)
             return [0.0] * 1024
@@ -134,11 +144,14 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             return [0.0] * 1024
         return vec
 
-    async def _aembed_batch(self, texts: List[str]) -> List[List[float]]:
+    async def _aembed_batch(self, texts: List[str], client: httpx.AsyncClient | None = None) -> List[List[float]]:
         """单批次调用 Embedding API（异步，OpenAI /v1/embeddings 格式）
 
         当批量请求失败或返回 NaN 时，自动逐条回退重试。
         """
+        if client is None:
+            async with httpx.AsyncClient(timeout=_embedding_timeout(), limits=_embedding_limits()) as scoped_client:
+                return await self._aembed_batch(texts, client=scoped_client)
         truncated = []
         truncated_count = 0
         original_lengths: list[int] = []
@@ -159,13 +172,11 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 "truncated_count": truncated_count,
             })
             try:
-                async with httpx.AsyncClient() as client:
-                    resp = await client.post(
-                        f"{self.base_url}/embeddings",
-                        headers=self._build_headers(),
-                        json={"model": self.model, "input": truncated},
-                        timeout=60,
-                    )
+                resp = await client.post(
+                    f"{self.base_url}/embeddings",
+                    headers=self._build_headers(),
+                    json={"model": self.model, "input": truncated},
+                )
                 resp.raise_for_status()
                 data = resp.json()
                 sorted_data = sorted(data["data"], key=lambda x: x["index"])
@@ -175,7 +186,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 logger.warning("Async batch embedding failed: %s, falling back to single", e)
                 results = []
                 for t in truncated:
-                    results.append(await self._aembed_single(t))
+                    results.append(await self._aembed_single(t, client=client))
                 mt.set("embeddings_count", len(results))
                 return results
 
@@ -184,7 +195,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             if nan_indices:
                 logger.warning("NaN detected in %d/%d async embeddings, retrying individually", len(nan_indices), len(results))
                 for i in nan_indices:
-                    results[i] = await self._aembed_single(truncated[i])
+                    results[i] = await self._aembed_single(truncated[i], client=client)
 
             return results
 
@@ -237,19 +248,20 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         start = time.perf_counter()
         batches = [texts[i:i + BATCH_SIZE] for i in range(0, len(texts), BATCH_SIZE)]
 
-        if len(batches) <= 1:
-            all_embeddings = await self._aembed_batch(texts)
-        else:
-            import asyncio
-            tasks = [self._aembed_batch(batch) for batch in batches]
-            batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-            all_embeddings = []
-            for i, result in enumerate(batch_results):
-                if isinstance(result, Exception):
-                    logger.warning("Async batch %d failed: %s", i, result)
-                    all_embeddings.extend([[0.0] * 1024] * len(batches[i]))
-                else:
-                    all_embeddings.extend(result)
+        async with httpx.AsyncClient(timeout=_embedding_timeout(), limits=_embedding_limits()) as client:
+            if len(batches) <= 1:
+                all_embeddings = await self._aembed_batch(texts, client=client)
+            else:
+                import asyncio
+                tasks = [self._aembed_batch(batch, client=client) for batch in batches]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                all_embeddings = []
+                for i, result in enumerate(batch_results):
+                    if isinstance(result, Exception):
+                        logger.warning("Async batch %d failed: %s", i, result)
+                        all_embeddings.extend([[0.0] * 1024] * len(batches[i]))
+                    else:
+                        all_embeddings.extend(result)
 
         metrics.emit(
             event="embed_documents",
@@ -314,7 +326,7 @@ def probe_bge_m3_sparse_support(force: bool = False) -> dict[str, object]:
             f"{settings.EMBEDDING_API_BASE}/embeddings",
             headers=probe._build_headers(),
             json=payload,
-            timeout=30,
+            timeout=_embedding_timeout(),
         )
         result["status_code"] = resp.status_code
         resp.raise_for_status()

@@ -85,7 +85,7 @@ class StudentKnowledgeState(Base):
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
-        # 同一学生对同一知识点只有一条记录
+        UniqueConstraint("user_id", "knowledge_point_id", name="uq_sks_user_kp"),
         {"sqlite_autoincrement": True},
     )
 
@@ -113,7 +113,6 @@ class QuestionRecord(Base):
     grading_score = Column(Float, nullable=True)                     # 批改分数 0-100
     is_wrong = Column(Boolean, default=False)                        # 是否错题
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (

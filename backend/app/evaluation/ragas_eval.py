@@ -9,29 +9,169 @@ from __future__ import annotations
 import logging
 import math
 import time
+from collections import defaultdict
 from typing import Any
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from datasets import Dataset
+from ragas import RunConfig
 
 from app.config import settings
 from app.evaluation.config import EvaluationConfig
 from app.evaluation.dataset import EvalSample
-from app.evaluation.adapters import get_retriever, get_eval_embedding
+from app.evaluation.adapters import get_retriever
 from app.rag.rag_utils import estimate_tokens as _estimate_tokens
 
 logger = logging.getLogger(__name__)
 
+
+# ── 模块级常量 ──
+
+_CROSS_SUBJECT_INDICATORS = frozenset({
+    "关联", "关系", "区别", "对比", "联系", "分别", "异同",
+    "比较", "有什么不同", "有什么关联", "有什么关系",
+})
+
+_VALID_COLLECTIONS = frozenset({
+    "data_structure", "computer_organization", "operating_system",
+    "computer_network", "questions", "learning_paths",
+})
+
+_SUBJECT_HINT: dict[str, str] = {
+    "data_structure": "数据结构",
+    "operating_system": "操作系统",
+    "computer_organization": "计算机组成原理",
+    "computer_network": "计算机网络",
+}
+
+_REFUSAL_PATTERNS = [
+    "未包含足够的信息来解答",
+    "建议查阅相关教材",
+    "根据提供的资料无法回答",
+    "根据提供的上下文无法回答",
+    "无法回答该问题",
+    "无法回答",
+    "没有提供",
+    "没有相关",
+    "没有提到",
+    "无法从",
+    "无法确定",
+    "I don't know",
+    "I cannot answer",
+]
+
+
+# ── RAGAS JSON 解析兜底 ──
+# Qwen3.6-plus 在 context 不相关时可能输出 {"verdict": "0"} 缺少 reason 字段，
+# 导致 pydantic model_validate_json 失败 → RagasOutputParserException → NaN。
+# 此 monkey-patch 在 model_validate_json 失败时自动补全缺失字段。
+
+def _is_pydantic_undefined(val: Any) -> bool:
+    """Check if value is Pydantic's PydanticUndefined sentinel"""
+    try:
+        from pydantic_core import PydanticUndefinedType
+        return isinstance(val, PydanticUndefinedType)
+    except ImportError:
+        return "PydanticUndefined" in type(val).__name__
+
+
+def _safe_model_validate_json(model_class, json_str: str):
+    """model_validate_json 的兜底版本：缺失字段自动填充类型默认值"""
+    import json as _json
+    from pydantic import ValidationError
+    try:
+        return model_class.model_validate_json(json_str)
+    except ValidationError:
+        try:
+            raw = _json.loads(json_str)
+        except _json.JSONDecodeError:
+            raise ValidationError(f"Invalid JSON: {json_str[:100]}")
+        filled = dict(raw)
+        for name, field_info in model_class.model_fields.items():
+            if name not in filled:
+                if not _is_pydantic_undefined(field_info.default):
+                    filled[name] = field_info.default
+                elif field_info.default_factory is not None:
+                    filled[name] = field_info.default_factory()
+                else:
+                    ann = field_info.annotation
+                    if ann is int:
+                        filled[name] = 0
+                    elif ann is str:
+                        filled[name] = "(auto-filled)"
+                    elif ann is float:
+                        filled[name] = 0.0
+                    elif ann is bool:
+                        filled[name] = False
+                    else:
+                        filled[name] = None
+        return model_class.model_validate(filled)
+
+
+_json_fallback_patched = False
+
+
+def _patch_ragas_json_fallback():
+    """Monkey-patch RAGAS PydanticPrompt.generate_multiple 使用兜底 JSON 解析
+
+    仅在 DashScope（LangchainLLMWrapper）路径下生效，
+    因为 InstructorLLM 路径靠 function calling 保证结构化输出。
+    幂等：多次调用只 patch 一次。
+    """
+    global _json_fallback_patched
+    if _json_fallback_patched:
+        return
+    try:
+        from ragas.prompt.pydantic_prompt import PydanticPrompt
+    except ImportError:
+        return
+
+    _orig_generate_multiple = PydanticPrompt.generate_multiple
+
+    async def _patched_generate_multiple(self, *args, **kwargs):
+        # 对 LangchainLLMWrapper 路径，替换 model_validate_json
+        from ragas.llms.base import LangchainLLMWrapper
+        llm = kwargs.get("llm", args[1] if len(args) > 1 else None)
+        if isinstance(llm, LangchainLLMWrapper):
+            # 临时替换 output_model 的验证方法
+            orig_validate = self.output_model.model_validate_json
+            self.output_model.model_validate_json = classmethod(
+                lambda cls, json_str: _safe_model_validate_json(cls, json_str)
+            )
+            try:
+                return await _orig_generate_multiple(self, *args, **kwargs)
+            finally:
+                self.output_model.model_validate_json = orig_validate
+        else:
+            return await _orig_generate_multiple(self, *args, **kwargs)
+
+    PydanticPrompt.generate_multiple = _patched_generate_multiple
+    _json_fallback_patched = True
+    logger.info("RAGAS PydanticPrompt.generate_multiple patched with JSON fallback")
+
 # ── 答案生成 Prompt ──────────────────────────────────
 _ANSWER_PROMPT = ChatPromptTemplate.from_messages([
     ("system", (
-        "你是一名教学答疑助手。请基于以下检索到的教材内容，"
-        "用中文回答学生的问题。回答应当准确、简洁，"
-        "只使用上下文中提供的信息。如果上下文中没有足够信息，"
-        "请明确说明。"
+        "你是一名教学答疑助手。请严格遵循以下规则：\n"
+        "1. 仅使用下方【上下文】中提供的信息回答问题，禁止使用任何外部知识或自行推断。\n"
+        "2. 回答必须紧扣问题，简明扼要，直击要点，不要添加无关背景铺垫。\n"
+        "3. 【抗干扰】提供的参考资料中可能包含与当前问题无关或相互冲突的干扰信息。"
+        "你必须仅提取与用户问题直接相关的片段进行回答，忽略所有无关的背景铺垫。\n"
+        "4. 【部分回答】如果【上下文】中有相关信息，即使信息不完整，也请基于已有信息尽量回答，"
+        "并在回答末尾注明\"（以上基于提供的部分资料）\"。\n"
+        "5. 不要使用\"可能\"、\"大概\"、\"应该是\"等猜测性表述。\n"
+        "6. 【代码与公式规范】如果问题要求代码实现或公式推导，请严格基于上下文提供的算法逻辑或公式进行输出，"
+        "并添加必要的注释或步骤说明。绝不可使用上下文中未提及的外部最优解或超纲公式。\n"
+        "7. 【忠实性与拒答红线】\n"
+        "   - 允许归纳：你可以对上下文进行逻辑梳理、归纳总结和教学性解释，"
+        "但所有核心事实、专业术语、数据和结论必须100%来源于提供的上下文。\n"
+        "   - 严禁幻觉：绝不可引入上下文之外的预训练知识（如外部代码库、超纲考点）。\n"
+        "   - 优雅拒答：如果上下文完全不足以回答该问题（即无法提取到任何与核心问题直接相关的事实），"
+        "请不要生硬拒绝，必须使用以下标准句式回答：\"关于【此处复述用户的核心问题】，"
+        "当前提供的参考资料中未包含足够的信息来解答，建议查阅相关教材的【推测所属章节】部分。\""
     )),
-    ("human", "上下文：\n{context}\n\n问题：{question}"),
+    ("human", "【上下文】\n{context}\n\n【问题】{question}"),
 ])
 
 
@@ -58,9 +198,21 @@ def _resolve_eval_llm_config(
     return resolved_model, resolved_base, resolved_key
 
 
-def _is_deepseek_api(api_base: str, model: str) -> bool:
-    """判断是否为 DeepSeek 系列 API（需传 enable_thinking 专有参数）"""
-    return "deepseek" in (api_base or "").lower() or "deepseek" in (model or "").lower()
+def _needs_thinking_disabled(api_base: str, model: str) -> bool:
+    """判断是否需要禁用思考模式（DeepSeek / Qwen3.x 等支持思考的模型）
+
+    RAGAS judge 需要结构化输出（function calling），思考模式会导致输出不稳定。
+    DeepSeek: 通过 enable_thinking header 禁用
+    Qwen3.x: 通过 enable_thinking header 禁用（百炼 OpenAI 兼容接口）
+    """
+    m = (model or "").lower()
+    b = (api_base or "").lower()
+    if "deepseek" in b or "deepseek" in m:
+        return True
+    # Qwen3.x 系列支持思考模式，需禁用
+    if "qwen3" in m:
+        return True
+    return False
 
 
 def _create_eval_llm(
@@ -69,84 +221,109 @@ def _create_eval_llm(
     api_key: str,
     temperature: float = 0.0,
 ) -> ChatOpenAI:
-    """创建评估专用的 ChatOpenAI 实例（不污染全局 settings/缓存）"""
+    """创建评估专用的 ChatOpenAI 实例（不污染全局 settings/缓存）
+
+    注意：RAGAS 0.4.x 的 evaluate() 接受 LangchainLLM 并自动包装为
+    LangchainLLMWrapper（已 deprecated，未来应迁移到 llm_factory）。
+    当前保留 ChatOpenAI 是因为 llm_factory 使用 instructor 补丁，
+    无法传递 DeepSeek 专有的 enable_thinking 参数。
+    """
     kwargs: dict[str, Any] = dict(
         api_key=api_key,
         base_url=api_base,
         model=model,
         temperature=temperature,
         streaming=False,
+        max_retries=3,
+        timeout=120,
     )
     # enable_thinking 是 DeepSeek 专有参数，禁用思考模式以保证结构化输出稳定
-    if _is_deepseek_api(api_base, model):
+    if _needs_thinking_disabled(api_base, model):
         kwargs["extra_body"] = {"enable_thinking": False}
     return ChatOpenAI(**kwargs)
 
 
+_answer_llm_cache: ChatOpenAI | None = None
+_answer_llm_cache_key: tuple[str, str, str] = ("", "", "")
+
+
 def _get_answer_llm(cfg: EvaluationConfig) -> ChatOpenAI:
-    """获取答案生成 LLM（独立配置，不篡改全局 settings）"""
+    """获取答案生成 LLM（缓存实例，避免每次调用创建新对象）"""
+    global _answer_llm_cache, _answer_llm_cache_key
     model, base, key = _resolve_eval_llm_config(
         cfg.answer_model, cfg.answer_api_base, cfg.answer_api_key,
         settings.EVAL_ANSWER_MODEL, settings.EVAL_ANSWER_API_BASE, settings.EVAL_ANSWER_API_KEY,
     )
+    cache_key = (model, base, key)
+    if _answer_llm_cache is not None and _answer_llm_cache_key == cache_key:
+        return _answer_llm_cache
     logger.info("Eval answer LLM: model=%s base=%s", model, base)
-    return _create_eval_llm(model, base, key, temperature=0.3)
+    _answer_llm_cache = _create_eval_llm(model, base, key, temperature=0.3)
+    _answer_llm_cache_key = cache_key
+    return _answer_llm_cache
 
 
-def _get_judge_llm(cfg: EvaluationConfig) -> ChatOpenAI:
-    """获取评测 LLM（独立配置，不篡改全局 settings）"""
+def _is_dashscope_api(api_base: str, model: str) -> bool:
+    """判断是否为阿里云百炼 DashScope API
+
+    DashScope 的 OpenAI 兼容接口不支持 instructor 的 content=list[dict] 格式，
+    必须使用 LangchainLLMWrapper 而非 InstructorLLM。
+    """
+    return "dashscope" in (api_base or "").lower()
+
+
+def _get_judge_llm_instructor(cfg: EvaluationConfig):
+    """获取评测 LLM（自动选择最佳模式）
+
+    DashScope (百炼): InstructorLLM 不兼容（content list 格式不支持），
+        使用 LangchainLLMWrapper + Qwen 原生结构化输出能力。
+    OpenAI / DeepSeek: 使用 InstructorLLM（function calling 强制结构化输出）。
+    """
     model, base, key = _resolve_eval_llm_config(
         cfg.judge_model, cfg.judge_api_base, cfg.judge_api_key,
         settings.EVAL_JUDGE_MODEL, settings.EVAL_JUDGE_API_BASE, settings.EVAL_JUDGE_API_KEY,
     )
-    logger.info("Eval judge LLM: model=%s base=%s", model, base)
-    return _create_eval_llm(model, base, key, temperature=0.0)
 
+    # ── DashScope: LangchainLLMWrapper ──
+    if _is_dashscope_api(base, model):
+        from ragas.llms import LangchainLLMWrapper
+        logger.info("Eval judge LLM (LangchainLLMWrapper for DashScope): model=%s base=%s", model, base)
+        lc_llm = _create_eval_llm(model, base, key, temperature=0.0)
+        # DashScope 不支持 InstructorLLM（content list 格式），
+        # LangchainLLMWrapper 靠 LLM 自行输出 JSON 再 pydantic 解析。
+        # response_format=json_object 强制 Qwen 输出合法 JSON，
+        # 避免 model_validate_json 解析失败 → NaN
+        # 注意：必须合并而非覆盖 model_kwargs，保留 extra_body 中的 enable_thinking=False
+        existing_kwargs = lc_llm.model_kwargs or {}
+        existing_kwargs["response_format"] = {"type": "json_object"}
+        lc_llm.model_kwargs = existing_kwargs
+        return LangchainLLMWrapper(langchain_llm=lc_llm)
 
-def retrieve_contexts(
-    query: str,
-    collection_name: str,
-    cfg: EvaluationConfig,
-    cross_subject_collections: list[str] | None = None,
-) -> list[str]:
-    """检索相关上下文（通过接口，与 RAG 实现解耦）
+    # ── OpenAI / DeepSeek: InstructorLLM ──
+    from openai import AsyncOpenAI
+    from ragas.llms import llm_factory
 
-    Args:
-        cross_subject_collections: 跨学科样本需搜索的多个 collection，
-            如 ["operating_system", "computer_organization"]。
-            非空时按 collection 分别检索并合并去重。
-    """
-    retriever = get_retriever()
-
-    if cross_subject_collections:
-        # 跨学科：分别检索每个 collection，合并去重
-        all_contents: list[str] = []
-        seen: set[str] = set()
-        per_col_k = max(cfg.retrieval_k // len(cross_subject_collections), 3)
-        for col in cross_subject_collections:
-            try:
-                docs = retriever.retrieve(
-                    query=query,
-                    collection_name=col,
-                    k=per_col_k,
-                    use_rerank=cfg.use_rerank,
-                )
-                for d in docs:
-                    content = d["content"]
-                    if content not in seen:
-                        seen.add(content)
-                        all_contents.append(content)
-            except Exception as e:
-                logger.warning("Cross-subject retrieve failed for %s: %s", col, e)
-        return all_contents
+    logger.info("Eval judge LLM (InstructorLLM): model=%s base=%s", model, base)
+    default_headers = {}
+    if _needs_thinking_disabled(base, model):
+        default_headers["enable_thinking"] = "false"
+    client = AsyncOpenAI(
+        api_key=key,
+        base_url=base,
+        default_headers=default_headers or None,
+    )
+    llm = llm_factory(model, client=client)
+    # 默认 max_tokens=1024 不够，function calling 响应常超 1024 tokens
+    # 导致 finish_reason=length → instructor 解析失败 → 一直重试 → 卡住
+    if llm.model_args is None:
+        llm.model_args = {"max_tokens": 4096}
+    elif isinstance(llm.model_args, dict):
+        llm.model_args["max_tokens"] = 4096
+    elif hasattr(llm.model_args, "max_tokens"):
+        llm.model_args.max_tokens = 4096
     else:
-        docs = retriever.retrieve(
-            query=query,
-            collection_name=collection_name,
-            k=cfg.retrieval_k,
-            use_rerank=cfg.use_rerank,
-        )
-        return [d["content"] for d in docs]
+        llm.model_args = {"max_tokens": 4096}
+    return llm
 
 
 def _normalize_content(content: Any) -> str:
@@ -169,6 +346,136 @@ def _normalize_content(content: Any) -> str:
     return str(content)
 
 
+def _rewrite_query(query: str, collection_name: str, cfg: EvaluationConfig) -> str:
+    """轻量 Query 改写：将短/模糊查询扩展为更丰富的表述，提升语义检索命中率。
+
+    仅对短查询（<20 字）或概念型查询触发，长查询和代码查询跳过。
+    使用 answer LLM 的快速模式，~50 tokens 输出，耗时 <1s。
+    """
+    # 跳过长查询/代码查询（它们本身足够具体）
+    if len(query) > 30:
+        return query
+    code_indicators = ["代码", "实现", "程序", "code", "算法实现"]
+    if any(p in query for p in code_indicators) and len(query) > 15:
+        return query
+
+    subject_hint = _SUBJECT_HINT.get(collection_name, "计算机科学")
+
+    try:
+        llm = _get_answer_llm(cfg)
+        from langchain_core.messages import HumanMessage, SystemMessage
+        messages = [
+            SystemMessage(content=(
+                f"你是一个查询改写助手，领域为{subject_hint}。"
+                "将用户简短的查询扩展为更具体、更丰富的表述，"
+                "补充关键术语和同义词，使语义检索能命中更多相关文档。\n"
+                "规则：\n"
+                "1. 保持原意不变，不添加查询未涉及的主题\n"
+                "2. 补充该领域常见的同义术语（如'死锁'→'进程死锁 死锁预防 死锁避免'）\n"
+                "3. 输出一行纯文本，不要解释，不要标点符号以外的格式\n"
+                "4. 长度控制在 40 字以内"
+            )),
+            HumanMessage(content=f"原查询：{query}"),
+        ]
+        resp = llm.invoke(messages)
+        rewritten = _normalize_content(resp.content).strip()
+        if rewritten and len(rewritten) > len(query):
+            logger.info("Query rewrite: '%s' → '%s'", query[:40], rewritten[:60])
+            return rewritten
+    except Exception as e:
+        logger.debug("Query rewrite failed, using original: %s", e)
+    return query
+
+
+def retrieve_contexts(
+    query: str,
+    collection_name: str,
+    cfg: EvaluationConfig,
+    cross_subject_collections: list[str] | None = None,
+) -> list[str]:
+    """检索相关上下文（通过接口，与 RAG 实现解耦）
+
+    Args:
+        cross_subject_collections: 跨学科样本需搜索的多个 collection，
+            如 ["operating_system", "computer_organization"]。
+            非空时按 collection 分别检索并合并去重。
+    """
+    # ── Query 改写（短/概念查询 → 丰富表述，提升检索命中率）──
+    effective_query = _rewrite_query(query, collection_name, cfg)
+
+    retriever = get_retriever()
+
+    # 评估场景不全局搜索 learning_paths：该集合内容与大多数单科查询无关，
+    # 引入噪声严重拉低 context_precision（AP 对排序敏感）
+    # 但跨学科/对比型查询需要 learning_paths 中的「跨学科知识关联与对比」专题
+    is_cross_intent = (bool(cross_subject_collections) or
+                       any(p in query for p in _CROSS_SUBJECT_INDICATORS))
+    always_search: list[str] = ["learning_paths"] if is_cross_intent else []
+    primary_collections = [collection_name] if collection_name and collection_name in _VALID_COLLECTIONS else []
+    if cross_subject_collections:
+        primary_collections.extend(c for c in cross_subject_collections if c in _VALID_COLLECTIONS)
+    all_search_cols = primary_collections + [c for c in always_search if c not in primary_collections]
+
+    # 统一走多 collection 检索逻辑
+    all_contents: list[str] = []
+    all_docs_with_meta: list[dict[str, Any]] = []  # {content, rerank_score, is_window_expanded}
+    seen: set[str] = set()
+    per_col_k = max(cfg.retrieval_k // max(len(all_search_cols), 1), 2)
+    for col in all_search_cols:
+        try:
+            docs = retriever.retrieve(
+                query=effective_query,
+                collection_name=col,
+                k=per_col_k,
+                use_rerank=cfg.use_rerank,
+            )
+            for d in docs:
+                content = d["content"]
+                if content not in seen:
+                    seen.add(content)
+                    meta = d.get("metadata", {}) or {}
+                    rerank_score = float(meta.get("rerank_score", 0) or 0)
+                    # window expansion 新增的 chunk 没有 rerank_score（=0），
+                    # 但有 _window_expanded 标记，对 recall 有贡献
+                    is_window = bool(meta.get("_window_expanded"))
+                    all_docs_with_meta.append({
+                        "content": content,
+                        "rerank_score": rerank_score,
+                        "is_window": is_window,
+                    })
+        except Exception as e:
+            logger.warning("Retrieve failed for collection %s: %s", col, e)
+
+    # ── 排序策略（对 AP 至关重要）──
+    # AP 公式对 context 顺序敏感：相关 context 必须排在前面
+    # 排序优先级：
+    #   1. 有 rerank_score > 0 的文档（按 score 降序）—— reranker 判定相关
+    #   2. window expansion 文档（score=0 但有 _window_expanded 标记）—— 相邻 chunk，辅助 recall
+    #   3. score=0 且非 window 的文档（rerank fallback 噪声）—— 排最后
+    def _sort_key(item: dict) -> tuple:
+        score = item["rerank_score"]
+        is_window = item["is_window"]
+        # 三层排序：有score > 无score+window > 无score+非window
+        tier = 0 if score > 0 else (1 if is_window else 2)
+        return (tier, -score)  # tier 升序，score 降序（用负数）
+
+    all_docs_with_meta.sort(key=_sort_key)
+
+    # 最终截断：确保不超过 retrieval_k
+    if len(all_docs_with_meta) > cfg.retrieval_k:
+        all_docs_with_meta = all_docs_with_meta[:cfg.retrieval_k]
+
+    all_contents = [d["content"] for d in all_docs_with_meta]
+    n_reranked = sum(1 for d in all_docs_with_meta if d["rerank_score"] > 0)
+    n_window = sum(1 for d in all_docs_with_meta if d["is_window"])
+    n_noise = len(all_docs_with_meta) - n_reranked - n_window
+    logger.info(
+        "Eval retrieve: query=%s total=%d (reranked=%d, window=%d, noise=%d)",
+        query[:40], len(all_contents), n_reranked, n_window, n_noise,
+    )
+    return all_contents
+
+
 # 答案缓存：避免重复评估时重生成，节省 token
 _answer_cache: dict[str, str] = {}
 _ANSWER_CACHE_MAX = 500
@@ -180,7 +487,7 @@ _token_counter: dict[str, int] = {
 }
 
 # 上下文 token 预算（粗估：中文×1.5 + ASCII×0.25）
-_CONTEXT_TOKEN_BUDGET = 4000
+_CONTEXT_TOKEN_BUDGET = 12000
 
 
 def _truncate_contexts(contexts: list[str], budget: int = _CONTEXT_TOKEN_BUDGET) -> list[str]:
@@ -266,6 +573,8 @@ def run_ragas_evaluation(
                            "cache_hits": 0, "empty_context_skips": 0})
 
     skipped = 0
+    refusal_indices: list[int] = []  # 拒答样本在 ragas_records 中的索引
+    record_sample_indices: list[int] = []  # ragas_records[i] 对应的 samples 索引
     for idx, sample in enumerate(samples):
         logger.info("RAGAS [%d/%d] %s", idx + 1, len(samples), sample.query[:60])
 
@@ -277,8 +586,11 @@ def run_ragas_evaluation(
                 cs_raw = sample.metadata.get("cross_subject", "")
                 if cs_raw:
                     cross_cols = [c.strip() for c in cs_raw.split(",") if c.strip()]
+                # 每个样本使用自己的 category 作为检索集合
+                # （baseline.jsonl 包含多学科，全局 collection_name 不适用）
+                sample_collection = sample.metadata.get("category", collection_name) or collection_name
                 contexts = retrieve_contexts(
-                    sample.query, collection_name, cfg,
+                    sample.query, sample_collection, cfg,
                     cross_subject_collections=cross_cols,
                 )
             except Exception as e:
@@ -310,9 +622,19 @@ def run_ragas_evaluation(
             continue
 
         record = sample.to_ragas_dict()
-        record["contexts"] = contexts
-        record["answer"] = answer
+        record["retrieved_contexts"] = contexts
+        record["response"] = answer
         ragas_records.append(record)
+        record_sample_indices.append(idx)  # 记录 ragas_records[-1] 对应 samples[idx]
+
+        # ── 拒答检测 ──
+        # RAGAS answer_relevancy 的 noncommittal 检测对中文拒答不敏感
+        # （"根据提供的上下文无法回答" 可能不被判定为 noncommittal=1）
+        # 此处标记拒答样本，在聚合时单独统计拒答率和 answer_relevancy 修正
+        is_refusal = any(p in answer for p in _REFUSAL_PATTERNS)
+        if is_refusal:
+            refusal_indices.append(len(ragas_records) - 1)  # 当前记录的索引
+            logger.info("RAGAS [%d/%d] 检测到拒答: %s", idx + 1, len(samples), answer[:60])
 
     if skipped:
         logger.warning("RAGAS: 跳过 %d/%d 条样本（检索失败）", skipped, len(samples))
@@ -329,12 +651,23 @@ def run_ragas_evaluation(
         answer_relevancy,
     )
 
+    # 兜底补全缺失字段（Qwen3.6 输出 {"verdict":"0"} 缺 reason → NaN）
+    _patch_ragas_json_fallback()
+
     dataset = Dataset.from_list(ragas_records)
 
-    # 配置 judge LLM（覆盖 RAGAS 默认的 GPT-4）
-    judge_llm = _get_judge_llm(cfg)
+    # 配置 judge LLM：自动选择最佳模式
+    # DashScope → LangchainLLMWrapper（InstructorLLM 不兼容 content list 格式）
+    # OpenAI/DeepSeek → InstructorLLM（function calling 强制结构化输出）
+    judge_llm = _get_judge_llm_instructor(cfg)
 
     # 选择启用的指标
+    # answer_relevancy: strictness=1 避免多次生成导致的不稳定
+    # context_precision/recall: max_retries=3 提高结构化输出稳定性
+    answer_relevancy.strictness = 1
+    context_precision.max_retries = 3
+    context_recall.max_retries = 3
+
     metric_map = {
         "faithfulness": faithfulness,
         "context_precision": context_precision,
@@ -345,36 +678,70 @@ def run_ragas_evaluation(
         metric_map[name] for name in cfg.ragas_metrics if name in metric_map
     ]
 
+    # 将 judge LLM 直接设置到每个指标上
+    # （ragas_evaluate 内部也会设置，但显式设置确保类型正确）
+    # DashScope 用 LangchainLLMWrapper，其他用 InstructorLLM
+    for metric in metrics_to_compute:
+        metric.llm = judge_llm
+
     if not metrics_to_compute:
         logger.warning("没有启用的 RAGAS 指标")
         return {"_meta": {"n": len(ragas_records), "error": "no metrics enabled"}}
 
-    # 获取 embedding（仅 answer_relevancy 需要，其他指标不需要）
-    eval_embedding = None
+    # 获取 embedding（仅 answer_relevancy 需要）
+    # 使用 LangChain OpenAIEmbeddings 对接 Ollama，带重试避免 500 错误
+    lc_embeddings = None
     if "answer_relevancy" in cfg.ragas_metrics:
         try:
-            eval_embedding = get_eval_embedding()
+            from langchain_openai import OpenAIEmbeddings
+            lc_embeddings = OpenAIEmbeddings(
+                api_key=settings.EMBEDDING_API_KEY,
+                base_url=settings.EMBEDDING_API_BASE,
+                model=settings.EMBEDDING_MODEL,
+                max_retries=5,
+                request_timeout=60,
+                check_embedding_ctx_length=False,
+            )
         except Exception as e:
             logger.warning("Embedding 初始化失败，跳过 answer_relevancy: %s", e)
             metrics_to_compute = [m for m in metrics_to_compute if m != answer_relevancy]
             if not metrics_to_compute:
-                return {"_meta": {"n": len(ragas_records), "error": f"embedding unavailable: {e}"}}
+                return {"_meta": {"n": len(ragas_records), "error": f"embedding init failed: {e}"}}
+
+    # RunConfig: 设置超时和重试
+    # context_precision 需要对每个 context 片段逐一判断，调用次数多
+    # timeout=300 确保单次 LLM 调用有足够时间完成结构化输出
+    run_config = RunConfig(timeout=300, max_retries=3, max_wait=60)
 
     try:
+        # llm=judge_llm: DashScope 用 LangchainLLMWrapper，其他用 InstructorLLM
+        # RAGAS 会根据类型自动选择调用路径
         ragas_result = ragas_evaluate(
             dataset,
             metrics=metrics_to_compute,
             llm=judge_llm,
-            embeddings=eval_embedding.langchain_embeddings if eval_embedding else None,
+            embeddings=lc_embeddings,
+            run_config=run_config,
+            raise_exceptions=False,
+            show_progress=True,
         )
     except Exception as e:
         logger.error("RAGAS evaluate 失败: %s", e)
         return {"_meta": {"n": len(ragas_records), "error": str(e)}}
 
     # NaN 诊断：输出每条样本的原始分数用于排查
-    # RAGAS 0.4.x EvaluationResult.__contains__ 会触发 __getitem__(0) 导致 KeyError
-    # 安全方式：直接访问 _scores_dict 或 try/except
-    result_scores = getattr(ragas_result, "_scores_dict", {})
+    # RAGAS 0.4.x EvaluationResult: __getitem__(metric_name) 返回 list[float]
+    # _scores_dict 是私有属性但稳定（__post_init__ 中设置），用 getattr 做防御性访问
+    result_scores = getattr(ragas_result, "_scores_dict", None)
+    if result_scores is None:
+        # Fallback: 逐指标用公共 API 提取
+        result_scores = {}
+        for m_name in cfg.ragas_metrics:
+            if m_name in metric_map:
+                try:
+                    result_scores[m_name] = ragas_result[m_name]
+                except (KeyError, TypeError):
+                    pass
 
     # 记录实际使用的模型配置（提前解析，供 NaN 诊断和 _meta 使用）
     judge_model_name, judge_base, _ = _resolve_eval_llm_config(
@@ -398,18 +765,79 @@ def run_ragas_evaluation(
                        ", ".join(nan_metrics), judge_model_name, judge_base)
 
     # ── 聚合结果（单次遍历，同时计算统计 + 附加 raw_scores）──
-    aggregated: dict[str, dict[str, float]] = {}
+    aggregated: dict[str, dict[str, Any]] = {}
 
     for metric_name in cfg.ragas_metrics:
         if metric_name not in metric_map:
             continue
         try:
-            scores = result_scores.get(metric_name, ragas_result[metric_name])
+            # 优先从 _scores_dict 取，否则用公共 __getitem__ API
+            if isinstance(result_scores, dict) and metric_name in result_scores:
+                scores = result_scores[metric_name]
+            else:
+                scores = ragas_result[metric_name]
             vals = [float(s) for s in scores]
             aggregated[metric_name] = _aggregate_scores(vals)
             aggregated[metric_name]["raw_scores"] = vals
         except (KeyError, TypeError, ValueError) as e:
             logger.warning("无法读取指标 %s: %s", metric_name, e)
+
+    # ── 按学科分组统计 ──
+    # 全局均值会被学科分布偏差扭曲（如 OS 占 30% 而 CN 只占 17.5%）
+    # 按学科分组统计能暴露某个学科检索质量差的问题
+    category_indices: dict[str, list[int]] = defaultdict(list)
+    for i, rec in enumerate(ragas_records):
+        # 用 record_sample_indices 正确映射：ragas_records[i] → samples[record_sample_indices[i]]
+        sample_idx = record_sample_indices[i] if i < len(record_sample_indices) else -1
+        cat = samples[sample_idx].metadata.get("category", "unknown") if 0 <= sample_idx < len(samples) else "unknown"
+        category_indices[cat].append(i)
+
+    per_category: dict[str, dict[str, dict[str, float]]] = {}
+    for cat, indices in sorted(category_indices.items()):
+        per_category[cat] = {}
+        for metric_name in cfg.ragas_metrics:
+            if metric_name not in aggregated:
+                continue
+            raw = aggregated[metric_name].get("raw_scores", [])
+            cat_scores = [raw[i] for i in indices if i < len(raw)
+                          and not (isinstance(raw[i], float) and math.isnan(raw[i]))]
+            if cat_scores:
+                per_category[cat][metric_name] = {
+                    "mean": round(sum(cat_scores) / len(cat_scores), 4),
+                    "n": len(cat_scores),
+                }
+    if per_category:
+        aggregated["_per_category"] = per_category
+
+    # ── answer_relevancy 拒答修正 ──
+    # 拒答样本的 answer_relevancy 不应计入均值（拒答是检索失败的后果，
+    # 不是模型相关性差），单独统计拒答率和可回答样本的相关性
+    ar_key = "answer_relevancy"
+    refusal_stats: dict[str, Any] = {}
+    if refusal_indices and ar_key in aggregated:
+        ar_raw = aggregated[ar_key].get("raw_scores", [])
+        refusal_ar_scores = [ar_raw[i] for i in refusal_indices if i < len(ar_raw)]
+        answerable_ar_scores = [ar_raw[i] for i in range(len(ar_raw))
+                                if i not in set(refusal_indices) and i < len(ar_raw)
+                                and not (isinstance(ar_raw[i], float) and math.isnan(ar_raw[i]))]
+        refusal_stats = {
+            "refusal_count": len(refusal_indices),
+            "refusal_rate": round(len(refusal_indices) / max(len(ragas_records), 1), 4),
+            "refusal_ar_mean": round(sum(refusal_ar_scores) / max(len(refusal_ar_scores), 1), 4)
+                if refusal_ar_scores else None,
+            "answerable_ar_mean": round(sum(answerable_ar_scores) / max(len(answerable_ar_scores), 1), 4)
+                if answerable_ar_scores else None,
+            "answerable_n": len(answerable_ar_scores),
+        }
+        # 修正 answer_relevancy 均值：只算可回答样本
+        if answerable_ar_scores:
+            aggregated[ar_key]["mean_answerable_only"] = refusal_stats["answerable_ar_mean"]
+            logger.info(
+                "answer_relevancy 拒答修正: refusal=%d/%d, refusal_ar_mean=%s, answerable_ar_mean=%.4f",
+                len(refusal_indices), len(ragas_records),
+                refusal_stats.get("refusal_ar_mean", "N/A"),
+                refusal_stats["answerable_ar_mean"],
+            )
 
     aggregated["_meta"] = {
         "n": len(ragas_records),
@@ -419,6 +847,10 @@ def run_ragas_evaluation(
         "answer_model": answer_model_name,
         "answer_api_base": answer_base,
         "skipped": skipped,
+        "refusal": refusal_stats if refusal_stats else {
+            "refusal_count": len(refusal_indices),
+            "refusal_rate": round(len(refusal_indices) / max(len(ragas_records), 1), 4),
+        },
         "token_stats": {
             "answer_input_est": _token_counter["answer_input"],
             "answer_output_est": _token_counter["answer_output"],

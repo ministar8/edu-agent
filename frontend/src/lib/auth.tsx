@@ -61,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void restoreSession();
   }, [clearSession]);
 
-  const _saveSession = useCallback((newToken: string, newUser: User) => {
+  const saveSession = useCallback((newToken: string, newUser: User) => {
     setToken(newToken);
     setUser(newUser);
     saveStoredToken(newToken);
@@ -76,17 +76,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (username: string, password: string) => {
     const res = await http.post("/api/auth/login", { username, password });
-    _saveSession(res.data.access_token, res.data.user);
-  }, [_saveSession]);
+    saveSession(res.data.access_token, res.data.user);
+  }, [saveSession]);
 
   const register = useCallback(async (username: string, password: string, displayName: string, role: string) => {
     const res = await http.post("/api/auth/register", { username, password, display_name: displayName, role });
-    _saveSession(res.data.access_token, res.data.user);
-  }, [_saveSession]);
+    saveSession(res.data.access_token, res.data.user);
+  }, [saveSession]);
 
-  const logout = useCallback(() => {
-    clearSession();
-  }, [clearSession]);
+  const logout = clearSession;
 
   return (
     <AuthContext.Provider value={{ user, token, loading, login, register, logout, clearSession }}>

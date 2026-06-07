@@ -84,7 +84,7 @@ class MetricsWriter:
                     f.write(line + "\n")
         except Exception as e:
             logger.debug("metrics write failed: %s", e)
-        logger.info("METRIC %s", line)
+        logger.debug("METRIC %s", line)
 
     def timer(self, event: str, stage: str, tags: dict[str, Any] | None = None) -> MetricsTimer:
         return MetricsTimer(self, event=event, stage=stage, tags=tags)
@@ -96,6 +96,20 @@ class MetricsWriter:
     def emit_retrieve_summary(self, *, query: str, collection: str, duration_ms: float | None = None, values: dict[str, Any] | None = None, status: str = "ok") -> None:
         tags = {"collection": collection, "query_preview": query[:120], "query_len": len(query)}
         self.emit(event="retrieve_query", stage="retriever", status=status, duration_ms=duration_ms, tags=tags, values=values)
+
+    def emit_evidence_summary(self, *, query: str, collection: str, duration_ms: float | None = None, values: dict[str, Any] | None = None, status: str = "ok") -> None:
+        tags = {"collection": collection, "query_preview": query[:120], "query_len": len(query)}
+        self.emit(event="retrieve_evidence", stage="evidence", status=status, duration_ms=duration_ms, tags=tags, values=values)
+
+    def emit_chat_baseline(self, *, endpoint: str, query: str, route_type: str, agent_name: str = "", duration_ms: float | None = None, values: dict[str, Any] | None = None, status: str = "ok") -> None:
+        tags = {
+            "endpoint": endpoint,
+            "route_type": route_type,
+            "agent_name": agent_name,
+            "query_preview": query[:120],
+            "query_len": len(query),
+        }
+        self.emit(event="chat_baseline", stage="chat", status=status, duration_ms=duration_ms, tags=tags, values=values)
 
     def _sanitize(self, data: dict[str, Any]) -> dict[str, Any]:
         return {str(k): self._sanitize_value(v) for k, v in data.items()}

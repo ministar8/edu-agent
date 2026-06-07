@@ -35,6 +35,7 @@ export function notifyUnauthorized() {
 
 export const http = axios.create({
   baseURL: API_BASE_URL,
+  timeout: 120000,
 });
 
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {

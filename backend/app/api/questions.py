@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db import QuestionRecord, User, get_db
 from app.api.auth import get_current_user
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +90,7 @@ async def generate_questions(
                 user_id=current_user.id,
                 conversation_id=None,
             ),
-            timeout=120,
+            timeout=settings.QUESTION_GEN_TIMEOUT,
         )
 
         # 检查是否有错误
@@ -248,7 +249,7 @@ async def weak_point_practice(
                 user_id=current_user.id,
                 conversation_id=None,
             ),
-            timeout=120,
+            timeout=settings.QUESTION_GEN_TIMEOUT,
         )
 
         if questions and questions[0].get("error"):
@@ -315,7 +316,7 @@ async def grade_question(
                 standard_answer=record.standard_answer or "",
                 user_answer=req.user_answer,
             ),
-            timeout=30,
+            timeout=settings.AGENT_RETRY_TIMEOUT,
         )
         score = result["score"]
         feedback = result["feedback"]
@@ -353,6 +354,11 @@ async def grade_question(
 
         return GradeResponse(score=score, feedback=feedback, is_wrong=is_wrong)
 
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="批改超时：Grading Agent 未在限定时间内完成。",
+        )
     except Exception as e:
         logger.error("Grading error: %s", e, exc_info=True)
         raise HTTPException(

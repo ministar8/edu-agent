@@ -2,10 +2,33 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import re
+import socket
+import time
 from typing import Any
+from urllib.parse import urlparse
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
+
+_MAX_KG_TOPICS = 3
+_MAX_KG_NODES = 24
+_MAX_KG_EDGES = 32
+_MAX_KG_PATHS = 6
+_KG_EVIDENCE_CACHE_TTL = 300
+_KG_EVIDENCE_CACHE_MAX = 128
+_KG_EVIDENCE_CACHE: dict[tuple[str, str, int], tuple[float, KGEvidence | None]] = {}
+_KG_FAILURE_COOLDOWN = 60
+_KG_FAILURE_UNTIL = 0.0
+_KG_TOPIC_STOP_WORDS = {
+    "什么", "是什么", "怎么", "如何", "为什么", "解释", "说明", "介绍",
+    "解释一下", "说明一下", "关系", "联系", "区别", "差异", "不同", "异同",
+    "核心", "概念", "核心概念", "作用", "应用", "特点", "对比", "比较",
+    "控制",
+}
 
 
 class TextEvidence(BaseModel):
@@ -72,7 +95,7 @@ def _parse_knowledge_points(value: Any) -> list[str]:
             if isinstance(parsed, list):
                 return [str(v) for v in parsed if str(v).strip()]
         except json.JSONDecodeError:
-            return [p.strip() for p in text.replace("，", ",").split(",") if p.strip()]
+            pass
         return [p.strip() for p in text.replace("，", ",").split(",") if p.strip()]
     return []
 
@@ -113,6 +136,119 @@ def kg_evidence_from_text(text: str, confidence: float = 0.7) -> KGEvidence | No
     )
 
 
+def _dedupe_keep_order(items: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        cleaned = str(item).strip()
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            result.append(cleaned)
+    return result
+
+
+def _extract_kg_topic_candidates(query: str) -> list[str]:
+    from app.rag.rag_utils import extract_query_terms, normalize_query_text
+    from app.rag.synonyms import SYNONYM_MAP, SYNONYM_MAP_CASEFOLD
+
+    normalized = normalize_query_text(query)
+    candidates: list[str] = []
+
+    def _add_candidate(term: str) -> None:
+        cleaned = str(term).strip("：:，,。？? ")
+        mapped = SYNONYM_MAP.get(cleaned) or SYNONYM_MAP_CASEFOLD.get(cleaned.casefold())
+        if len(cleaned) < 2 or cleaned in _KG_TOPIC_STOP_WORDS:
+            return
+        if not re.search(r"[\u4e00-\u9fff]", cleaned) and cleaned.casefold() == cleaned and not mapped:
+            return
+        if re.fullmatch(r"[a-z][a-z0-9_./+-]*", cleaned) and not mapped:
+            return
+        candidates.append(cleaned)
+        if mapped and mapped not in _KG_TOPIC_STOP_WORDS:
+            candidates.append(mapped)
+
+    relation_parts = re.split(r"(?:和|与|及|以及|、|，|,|\s+vs\s+|\s+VS\s+)", normalized)
+    if 2 <= len(relation_parts) <= 4:
+        for part in relation_parts:
+            cleaned = re.sub(r"^(请|帮我|解释|说明|比较|对比|分析|讲解|一下)+", "", part.strip())
+            cleaned = re.sub(r"(的)?(区别|差异|不同|异同|关系|联系|对比|比较)$", "", cleaned.strip())
+            _add_candidate(cleaned)
+
+    for term in extract_query_terms(normalized):
+        _add_candidate(term)
+
+    for matched in re.findall(r"[\u4e00-\u9fffA-Za-z0-9_+./-]{2,}", normalized):
+        if matched == normalized and re.search(r"(区别|差异|不同|异同|关系|联系|对比|比较)", normalized):
+            continue
+        if matched not in candidates:
+            _add_candidate(matched)
+
+    if len(normalized) <= 24 and not re.search(r"(区别|差异|不同|异同|关系|联系|对比|比较)", normalized):
+        _add_candidate(normalized)
+
+    return _dedupe_keep_order(candidates)[:8]
+
+
+def _resolve_kg_topics(kg: Any, query: str, category: str) -> tuple[list[str], list[str]]:
+    resolved_topics: list[str] = []
+    matched_candidates: list[str] = []
+    for candidate in _extract_kg_topic_candidates(query):
+        resolved = kg.resolve_topic(candidate, category=category)
+        if not resolved and category:
+            resolved = kg.resolve_topic(candidate, category="")
+        if resolved and resolved not in resolved_topics:
+            resolved_topics.append(resolved)
+            matched_candidates.append(candidate)
+        if len(resolved_topics) >= _MAX_KG_TOPICS:
+            break
+    return resolved_topics, matched_candidates
+
+
+def _append_unique_edge(edges: list[dict[str, Any]], source: str, target: str,
+                        relation: str = "PREREQUISITE_OF") -> None:
+    if not source or not target:
+        return
+    edge = {"source": source, "target": target, "relation": relation}
+    if edge not in edges:
+        edges.append(edge)
+
+
+def _get_cached_kg_evidence(query: str, category: str, max_depth: int) -> KGEvidence | None | bool:
+    key = (query, category, max_depth)
+    cached = _KG_EVIDENCE_CACHE.get(key)
+    if cached is None:
+        return False
+    ts, value = cached
+    if time.time() - ts > _KG_EVIDENCE_CACHE_TTL:
+        del _KG_EVIDENCE_CACHE[key]
+        return False
+    return value
+
+
+def _set_cached_kg_evidence(query: str, category: str, max_depth: int,
+                            value: KGEvidence | None) -> None:
+    if len(_KG_EVIDENCE_CACHE) >= _KG_EVIDENCE_CACHE_MAX:
+        oldest = min(_KG_EVIDENCE_CACHE, key=lambda k: _KG_EVIDENCE_CACHE[k][0])
+        del _KG_EVIDENCE_CACHE[oldest]
+    _KG_EVIDENCE_CACHE[(query, category, max_depth)] = (time.time(), value)
+
+
+def _kg_endpoint_available(timeout: float = 0.25) -> bool:
+    try:
+        from app.config import settings
+        parsed = urlparse(settings.NEO4J_URI)
+        host = parsed.hostname
+        port = parsed.port or 7687
+        if not host:
+            return True
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+    except Exception:
+        return True
+
+
 def kg_evidence_from_query(
     query: str,
     category: str = "",
@@ -135,103 +271,107 @@ def kg_evidence_from_query(
     Returns:
         KGEvidence with structured nodes/edges/paths; None if no KG match.
     """
-    import logging
-    logger = logging.getLogger(__name__)
+    cached = _get_cached_kg_evidence(query, category, max_depth)
+    if cached is not False:
+        return cached
+    global _KG_FAILURE_UNTIL
+    if time.time() < _KG_FAILURE_UNTIL:
+        return None
+    if not _kg_endpoint_available():
+        _KG_FAILURE_UNTIL = time.time() + _KG_FAILURE_COOLDOWN
+        _set_cached_kg_evidence(query, category, max_depth, None)
+        return None
     try:
         from app.rag.knowledge_graph import get_kg_manager
 
         kg = get_kg_manager()
 
-        # 1. Resolve topic (with optional category disambiguation)
-        resolved = kg.resolve_topic(query, category=category)
-        if not resolved:
+        resolved_topics, matched_candidates = _resolve_kg_topics(kg, query, category)
+        if not resolved_topics:
+            _set_cached_kg_evidence(query, category, max_depth, None)
             return None
 
-        nodes: list[str] = [resolved]
+        nodes: list[str] = []
         edges: list[dict[str, Any]] = []
         path_list: list[list[str]] = []
 
-        # 2. Prerequisites (n-hop, incoming: pre -> resolved)
-        prereqs = kg.get_prerequisites(resolved, depth=max_depth)
-        for p in prereqs:
-            name = str(p.get("name", "")).strip()
-            if name and name not in nodes:
-                nodes.append(name)
-            if name:
-                edges.append({
-                    "source": name,
-                    "target": resolved,
-                    "relation": "PREREQUISITE_OF",
-                })
+        parts = ["[KG Related Info]"]
+        for resolved in resolved_topics:
+            if resolved not in nodes:
+                nodes.append(resolved)
 
-        # 3. Next topics (n-hop, outgoing: resolved -> next)
-        next_topics = kg.get_next_topics(resolved, depth=max_depth)
-        for n in next_topics:
-            name = str(n.get("name", "")).strip()
-            if name and name not in nodes:
-                nodes.append(name)
-            if name:
-                edges.append({
-                    "source": resolved,
-                    "target": name,
-                    "relation": "PREREQUISITE_OF",
-                })
-
-        # 4. Learning paths (multi-hop reverse traversal)
-        raw_paths = kg.get_learning_path(resolved, max_depth=max_depth)
-        for path in raw_paths:
-            names = [
-                str(step.get("name", "")).strip()
-                for step in path
-                if str(step.get("name", "")).strip()
-            ]
-            if names:
-                path_list.append(names)
-                for name in names:
-                    if name not in nodes:
-                        nodes.append(name)
-
-        # 5. Serialize for LLM context
-        parts = [f"Topic: {resolved}"]
-        if prereqs:
-            pre_names = [
-                str(p.get("name", "")) for p in prereqs if p.get("name")
-            ]
+            topic_parts = [f"Topic: {resolved}"]
+            prereqs = kg.get_prerequisites(resolved, depth=max_depth)
+            pre_names = [str(p.get("name", "")).strip() for p in prereqs if p.get("name")]
             if pre_names:
-                parts.append(
-                    f"Prerequisites: {' -> '.join(pre_names)} -> [{resolved}]"
-                )
-        if next_topics:
-            next_names = [
-                str(n.get("name", "")) for n in next_topics if n.get("name")
-            ]
+                topic_parts.append(f"Prerequisites: {' -> '.join(pre_names[:8])} -> [{resolved}]")
+            for name in pre_names:
+                if name and name not in nodes and len(nodes) < _MAX_KG_NODES:
+                    nodes.append(name)
+                _append_unique_edge(edges, name, resolved)
+
+            next_topics = kg.get_next_topics(resolved, depth=max_depth)
+            next_names = [str(n.get("name", "")).strip() for n in next_topics if n.get("name")]
             if next_names:
-                parts.append(
-                    f"Next topics: [{resolved}] -> {' -> '.join(next_names)}"
-                )
-        if path_list:
-            for p in path_list:
-                parts.append(f"Learning path: {' -> '.join(p)}")
+                topic_parts.append(f"Next topics: [{resolved}] -> {' -> '.join(next_names[:8])}")
+            for name in next_names:
+                if name and name not in nodes and len(nodes) < _MAX_KG_NODES:
+                    nodes.append(name)
+                _append_unique_edge(edges, resolved, name)
 
-        serialized = "[KG Related Info]\n" + "\n".join(parts)
+            raw_paths = kg.get_learning_path(resolved, max_depth=max_depth)
+            for path in raw_paths:
+                names = [
+                    str(step.get("name", "")).strip()
+                    for step in path
+                    if str(step.get("name", "")).strip()
+                ]
+                if names and names not in path_list:
+                    path_list.append(names)
+                    topic_parts.append(f"Learning path: {' -> '.join(names)}")
+                    for name in names:
+                        if name not in nodes and len(nodes) < _MAX_KG_NODES:
+                            nodes.append(name)
 
-        confidence = 0.7
+            parts.extend(topic_parts)
+            if len(nodes) >= _MAX_KG_NODES:
+                break
 
-        return KGEvidence(
-            evidence_id=_stable_id("kg", resolved),
+        nodes = nodes[:_MAX_KG_NODES]
+        edges = edges[:_MAX_KG_EDGES]
+        path_list = path_list[:_MAX_KG_PATHS]
+
+        if len(resolved_topics) >= 2:
+            parts.append("Resolved topics: " + " | ".join(resolved_topics))
+
+        serialized = "\n".join(parts)
+        confidence = min(0.95, 0.65 + 0.08 * len(resolved_topics))
+
+        result = KGEvidence(
+            evidence_id=_stable_id("kg", "|".join(resolved_topics)),
             serialized=serialized,
             nodes=nodes,
             edges=edges,
             paths=path_list,
             confidence=confidence,
             source="knowledge_graph",
+            metadata={
+                "resolved_topics": resolved_topics,
+                "matched_candidates": matched_candidates,
+                "category": category,
+                "max_depth": max_depth,
+            },
         )
+        _set_cached_kg_evidence(query, category, max_depth, result)
+        return result
     except Exception as e:
         logger.debug("kg_evidence_from_query failed (non-fatal): %s", e)
+        _KG_FAILURE_UNTIL = time.time() + _KG_FAILURE_COOLDOWN
+        _set_cached_kg_evidence(query, category, max_depth, None)
         return None
 
 
-# -- Formatting utilities (shared by fusion.py / compressor.py) --
+# -- Formatting utilities (shared by fusion.py) --
 
 def format_text_evidence(index: int, ev: TextEvidence) -> str:
     path_info = f" [{ev.section_path}]" if ev.section_path else ""

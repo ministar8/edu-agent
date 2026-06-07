@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Edge, MarkerType, Node } from "@xyflow/react";
 
 import { getErrorMessage } from "@/lib/errors";
@@ -58,14 +58,22 @@ export function useKnowledgeGraph() {
   const [edges, setEdges] = useState<Edge[]>([]);
   const [showImport, setShowImport] = useState(false);
   const [error, setError] = useState("");
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const fetchGraph = useCallback(async () => {
     try {
       const res = await http.get("/api/visualization/knowledge-graph");
-      setNodes(toReactNodes(res.data.nodes));
-      setEdges(toReactEdges(res.data.edges));
+      if (!mountedRef.current) return;
+      setNodes(toReactNodes(res.data.nodes || []));
+      setEdges(toReactEdges(res.data.edges || []));
       setError("");
     } catch (error: unknown) {
+      if (!mountedRef.current) return;
       setNodes([]);
       setEdges([]);
       setError(getErrorMessage(error, "知识图谱加载失败"));
@@ -83,9 +91,9 @@ export function useKnowledgeGraph() {
         edges: demoGraphEdges,
       });
       void fetchGraph();
-      setShowImport(false);
+      if (mountedRef.current) setShowImport(false);
     } catch (error: unknown) {
-      setError(getErrorMessage(error, "导入失败"));
+      if (mountedRef.current) setError(getErrorMessage(error, "导入失败"));
     }
   }, [fetchGraph]);
 

@@ -24,6 +24,7 @@ _MAX_PER_SOURCE = 3
 _KG_TEXT_BOOST = 1.2
 _PARENT_WINDOW_BONUS = 1.08
 _HYDE_PENALTY = 0.95
+_NOISE_DOWNGRADE_PENALTY = 0.5   # window 噪声降级惩罚（排到 context 末尾）
 
 
 def _content_key(ev: TextEvidence) -> str:
@@ -83,6 +84,8 @@ def _score_text_evidence(ev: TextEvidence, kg_terms: set[str]) -> float:
         score *= _PARENT_WINDOW_BONUS
     if ev.metadata.get("_hyde_fallback"):
         score *= _HYDE_PENALTY
+    if ev.metadata.get("_noise_downgraded"):
+        score *= ev.metadata.get("_noise_downgrade_factor", _NOISE_DOWNGRADE_PENALTY)
     if kg_terms:
         kp = set(ev.knowledge_points)
         if kp & kg_terms:
@@ -99,6 +102,7 @@ def fuse_evidence(
     query: str = "",
     student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
+    depth: str = "standard",
 ) -> FusedEvidence:
     text_evidences = text_evidences or []
     kg_evidences = kg_evidences or []
@@ -139,6 +143,21 @@ def fuse_evidence(
     kg_parts = [format_kg_evidence(ev) for ev in kg_evidences if ev.serialized.strip()]
     kg_text = "\n".join(kg_parts).strip()
     kg_tokens = estimate_tokens(kg_text) if kg_text else 0
+    kg_nodes_count = sum(len(ev.nodes) for ev in kg_evidences)
+    kg_edges_count = sum(len(ev.edges) for ev in kg_evidences)
+    kg_paths_count = sum(len(ev.paths) for ev in kg_evidences)
+    kg_resolved_topics = sorted({
+        str(topic)
+        for ev in kg_evidences
+        for topic in ev.metadata.get("resolved_topics", [])
+        if str(topic).strip()
+    })
+    kg_matched_candidates = sorted({
+        str(candidate)
+        for ev in kg_evidences
+        for candidate in ev.metadata.get("matched_candidates", [])
+        if str(candidate).strip()
+    })
     profile_tokens = estimate_tokens(profile) if profile else 0
     doc_budget = max(1000, max_tokens - kg_tokens - profile_tokens)
 
@@ -159,10 +178,24 @@ def fuse_evidence(
 
     parts: list[str] = []
     if selected_texts:
-        parts.append(selected_texts[0][1])
+        # 策略 B：交叉排列（首尾效应优化）
+        # LLM 对 Context 首尾位置关注度更高，中间位置容易被忽略
+        # 将最高相关度的证据放在首尾，次相关的放在中间
+        # 原序 [1,2,3,4,5] → 交叉排列 [1,3,5,4,2]
+        n = len(selected_texts)
+        if n >= 4:
+            even_idx = list(range(0, n, 2))   # [0, 2, 4, ...]
+            odd_idx = list(range(1, n, 2))    # [1, 3, 5, ...]
+            odd_idx.reverse()                   # [5, 3, 1, ...]
+            interleaved_indices = even_idx + odd_idx
+            interleaved = [selected_texts[i] for i in interleaved_indices]
+        else:
+            interleaved = selected_texts
+
+        parts.append(interleaved[0][1])
         if kg_text:
             parts.append(kg_text)
-        parts.extend(text for _, text in selected_texts[1:])
+        parts.extend(text for _, text in interleaved[1:])
     elif kg_text:
         parts.append(kg_text)
     if profile:
@@ -174,6 +207,11 @@ def fuse_evidence(
         if ev.source and ev.source not in seen_sources:
             sources.append(ev.source)
             seen_sources.add(ev.source)
+    if not sources:
+        for ev in kg_evidences:
+            if ev.source and ev.source not in seen_sources:
+                sources.append(ev.source)
+                seen_sources.add(ev.source)
 
     selected_source_counts = Counter(ev.source for ev, _ in selected_texts if ev.source)
     diversity_score = 0.0
@@ -208,29 +246,21 @@ def fuse_evidence(
             "input_text_evidence_count": len(text_evidences),
             "deduped_text_evidence_count": len(deduped),
             "selected_text_evidence_count": len(selected_texts),
+            "kg_used": bool(kg_evidences),
+            "kg_evidence_count": len(kg_evidences),
+            "kg_nodes_count": kg_nodes_count,
+            "kg_edges_count": kg_edges_count,
+            "kg_paths_count": kg_paths_count,
+            "kg_tokens": kg_tokens,
+            "kg_resolved_topics": kg_resolved_topics,
+            "kg_matched_candidates": kg_matched_candidates,
             "kg_text_boost_terms": sorted(kg_terms),
+            "profile_tokens": profile_tokens,
+            "doc_token_budget": doc_budget,
+            "max_tokens": max_tokens,
+            "retrieval_depth": depth,
         },
     )
-
-    # CRAG compress: evaluate relevance, drop irrelevant, compress partial
-    if query:
-        try:
-            from app.rag.compressor import compress_evidence
-            fused = compress_evidence(
-                fused,
-                query=query,
-                use_llm=settings.CRAG_USE_LLM,
-                max_eval_batch=settings.CRAG_MAX_EVAL_BATCH,
-                score_threshold=settings.CRAG_SCORE_THRESHOLD,
-                student_profile=student_profile,
-                max_tokens=max_tokens,
-                depth=fused.metadata.get("retrieval_depth", "standard"),
-            )
-        except Exception as e:
-            if isinstance(e, (TypeError, ValueError, KeyError, AttributeError)):
-                logger.error("CRAG compress logic error, using raw fusion: %s", e, exc_info=True)
-            else:
-                logger.warning("CRAG compress failed, using raw fusion: %s", e)
 
     return fused
 
@@ -242,6 +272,7 @@ def fuse_documents(
     student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
     kg_evidences: list[KGEvidence] | None = None,
+    depth: str = "standard",
 ) -> FusedEvidence:
     """Fuse retrieved documents into FusedEvidence.
 
@@ -270,4 +301,32 @@ def fuse_documents(
         query=query,
         student_profile=student_profile,
         max_tokens=max_tokens,
+        depth=depth,
     )
+
+
+async def afuse_documents(
+    docs: list[Document],
+    query: str = "",
+    kg_supplement: str = "",
+    student_profile: str = "",
+    max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
+    kg_evidences: list[KGEvidence] | None = None,
+    depth: str = "standard",
+) -> FusedEvidence:
+    text_evidences = [text_evidence_from_document(doc) for doc in docs]
+    if kg_evidences is not None:
+        kg_evs = kg_evidences
+    else:
+        kg_ev = kg_evidence_from_text(kg_supplement)
+        kg_evs = [kg_ev] if kg_ev else []
+
+    fused = fuse_evidence(
+        text_evidences=text_evidences,
+        kg_evidences=kg_evs,
+        query=query,
+        student_profile=student_profile,
+        max_tokens=max_tokens,
+        depth=depth,
+    )
+    return fused

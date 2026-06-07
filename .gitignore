@@ -25,6 +25,7 @@ node_modules/
 .next/
 out/
 tsconfig.tsbuildinfo
+next-env.d.ts
 
 # ── Database ────────────────────────────────────────────
 *.db
@@ -44,14 +45,7 @@ Desktop.ini
 knowledge/general/
 knowledge/questions/
 knowledge/answers/
-knowledge/learning_paths/
 
-# ── Cloned repos (content already in knowledge/) ───────
-408/
-408-CS-master/
-CS-Basic-SelfLearning/
-CS-Notes/
-CSPostgraduate-408-master/
-ComputerOrganizationNote/
-Postgraduate-408-old-exam/
-learn-network/
+# ── Temporary / scratch scripts ──────────────────────────
+_*.py
+!__init__.py

@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import logging
 import re
+import asyncio
 from dataclasses import dataclass
+
+from app.rag.synonyms import SYNONYM_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +34,13 @@ class RetrievalDepth:
     skip_hyde: bool = False            # 跳过 HyDE fallback
     skip_metadata_routes: bool = False # 跳过元数据路由（concept_meta 等）
     skip_rerank: bool = False          # 跳过 rerank 重排序（shallow 查询省延迟）
+    lightweight_rerank: bool = False   # 轻量 rerank（L2：候选池小，省延迟）
     max_metadata_routes: int = 10      # 元数据路由上限（0=不限制，配合 skip_metadata_routes 使用）
     extra_k_for_deep: int = 0          # deep 模式额外 k 增量
 
     def __repr__(self) -> str:
-        skips = [s for s in ("bm25", "kg", "decompose", "hyde", "meta", "rerank")
-                 if getattr(self, f"skip_{s}" if s != "meta" else "skip_metadata_routes")]
+        skips = [s for s in ("bm25", "kg", "decompose", "hyde", "meta", "rerank", "lw_rerank")
+                 if getattr(self, f"skip_{s}" if s not in ("meta", "lw_rerank") else ("skip_metadata_routes" if s == "meta" else "lightweight_rerank"))]
         skip_str = f" skip={'+'.join(skips)}" if skips else ""
         meta_cap = f" meta_cap={self.max_metadata_routes}" if self.max_metadata_routes < 10 else ""
         return f"RetrievalDepth({self.depth} k={self.k}{skip_str}{meta_cap})"
@@ -45,13 +49,14 @@ class RetrievalDepth:
 # 预定义深度配置
 SHALLOW_DEPTH = RetrievalDepth(
     depth="shallow", k=3,
-    skip_bm25=True, skip_kg=True, skip_decompose=True, skip_hyde=True,
+    skip_bm25=False, skip_kg=True, skip_decompose=True, skip_hyde=True,
     skip_metadata_routes=True, max_metadata_routes=0,
     skip_rerank=True,
 )
 STANDARD_DEPTH = RetrievalDepth(
     depth="standard", k=5,
     max_metadata_routes=2,
+    lightweight_rerank=True,
 )
 DEEP_DEPTH = RetrievalDepth(
     depth="deep", k=8,
@@ -75,22 +80,22 @@ def resolve_retrieval_depth(cat: QueryCategory) -> RetrievalDepth:
     """根据查询分类自动选择检索深度
 
     规则优先级：
-    1. 短查询 + 概念查询 → shallow（省延迟 ~200ms）
-    2. 对比查询 / 长查询 → deep（多角度覆盖）
-    3. 代码查询 → code（code_meta 优先，不用 HyDE）
-    4. 其余 → standard（完整管线）
+    1. 学习路径 + 长查询 → deep
+    2. 短查询 → shallow（省延迟 ~200ms）
+    3. 对比查询 → deep（多角度覆盖）
+    4. 代码查询 → code（code_meta 优先，不用 HyDE）
+    5. 练习/答案查询 → standard
+    6. 长查询 + 结构化 → deep
+    7. 其余 → standard
     """
     if cat.is_learning_path:
         return DEEP_DEPTH if cat.is_long else STANDARD_DEPTH
-
-    if cat.is_short and cat.is_concept:
-        return SHALLOW_DEPTH
 
     if cat.is_short:
         return SHALLOW_DEPTH
 
     if cat.is_comparison:
-        return DEEP_DEPTH
+        return STANDARD_DEPTH  # 对比查询 L2 足够，无需 L3 deep
 
     if cat.is_code:
         return CODE_DEPTH
@@ -99,9 +104,6 @@ def resolve_retrieval_depth(cat: QueryCategory) -> RetrievalDepth:
         return STANDARD_DEPTH
 
     if cat.is_long and cat.is_structured:
-        return DEEP_DEPTH
-
-    if cat.is_long and cat.is_concept:
         return DEEP_DEPTH
 
     return STANDARD_DEPTH
@@ -175,16 +177,23 @@ _RULE_MARKERS: dict[str, tuple[str, ...]] = {
     "exercise": ("习题", "练习", "题目", "选择题", "判断题", "填空", "简答题", "出题", "题"),
     "answer": ("答案", "解析", "批改", "评分", "得分", "为什么错", "标准答案"),
     "structured": ("步骤", "流程", "总结", "要点", "区别", "注意事项", "清单", "对比"),
-    "concept": ("概念", "定义", "是什么", "什么是", "含义", "意思", "原理", "介绍", "应用", "作用", "用途"),
-    "comparison": ("区别", "不同", "差异", "对比", "比较", "相同", "异同"),
+    "concept": ("概念", "定义", "是什么", "什么是", "含义", "意思", "原理", "介绍", "应用", "作用", "用途", "解释"),
+    "comparison": ("区别", "不同", "差异", "对比", "比较", "相同", "异同", "关系", "联系"),
     "learning_path": ("怎么学", "如何学", "学习路线", "学习路径", "复习路线", "复习路径", "前置知识", "重点章节", "应该怎么学"),
+}
+
+_DOMAIN_ALPHA_TERMS = {
+    term.casefold()
+    for item in (set(SYNONYM_MAP.keys()) | set(SYNONYM_MAP.values()))
+    for term in re.findall(r"[A-Za-z_][A-Za-z0-9_./+-]{1,}", item)
 }
 
 _LLM_CLASSIFY_PROMPT = (
     "判断以下学生问题的查询意图类别（可多选）。\n"
     "可选标签：code, exercise, answer, structured, concept, comparison, learning_path\n"
     "如果没有匹配的类别，返回 uncategorized。\n\n"
-    "问题：{query}"
+    "问题：{query}\n\n"
+    "请以JSON格式输出。"
 )
 
 _classify_cache: dict[str, QueryCategory] = {}
@@ -202,13 +211,17 @@ def _classify_by_rules(normalized: str, terms: list[str]) -> QueryCategory:
             # 短标识符（3字符如 KMP）由关键词 markers 覆盖
             flags["code"] = (
                 any(m in lowered for m in markers)
-                or any(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_\.]{3,}", t) is not None for t in terms)
+                or any(
+                    re.fullmatch(r"[A-Za-z_][A-Za-z0-9_\.]{3,}", t) is not None
+                    and t.casefold() not in _DOMAIN_ALPHA_TERMS
+                    for t in terms
+                )
             )
         else:
             flags[category] = any(m in normalized for m in markers)
 
     is_short = len(terms) <= 2 and len(normalized) <= 15
-    is_long = len(normalized) >= 40 or len(terms) >= 4
+    is_long = len(normalized) >= 40 or len(terms) >= 6
 
     return QueryCategory(
         is_code=flags.get("code", False),
@@ -224,17 +237,32 @@ def _classify_by_rules(normalized: str, terms: list[str]) -> QueryCategory:
     )
 
 
-def _classify_by_llm(query: str) -> QueryCategory | None:
-    """LLM 分类兜底：规则无法判断时调用，使用 with_structured_output"""
+async def _classify_by_llm(query: str) -> QueryCategory | None:
+    """LLM 分类兜底：规则无法判断时调用，使用 with_structured_output
+
+    针对性异常捕获：
+    - TimeoutError / asyncio.TimeoutError → LLM 响应超时，降级到规则
+    - OutputParserError / ValidationError → 结构化输出解析失败，降级
+    - httpx.HTTPStatusError / APIConnectionError → API 层错误，降级
+    - 其他 Exception → 兜底日志，降级
+    """
     try:
         from app.rag.rag_utils import get_llm
         from app.rag.schemas import QueryClassifyResult
 
         llm = get_llm(streaming=False, temperature=0.0)
         structured_llm = llm.with_structured_output(QueryClassifyResult)
-        result = structured_llm.invoke(_LLM_CLASSIFY_PROMPT.format(query=query))
+        result = await structured_llm.ainvoke(_LLM_CLASSIFY_PROMPT.format(query=query))
+    except (asyncio.TimeoutError, TimeoutError) as e:
+        logger.warning("LLM classify timed out: %s", e)
+        return None
+    except (ValueError, TypeError) as e:
+        # OutputParserError / ValidationError inherit from these
+        logger.warning("LLM classify output parse failed: %s", e)
+        return None
     except Exception as e:
-        logger.debug("LLM classify failed: %s", e)
+        # httpx errors, API errors, etc.
+        logger.warning("LLM classify failed: %s", e)
         return None
 
     valid_tags = {"code", "exercise", "answer", "structured", "concept", "comparison", "learning_path"}
@@ -287,13 +315,13 @@ def _merge_categories(rule_cat: QueryCategory, llm_cat: QueryCategory) -> QueryC
     )
 
 
-def classify_query(query: str, terms: list[str] | None = None) -> QueryCategory:
-    """统一查询分类入口：规则优先，LLM 按需兜底
+async def aclassify_query(query: str, terms: list[str] | None = None) -> QueryCategory:
+    """异步查询分类入口：规则优先，LLM 按需兜底（原生 async，一路 await）
 
     策略：
     1. 规则关键词匹配（零延迟）→ 命中则直接返回
-    2. 规则未命中 + 查询长度足够 → LLM 兜底分类
-    3. LLM 也未命中 → 返回规则结果（未分类）
+    2. 规则未命中 + 查询长度足够 → LLM 兜底分类（await，不阻塞事件循环）
+    3. LLM 也未命中 / 超时 / 解析失败 → 返回规则结果（未分类）
 
     Args:
         query: 原始查询文本
@@ -318,19 +346,58 @@ def classify_query(query: str, terms: list[str] | None = None) -> QueryCategory:
     # 1. 规则分类
     rule_cat = _classify_by_rules(normalized, terms)
 
-    # 2. 判断是否需要 LLM 兜底
+    # 2. LLM 兜底（原生 await，不再 asyncio.run）
     if _needs_llm_fallback(rule_cat):
-        llm_cat = _classify_by_llm(query)
+        llm_cat = await _classify_by_llm(query)
         if llm_cat is not None:
             rule_cat = _merge_categories(rule_cat, llm_cat)
 
     # 缓存
     if len(_classify_cache) > _CLASSIFY_CACHE_MAX:
-        # Partial eviction: delete oldest 25% to avoid cache stampede
         _evict_count = max(1, len(_classify_cache) // 4)
         for _key in list(_classify_cache.keys())[:_evict_count]:
             del _classify_cache[_key]
     _classify_cache[cache_key] = rule_cat
 
     logger.debug("Query classified: %s → %s", query[:50], rule_cat)
+    return rule_cat
+
+
+def classify_query(query: str, terms: list[str] | None = None) -> QueryCategory:
+    """同步查询分类入口：仅规则分类（零延迟，无 LLM 调用）
+
+    在 async 上下文中请使用 aclassify_query() 以获得 LLM 兜底能力。
+    此 sync 版本不调用 LLM，避免 asyncio.run() 嵌套风险。
+
+    Args:
+        query: 原始查询文本
+        terms: 已提取的关键词列表（可选，不传则内部提取）
+
+    Returns:
+        QueryCategory 分类结果（仅规则层）
+    """
+    from app.rag.rag_utils import normalize_query_text, extract_query_terms
+    normalized = normalize_query_text(query)
+    if not normalized:
+        return QueryCategory(source="rule")
+
+    if terms is None:
+        terms = extract_query_terms(normalized)
+
+    # 缓存检查
+    cache_key = normalized
+    if cache_key in _classify_cache:
+        return _classify_cache[cache_key]
+
+    # 仅规则分类（不调用 LLM，避免 asyncio.run 嵌套）
+    rule_cat = _classify_by_rules(normalized, terms)
+
+    # 缓存
+    if len(_classify_cache) > _CLASSIFY_CACHE_MAX:
+        _evict_count = max(1, len(_classify_cache) // 4)
+        for _key in list(_classify_cache.keys())[:_evict_count]:
+            del _classify_cache[_key]
+    _classify_cache[cache_key] = rule_cat
+
+    logger.debug("Query classified (rule-only): %s → %s", query[:50], rule_cat)
     return rule_cat

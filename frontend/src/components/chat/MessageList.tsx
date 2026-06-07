@@ -12,6 +12,7 @@ type MessageListProps = {
   streamingAgent: string;
   activeTool: string | null;
   streamingGovernance: ChatPanelState["streamingGovernance"];
+  statusLabel: string;
   messagesEndRef: RefObject<HTMLDivElement>;
   onSelectSuggestion: (suggestion: string) => void;
 };
@@ -23,6 +24,7 @@ function MessageListComponent({
   streamingAgent,
   activeTool,
   streamingGovernance,
+  statusLabel,
   messagesEndRef,
   onSelectSuggestion,
 }: MessageListProps) {
@@ -31,7 +33,7 @@ function MessageListComponent({
       {messages.length === 0 && !loading && <EmptyChatState onSelectSuggestion={onSelectSuggestion} />}
 
       {messages.map((message, index) => (
-        <MessageBubble key={`${message.role}-${message.timestamp.getTime()}-${index}`} message={message} />
+        <MessageBubble key={`msg-${index}`} message={message} />
       ))}
 
       {loading && (
@@ -40,6 +42,7 @@ function MessageListComponent({
           activeTool={activeTool}
           streamingGovernance={streamingGovernance}
           streamingText={streamingText}
+          statusLabel={statusLabel}
         />
       )}
       <div ref={messagesEndRef} />

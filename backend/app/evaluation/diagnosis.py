@@ -9,12 +9,12 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any
 
 from app.evaluation.config import EvaluationConfig
 from app.evaluation.dataset import EvalSample
 from app.evaluation.adapters import (
+    META_ROUTE_NAMES,
     get_diagnostic_retriever,
     get_decomposer,
 )
@@ -72,11 +72,7 @@ def diagnose_route_ablation(
     }
 
     # ── metadata 路由集合（用于分组合并）──
-    _META_ROUTE_NAMES = {
-        "code_meta", "exercise_meta", "answer_meta",
-        "concept_meta", "comparison_meta", "structured_meta",
-        "section_meta", "formula_meta", "table_meta", "merged_qa_meta",
-    }
+    _meta_routes = META_ROUTE_NAMES
 
     for disabled_route in routes:
         route_log: dict[str, list[float | int]] = {"latency": [], "chunk_count": [], "avg_rrf_score": []}
@@ -114,8 +110,8 @@ def diagnose_route_ablation(
         }
 
     # ── 合并 metadata 路由组：delta 完全相同的 metadata 路由合并为一行 ──
-    meta_routes_in_result = [r for r in routes if r in _META_ROUTE_NAMES]
-    base_routes_in_result = [r for r in routes if r not in _META_ROUTE_NAMES]
+    meta_routes_in_result = [r for r in routes if r in _meta_routes]
+    base_routes_in_result = [r for r in routes if r not in _meta_routes]
 
     # 检测 metadata 路由是否冗余（chunk_delta 和 rrf_score_delta 完全一致）
     meta_deltas: dict[str, tuple[float, float]] = {}
@@ -405,7 +401,7 @@ def diagnose_guard_governance(
         logger.warning("Guard Governance: 数据库模块不可用，跳过")
         return {"error": "database module not available"}
 
-    import json as _json  # noqa: F811
+    import json as _json
 
     stats: dict[str, Any] = {
         "total_messages": 0,

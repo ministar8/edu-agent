@@ -7,7 +7,8 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
 
-_SOURCE_RE = re.compile(r"\[来源\d+:\s*([^\]\n]+)\]")
+_SOURCE_RE = re.compile(r"\[(?:来源|Source)\s*\d*\s*:\s*([^\]\n]+)\]", re.IGNORECASE)
+_SOURCES_LINE_RE = re.compile(r"^Sources:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 
 def _to_text(value: Any, limit: int = 1200) -> str:
@@ -30,7 +31,21 @@ def extract_sources_from_text(text: str) -> list[str]:
         if source and source != "未知来源" and source not in seen:
             seen.add(source)
             sources.append(source)
-    if "【知识图谱关联信息】" in (text or "") and "知识图谱" not in seen:
+    for match in _SOURCES_LINE_RE.finditer(text or ""):
+        for raw in re.split(r"[,，;；]", match.group(1)):
+            source = re.split(r"\s+\(|\s+\[", raw.strip(), maxsplit=1)[0].strip()
+            if source and source != "未知来源" and source not in seen:
+                seen.add(source)
+                sources.append(source)
+    text = text or ""
+    if (
+        "【知识图谱关联信息】" in text
+        or "[KG Related Info]" in text
+        or "Related topics" in text
+        or "Dependency edges" in text
+        or "Learning paths" in text
+    ) and "知识图谱" not in seen:
+        seen.add("知识图谱")
         sources.append("知识图谱")
     return sources
 

@@ -10,9 +10,10 @@ type StreamingMessageProps = {
   activeTool: string | null;
   streamingGovernance: Governance | null;
   streamingText: string;
+  statusLabel: string;
 };
 
-function StreamingMessageComponent({ streamingAgent, activeTool, streamingGovernance, streamingText }: StreamingMessageProps) {
+function StreamingMessageComponent({ streamingAgent, activeTool, streamingGovernance, streamingText, statusLabel }: StreamingMessageProps) {
   return (
     <div className="flex justify-start">
       <div className={`max-w-[70%] rounded-xl px-4 py-3 ${agentColors[streamingAgent] || "chat-message-agent"}`}>
@@ -27,6 +28,12 @@ function StreamingMessageComponent({ streamingAgent, activeTool, streamingGovern
           <div className="text-xs text-emerald-600 mb-2 flex items-center gap-1">
             <span className="animate-spin">⚙</span>
             {toolLabels[activeTool] || activeTool}...
+          </div>
+        )}
+        {!activeTool && statusLabel && !streamingText && (
+          <div className="text-xs text-slate-400 mb-2 flex items-center gap-1">
+            <span className="animate-spin">⚙</span>
+            {statusLabel}
           </div>
         )}
         {streamingText ? (

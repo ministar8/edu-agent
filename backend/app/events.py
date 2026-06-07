@@ -76,13 +76,6 @@ def subscribe(event_type: str, handler: Callable) -> None:
     _handlers.setdefault(event_type, []).append(handler)
 
 
-def unsubscribe(event_type: str, handler: Callable) -> None:
-    """取消订阅"""
-    handlers = _handlers.get(event_type)
-    if handlers and handler in handlers:
-        handlers.remove(handler)
-
-
 async def emit(event: TrackingEvent) -> None:
     """发射事件，异步调用所有订阅者
 
@@ -120,7 +113,7 @@ def emit_sync(event: TrackingEvent) -> None:
                     loop = asyncio.get_running_loop()
                     loop.create_task(result)
                 except RuntimeError:
-                    asyncio.run(result)
+                    logger.warning("Cannot schedule async handler in sync context, event dropped: %s", event.event_type)
         except Exception as e:
             logger.error(
                 "Event handler error (sync): event_type=%s handler=%s error=%s",
@@ -166,8 +159,12 @@ def _resolve_kp_ids_from_registry(
     try:
         from app.db.models import KnowledgePointRegistry
         from app.db.session import SessionLocal
-        db = SessionLocal()
-        try:
+
+        def _like_escape(value: str) -> str:
+            """Escape SQL LIKE wildcards to prevent injection."""
+            return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+        with SessionLocal() as db:
             for name in names:
                 # 精确匹配名称
                 row = db.query(KnowledgePointRegistry).filter(
@@ -179,7 +176,7 @@ def _resolve_kp_ids_from_registry(
                     continue
                 # LIKE 匹配 source_file
                 rows = db.query(KnowledgePointRegistry).filter(
-                    KnowledgePointRegistry.source_file.like(f"%{name}%"),
+                    KnowledgePointRegistry.source_file.like(f"%{_like_escape(name)}%", escape="\\"),
                 ).all()
                 for row in rows:
                     if row.id not in seen:
@@ -188,7 +185,7 @@ def _resolve_kp_ids_from_registry(
 
             for sf in source_files:
                 rows = db.query(KnowledgePointRegistry).filter(
-                    KnowledgePointRegistry.source_file.like(f"%{sf}%"),
+                    KnowledgePointRegistry.source_file.like(f"%{_like_escape(sf)}%", escape="\\"),
                 ).all()
                 for row in rows:
                     if row.id not in seen:
@@ -197,14 +194,12 @@ def _resolve_kp_ids_from_registry(
 
             for hp in heading_paths:
                 rows = db.query(KnowledgePointRegistry).filter(
-                    KnowledgePointRegistry.heading_path.like(f"%{hp}%"),
+                    KnowledgePointRegistry.heading_path.like(f"%{_like_escape(hp)}%", escape="\\"),
                 ).all()
                 for row in rows:
                     if row.id not in seen:
                         seen.add(row.id)
                         kp_ids.append(row.id)
-        finally:
-            db.close()
     except Exception as e:
         logger.debug("Registry fallback lookup failed (non-critical): %s", e)
 
@@ -300,7 +295,7 @@ def extract_kp_ids_from_steps(steps: list[dict]) -> list[int]:
                             seen.add(kp_id)
                             kp_ids.append(kp_id)
             except (json.JSONDecodeError, TypeError):
-                pass
+                logger.debug("Event data JSON parse skipped (non-critical)")
 
         # 路径2：从 sources 提取文件名，收集用于 Registry 回退
         for source in step.get("sources", []):

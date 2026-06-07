@@ -22,11 +22,7 @@ export type ChatPanelState = {
   streamingAgent: string;
   activeTool: string | null;
   streamingGovernance: Governance | null;
+  statusLabel: string;
   baseThreadId: string;
   conversationId: number | null;
-};
-
-export type ChatPanelProps = {
-  state: ChatPanelState;
-  setState: React.Dispatch<React.SetStateAction<ChatPanelState>>;
 };

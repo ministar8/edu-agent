@@ -20,11 +20,10 @@ _MAX_QUERY_TERMS = 6
 _QUERY_STOP_WORDS = frozenset({
     "什么", "怎么", "如何", "为什么", "请问", "一下", "一下子", "有关", "关于", "这个", "那个",
     "哪些", "是否", "可以", "一下吧", "帮我", "讲解", "解释", "说明", "作用", "使用", "方法",
+    "解释一下", "说明一下", "介绍一下", "讲一下", "讲讲", "简述", "阐述",
     "是", "的", "了", "在", "有", "和", "与", "及", "或", "等", "都", "也", "还", "又",
     "那", "这", "被", "把", "从", "到", "对", "向", "给", "让", "用", "以",
 })
-
-_BM25_STOP_WORDS = _QUERY_STOP_WORDS  # BM25 shares the same stop words as query extraction
 
 
 # ── Token 估算 ───────────────────────────────────────
@@ -87,7 +86,7 @@ def extract_query_terms(query: str, max_terms: int = _MAX_QUERY_TERMS) -> list[s
 
 
 def get_bm25_stop_words() -> frozenset[str]:
-    return _BM25_STOP_WORDS
+    return _QUERY_STOP_WORDS
 
 
 # ── 内容类型检测 ─────────────────────────────────────
@@ -140,7 +139,9 @@ def _is_deepseek_api(api_base: str, model: str) -> bool:
     return "deepseek" in (api_base or "").lower() or "deepseek" in (model or "").lower()
 
 
-def get_llm(streaming: bool = True, temperature: float = 0.3):
+_LLM_INSTANCES: dict = {}
+
+def get_llm(streaming: bool = True, temperature: float = 0.3, use_fast: bool = False):
     """获取 LLM 实例（单例缓存）
 
     从 retriever.py 迁移至此，消除各模块对 retriever.py 的耦合。
@@ -161,30 +162,37 @@ def get_llm(streaming: bool = True, temperature: float = 0.3):
         settings.LLM_API_KEY[-8:],
         "stream" if streaming else "no_stream",
         f"temperature={temperature}",
+        f"timeout={settings.LLM_TIMEOUT}|fast={use_fast}",
+        f"deepseek={_is_deepseek_api(settings.LLM_API_BASE, settings.LLM_MODEL)}",
     ])
 
-    if not hasattr(get_llm, "_instances"):
-        get_llm._instances = {}
-
-    if cache_key not in get_llm._instances:
-        logger.info(
-            "Creating LLM client: base=%s model=%s streaming=%s key_prefix=%s key_len=%d",
+    if cache_key not in _LLM_INSTANCES:
+        logger.debug(
+            "Creating LLM client: base=%s model=%s streaming=%s fast=%s",
             settings.LLM_API_BASE,
             settings.LLM_MODEL,
             streaming,
-            settings.LLM_API_KEY[:8],
-            len(settings.LLM_API_KEY),
+            use_fast,
         )
+        model = settings.LLM_MODEL_FAST if use_fast and settings.LLM_MODEL_FAST else settings.LLM_MODEL
         kwargs = dict(
             api_key=settings.LLM_API_KEY,
             base_url=settings.LLM_API_BASE,
-            model=settings.LLM_MODEL,
+            model=model,
             temperature=temperature,
             streaming=streaming,
+            request_timeout=settings.LLM_TIMEOUT,
+            max_retries=2,
         )
-        # enable_thinking 是 DeepSeek 专有参数，禁用思考模式以保证结构化输出稳定
-        # 检测：API base 或 模型名 含 "deepseek" 均视为 DeepSeek 系列
-        if _is_deepseek_api(settings.LLM_API_BASE, settings.LLM_MODEL):
-            kwargs["extra_body"] = {"enable_thinking": False}
-        get_llm._instances[cache_key] = ChatOpenAI(**kwargs)
-    return get_llm._instances[cache_key]
+        # DeepSeek v4: 禁用思考模式以避免 reasoning token 暴增输出费用
+        # 官方参数: extra_body={"thinking": {"type": "disabled"}}
+        if _is_deepseek_api(settings.LLM_API_BASE, model):
+            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+        # Qwen 思考模型（max 系列）通过 DashScope 必须 enable_thinking=True
+        # 非思考模型不传该参数（用 API 默认行为），传 False 会导致 400 错误
+        if "qwen" in model.lower() and "dashscope" in (settings.LLM_API_BASE or "").lower():
+            # qwen3.x-max、qwen3.x-max-* 等思考模型必须传 True
+            if re.search(r"qwen[\d.]+-max", model.lower()):
+                kwargs.setdefault("extra_body", {})["enable_thinking"] = True
+        _LLM_INSTANCES[cache_key] = ChatOpenAI(**kwargs)
+    return _LLM_INSTANCES[cache_key]

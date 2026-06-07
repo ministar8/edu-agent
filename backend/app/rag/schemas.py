@@ -7,7 +7,7 @@ DeepSeek / qwen 系列均支持 Function Calling，with_structured_output 内部
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ── 批改结果 ──────────────────────────────────────────
@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 class GradingResult(BaseModel):
     """单题批改结构化输出"""
     score: int = Field(ge=0, le=100, description="0-100 的整数得分")
-    feedback: str = Field(max_length=200, description="不超过200字的批改反馈，指出对错和关键点")
+    feedback: str = Field(max_length=800, description="不超过200字的批改反馈，指出对错和关键点")
     is_wrong: bool = Field(description="学生答案是否错误（score < 60 视为错误）")
 
 
@@ -42,11 +42,22 @@ class QuestionList(BaseModel):
 
 class DecomposeResult(BaseModel):
     """查询分解结构化输出"""
+    model_config = {"populate_by_name": True}
+
     sub_queries: list[str] = Field(
+        alias="sub_questions",
         min_length=1,
         max_length=4,
         description="拆分后的子问题列表，每个聚焦单一知识点。如果无需分解，返回原始查询。",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _wrap_bare_list(cls, data):
+        """LLM 有时直接返回 list 而非 {"sub_queries": list}，自动包装"""
+        if isinstance(data, list):
+            return {"sub_queries": data}
+        return data
 
 
 # ── KG 抽取结果 ──────────────────────────────────────
@@ -76,7 +87,10 @@ class KGExtractResult(BaseModel):
 
 class QueryClassifyResult(BaseModel):
     """查询分类结构化输出"""
+    model_config = {"populate_by_name": True}
+
     categories: list[str] = Field(
+        alias="intent",
         min_length=1,
         max_length=7,
         description="命中的分类标签，可选值：code, exercise, answer, structured, concept, comparison, learning_path, uncategorized",

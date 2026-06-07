@@ -24,7 +24,6 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 from langchain_core.documents import Document
 
@@ -78,7 +77,7 @@ class AnomalyRecord:
     garbled_paragraphs: list[dict] = field(default_factory=list)  # [{"index": int, "position": int, "text": str}]
 
     # ── 阶段2：统计层 ──
-    length_outlier: Optional[str] = None     # "too_short" | "too_long" | None
+    length_outlier: str | None = None     # "too_short" | "too_long" | None
     length_zscore: float = 0.0               # 长度 Z-Score
     language_mixed: bool = False              # 语言混杂
     language_mix_ratio: float = 0.0           # 中英混排比 (0~1, 越高越混杂)
@@ -89,7 +88,7 @@ class AnomalyRecord:
 
 # ── 统计层异常检测 ──────────────────────────────────
 
-def _detect_length_outliers(documents: list[Document]) -> dict[str, tuple[Optional[str], float]]:
+def _detect_length_outliers(documents: list[Document]) -> dict[str, tuple[str | None, float]]:
     """基于 IQR 方法检测文本长度离群值
 
     策略：
@@ -133,7 +132,7 @@ def _detect_length_outliers(documents: list[Document]) -> dict[str, tuple[Option
     variance = sum((l - mean_len) ** 2 for l in lengths) / len(lengths)
     std_len = variance ** 0.5 if variance > 0 else 1.0
 
-    results: dict[str, tuple[Optional[str], float]] = {}
+    results: dict[str, tuple[str | None, float]] = {}
     for source, length in doc_map:
         zscore = (length - mean_len) / std_len if std_len > 0 else 0.0
         outlier = None
@@ -323,7 +322,7 @@ def _clean_repetitions(text: str) -> str:
     return text
 
 
-def _suggest_length_action(outlier_type: Optional[str], zscore: float) -> Optional[str]:
+def _suggest_length_action(outlier_type: str | None, zscore: float) -> str | None:
     """根据长度离群值建议处理操作"""
     if outlier_type == "too_short":
         if zscore < -2.0:

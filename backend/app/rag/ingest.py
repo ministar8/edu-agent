@@ -1,3 +1,4 @@
+
 """一键重建全量索引 CLI
 
 用法:
@@ -8,6 +9,10 @@
 """
 
 from __future__ import annotations
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 import argparse
 import os
@@ -24,7 +29,6 @@ from app.rag.vectorstore import get_vector_store_manager
 from app.rag.knowledge_graph import get_kg_manager
 from app.rag.metrics import metrics
 DEFAULT_CATEGORIES = ["data_structure", "computer_organization", "operating_system", "computer_network", "questions", "learning_paths"]
-
 
 def ingest_category(
     category: str,
@@ -45,14 +49,14 @@ def ingest_category(
 
     # 重建模式：先清空（向量库 + 知识图谱同步清理）
     if rebuild:
-        print(f"  [rebuild] 清空集合 '{category}'...")
+        logger.info(f"  [rebuild] 清空集合 '{category}'...")
         vector_store_manager.delete_collection(category)
         try:
             deleted = kg_manager.delete_by_category(category)
             if deleted:
-                print(f"  [rebuild] 清空知识图谱分类 '{category}'：{deleted} 个节点")
+                logger.info(f"  [rebuild] 清空知识图谱分类 '{category}'：{deleted} 个节点")
         except Exception as e:
-            print(f"  [rebuild] 知识图谱清理失败（非致命）：{e}")
+            logger.info(f"  [rebuild] 知识图谱清理失败（非致命）：{e}")
 
     total_chunks = 0
     total_files = 0
@@ -111,7 +115,7 @@ def ingest_category(
                     graph_success = True
                 else:
                     # KG 构建失败：向量库有数据但 KG 为空，告警
-                    print(f"  [WARN] 知识图谱构建失败: {filename} (向量库已入库 {len(ids)} chunks，但 KG 为空)")
+                    logger.info(f"  [WARN] 知识图谱构建失败: {filename} (向量库已入库 {len(ids)} chunks，但 KG 为空)")
                     metrics.emit(
                         event="kg_build_failure",
                         stage="ingest",
@@ -135,7 +139,7 @@ def ingest_category(
                     "indexed_chunks": len(ids),
                 },
             )
-            print(f"  [OK] {filename}: {len(chunks)} chunks, {len(ids)} indexed ({elapsed:.1f}s)")
+            logger.info(f"  [OK] {filename}: {len(chunks)} chunks, {len(ids)} indexed ({elapsed:.1f}s)")
 
         except Exception as e:
             total_errors += 1
@@ -146,7 +150,7 @@ def ingest_category(
                 status="error",
                 values={"error_type": e.__class__.__name__},
             )
-            print(f"  [ERR] {filename}: ERROR - {e}")
+            logger.info(f"  [ERR] {filename}: ERROR - {e}")
 
     category_elapsed_ms = round((time.perf_counter() - category_start) * 1000, 3)
     metrics.emit(
@@ -171,7 +175,6 @@ def ingest_category(
         "errors": total_errors,
     }
 
-
 def ingest_all(
     categories: list[str] | None = None,
     rebuild: bool = False,
@@ -181,12 +184,12 @@ def ingest_all(
     if categories is None:
         categories = DEFAULT_CATEGORIES
 
-    print("=" * 60)
-    print("  智能教学系统 - 全量索引构建")
-    print(f"  模式: {'全量重建' if rebuild else '增量入库'}")
-    print(f"  知识图谱: {'开启' if build_graph else '关闭'}")
-    print(f"  分类: {', '.join(categories)}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("  智能教学系统 - 全量索引构建")
+    logger.info(f"  模式: {'全量重建' if rebuild else '增量入库'}")
+    logger.info(f"  知识图谱: {'开启' if build_graph else '关闭'}")
+    logger.info(f"  分类: {', '.join(categories)}")
+    logger.info("=" * 60)
 
     total_start = time.perf_counter()
     total_files = 0
@@ -196,11 +199,11 @@ def ingest_all(
     total_errors = 0
 
     for category in categories:
-        print(f"\n[DIR] 处理分类: {category}")
+        logger.info(f"\n[DIR] 处理分类: {category}")
         result = ingest_category(category, rebuild=rebuild, build_graph=build_graph)
 
         if result.get("skipped"):
-            print(f"  [SKIP] 目录不存在，跳过")
+            logger.info("  [SKIP] 目录不存在，跳过")
             continue
 
         total_files += result["files"]
@@ -209,7 +212,7 @@ def ingest_all(
         total_graph_edges += result["graph_edges"]
         total_errors += result["errors"]
 
-        print(f"  小计: {result['files']} 文件, {result['chunks']} chunks, "
+        logger.info(f"  小计: {result['files']} 文件, {result['chunks']} chunks, "
               f"{result['graph_nodes']} 图谱节点, {result['graph_edges']} 图谱边")
 
     total_elapsed = time.perf_counter() - total_start
@@ -227,30 +230,30 @@ def ingest_all(
         },
     )
 
-    print("\n" + "=" * 60)
-    print("  构建完成!")
-    print(f"  总文件数: {total_files}")
-    print(f"  总 chunk 数: {total_chunks}")
-    print(f"  图谱节点: {total_graph_nodes}")
-    print(f"  图谱关系: {total_graph_edges}")
-    print(f"  错误数: {total_errors}")
-    print(f"  总耗时: {total_elapsed:.1f}s")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("  构建完成!")
+    logger.info(f"  总文件数: {total_files}")
+    logger.info(f"  总 chunk 数: {total_chunks}")
+    logger.info(f"  图谱节点: {total_graph_nodes}")
+    logger.info(f"  图谱关系: {total_graph_edges}")
+    logger.info(f"  错误数: {total_errors}")
+    logger.info(f"  总耗时: {total_elapsed:.1f}s")
+    logger.info("=" * 60)
 
     # 打印集合信息
-    print("\n[STAT] 当前索引状态:")
+    logger.info("\n[STAT] 当前索引状态:")
     vector_store_manager = get_vector_store_manager()
     collections = vector_store_manager.list_collections()
     for name in collections:
         info = vector_store_manager.get_collection_info(name)
-        print(f"  {name}: {info.get('count', 0)} 条文档")
+        logger.info(f"  {name}: {info.get('count', 0)} 条文档")
 
     # 缓存预热
     if build_graph:  # 仅全量模式时预热（增量模式跳过的知识图谱也跳过预热）
-        print("\n[WARMUP] 预热查询缓存...")
+        logger.info("\n[WARMUP] 预热查询缓存...")
         from app.rag.retriever import warmup_query_cache
         warmup_result = warmup_query_cache(quiet=True)
-        print(f"  {warmup_result['succeeded']}/{warmup_result['total']} 条预热成功, "
+        logger.info(f"  {warmup_result['succeeded']}/{warmup_result['total']} 条预热成功, "
               f"耗时 {warmup_result['elapsed_ms']:.0f} ms")
 
 def main():
@@ -281,7 +284,6 @@ def main():
         rebuild=args.rebuild,
         build_graph=not args.no_graph,
     )
-
 
 if __name__ == "__main__":
     main()

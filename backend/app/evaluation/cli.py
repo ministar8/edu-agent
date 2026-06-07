@@ -56,8 +56,8 @@ def main():
     parser.add_argument(
         "--k",
         type=int,
-        default=8,
-        help="检索 Top-K（默认 8）",
+        default=6,
+        help="检索 Top-K（默认 6）",
     )
     parser.add_argument(
         "--no-rerank",
@@ -196,14 +196,14 @@ def main():
     paths = save_report(report, cfg.output_dir, tag=cfg.output_tag)
 
     print(f"\n{'='*60}")
-    print(f"  评估完成")
+    print("  评估完成")
     print(f"  报告: {paths.get('json', 'N/A')}")
     print(f"        {paths.get('markdown', 'N/A')}")
 
     # 打印关键指标摘要
     layer1 = report.get("layer1", {})
     if layer1:
-        print(f"\n  Layer 1 摘要:")
+        print("\n  Layer 1 摘要:")
         for metric, scores in sorted(layer1.items()):
             if metric.startswith("_"):
                 continue

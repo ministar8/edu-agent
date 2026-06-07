@@ -10,6 +10,10 @@ import logging
 from langchain_core.documents import Document
 
 from app.rag.query_classifier import QueryCategory
+from app.rag.rag_utils import (
+    estimate_tokens as _estimate_tokens,
+    extract_query_terms as _extract_query_terms,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +30,22 @@ def _dynamic_rrf_k(route_count: int) -> int:
     """
     import math
     return max(10, min(60, int(_RRF_K_BASE * math.sqrt(route_count) / math.sqrt(4))))
+
+
+def _base_route_name(route_name: str) -> str:
+    return route_name.rsplit(":", 1)[-1].strip()
+
+
+def _dedup_key(doc: Document) -> str:
+    """Build a dedup key from collection + content_hash for cross-collection dedup."""
+    collection = doc.metadata.get("_collection", "")
+    content_hash = doc.metadata.get("content_hash")
+    if not content_hash:
+        import hashlib
+        content_hash = hashlib.sha256(doc.page_content[:200].encode()).hexdigest()[:16]
+    else:
+        content_hash = str(content_hash)
+    return f"{collection}::{content_hash}"
 
 
 # ── RRF 合并 ──────────────────────────────────────────
@@ -50,18 +70,11 @@ def merge_route_results(
     raw_count = sum(len(results) for _, results in route_results)
 
     for route_name, results in route_results:
-        w = get_route_weight(route_name, cat)
+        w = get_route_weight(_base_route_name(route_name), cat)
         for rank, (doc, original_score) in enumerate(results, 1):
             # 去重 key 加入集合来源，防止跨集合同名文档被误合并
             # 例如 "栈的定义" 在 data_structure 和 computer_organization 都出现
-            collection = doc.metadata.get("_collection", "")
-            content_hash = doc.metadata.get("content_hash")
-            if not content_hash:
-                import hashlib
-                content_hash = hashlib.sha256(doc.page_content[:200].encode()).hexdigest()[:16]
-            else:
-                content_hash = str(content_hash)
-            key = f"{collection}::{content_hash}"
+            key = _dedup_key(doc)
             rrf_contribution = w / (k + rank)
 
             existing = merged.get(key)
@@ -82,12 +95,10 @@ def merge_route_results(
         ranked.append((doc, rrf_score))
 
     ranked.sort(key=lambda item: item[1], reverse=True)
-    logger.info(
-        "RRF merge k=%d routes=%d raw_hits=%d merged_hits=%d top_scores=%s multi_route=%d",
-        k, len(route_results),
-        raw_count,
-        len(ranked),
-        [round(score, 6) for _, score in ranked[:5]],
+    logger.debug(
+        "RRF k=%d routes=%d raw=%d merged=%d top=%.4f multi=%d",
+        k, len(route_results), raw_count, len(ranked),
+        ranked[0][1] if ranked else 0,
         sum(1 for _, _, routes, _ in merged.values() if len(routes) >= 2),
     )
     return ranked
@@ -127,18 +138,11 @@ def weighted_rrf_merge(
             route_str = doc.metadata.get("recall_routes", "")
             route_names = [r.strip() for r in route_str.split(",") if r.strip()]
             if route_names and cat is not None:
-                w_route = max(get_route_weight(r, cat) for r in route_names)
+                w_route = max(get_route_weight(_base_route_name(r), cat) for r in route_names)
             else:
                 w_route = 1.0
             # 去重 key 用 content_hash + collection，避免同 section 不同 chunk 前100字相同被误合并
-            collection = doc.metadata.get("_collection", "")
-            content_hash = doc.metadata.get("content_hash")
-            if not content_hash:
-                import hashlib
-                content_hash = hashlib.sha256(doc.page_content[:200].encode()).hexdigest()[:16]
-            else:
-                content_hash = str(content_hash)
-            key = f"{collection}::{content_hash}"
+            key = _dedup_key(doc)
             rrf_contribution = w_source * w_route / (k + rank)
 
             existing = merged.get(key)
@@ -157,11 +161,10 @@ def weighted_rrf_merge(
         ranked.append((doc, rrf_score))
 
     ranked.sort(key=lambda item: item[1], reverse=True)
-    logger.info(
-        "Weighted RRF merge k=%d weights=%s raw_hits=%d merged_hits=%d top_scores=%s multi_label=%d",
-        k, weights, raw_count, len(ranked),
-        [round(score, 6) for _, score in ranked[:5]],
-        sum(1 for _, _, labels in merged.values() if len(labels) >= 2),
+    logger.debug(
+        "Weighted RRF k=%d raw=%d merged=%d top=%.4f",
+        k, raw_count, len(ranked),
+        ranked[0][1] if ranked else 0,
     )
     return ranked
 
@@ -196,7 +199,7 @@ def dedup_same_section(
 
     removed = len(results) - len(deduped)
     if removed > 0:
-        logger.info("Section dedup removed=%d before=%d after=%d", removed, len(results), len(deduped))
+        logger.debug("Section dedup -%d %d→%d", removed, len(results), len(deduped))
     return deduped
 
 
@@ -206,9 +209,6 @@ def dedup_same_section(
 _WINDOW_SIZE = 2            # 命中 chunk 左右各展开的 chunk 数
 _WINDOW_TOKEN_BUDGET = 6000  # 每 section token 预算（≈4000 中文字 / 24000 英文词）
 _GLOBAL_WINDOW_TOKEN_BUDGET = 12000  # 全局 token 预算上限（多 section 叠加后总量可控）
-
-
-from app.rag.rag_utils import estimate_tokens as _estimate_tokens
 
 
 def _parent_window_expand(docs: list[Document], global_budget: int) -> list[Document]:
@@ -253,10 +253,7 @@ def _parent_window_expand(docs: list[Document], global_budget: int) -> list[Docu
         total_tokens += parent_tokens
 
     if len(result) > len(docs):
-        logger.info(
-            "Parent window expand added=%d total_docs=%d tokens≈%d",
-            len(result) - len(docs), len(result), total_tokens,
-        )
+        logger.debug("Parent window +%d total=%d tokens≈%d", len(result) - len(docs), len(result), total_tokens)
     return result
 
 
@@ -440,10 +437,7 @@ def _chroma_window_expand(
             added += 1
 
         if added > 0:
-            logger.info(
-                "Sentence window expand sec=%s anchor=%d window=[%d,%d] added=%d tokens≈%d",
-                sec_id, anchor_idx, lo, hi, added, window_tokens,
-            )
+            logger.debug("Window expand +%d sec=%s tokens≈%d", added, sec_id, window_tokens)
 
     # 全局 token 预算控制：从尾部（低优先级 window chunk）开始裁剪
     total_tokens = sum(_estimate_tokens(d.page_content) for d in result)
@@ -451,9 +445,81 @@ def _chroma_window_expand(
         while total_tokens > global_budget and len(result) > len(docs):
             removed_doc = result.pop()
             total_tokens -= _estimate_tokens(removed_doc.page_content)
-        logger.info(
-            "Sentence window global budget trim: total_tokens=%d > global_budget=%d, trimmed to %d docs",
-            total_tokens, global_budget, len(result),
-        )
+        logger.debug("Window budget trim: %d tokens > %d budget, → %d docs", total_tokens, global_budget, len(result))
 
     return result
+
+
+# ── Negative Sampling: Window 噪声软降级 ──────────────────
+
+_NOISE_MIN_COVERAGE = 0.15   # chunk 中至少 15% 的 query 关键词被命中才视为相关
+_NOISE_PENALTY_FACTOR = 0.5  # fusion 评分惩罚系数（越低排越后）
+
+
+def downgrade_window_noise(
+    docs: list[Document],
+    query: str,
+    *,
+    is_comparison: bool = False,
+    min_coverage: float = _NOISE_MIN_COVERAGE,
+) -> list[Document]:
+    """对 sentence_window_expand 展开的噪声 chunk 做软降级标记。
+
+    策略 1: 只过滤 window 展开的 chunk（原始检索结果保留）
+    策略 3: 不删除，只标记 _noise_downgraded=True + 降权系数，
+            fusion.py 排序时将其排到末尾，保证 Recall 不丢。
+
+    对比查询豁免：is_comparison=True 时跳过降级，
+    因为对比查询需要两侧 context，误删任一侧都会丢失关键信息。
+
+    Args:
+        docs: sentence_window_expand 后的文档列表
+        query: 原始查询
+        is_comparison: 是否为对比查询（豁免降级）
+        min_coverage: 关键词覆盖率阈值（低于此值视为噪声）
+
+    Returns:
+        标记了 _noise_downgrade_factor 的文档列表（顺序不变）
+    """
+    if not docs or not query or is_comparison:
+        return docs
+
+    terms = _extract_query_terms(query)
+    if not terms:
+        return docs
+
+    # 构建小写关键词集合
+    term_set = {t.lower() for t in terms if len(t) >= 2}
+    if not term_set:
+        return docs
+
+    downgraded = 0
+    for doc in docs:
+        # 只处理 window 展开的 chunk（策略 1: 原始检索结果保留）
+        if not doc.metadata.get("_window_expanded") and not doc.metadata.get("_parent_expanded"):
+            continue
+
+        content_lower = doc.page_content.lower()
+
+        # 计算关键词覆盖率
+        hit = sum(1 for t in term_set if t in content_lower)
+        coverage = hit / len(term_set) if term_set else 0.0
+
+        if coverage < min_coverage:
+            doc.metadata["_noise_downgraded"] = True
+            doc.metadata["_noise_downgrade_factor"] = _NOISE_PENALTY_FACTOR
+            doc.metadata["_noise_coverage"] = round(coverage, 3)
+            downgraded += 1
+        else:
+            # 相关的 window chunk，保留并标记覆盖率供诊断
+            doc.metadata["_noise_coverage"] = round(coverage, 3)
+
+    if downgraded > 0:
+        logger.debug(
+            "Window noise downgrade: query='%s' terms=%s downgraded=%d/%d threshold=%.2f",
+            query[:40], term_set, downgraded,
+            sum(1 for d in docs if d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded")),
+            min_coverage,
+        )
+
+    return docs

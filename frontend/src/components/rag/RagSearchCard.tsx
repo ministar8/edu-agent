@@ -51,6 +51,7 @@ function RagSearchCardComponent({
           onChange={(event) => onQueryChange(event.target.value)}
           onKeyDown={(event) => event.key === "Enter" && onSearch()}
           placeholder="输入检索查询，如：进程死锁的四个必要条件"
+          maxLength={200}
           className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70"
         />
         <button

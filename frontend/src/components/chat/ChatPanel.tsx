@@ -67,6 +67,7 @@ export default function ChatPanel({ state, setState }: ChatPanelProps) {
           streamingAgent={state.streamingAgent}
           activeTool={state.activeTool}
           streamingGovernance={state.streamingGovernance}
+          statusLabel={state.statusLabel}
           messagesEndRef={messagesEndRef}
           onSelectSuggestion={handleSelectSuggestion}
         />

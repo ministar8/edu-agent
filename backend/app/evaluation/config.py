@@ -43,20 +43,9 @@ class EvaluationConfig:
     output_tag: str = ""  # 报告文件名后缀
 
     # ── 检索 ──
-    retrieval_k: int = 8   # RAGAS 评估检索 Top-K（8→给 reranker 更大候选池，提升 recall）
+    retrieval_k: int = 6   # k=6: recall 比 k=5 高 ~5%，rerank 保证第 6 条噪声不影响 AP 前几位
     use_rerank: bool = True
 
     # ── 快速模式 ──
     quick: bool = False  # 合并分组、减少指标，压到 ~5min
 
-
-# 默认 recall 路由名称（metadata 路由见 adapters.py 的 CurrentDiagnosticRetriever.route_names）
-ALL_RECALL_ROUTES = ["semantic", "keyword_bm25", "focus", "expanded", "kg_expand"]
-
-# 耗时监控阈值（超过记警告，ms）
-LATENCY_WARN_THRESHOLD = {
-    "total": 3000,
-    "recall": 1000,
-    "rerank": 500,
-    "window_expand": 200,
-}

@@ -23,22 +23,32 @@ _SYNONYM_RAW: dict[str, str] = {
     "DS": "数据结构",
     "数据结构": "数据结构",
     "BST": "二叉搜索树",
+    "BST树": "二叉搜索树",
     "二叉搜索树": "二叉搜索树",
     "二叉排序树": "二叉搜索树",
     "二叉查找树": "二叉搜索树",
     "AVL": "平衡二叉树",
+    "AVL树": "平衡二叉树",
+    "平衡树": "平衡二叉树",
     "平衡二叉树": "平衡二叉树",
+    "RBT": "红黑树",
     "红黑树": "红黑树",
+    "B-树": "B树",
+    "B Tree": "B树",
     "B树": "B树",
+    "B+ Tree": "B+树",
     "B+树": "B+树",
+    "Hash表": "散列表",
     "哈希表": "散列表",
     "散列表": "散列表",
     "Hash": "散列表",
     "哈希": "散列",
     "散列": "散列",
     "DFS": "深度优先搜索",
+    "深搜": "深度优先搜索",
     "深度优先搜索": "深度优先搜索",
     "BFS": "广度优先搜索",
+    "广搜": "广度优先搜索",
     "广度优先搜索": "广度优先搜索",
     "KMP": "KMP算法",
     "KMP算法": "KMP算法",
@@ -65,6 +75,16 @@ _SYNONYM_RAW: dict[str, str] = {
     "最短路径": "最短路径",
     "Dijkstra": "Dijkstra算法",
     "Dijkstra算法": "Dijkstra算法",
+    "迪杰斯特拉": "Dijkstra算法",
+    "Floyd": "Floyd算法",
+    "Floyd算法": "Floyd算法",
+    "弗洛伊德": "Floyd算法",
+    "Prim": "Prim算法",
+    "Prim算法": "Prim算法",
+    "普里姆": "Prim算法",
+    "Kruskal": "Kruskal算法",
+    "Kruskal算法": "Kruskal算法",
+    "克鲁斯卡尔": "Kruskal算法",
     "拓扑排序": "拓扑排序",
     "AOV": "AOV网",
     "AOV网": "AOV网",
@@ -98,7 +118,12 @@ _SYNONYM_RAW: dict[str, str] = {
     "CU": "控制单元",
     "控制单元": "控制单元",
     "Cache": "高速缓存",
+    "缓存": "高速缓存",
+    "Cache存储器": "高速缓存",
     "高速缓存": "高速缓存",
+    "I/O": "输入输出",
+    "IO": "输入输出",
+    "输入输出": "输入输出",
     "DMA": "直接存储器存取",
     "直接存储器存取": "直接存储器存取",
     "PCB": "进程控制块",
@@ -156,10 +181,17 @@ _SYNONYM_RAW: dict[str, str] = {
     "进程": "进程",
     "线程": "线程",
     "PV操作": "信号量操作",
+    "PV": "信号量操作",
+    "P/V": "信号量操作",
+    "P/V操作": "信号量操作",
     "信号量操作": "信号量操作",
     "P操作": "P操作",
     "V操作": "V操作",
     "信号量": "信号量",
+    "临界区": "临界区",
+    "临界资源": "临界资源",
+    "管程": "管程",
+    "Monitor": "管程",
     "互斥": "互斥",
     "同步": "同步",
     "死锁": "死锁",
@@ -192,10 +224,13 @@ _SYNONYM_RAW: dict[str, str] = {
     "作业调度": "作业调度",
     "磁盘调度": "磁盘调度",
     "FCFS": "先来先服务",
+    "FCFS调度": "先来先服务",
     "先来先服务": "先来先服务",
     "SJF": "短作业优先",
+    "SJF调度": "短作业优先",
     "短作业优先": "短作业优先",
     "RR": "时间片轮转",
+    "RR调度": "时间片轮转",
     "时间片轮转": "时间片轮转",
     "优先级调度": "优先级调度",
     "多级反馈队列": "多级反馈队列",
@@ -207,6 +242,8 @@ _SYNONYM_RAW: dict[str, str] = {
     "扇区": "扇区",
     "磁道": "磁道",
     "柱面": "柱面",
+    "SPOOL": "SPOOLing技术",
+    "Spooling": "SPOOLing技术",
     "SPOOLing": "SPOOLing技术",
     "SPOOLing技术": "SPOOLing技术",
     "用户态": "用户态",
@@ -217,6 +254,8 @@ _SYNONYM_RAW: dict[str, str] = {
     "计网": "计算机网络",
     "计算机网络": "计算机网络",
     "TCP": "传输控制协议",
+    "TCP/IP": "TCP/IP协议",
+    "TCP/IP协议": "TCP/IP协议",
     "传输控制协议": "传输控制协议",
     "UDP": "用户数据报协议",
     "用户数据报协议": "用户数据报协议",
@@ -232,6 +271,7 @@ _SYNONYM_RAW: dict[str, str] = {
     "域名系统": "域名系统",
     "HTTP": "超文本传输协议",
     "HTTPS": "安全超文本传输协议",
+    "安全超文本传输协议": "安全超文本传输协议",
     "FTP": "文件传输协议",
     "文件传输协议": "文件传输协议",
     "SMTP": "简单邮件传输协议",
@@ -252,6 +292,8 @@ _SYNONYM_RAW: dict[str, str] = {
     "子网划分": "子网划分",
     "CIDR": "无类域间路由",
     "无类域间路由": "无类域间路由",
+    "IPv4": "IPv4",
+    "IPv6": "IPv6",
     "三次握手": "TCP三次握手",
     "TCP三次握手": "TCP三次握手",
     "四次挥手": "TCP四次挥手",
@@ -263,6 +305,7 @@ _SYNONYM_RAW: dict[str, str] = {
     "快重传": "快重传",
     "快恢复": "快恢复",
     "CSMA/CD": "CSMA/CD协议",
+    "CSMA": "CSMA/CD协议",
     "CSMA/CD协议": "CSMA/CD协议",
     "以太网": "以太网",
     "集线器": "集线器",
@@ -286,6 +329,16 @@ _SYNONYM_RAW: dict[str, str] = {
     "最大报文段长度": "最大报文段长度",
     "RTT": "往返时延",
     "往返时延": "往返时延",
+    "CRC": "循环冗余校验",
+    "循环冗余校验": "循环冗余校验",
+    "HDLC": "HDLC协议",
+    "HDLC协议": "HDLC协议",
+    "PPP": "PPP协议",
+    "PPP协议": "PPP协议",
+    "GBN": "回退N帧协议",
+    "回退N帧协议": "回退N帧协议",
+    "SR": "选择重传协议",
+    "选择重传协议": "选择重传协议",
     "带宽": "带宽",
     "时延": "时延",
     "吞吐量": "吞吐量",
@@ -310,9 +363,11 @@ _SYNONYM_RAW: dict[str, str] = {
 
 # cleaner 用：含自映射的完整映射
 SYNONYM_MAP: dict[str, str] = dict(_SYNONYM_RAW)
+SYNONYM_MAP_CASEFOLD: dict[str, str] = {k.casefold(): v for k, v in SYNONYM_MAP.items()}
 
 # recall / kg 用：正向映射（不含自映射）
 SYNONYM_FORWARD: dict[str, str] = {k: v for k, v in _SYNONYM_RAW.items() if k != v}
+SYNONYM_FORWARD_CASEFOLD: dict[str, str] = {k.casefold(): v for k, v in SYNONYM_FORWARD.items()}
 
 # recall 用：反向映射（标准词 → 所有变体列表）
 SYNONYM_REVERSE: dict[str, list[str]] = {}
@@ -323,46 +378,73 @@ for _k, _v in _SYNONYM_RAW.items():
             SYNONYM_REVERSE[_v].append(_k)
 
 # recall 用：预编译正则（按长度降序，避免短词先匹配）
-_SYNONYM_EXPAND_KEYS = sorted(SYNONYM_FORWARD.keys(), key=len, reverse=True)
+_SYNONYM_EXPAND_KEYS = sorted(SYNONYM_MAP.keys(), key=len, reverse=True)
 SYNONYM_EXPAND_RE: re.Pattern[str] = re.compile(
-    "|".join(re.escape(k) for k in _SYNONYM_EXPAND_KEYS)
-) if _SYNONYM_EXPAND_KEYS else re.compile(r"(?!)")
+    "|".join(re.escape(k) for k in _SYNONYM_EXPAND_KEYS), re.IGNORECASE
+) if _SYNONYM_EXPAND_KEYS else re.compile(r"(?!)", re.IGNORECASE)
 
 
-def expand_query_with_synonyms(query: str) -> str:
+def _lookup_standard(term: str) -> str:
+    return SYNONYM_MAP.get(term) or SYNONYM_MAP_CASEFOLD.get(term.casefold()) or ""
+
+
+def _is_embedded_ascii_match(text: str, match: re.Match) -> bool:
+    matched = match.group(0)
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_./+-]*", matched):
+        return False
+    start, end = match.span()
+    prev_char = text[start - 1] if start > 0 else ""
+    next_char = text[end] if end < len(text) else ""
+    return bool(
+        (prev_char and re.fullmatch(r"[A-Za-z0-9_]", prev_char))
+        or (next_char and re.fullmatch(r"[A-Za-z0-9_]", next_char))
+    )
+
+
+def expand_query_with_synonyms(query: str, max_expansions: int = 8) -> str:
     """同义词查询扩展：将用户查询中的术语扩展为所有同义表述
 
     例："什么是OS" → "什么是OS 操作系统"
     """
     # 使用共享的 extract_query_terms 获取已有 token（避免重复 jieba 调用）
     from app.rag.rag_utils import extract_query_terms
-    existing = {t.lower() for t in extract_query_terms(query)}
+    existing = {t.casefold() for t in extract_query_terms(query)}
     # 补充英文缩写
     for t in re.findall(r"[A-Za-z_][A-Za-z0-9_\.]{0,}", query):
-        existing.add(t.lower())
+        existing.add(t.casefold())
 
-    query_lower = query.lower()
+    query_lower = query.casefold()
     # 标准词已是 query 子串 → 不重复追加
     for m in SYNONYM_EXPAND_RE.finditer(query):
-        std = SYNONYM_FORWARD[m.group(0)]
-        if std.lower() in query_lower:
-            existing.add(std.lower())
+        if _is_embedded_ascii_match(query, m):
+            continue
+        std = _lookup_standard(m.group(0))
+        if std and std.casefold() in query_lower:
+            existing.add(std.casefold())
 
     expansions: list[str] = []
     seen: set[str] = set()
 
     def _add(term: str) -> None:
-        lower = term.lower()
+        if len(expansions) >= max_expansions:
+            return
+        lower = term.casefold()
         if lower not in seen and lower not in existing:
             seen.add(lower)
             expansions.append(term)
 
     for m in SYNONYM_EXPAND_RE.finditer(query):
+        if _is_embedded_ascii_match(query, m):
+            continue
         matched = m.group(0)
-        standard = SYNONYM_FORWARD[matched]
+        standard = _lookup_standard(matched)
+        if not standard:
+            continue
         _add(standard)
         for variant in SYNONYM_REVERSE.get(standard, []):
             _add(variant)
+        if len(expansions) >= max_expansions:
+            break
 
     if not expansions:
         return query

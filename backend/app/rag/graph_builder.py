@@ -18,9 +18,9 @@ from typing import Any
 
 from langchain_core.documents import Document
 
-from app.rag.rag_utils import get_llm
+from app.rag.rag_utils import estimate_tokens as _estimate_tokens, get_llm
 from app.rag.schemas import KGExtractResult
-from app.rag.rag_utils import estimate_tokens as _estimate_tokens
+
 logger = logging.getLogger(__name__)
 
 # 每次 LLM 调用处理的 chunk 数量
@@ -107,6 +107,17 @@ def _coerce_from_exception(exc: Exception) -> dict[str, Any] | None:
         all_edges: list[dict[str, str]] = []
         for err in exc.errors():
             payload = err.get("input")
+            # LLM returned empty list instead of object
+            if isinstance(payload, list):
+                if len(payload) == 0:
+                    continue
+                # Try to coerce each item in the list
+                for item in payload:
+                    if isinstance(item, dict):
+                        coerced = _coerce_kg_payload(item)
+                        all_nodes.extend(coerced["nodes"])
+                        all_edges.extend(coerced["edges"])
+                continue
             if not isinstance(payload, dict):
                 continue
             # 单个 edge dict（含 source/target/type 但缺 relation）
@@ -143,7 +154,7 @@ def _coerce_from_exception(exc: Exception) -> dict[str, Any] | None:
 
 def _extract_with_structured_output(content: str, retry_on_empty: bool = True) -> dict[str, Any]:
     """结构化 KG 抽取：with_structured_output(KGExtractResult) + 截断重试"""
-    llm = get_llm()
+    llm = get_llm(use_fast=False)
     structured_llm = llm.with_structured_output(KGExtractResult)
     truncated = _truncate_to_token_budget(content, _MAX_BATCH_TOKENS)
     prompt = _EXTRACT_PROMPT.format(content=truncated)
@@ -177,7 +188,7 @@ def _extract_with_structured_output(content: str, retry_on_empty: bool = True) -
 
 async def _aextract_with_structured_output(content: str, retry_on_empty: bool = True) -> dict[str, Any]:
     """异步结构化 KG 抽取"""
-    llm = get_llm()
+    llm = get_llm(use_fast=False)
     structured_llm = llm.with_structured_output(KGExtractResult)
     truncated = _truncate_to_token_budget(content, _MAX_BATCH_TOKENS)
     prompt = _EXTRACT_PROMPT.format(content=truncated)
@@ -210,28 +221,69 @@ async def _aextract_with_structured_output(content: str, retry_on_empty: bool = 
 
 def _extract_via_json_fallback(content: str) -> dict[str, Any]:
     """Plain JSON fallback：普通 LLM 调用 + 手动 JSON 解析"""
-    llm = get_llm(streaming=False, temperature=0.0)
+    llm = get_llm(streaming=False, temperature=0.0).bind(max_tokens=4096)
     truncated = _truncate_to_token_budget(content, _MAX_BATCH_TOKENS)
     prompt = _JSON_FALLBACK_PROMPT.format(content=truncated)
-    try:
-        raw = llm.invoke(prompt)
-        text = str(raw.content if hasattr(raw, "content") else raw).strip()
-        # 去除 markdown 代码块包裹
-        if text.startswith("```"):
-            first_nl = text.find("\n")
-            text = text[first_nl + 1:] if first_nl >= 0 else text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start < 0 or end <= start:
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            raw = llm.invoke(prompt)
+            text = str(raw.content if hasattr(raw, "content") else raw).strip()
+            # 去除 markdown 代码块包裹
+            if text.startswith("```"):
+                first_nl = text.find("\n")
+                text = text[first_nl + 1:] if first_nl >= 0 else text[3:]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start < 0 or end <= start:
+                if attempt < _MAX_RETRIES:
+                    budget = _MAX_BATCH_TOKENS // (2 ** (attempt + 1))
+                    truncated = _truncate_to_token_budget(content, budget)
+                    prompt = _JSON_FALLBACK_PROMPT.format(content=truncated)
+                    logger.info("KG JSON fallback no JSON found, retry with budget=%d", budget)
+                    continue
+                return {"nodes": [], "edges": []}
+            parsed = json.loads(text[start:end])
+            result = _coerce_kg_payload(parsed)
+            # 空结果重试（可能输入过长导致输出截断）
+            if not result.get("nodes") and not result.get("edges") and attempt < _MAX_RETRIES:
+                budget = _MAX_BATCH_TOKENS // (2 ** (attempt + 1))
+                truncated = _truncate_to_token_budget(content, budget)
+                prompt = _JSON_FALLBACK_PROMPT.format(content=truncated)
+                logger.info("KG JSON fallback empty result, retry with budget=%d", budget)
+                continue
+            return result
+        except json.JSONDecodeError as e:
+            logger.warning("KG JSON fallback parse error (attempt %d): %s", attempt + 1, e)
+            if attempt < _MAX_RETRIES:
+                budget = _MAX_BATCH_TOKENS // (2 ** (attempt + 1))
+                truncated = _truncate_to_token_budget(content, budget)
+                prompt = _JSON_FALLBACK_PROMPT.format(content=truncated)
+                continue
             return {"nodes": [], "edges": []}
-        parsed = json.loads(text[start:end])
-        return _coerce_kg_payload(parsed)
-    except Exception as e:
-        logger.warning("KG JSON fallback failed: %s", e)
-        return {"nodes": [], "edges": []}
+        except Exception as e:
+            logger.warning("KG JSON fallback failed: %s", e)
+            return {"nodes": [], "edges": []}
+    return {"nodes": [], "edges": []}
+
+
+def _skip_structured_output() -> bool:
+    """检测当前 LLM 是否不支持 with_structured_output（如 DeepSeek-flash / Qwen via DashScope）"""
+    from app.config import settings
+    model = (settings.LLM_MODEL or "").lower()
+    base = (settings.LLM_API_BASE or "").lower()
+    # DeepSeek 官方 API 不支持 response_format（所有模型）
+    if "deepseek" in base or "deepseek" in model:
+        return True
+    # Qwen via DashScope: with_structured_output uses response_format=json_object,
+    # but DashScope requires 'json' in messages which gets overridden → 400 error
+    if "dashscope" in base and "qwen" in model:
+        return True
+    if "qwen" in model and "dashscope" in base:
+        return True
+    return False
 
 
 def extract_knowledge_from_text(content: str) -> dict[str, Any]:
@@ -240,6 +292,10 @@ def extract_knowledge_from_text(content: str) -> dict[str, Any]:
     Returns:
         {"nodes": [...], "edges": [...]}
     """
+    from app.config import settings as _settings
+    if _skip_structured_output():
+        logger.info("KG: skipping structured output (model=%s), using JSON fallback", _settings.LLM_MODEL)
+        return _extract_via_json_fallback(content)
     result = _extract_with_structured_output(content)
     if result.get("nodes") or result.get("edges"):
         return result
@@ -250,6 +306,10 @@ def extract_knowledge_from_text(content: str) -> dict[str, Any]:
 
 async def aextract_knowledge_from_text(content: str) -> dict[str, Any]:
     """从文本中提取知识点和关系（异步，先 structured output，空则 fallback）"""
+    from app.config import settings as _settings
+    if _skip_structured_output():
+        logger.info("KG: skipping structured output (model=%s), using JSON fallback", _settings.LLM_MODEL)
+        return _extract_via_json_fallback(content)
     result = await _aextract_with_structured_output(content)
     if result.get("nodes") or result.get("edges"):
         return result
@@ -282,15 +342,13 @@ def build_graph_from_documents(
     total_nodes = 0
     total_edges = 0
     errors = 0
-    total_batches = (len(documents) + batch_size - 1) // batch_size
 
     for i in range(0, len(documents), batch_size):
-        batch_idx = i // batch_size + 1
         batch = documents[i:i + batch_size]
         # 拼接 batch 内的 chunk 内容
         combined = "\n\n---\n\n".join(doc.page_content for doc in batch)
 
-        print(f"    [KG] 批次 {batch_idx}/{total_batches} ({source_file}) LLM 抽取中...", end="", flush=True)
+        logger.info("[KG] 批次 LLM 抽取中...")
         result = extract_knowledge_from_text(combined)
         n_nodes = len(result.get("nodes", []))
         n_edges = len(result.get("edges", []))
@@ -304,7 +362,7 @@ def build_graph_from_documents(
 
         # 写入知识图谱
         try:
-            # 添加节点
+            # 先添加节点（确保 MATCH 能找到）
             for node in nodes:
                 name = node.get("name", "").strip()
                 desc = node.get("description", "").strip()
@@ -317,16 +375,16 @@ def build_graph_from_documents(
                     )
                     total_nodes += 1
 
-            # 添加关系
+            # 再添加关系（使用 MERGE 确保端点节点存在）
             for edge in edges:
                 source = edge.get("source", "").strip()
                 target = edge.get("target", "").strip()
                 relation = edge.get("relation", "RELATED_TO").strip()
                 if source and target:
                     if relation == "PREREQUISITE_OF":
-                        kg_manager.add_prerequisite(source, target)
+                        kg_manager.add_prerequisite(source, target, category=category)
                     else:
-                        kg_manager.add_related(source, target)
+                        kg_manager.add_related(source, target, category=category)
                     total_edges += 1
 
         except Exception as e:
@@ -382,6 +440,7 @@ async def abuild_graph_from_documents(
 
         try:
             # 写入图谱（同步操作，用 to_thread 包裹）
+            # 先写节点再写边，确保 MERGE 时端点节点已存在
             def _write_graph():
                 n, e = 0, 0
                 for node in nodes:
@@ -399,9 +458,9 @@ async def abuild_graph_from_documents(
                     relation = edge.get("relation", "RELATED_TO").strip()
                     if source and target:
                         if relation == "PREREQUISITE_OF":
-                            kg_manager.add_prerequisite(source, target)
+                            kg_manager.add_prerequisite(source, target, category=category)
                         else:
-                            kg_manager.add_related(source, target)
+                            kg_manager.add_related(source, target, category=category)
                         e += 1
                 return n, e
 

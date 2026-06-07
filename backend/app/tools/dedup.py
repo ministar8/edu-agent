@@ -12,12 +12,16 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-import sys
-from typing import Optional
 
 from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
+
+
+def _doc_source(doc: Document) -> str:
+    """提取文档的 source_path 或 source_file 标识"""
+    return str(doc.metadata.get("source_path") or doc.metadata.get("source_file") or "unknown")
+
 
 # ── 内存与性能控制 ──────────────────────────────────
 
@@ -109,7 +113,7 @@ def exact_dedup(documents: list[Document]) -> tuple[list[Document], list[dict]]:
 # ── 模糊去重 ────────────────────────────────────────
 
 # 默认 MinHash 参数
-_DEFAULT_NUM_perm = 128       # 排列数（越高越精确，越慢）
+_DEFAULT_NUM_PERM = 128       # 排列数（越高越精确，越慢）
 _DEFAULT_THRESHOLD = 0.9      # 相似度阈值
 _DEFAULT_NGRAM = 3            # n-gram 长度
 
@@ -134,7 +138,7 @@ def _shingle_ngrams(text: str, n: int = _DEFAULT_NGRAM) -> set[str]:
     return ngrams
 
 
-def _compute_minhash(ngrams: set[str], num_perm: int = _DEFAULT_NUM_perm) -> object:
+def _compute_minhash(ngrams: set[str], num_perm: int = _DEFAULT_NUM_PERM) -> object:
     """计算 MinHash 签名
 
     优先使用 datasketch 库，降级为内置实现。
@@ -177,7 +181,7 @@ class _SimpleMinHash:
 def fuzzy_dedup(
     documents: list[Document],
     similarity_threshold: float = _DEFAULT_THRESHOLD,
-    num_perm: int = _DEFAULT_NUM_perm,
+    num_perm: int = _DEFAULT_NUM_PERM,
     ngram_size: int = _DEFAULT_NGRAM,
 ) -> tuple[list[Document], list[dict]]:
     """模糊去重：使用 MinHash + LSH 识别高度相似记录
@@ -308,8 +312,8 @@ def _lsh_batch(
 
             if sim >= threshold:
                 duplicate_indices.add(j)
-                source_j = str(documents[j].metadata.get("source_path") or documents[j].metadata.get("source_file") or "unknown")
-                source_i = str(documents[i].metadata.get("source_path") or documents[i].metadata.get("source_file") or "unknown")
+                source_j = _doc_source(documents[j])
+                source_i = _doc_source(documents[i])
                 duplicates.append({
                     "source": source_j,
                     "duplicate_of": source_i,
@@ -365,8 +369,8 @@ def _lsh_batched(
                 sim = minhashes[i].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
                 if sim >= threshold:
                     duplicate_indices.add(j)
-                    source_j = str(documents[j].metadata.get("source_path") or documents[j].metadata.get("source_file") or "unknown")
-                    source_i = str(documents[i].metadata.get("source_path") or documents[i].metadata.get("source_file") or "unknown")
+                    source_j = _doc_source(documents[j])
+                    source_i = _doc_source(documents[i])
                     duplicates.append({
                         "source": source_j,
                         "duplicate_of": source_i,
@@ -390,8 +394,8 @@ def _lsh_batched(
                     sim = minhashes[i].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
                     if sim >= threshold:
                         duplicate_indices.add(j)
-                        source_j = str(documents[j].metadata.get("source_path") or documents[j].metadata.get("source_file") or "unknown")
-                        source_i = str(documents[i].metadata.get("source_path") or documents[i].metadata.get("source_file") or "unknown")
+                        source_j = _doc_source(documents[j])
+                        source_i = _doc_source(documents[i])
                         duplicates.append({
                             "source": source_j,
                             "duplicate_of": source_i,
@@ -437,8 +441,8 @@ def _brute_force_batched(
                 sim = minhashes[i].jaccard(minhashes[j])
                 if sim >= threshold:
                     duplicate_indices.add(j)
-                    source_j = str(documents[j].metadata.get("source_path") or documents[j].metadata.get("source_file") or "unknown")
-                    source_i = str(documents[i].metadata.get("source_path") or documents[i].metadata.get("source_file") or "unknown")
+                    source_j = _doc_source(documents[j])
+                    source_i = _doc_source(documents[i])
                     duplicates.append({
                         "source": source_j,
                         "duplicate_of": source_i,
@@ -454,7 +458,7 @@ def dedup_documents(
     exact: bool = True,
     fuzzy: bool = True,
     fuzzy_threshold: float = _DEFAULT_THRESHOLD,
-    num_perm: int = _DEFAULT_NUM_perm,
+    num_perm: int = _DEFAULT_NUM_PERM,
 ) -> tuple[list[Document], list[dict]]:
     """组合去重：先精确去重，再模糊去重
 

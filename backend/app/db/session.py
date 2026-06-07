@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path(settings.KNOWLEDGE_DIR).resolve().parent / "edu_agent.db"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
@@ -17,7 +20,6 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
-
 
 def init_db() -> None:
     from app.db.models import Base as ModelsBase
@@ -58,7 +60,6 @@ def init_db() -> None:
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_sks_user_kp "
                     "ON student_knowledge_state (user_id, knowledge_point_id)"
                 ))
-
 
 def get_db():
     db = SessionLocal()

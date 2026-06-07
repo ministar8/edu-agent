@@ -10,8 +10,6 @@ from __future__ import annotations
 import logging
 import re
 
-import jieba
-
 from app.rag.query_classifier import classify_query, QueryCategory
 from app.rag.synonyms import expand_query_with_synonyms
 from app.rag.rag_utils import normalize_query_text, extract_query_terms, get_bm25_stop_words
@@ -19,6 +17,15 @@ from app.rag.rag_utils import normalize_query_text, extract_query_terms, get_bm2
 logger = logging.getLogger(__name__)
 
 _BM25_STOP_WORDS = get_bm25_stop_words()
+
+
+def _contains_collection_keyword(text: str, keyword: str) -> bool:
+    key = keyword.lower()
+    if not key:
+        return False
+    if not re.fullmatch(r"[a-z0-9_./+-]+", key):
+        return key in text
+    return re.search(rf"(?<![a-z0-9_]){re.escape(key)}(?![a-z0-9_])", text) is not None
 
 
 def combine_filters(base_filter: dict | None, extra_filter: dict | None) -> dict | None:
@@ -94,11 +101,10 @@ def build_recall_queries(
         focus_terms = ranked_terms[:min(3, len(ranked_terms))]
         routes.append(("focus", " ".join(focus_terms)))
 
-    # expanded 路由：短查询/代码查询/概念查询跳过
-    # 技术术语（"虚拟存储器""银行家算法"）同义词扩展只会引入噪声
-    if not cat.is_short and not cat.is_code and not cat.is_concept:
-        expanded = expand_query_with_synonyms(normalized)
-        if expanded != normalized:
+    # expanded 路由：短查询仅在含英文缩写时启用
+    if not cat.is_code:
+        expanded = expand_query_with_synonyms(normalized, max_expansions=4 if cat.is_short else 6)
+        if expanded != normalized and (not cat.is_short or re.search(r"[A-Za-z]", normalized)):
             routes.append(("expanded", expanded))
 
     deduped: list[tuple[str, str]] = []
@@ -266,18 +272,20 @@ _COLLECTION_KEYWORDS = {
         "树", "二叉树", "森林", "哈夫曼", "图", "查找", "散列", "哈希", "排序",
         "avl", "红黑树", "b树", "b+树", "最短路径", "最小生成树", "拓扑排序",
         "关键路径", "迪杰斯特拉", "弗洛伊德", "普里姆", "克鲁斯卡尔",
+        "bst", "rbt", "mst", "dijkstra", "floyd", "prim", "kruskal", "bfs", "dfs",
     ),
     "computer_organization": (
         "计组", "组成原理", "计算机组成", "cpu", "中央处理器", "指令系统", "总线", "存储器",
         "cache", "高速缓存", "主存", "磁盘", "运算器", "控制器", "流水线", "io系统", "输入输出",
         "指令流水线", "微程序", "中断", "dma", "寻址方式", "浮点数", "补码", "alu",
-        "tlb", "快表", "页表", "段表", "虚拟存储器", "存储层次",
+        "tlb", "快表", "页表", "段表", "虚拟存储器", "存储层次", "co", "i/o", "io",
     ),
     "operating_system": (
         "操作系统", "进程", "线程", "进程调度", "死锁", "同步", "互斥", "信号量", "pv操作",
         "内存管理", "分页", "分段", "虚拟内存", "虚拟存储器", "文件管理", "文件系统", "设备管理",
         "进程通信", "管道", "共享内存", "银行家算法", "页面置换", "lru", "磁盘调度",
         "作业调度", "进程状态", "就绪", "阻塞", "时间片",
+        "os", "pv", "p/v", "管程", "monitor", "spooling", "spooling技术", "fcfs", "sjf", "rr",
     ),
     "computer_network": (
         "计网", "计算机网络", "物理层", "数据链路层", "网络层", "传输层",
@@ -285,15 +293,18 @@ _COLLECTION_KEYWORDS = {
         "三次握手", "四次挥手", "滑动窗口", "子网掩码", "mac地址", "arp",
         "csma", "路由协议", "ospf", "rip", "bgp", "nat", "dhcp", "icmp",
         "曼彻斯特", "波特率", "带宽", "时延", "吞吐量",
+        "cidr", "无类域间路由", "tcp/ip", "ipv4", "ipv6", "mtu", "mss", "rtt", "crc",
+        "hdlc", "ppp", "gbn", "sr",
     ),
 }
 
 
 def _infer_subject_collections(query: str) -> list[str]:
     normalized = normalize_query_text(query).lower()
+    expanded = expand_query_with_synonyms(normalized, max_expansions=6).lower()
     matched: list[str] = []
     for collection, keywords in _COLLECTION_KEYWORDS.items():
-        if any(keyword.lower() in normalized for keyword in keywords):
+        if any(_contains_collection_keyword(normalized, keyword) or _contains_collection_keyword(expanded, keyword) for keyword in keywords):
             matched.append(collection)
     return matched
 

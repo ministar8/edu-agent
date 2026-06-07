@@ -32,6 +32,7 @@ function QuestionFormComponent({ state, onChange, onGenerate }: QuestionFormProp
             value={state.topic}
             onChange={(event) => onChange({ topic: event.target.value })}
             placeholder="如：操作系统-进程调度"
+            maxLength={100}
             className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-400 focus:ring-4 focus:ring-slate-200/70"
           />
           <div className="mt-3 flex flex-wrap gap-2">

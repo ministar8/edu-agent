@@ -102,7 +102,7 @@ export function IconDashboard(props: IconProps) {
 
 export function IconGraduation(props: IconProps) {
   return (
-    <SvgIcon {...props} viewBox="0 0 24 24">
+    <SvgIcon {...props}>
       <path d="M22 10.5V6L12 1 2 6l10 5 8-4" />
       <path d="M6 10v3c0 3 3 6 6 6s6-3 6-6v-3" />
       <path d="M22 10.5V17" />

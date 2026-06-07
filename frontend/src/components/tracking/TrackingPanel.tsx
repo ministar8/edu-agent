@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { http } from "@/lib/http";
 import { getErrorMessage } from "@/lib/errors";
+import { knowledgeCategories } from "@/lib/collections";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -57,20 +58,17 @@ interface KnowledgePointDetail {
 
 // ── Category label map ───────────────────────────────────────
 
-const CATEGORY_LABELS: Record<string, string> = {
-  data_structure: "数据结构",
-  computer_organization: "计算机组成原理",
-  operating_system: "操作系统",
-  computer_network: "计算机网络",
-  questions: "题库",
-  learning_paths: "学习路径",
-  answers: "标准答案",
-};
+const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
+  knowledgeCategories.map((c) => [c.value, c.label]),
+);
+// Extra categories not in knowledgeCategories but returned by tracking API
+CATEGORY_LABELS.learning_paths = "学习路径";
+CATEGORY_LABELS.answers = "标准答案";
 
 // ── Radar Chart (pure SVG) ───────────────────────────────────
 
 function RadarChart({ data }: { data: CategoryStat[] }) {
-  if (!data.length) return null;
+  if (data.length < 3) return null;
 
   const size = 280;
   const cx = size / 2;
@@ -81,7 +79,8 @@ function RadarChart({ data }: { data: CategoryStat[] }) {
 
   const point = (i: number, value: number) => {
     const angle = -Math.PI / 2 + i * angleStep;
-    const dist = r * value;
+    const clamped = Math.max(0, Math.min(1, value));
+    const dist = r * clamped;
     return { x: cx + dist * Math.cos(angle), y: cy + dist * Math.sin(angle) };
   };
 
@@ -148,7 +147,7 @@ function RadarChart({ data }: { data: CategoryStat[] }) {
 // ── Mastery bar ──────────────────────────────────────────────
 
 function MasteryBar({ value, label }: { value: number; label?: string }) {
-  const pct = Math.round(value * 100);
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
   const color =
     pct >= 60 ? "bg-emerald-500" : pct >= 30 ? "bg-amber-500" : "bg-red-500";
   return (
@@ -172,6 +171,12 @@ export default function TrackingPanel() {
   const [categoryDetail, setCategoryDetail] = useState<CategoryDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   // Fetch profile + weak points + recommendations
   useEffect(() => {
@@ -183,13 +188,15 @@ export default function TrackingPanel() {
           http.get("/api/tracking/weak-points", { params: { threshold: 0.3, limit: 10 } }),
           http.get("/api/tracking/recommendations", { params: { limit: 5 } }),
         ]);
+        if (!mountedRef.current) return;
         setProfile(pRes.data?.data?.categories || []);
         setWeakPoints(wRes.data?.data || []);
         setRecommendations(rRes.data?.data || []);
       } catch (e: unknown) {
+        if (!mountedRef.current) return;
         setError(getErrorMessage(e, "加载失败"));
       } finally {
-        setLoading(false);
+        if (mountedRef.current) setLoading(false);
       }
     })();
   }, []);
@@ -201,9 +208,9 @@ export default function TrackingPanel() {
       return;
     }
     http
-      .get(`/api/tracking/category/${selectedCategory}`)
-      .then((res) => setCategoryDetail(res.data?.data || null))
-      .catch(() => setCategoryDetail(null));
+      .get(`/api/tracking/category/${encodeURIComponent(selectedCategory)}`)
+      .then((res) => { if (mountedRef.current) setCategoryDetail(res.data?.data || null); })
+      .catch(() => { if (mountedRef.current) setCategoryDetail(null); });
   }, [selectedCategory]);
 
   if (loading) {
@@ -314,8 +321,8 @@ export default function TrackingPanel() {
                         <MasteryBar value={kp.effective_score} label="掌握度" />
                         <div className="flex gap-4 text-xs text-slate-400">
                           <span>交互 {kp.interaction_count} 次</span>
-                          <span>置信度 {Math.round(kp.confidence * 100)}%</span>
-                          <span>难度 {kp.difficulty.toFixed(1)}</span>
+                          <span>置信度 {typeof kp.confidence === "number" ? Math.round(kp.confidence * 100) + "%" : "-"}</span>
+                          <span>难度 {typeof kp.difficulty === "number" ? kp.difficulty.toFixed(1) : "-"}</span>
                         </div>
                       </>
                     )}
@@ -345,8 +352,8 @@ export default function TrackingPanel() {
                     </div>
                     <MasteryBar value={wp.effective_score} label="有效分" />
                     <div className="flex gap-4 text-xs text-slate-400">
-                      <span>掌握度 {Math.round(wp.mastery * 100)}%</span>
-                      <span>置信度 {Math.round(wp.confidence * 100)}%</span>
+                      <span>掌握度 {typeof wp.mastery === "number" ? Math.round(wp.mastery * 100) + "%" : "-"}</span>
+                      <span>置信度 {typeof wp.confidence === "number" ? Math.round(wp.confidence * 100) + "%" : "-"}</span>
                       <span>交互 {wp.interaction_count} 次</span>
                     </div>
                   </div>

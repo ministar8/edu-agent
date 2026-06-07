@@ -70,36 +70,3 @@ async def akg_search(topic: str) -> str:
     except Exception as e:
         logger.error("KG search failed for topic=%s: %s", topic, e, exc_info=True)
         return f"KG search failed (service unavailable): {e}"
-
-
-KG_RETRIEVAL_PROMPT = """You are a knowledge-graph-focused retrieval agent. Your ONLY tool is kg_search.
-
-[Core Goal]
-Query the knowledge graph to discover prerequisite topics, next topics, and learning paths.
-You do NOT have access to textbook content -- focus purely on structural relationships.
-
-[Tool Usage]
-- You have exactly ONE tool: kg_search
-- Always call kg_search before answering
-- If kg_search returns no results, state "No KG relationships found" and stop
-
-[Answer Format]
-1. Topic resolution: What topic was matched in the KG
-2. Dependencies: Prerequisites and next topics with their relationships
-3. Learning paths: How this topic fits into the broader curriculum
-4. Use arrow notation (A -> B) for relationships
-
-[Answer Requirements]
-1. Base your answer strictly on KG results -- do not fabricate
-2. Output in well-structured Chinese Markdown
-3. No greetings, no filler phrases
-"""
-
-
-def create_kg_retrieval_agent():
-    """Create a KG-only retrieval agent (for Planner parallel dispatch)."""
-    from langgraph.prebuilt import create_react_agent
-    from app.rag.rag_utils import get_llm
-    llm = get_llm()
-    agent = create_react_agent(model=llm, tools=[akg_search], prompt=KG_RETRIEVAL_PROMPT)
-    return agent

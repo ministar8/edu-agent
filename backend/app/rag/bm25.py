@@ -7,9 +7,9 @@ from __future__ import annotations
 
 import logging
 import math
+import time
 
 from langchain_core.documents import Document
-import time
 
 logger = logging.getLogger(__name__)
 
