@@ -1,51 +1,68 @@
-# ── Python ──────────────────────────────────────────────
+# ── Python ─────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*.pyc
-*.egg-info/
+*.pyo
+*.pyd
 *.egg
-dist/
+*.egg-info/
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 build/
+dist/
 venv/
 .venv/
+env/
 
-# ── Environment ────────────────────────────────────────
+# ── Node / Next.js ─────────────────────────────────────
+node_modules/
+.next/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ── Environment / Secrets ──────────────────────────────
 .env
 .env.local
 .env.*.local
+!.env.example
 
-# ── IDE ────────────────────────────────────────────────
+# ── Local IDE / Editor ─────────────────────────────────
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# ── Node / Frontend ────────────────────────────────────
-node_modules/
-.next/
-out/
-tsconfig.tsbuildinfo
-next-env.d.ts
-
-# ── Database ────────────────────────────────────────────
+# ── Database / Runtime Storage ─────────────────────────
 *.db
+*.sqlite
 *.sqlite3
 chroma_db/
 
-# ── Data & Logs ────────────────────────────────────────
+# ── Generated Data / Logs ──────────────────────────────
 backend/data/
+logs/
 *.log
 
-# ── OS ─────────────────────────────────────────────────
+# ── Local Knowledge / Thesis Materials ─────────────────
+knowledge/general/
+knowledge/questions/
+knowledge/answers/
+docs/
+
+# ── OS Files ───────────────────────────────────────────
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# ── Knowledge content (tracked via .gitkeep only) ──────
-knowledge/general/
-knowledge/questions/
-knowledge/answers/
-
-# ── Temporary / scratch scripts ──────────────────────────
+# ── Temporary / Scratch Scripts ────────────────────────
 _*.py
 !__init__.py
