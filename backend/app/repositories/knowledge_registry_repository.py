@@ -92,6 +92,15 @@ class KnowledgeRegistryRepository:
         except Exception:
             return None
 
+    @staticmethod
+    def find_id_by_name_with_managed_session(knowledge_point_name: str) -> int | None:
+        try:
+            with SessionLocal() as db:
+                registry = KnowledgeRegistryRepository(db).find_by_name(knowledge_point_name)
+                return registry.id if registry else None
+        except Exception:
+            return None
+
 
 def _has_difficulty_keyword(heading_path: str) -> bool:
     keywords = {
