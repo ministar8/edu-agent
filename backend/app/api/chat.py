@@ -5,14 +5,13 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 
 from app.api.auth import get_current_user
 from app.config import settings
 from app.agents.trace_utils import collect_sources_from_steps
 from app.core.dependencies import get_chat_message_service
 from app.db import User
-from app.schemas import ChatRequest, ChatResponse, ConversationDetail, ConversationItem
+from app.schemas import ChatRequest, ChatResponse, ConversationDetail, ConversationItem, FeedbackRequest
 from app.services.chat_message_service import ChatMessageService
 from app.services.chat_metrics_service import emit_chat_baseline_metric as _emit_chat_baseline_metric
 from app.services.chat_metrics_service import make_metric_emitter as _make_metric_emitter
@@ -1189,14 +1188,6 @@ async def delete_conversation(
     if not service.delete_conversation(conversation_id, current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
     return {"success": True}
-
-
-class FeedbackRequest(BaseModel):
-    thread_id: str
-    rating: int = 0  # 1=like, -1=dislike
-    query: str = ""
-    answer: str = ""
-    metadata: dict = Field(default_factory=dict)
 
 
 @router.post("/feedback")
