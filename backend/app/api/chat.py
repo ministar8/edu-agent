@@ -23,6 +23,7 @@ from app.services.chat_stream_helpers import deadline_remaining as _deadline_rem
 from app.services.chat_stream_helpers import sse as _sse
 from app.services.chat_feedback_service import ChatFeedbackService
 from app.services.chat_tracking_service import ChatTrackingService
+from app.services.chat_stream_policy import should_fast_stream_simple_knowledge as _should_fast_stream_simple_knowledge
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -186,37 +187,6 @@ def _persist_message(conv_id: int, role: str, text: str, *, parent_id: int | Non
         parent_id=parent_id,
         **kwargs,
     )
-
-
-def _should_fast_stream_simple_knowledge(query: str) -> bool:
-    try:
-        from app.agents.supervisor import _rule_based_route
-        from app.rag.query_classifier import classify_query
-        from app.rag.rag_utils import extract_query_terms, normalize_query_text
-        from app.rag.retrieval_strategy import resolve_retrieval_strategy
-
-        if _rule_based_route(query) != "knowledge_agent":
-            return False
-        normalized = normalize_query_text(query)
-        terms = extract_query_terms(normalized)
-        cat = classify_query(query, terms)
-        strategy = resolve_retrieval_strategy(cat)
-        if strategy.layer not in {"L1", "L2"}:
-            return False
-        if (
-            cat.is_code
-            or cat.is_exercise
-            or cat.is_answer
-            or cat.is_comparison
-            or cat.is_learning_path
-        ):
-            return False
-        if strategy.layer == "L2" and (cat.is_long or not cat.is_concept):
-            return False
-        return True
-    except Exception as e:
-        logger.debug("Fast-stream eligibility check skipped: %s", e)
-        return False
 
 
 @router.post("/stream")
