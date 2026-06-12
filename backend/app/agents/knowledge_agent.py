@@ -1,13 +1,12 @@
 import logging
 
 from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
 
 from app.rag.retriever import aretrieve_evidence_with_retry
-from app.rag.rag_utils import get_llm
 from app.rag.query_classifier import TEXT_ONLY_DEPTH
 from app.agents.kg_tools import akg_search
 from app.agents.prompts import KNOWLEDGE_AGENT_SYSTEM_PROMPT as KNOWLEDGE_AGENT_PROMPT
+from app.agents.agent_factory import ReactAgentSpec, create_react_tool_agent
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +71,14 @@ async def aknowledge_search(query: str) -> str:
 
 def create_knowledge_agent():
     """Create knowledge agent with 3-tool layered retrieval."""
-    llm = get_llm(use_fast=True)  # ReAct 工具选择用 fast 模型，检索工具内部用 max
-    agent = create_react_agent(
-        model=llm,
-        tools=[
-            aknowledge_search,
-            atext_search,
-            akg_search,
-        ],
-        prompt=KNOWLEDGE_AGENT_PROMPT,
+    return create_react_tool_agent(
+        ReactAgentSpec(
+            name="knowledge_agent",
+            prompt=KNOWLEDGE_AGENT_PROMPT,
+            tools=[
+                aknowledge_search,
+                atext_search,
+                akg_search,
+            ],
+        )
     )
-    return agent
