@@ -11,18 +11,14 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
-from app.db import User, get_db
+from app.core.dependencies import get_tracking_query_service
+from app.db import User
 from app.services.knowledge_tracker import get_knowledge_tracker
 from app.services.tracking_query_service import TrackingQueryService
 
 router = APIRouter()
-
-
-def get_tracking_query_service(db: Session = Depends(get_db)) -> TrackingQueryService:
-    return TrackingQueryService(db)
 
 
 # ── 学生画像 ─────────────────────────────────────────────────

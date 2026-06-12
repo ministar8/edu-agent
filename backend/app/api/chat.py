@@ -6,12 +6,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.config import settings
 from app.agents.trace_utils import collect_sources_from_steps
-from app.db import User, get_db
+from app.core.dependencies import get_chat_message_service
+from app.db import User
 from app.events import TrackingEvent, emit, extract_kp_ids_from_docs, extract_kp_ids_from_steps
 from app.schemas import ChatRequest, ChatResponse, ConversationDetail, ConversationItem
 from app.services.chat_message_service import ChatMessageService
@@ -27,12 +27,6 @@ from app.rag.feedback import log_feedback
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def get_chat_message_service(db: Session = Depends(get_db)) -> ChatMessageService:
-    return ChatMessageService(db)
-
-
 
 
 async def _maybe_summarize_conversation(conversation_id: int) -> None:

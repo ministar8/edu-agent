@@ -2,10 +2,10 @@ import asyncio
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
-from app.db import User, get_db
+from app.core.dependencies import get_question_service
+from app.db import User
 from app.schemas.questions import (
     GradeRequest,
     GradeResponse,
@@ -23,10 +23,6 @@ from app.services.question_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def get_question_service(db: Session = Depends(get_db)) -> QuestionService:
-    return QuestionService(db)
 
 
 # ── 出题接口 ──────────────────────────────────────────────────
