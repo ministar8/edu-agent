@@ -22,8 +22,8 @@ from app.services.chat_stream_helpers import build_timeout_governance as _build_
 from app.services.chat_stream_helpers import chunk_text as _chunk_text
 from app.services.chat_stream_helpers import deadline_remaining as _deadline_remaining
 from app.services.chat_stream_helpers import sse as _sse
+from app.services.chat_feedback_service import ChatFeedbackService
 from app.services.chat_tracking_service import ChatTrackingService
-from app.rag.feedback import log_feedback
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -1209,17 +1209,14 @@ async def submit_feedback(
     Records like/dislike with query context for periodic bad case clustering.
     """
     try:
-        log_feedback(
-            query=request.query or "",
-            answer=request.answer or "",
+        return ChatFeedbackService.submit_feedback(
+            user_id=current_user.id,
+            thread_id=request.thread_id,
             rating=request.rating,
-            metadata={
-                "thread_id": request.thread_id,
-                "user_id": current_user.id,
-                **(request.metadata or {}),
-            },
+            query=request.query,
+            answer=request.answer,
+            metadata=request.metadata,
         )
-        return {"status": "ok", "rating": request.rating}
     except Exception as e:
         logger.error("Feedback submission failed: %s", e)
         return {"status": "error", "detail": str(e)}
@@ -1228,8 +1225,4 @@ async def submit_feedback(
 @router.get("/feedback/stats")
 async def get_feedback_stats(days: int = 7, current_user: User = Depends(get_current_user)):
     """Get feedback statistics for data flywheel dashboard."""
-    from app.rag.feedback import get_feedback_stats, cluster_bad_cases
-    stats = get_feedback_stats(days=days)
-    clusters = cluster_bad_cases(days=days)
-    stats["bad_case_clusters"] = clusters
-    return stats
+    return ChatFeedbackService.get_feedback_summary(days=days)
