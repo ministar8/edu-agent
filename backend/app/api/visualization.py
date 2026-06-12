@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends
-from fastapi import HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from app.core.dependencies import get_visualization_service
 from app.services.visualization_service import VisualizationService
 
