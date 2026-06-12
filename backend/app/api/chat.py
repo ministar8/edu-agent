@@ -12,7 +12,6 @@ from app.config import settings
 from app.agents.trace_utils import collect_sources_from_steps
 from app.core.dependencies import get_chat_message_service
 from app.db import User
-from app.events import TrackingEvent, emit, extract_kp_ids_from_docs, extract_kp_ids_from_steps
 from app.schemas import ChatRequest, ChatResponse, ConversationDetail, ConversationItem
 from app.services.chat_message_service import ChatMessageService
 from app.services.chat_metrics_service import emit_chat_baseline_metric as _emit_chat_baseline_metric
@@ -23,6 +22,7 @@ from app.services.chat_stream_helpers import build_timeout_governance as _build_
 from app.services.chat_stream_helpers import chunk_text as _chunk_text
 from app.services.chat_stream_helpers import deadline_remaining as _deadline_remaining
 from app.services.chat_stream_helpers import sse as _sse
+from app.services.chat_tracking_service import ChatTrackingService
 from app.rag.feedback import log_feedback
 
 logger = logging.getLogger(__name__)
@@ -440,19 +440,12 @@ async def chat_stream(
             _persist_message(conv_id, "assistant", full_text,
                              parent_id=user_msg.id, agent_name=agent_name, sources=latest_sources, governance=governance)
 
-            kp_ids = extract_kp_ids_from_docs(docs)
-            if kp_ids:
-                try:
-                    await emit(TrackingEvent(
-                        event_type="qa_high_confidence" if governance.get("confidence") == "high" else "qa_low_confidence",
-                        user_id=current_user.id,
-                        knowledge_point_ids=kp_ids,
-                        category=(docs[0].metadata.get("category") or docs[0].collection or "") if docs else "",
-                        difficulty=1.0,
-                        outcome=1.0 if governance.get("confidence") == "high" else 0.3,
-                    ))
-                except Exception as e:
-                    logger.warning("Tracking event emission failed (fast-stream): %s", e)
+            await ChatTrackingService.emit_document_qa_event(
+                user_id=current_user.id,
+                docs=docs,
+                governance=governance,
+                context="fast-stream",
+            )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             emit_metric(
@@ -791,53 +784,13 @@ async def chat_stream(
             _persist_message(conv_id, "assistant", full_text,
                              parent_id=user_msg.id, agent_name=current_agent, sources=latest_sources, governance=latest_governance)
 
-            # ── 知识追踪事件 ──
-            try:
-                kp_ids = extract_kp_ids_from_steps(latest_agent_steps)
-                if kp_ids and current_agent in ("knowledge_agent", "grading_agent", "path_agent"):
-                    gov_confidence = (latest_governance or {}).get("confidence", "low")
-                    if current_agent == "grading_agent":
-                        # 从批改结果中提取分数、知识点、难度
-                        import re
-                        score_match = re.search(r'评分[：:]\s*(\d+)\s*/\s*100', full_text)
-                        score = int(score_match.group(1)) if score_match else 50
-                        if score >= 80:
-                            event_type = "grading_excellent"
-                        elif score >= 50:
-                            event_type = "grading_pass"
-                        else:
-                            event_type = "grading_fail"
-                        outcome = score / 100.0
-                        # 解析难度
-                        diff_match = re.search(r'难度[：:]\s*(基础|理解|综合|创新)', full_text)
-                        diff_map = {"基础": 1.0, "理解": 1.3, "综合": 1.6, "创新": 2.0}
-                        difficulty = diff_map.get(diff_match.group(1), 1.3) if diff_match else 1.3
-                        # 解析知识点名称 → 匹配 Registry
-                        kp_match = re.search(r'知识点[：:]\s*(.+)', full_text)
-                        if kp_match and not kp_ids:
-                            kp_name = kp_match.group(1).strip()
-                            try:
-                                from app.repositories.knowledge_registry_repository import KnowledgeRegistryRepository
-
-                                kp_id = KnowledgeRegistryRepository.find_id_by_name_with_managed_session(kp_name)
-                                if kp_id:
-                                    kp_ids = [kp_id]
-                            except Exception as e:
-                                logger.debug("Knowledge point registry lookup skipped: %s", e)
-                    else:
-                        event_type = "qa_high_confidence" if gov_confidence == "high" else "qa_low_confidence"
-                        outcome = 1.0 if gov_confidence == "high" else 0.3
-                        difficulty = 1.0
-                    await emit(TrackingEvent(
-                        event_type=event_type,
-                        user_id=current_user.id,
-                        knowledge_point_ids=kp_ids,
-                        category="",
-                        difficulty=difficulty,
-                        outcome=outcome,
-                    ))
-            except Exception as e:
-                logger.warning("Tracking event emission failed (multi-agent): %s", e)
+            await ChatTrackingService.emit_multi_agent_event(
+                user_id=current_user.id,
+                current_agent=current_agent,
+                agent_steps=latest_agent_steps,
+                governance=latest_governance,
+                final_answer=full_text,
+            )
 
             graph_metric_status = "timeout" if "timeout_partial" in ((latest_governance or {}).get("flags") or []) else "ok"
             graph_metric_error = "TimeoutError" if graph_metric_status == "timeout" else ""
@@ -1123,22 +1076,12 @@ async def chat_rag_stream(
             _persist_message(conv_id, "assistant", full_text,
                              parent_id=user_msg.id, agent_name="rag_direct", sources=latest_sources, governance=governance)
 
-            # ── 知识追踪事件 ──
-            kp_ids = extract_kp_ids_from_docs(docs)
-            if kp_ids:
-                gov_confidence = governance.get("confidence", "low") if governance else "low"
-                event_type = "qa_high_confidence" if gov_confidence == "high" else "qa_low_confidence"
-                try:
-                    await emit(TrackingEvent(
-                        event_type=event_type,
-                        user_id=current_user.id,
-                        knowledge_point_ids=kp_ids,
-                        category=(docs[0].metadata.get("category") or docs[0].collection or "") if docs else "",
-                        difficulty=1.0,
-                        outcome=1.0 if gov_confidence == "high" else 0.3,
-                    ))
-                except Exception as e:
-                    logger.warning("Tracking event emission failed: %s", e)
+            await ChatTrackingService.emit_document_qa_event(
+                user_id=current_user.id,
+                docs=docs,
+                governance=governance,
+                context="direct-rag",
+            )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             emit_metric(
