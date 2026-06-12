@@ -101,65 +101,49 @@ export default function StudyDashboardPanel({
 
   return (
     <div className="h-full overflow-y-auto bg-stone-50 p-6 text-slate-800">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
-        <section className="rounded-[28px] border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-cyan-50 p-6 shadow-sm">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-600">学习工作台</p>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">先看下一步，再开始学习</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                把原来的技术展示入口收敛为学习行动入口：讲解、练习、错题和知识地图围绕薄弱点形成闭环。
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3 lg:min-w-[420px]">
-              <div className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-100">
-                <div className="text-2xl font-semibold text-slate-900">{totalPoints}</div>
-                <div className="mt-1 text-xs text-slate-500">知识点总数</div>
-              </div>
-              <div className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-100">
-                <div className="text-2xl font-semibold text-emerald-600">{totalMastered}</div>
-                <div className="mt-1 text-xs text-slate-500">已掌握</div>
-              </div>
-              <div className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-slate-100">
-                <div className="text-2xl font-semibold text-rose-500">{totalWeak}</div>
-                <div className="mt-1 text-xs text-slate-500">待加强</div>
-              </div>
+      <div className="grid min-h-full gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <section className="flex min-w-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-6 py-5">
+            <p className="text-xs font-medium tracking-[0.24em] text-slate-400">STUDY WORKSPACE</p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">先看下一步，再开始学习</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              围绕薄弱点把讲解、练习和知识地图串起来，保留学习入口，但视觉层级回到主界面的简洁布局。
+            </p>
+          </div>
+
+          <div className="border-b border-slate-100 p-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <button
+                onClick={() => onStartChat(`请用适合考研408复习的方式，系统讲解「${primaryWeakPoint}」，并给出常见题型。`)}
+                className="rounded-xl border border-slate-200 bg-stone-50/70 p-4 text-left transition hover:border-emerald-200 hover:bg-white"
+              >
+                <div className="text-sm font-semibold text-slate-900">AI 讲解薄弱点</div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">生成结构化讲解、重点和例题。</p>
+              </button>
+              <button
+                onClick={() => onGeneratePractice(primaryWeakPoint)}
+                className="rounded-xl border border-slate-200 bg-stone-50/70 p-4 text-left transition hover:border-emerald-200 hover:bg-white"
+              >
+                <div className="text-sm font-semibold text-slate-900">专项练习</div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">进入练习与错题，围绕薄弱点出题。</p>
+              </button>
+              <button
+                onClick={() => onOpenKnowledgeMap(primaryWeakPoint)}
+                className="rounded-xl border border-slate-200 bg-stone-50/70 p-4 text-left transition hover:border-emerald-200 hover:bg-white"
+              >
+                <div className="text-sm font-semibold text-slate-900">知识地图</div>
+                <p className="mt-2 text-xs leading-5 text-slate-500">查看知识点位置和前后依赖。</p>
+              </button>
             </div>
           </div>
-        </section>
 
-        <section className="grid gap-4 lg:grid-cols-3">
-          <button
-            onClick={() => onStartChat(`请用适合考研408复习的方式，系统讲解「${primaryWeakPoint}」，并给出常见题型。`)}
-            className="rounded-[24px] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
-          >
-            <div className="text-sm font-semibold text-slate-900">让 AI 讲清薄弱点</div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">围绕当前薄弱点生成结构化讲解、重点与例题。</p>
-          </button>
-          <button
-            onClick={() => onGeneratePractice(primaryWeakPoint)}
-            className="rounded-[24px] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
-          >
-            <div className="text-sm font-semibold text-slate-900">生成专项练习</div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">直接进入练习与错题，围绕薄弱知识点出题并批改。</p>
-          </button>
-          <button
-            onClick={() => onOpenKnowledgeMap(primaryWeakPoint)}
-            className="rounded-[24px] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md"
-          >
-            <div className="text-sm font-semibold text-slate-900">查看知识地图</div>
-            <p className="mt-2 text-xs leading-5 text-slate-500">定位知识点在 408 知识结构中的位置和前后依赖。</p>
-          </button>
-        </section>
+          {error && (
+            <div className="mx-5 mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {error}
+            </div>
+          )}
 
-        {error && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            {error}
-          </div>
-        )}
-
-        <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="min-h-0 flex-1 p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h3 className="text-base font-semibold text-slate-900">当前薄弱点</h3>
@@ -169,9 +153,9 @@ export default function StudyDashboardPanel({
             </div>
             <div className="space-y-3">
               {weakPoints.length === 0 && !loading ? (
-                <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">暂无薄弱点数据，可以先从智能问答或练习开始。</div>
+                <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">暂无薄弱点数据，可以先从智能问答或练习开始。</div>
               ) : weakPoints.map((point) => (
-                <div key={point.id} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                <div key={point.id} className="rounded-xl border border-slate-100 bg-slate-50/80 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-slate-800">{point.name}</div>
@@ -191,45 +175,63 @@ export default function StudyDashboardPanel({
               ))}
             </div>
           </div>
+        </section>
 
-          <div className="space-y-6">
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-base font-semibold text-slate-900">推荐行动</h3>
-              <div className="mt-4 space-y-3">
-                {recommendations.length === 0 && !loading ? (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">完成几次练习后，这里会给出更具体的推荐。</div>
-                ) : recommendations.map((item) => (
-                  <button
-                    key={`${item.category}-${item.weak_point}`}
-                    onClick={() => onGeneratePractice(item.weak_point)}
-                    className="w-full rounded-2xl bg-slate-50 p-4 text-left transition hover:bg-emerald-50"
-                  >
-                    <div className="text-sm font-medium text-slate-800">{item.weak_point}</div>
-                    <div className="mt-1 text-xs text-slate-400">{categoryLabel(item.category)}</div>
-                    <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{item.reason}</p>
-                  </button>
-                ))}
+        <aside className="space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-base font-semibold text-slate-900">学习概览</h3>
+            <div className="mt-4 grid grid-cols-3 gap-3 xl:grid-cols-1">
+              <div className="rounded-xl bg-slate-50 px-4 py-3">
+                <div className="text-xl font-semibold text-slate-900">{totalPoints}</div>
+                <div className="mt-1 text-xs text-slate-500">知识点总数</div>
               </div>
-            </div>
-
-            <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold text-slate-900">最近学习</h3>
-                <button onClick={onOpenDebug} className="text-xs font-medium text-slate-400 hover:text-slate-700">管理调试</button>
+              <div className="rounded-xl bg-slate-50 px-4 py-3">
+                <div className="text-xl font-semibold text-emerald-600">{totalMastered}</div>
+                <div className="mt-1 text-xs text-slate-500">已掌握</div>
               </div>
-              <div className="mt-4 space-y-2">
-                {recentInteractions.length === 0 && !loading ? (
-                  <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">暂无学习记录。</div>
-                ) : recentInteractions.map((item) => (
-                  <div key={item.id} className="rounded-2xl bg-slate-50 px-4 py-3">
-                    <div className="truncate text-sm font-medium text-slate-700">{item.name}</div>
-                    <div className="mt-1 text-xs text-slate-400">{categoryLabel(item.category)} · {item.source} · {item.time_ago}</div>
-                  </div>
-                ))}
+              <div className="rounded-xl bg-slate-50 px-4 py-3">
+                <div className="text-xl font-semibold text-rose-500">{totalWeak}</div>
+                <div className="mt-1 text-xs text-slate-500">待加强</div>
               </div>
             </div>
           </div>
-        </section>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-base font-semibold text-slate-900">推荐行动</h3>
+            <div className="mt-4 space-y-3">
+              {recommendations.length === 0 && !loading ? (
+                <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">完成几次练习后，这里会给出更具体的推荐。</div>
+              ) : recommendations.map((item) => (
+                <button
+                  key={`${item.category}-${item.weak_point}`}
+                  onClick={() => onGeneratePractice(item.weak_point)}
+                  className="w-full rounded-xl bg-slate-50 p-4 text-left transition hover:bg-emerald-50"
+                >
+                  <div className="text-sm font-medium text-slate-800">{item.weak_point}</div>
+                  <div className="mt-1 text-xs text-slate-400">{categoryLabel(item.category)}</div>
+                  <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{item.reason}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-semibold text-slate-900">最近学习</h3>
+              <button onClick={onOpenDebug} className="text-xs font-medium text-slate-400 hover:text-slate-700">管理调试</button>
+            </div>
+            <div className="mt-4 space-y-2">
+              {recentInteractions.length === 0 && !loading ? (
+                <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-500">暂无学习记录。</div>
+              ) : recentInteractions.map((item) => (
+                <div key={item.id} className="rounded-xl bg-slate-50 px-4 py-3">
+                  <div className="truncate text-sm font-medium text-slate-700">{item.name}</div>
+                  <div className="mt-1 text-xs text-slate-400">{categoryLabel(item.category)} · {item.source} · {item.time_ago}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
