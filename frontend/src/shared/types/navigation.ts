@@ -1,4 +1,4 @@
-export type TabType = "dashboard" | "chat" | "practice" | "kgraph" | "debug";
+export type TabType = "chat" | "questions" | "agents" | "knowledge" | "rag" | "kgraph" | "tracking";
 
 export type AppTab = {
   id: TabType;

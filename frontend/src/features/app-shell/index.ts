@@ -1,4 +1,4 @@
 export { Sidebar } from "./components/Sidebar";
 export { WorkspaceContent } from "./components/WorkspaceContent";
 export { WorkspaceHeader } from "./components/WorkspaceHeader";
-export { primaryTabs, roleLabels, tabDescriptions, tabs, utilityTabs } from "./config/navigationConfig";
+export { roleLabels, tabDescriptions, tabs } from "./config/navigationConfig";

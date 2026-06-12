@@ -40,7 +40,7 @@ class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNod
 export default function Home() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>("dashboard");
+  const [activeTab, setActiveTab] = useState<TabType>("chat");
   const [knowledgeGraphFocus, setKnowledgeGraphFocus] = useState("");
   const [questionState, setQuestionState] = useState<QuestionPanelState>({
     topic: "",
@@ -118,7 +118,7 @@ export default function Home() {
               questions: [],
               activeTab: "generate",
             }));
-            setActiveTab("practice");
+            setActiveTab("questions");
           }}
           onJumpToChat={(question) => {
             setChatState((prev) => ({
@@ -127,7 +127,6 @@ export default function Home() {
             }));
             setActiveTab("chat");
           }}
-          onOpenDebug={() => setActiveTab("debug")}
         />
       </div>
     </div>
