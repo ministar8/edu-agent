@@ -166,6 +166,9 @@ async def asearch_question_templates(query: str) -> str:
 
         # 缓存供下游复用
         _set_cached_evidences(all_evidences)
+        logger.debug(f"Cached {len(all_evidences)} evidences for question generation")
+        for i, ev in enumerate(all_evidences[:3]):
+            logger.debug(f"  Evidence {i}: kp={ev.knowledge_points}, section_path={ev.section_path}, collection={ev.collection}")
 
         if not context_parts:
             return "题库和教材中暂无相关内容。"
@@ -369,6 +372,7 @@ async def generate_and_persist_questions(
     prompt: str,
     user_id: int,
     conversation_id: int | None = None,
+    topic: str = "",
 ) -> list[dict]:
     """出题 + 解析 + 质量评估 + 持久化，返回结构化题目列表"""
     # 一次检索，同时用于生成 + 质量评估
@@ -425,7 +429,7 @@ async def generate_and_persist_questions(
 
     # 持久化
     batch_id = str(uuid.uuid4())
-    _persist_questions(questions, user_id, conversation_id, batch_id)
+    _persist_questions(questions, user_id, conversation_id, batch_id, topic or retrieval_query)
 
     for q in questions:
         q["batch_id"] = batch_id
@@ -438,10 +442,67 @@ def _persist_questions(
     user_id: int,
     conversation_id: int | None,
     batch_id: str,
+    topic: str,
 ) -> None:
     """将解析后的题目存入 QuestionRecord，并回写 DB id 到 question dict"""
     from app.db.session import SessionLocal
-    from app.db.models import QuestionRecord
+    from app.db.models import QuestionRecord, KnowledgePointRegistry
+
+    # Try to resolve knowledge point from cached evidences first
+    evidences = _get_cached_evidences()
+    kp_id = None
+    if evidences:
+        with SessionLocal() as db:
+            for ev in evidences:
+                # Try structured knowledge_points list first
+                for kp_name in ev.knowledge_points:
+                    if kp_name:
+                        reg = db.query(KnowledgePointRegistry).filter(
+                            KnowledgePointRegistry.name == kp_name
+                        ).first()
+                        if reg:
+                            kp_id = reg.id
+                            logger.debug(f"Resolved KP from evidence.knowledge_points: {kp_name} -> id={reg.id}")
+                            break
+                if kp_id:
+                    break
+                # Fallback: try section_path (heading_path) last segment
+                if ev.section_path:
+                    heading = ev.section_path.split(">")[-1].strip()
+                    if heading:
+                        reg = db.query(KnowledgePointRegistry).filter(
+                            KnowledgePointRegistry.name == heading
+                        ).first()
+                        if reg:
+                            kp_id = reg.id
+                            logger.debug(f"Resolved KP from evidence.section_path: {heading} -> id={reg.id}")
+                            break
+
+    # Fallback: try to match from evidences collection names
+    if not kp_id and evidences:
+        collections = set(ev.collection for ev in evidences if ev.collection)
+        for coll in collections:
+            if coll in ["data_structure", "computer_organization", "operating_system", "computer_network"]:
+                with SessionLocal() as db:
+                    reg = db.query(KnowledgePointRegistry).filter(
+                        KnowledgePointRegistry.category == coll
+                    ).first()
+                    if reg:
+                        kp_id = reg.id
+                        logger.debug(f"Resolved KP from collection: {coll} -> id={reg.id}")
+                        break
+
+    # Final fallback: try to match topic directly to a knowledge point name
+    if not kp_id and topic:
+        with SessionLocal() as db:
+            reg = db.query(KnowledgePointRegistry).filter(
+                KnowledgePointRegistry.name == topic
+            ).first()
+            if reg:
+                kp_id = reg.id
+                logger.debug(f"Resolved KP from topic: {topic} -> id={reg.id}")
+
+    logger.debug(f"Using kp_id={kp_id} for batch {batch_id}")
 
     with SessionLocal() as db:
         try:
@@ -450,12 +511,12 @@ def _persist_questions(
                     user_id=user_id,
                     conversation_id=conversation_id,
                     batch_id=batch_id,
+                    knowledge_point_id=kp_id,
                     question_type=q.get("question_type", "简答"),
                     difficulty=q.get("difficulty", 1.0),
                     stem=q.get("stem", ""),
                     standard_answer=q.get("answer", ""),
                     explanation=q.get("explanation", ""),
-                    source="generated",
                     quality_score=q.get("quality_score"),
                 )
                 db.add(record)

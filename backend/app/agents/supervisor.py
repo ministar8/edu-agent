@@ -26,38 +26,13 @@ from app.agents.retrieval_guard import run_retrieval_guard
 from app.agents.memory_manager import build_scoped_context, extract_current_query, format_history_from_messages
 from app.agents.trace_utils import extract_sources_from_text
 from app.agents.prompts import (
-    SINGLE_AGENT_FAST_PATH_SYSTEM_PROMPT, SINGLE_AGENT_FAST_PATH_USER_TEMPLATE,
+    FAST_PATH_PROMPT_MAP, FAST_PATH_USER_TEMPLATE,
     SUPERVISOR_FEW_SHOT_PROMPT,
 )
 
 logger = logging.getLogger(__name__)
 
 # ── Shared helpers (eliminate retrieval/formatting/query-extraction duplication) ──
-
-# Direct-generation prompts for L1/L2/L3 fast-path (NOT ReAct — no tool calling)
-_DIRECT_GEN_PROMPTS = {
-    "grading_agent": (
-        "你是408考研批改评估助手。参考资料已为你检索好，请严格基于参考资料批改学生答案。\n"
-        "评分0-100，逐项对比标准答案与知识依据，给出命中要点、主要问题、改进建议。\n"
-        "使用结构化Markdown格式。若参考资料不足，明确说明'参考评分（标准答案库不足）'。"
-    ),
-    "question_agent": (
-        "你是408考研出题助手。参考资料已为你检索好，请严格基于参考资料生成练习题。\n"
-        "支持选择题、填空题、简答题、综合应用题，每道题必须给出标准答案与简明解析。\n"
-        "使用结构化Markdown格式。若参考资料不足，明确说明'题库模板不足'，不要编造题目。"
-    ),
-    "path_agent": (
-        "你是408考研学习路径推荐助手。参考资料已为你检索好，请基于参考资料推荐循序渐进的学习路径。\n"
-        "先补前置知识，再学目标知识，最后安排巩固。每步说明'为什么学'和'学什么'。\n"
-        "使用结构化Markdown格式。若参考资料不足，基于已有信息做保守建议。"
-    ),
-}
-
-_AGENT_PROMPT_MAP = {
-    "grading_agent": _DIRECT_GEN_PROMPTS["grading_agent"],
-    "question_agent": _DIRECT_GEN_PROMPTS["question_agent"],
-    "path_agent": _DIRECT_GEN_PROMPTS["path_agent"],
-}
 
 
 def _format_docs(docs, max_docs: int = 5, content_limit: int = 800) -> str:
@@ -121,8 +96,8 @@ def _extract_retrieval_query(current_query: str, agent_name: str) -> str:
 
 
 def _get_agent_prompt(agent_name: str) -> str:
-    """Return agent-specific system prompt, fallback to fast-path prompt."""
-    return _AGENT_PROMPT_MAP.get(agent_name, SINGLE_AGENT_FAST_PATH_SYSTEM_PROMPT)
+    """Return agent-specific fast-path system prompt from FAST_PATH_PROMPT_MAP."""
+    return FAST_PATH_PROMPT_MAP.get(agent_name, FAST_PATH_PROMPT_MAP["knowledge_agent"])
 
 
 async def _llm_generate(
@@ -136,7 +111,7 @@ async def _llm_generate(
     """Single LLM generation call with evidence context. Returns answer or None."""
     messages = [
         SystemMessage(content=system_prompt),
-        HumanMessage(content=SINGLE_AGENT_FAST_PATH_USER_TEMPLATE.format(evidence=evidence, query=query)),
+        HumanMessage(content=FAST_PATH_USER_TEMPLATE.format(evidence=evidence, query=query)),
     ]
     llm = get_llm(streaming=False, temperature=settings.TEMP_PRECISE, use_fast=use_fast)
     try:
@@ -666,8 +641,8 @@ def _run_l3_agent(agent, name: str):
                 tool_outputs = [ctx_fb]
                 try:
                     rag_messages = [
-                        SystemMessage(content="You are a 408 exam Q&A assistant. Answer based strictly on the given context."),
-                        HumanMessage(content=f"Context:\n{ctx_fb}\n\nQuestion: {current_query}\n\nAnswer directly and accurately."),
+                        SystemMessage(content="You are a 408 exam Q&A assistant. Answer based strictly on the given context. Be concise: only answer what is asked, do not expand on unrelated topics. 1-2 sentences for concepts, 2-4 key points for lists."),
+                        HumanMessage(content=f"Context:\n{ctx_fb}\n\nQuestion: {current_query}\n\nAnswer directly, accurately and concisely. Only address what the question asks."),
                     ]
                     llm = get_llm(streaming=False, temperature=0.0)
                     rag_result = await asyncio.wait_for(llm.ainvoke(rag_messages), timeout=settings.RAG_FALLBACK_TIMEOUT)

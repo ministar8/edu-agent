@@ -13,11 +13,13 @@ import { MessageList } from "./MessageList";
 type ChatPanelProps = {
   state: ChatPanelState;
   setState: React.Dispatch<React.SetStateAction<ChatPanelState>>;
+  onOpenKnowledgeGraph?: (focus: string) => void;
+  onGenerateSimilarPractice?: (topic: string) => void;
 };
 
-export default function ChatPanel({ state, setState }: ChatPanelProps) {
+export default function ChatPanel({ state, setState, onOpenKnowledgeGraph, onGenerateSimilarPractice }: ChatPanelProps) {
   const { token } = useAuth();
-  const { sendMessage, updateState, loadConversation, newChat } = useChatStream({ token, state, setState });
+  const { sendMessage, stop, regenerate, updateState, loadConversation, newChat } = useChatStream({ token, state, setState });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [convRefreshKey, setConvRefreshKey] = useState(0);
 
@@ -68,14 +70,20 @@ export default function ChatPanel({ state, setState }: ChatPanelProps) {
           activeTool={state.activeTool}
           streamingGovernance={state.streamingGovernance}
           statusLabel={state.statusLabel}
+          activeLeafId={state.activeLeafId}
           messagesEndRef={messagesEndRef}
           onSelectSuggestion={handleSelectSuggestion}
+          onOpenKnowledgeGraph={onOpenKnowledgeGraph}
+          onGenerateSimilarPractice={onGenerateSimilarPractice}
+          onRegenerate={() => void regenerate()}
+          onSetActiveLeafId={(id) => updateState({ activeLeafId: id })}
         />
         <ChatInput
           input={state.input}
           loading={state.loading}
           onInputChange={handleInputChange}
           onSubmit={() => void sendMessage()}
+          onStop={() => stop()}
         />
       </div>
     </div>

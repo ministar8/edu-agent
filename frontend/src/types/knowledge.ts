@@ -6,6 +6,8 @@ export interface Collection {
 export interface UploadResultItem {
   filename: string;
   chunk_count: number;
+  graph_nodes: number;
+  graph_edges: number;
   success: boolean;
   error?: string;
 }

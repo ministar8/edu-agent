@@ -7,7 +7,7 @@ import { QuestionResult } from "./QuestionResult";
 import { QuestionStrategyCard } from "./QuestionStrategyCard";
 
 export default function QuestionPanel({ state, setState }: QuestionPanelProps) {
-  const { generate, updateState, gradeQuestion, updateQuestionAnswer, loadWrongQuestions, weakPointPractice } = useQuestionGeneration({ state, setState });
+  const { generate, updateState, gradeQuestion, updateQuestionAnswer, loadWrongQuestions, weakPointPractice, redoWrongQuestion, redoAnswerChange } = useQuestionGeneration({ state, setState });
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-6 text-slate-800">
@@ -22,6 +22,8 @@ export default function QuestionPanel({ state, setState }: QuestionPanelProps) {
         onLoadWrong={() => void loadWrongQuestions()}
         onWeakPointPractice={() => void weakPointPractice()}
         onSwitchTab={(tab) => updateState({ activeTab: tab })}
+        onRedoWrongQuestion={(qId) => void redoWrongQuestion(qId)}
+        onRedoAnswerChange={redoAnswerChange}
       />
     </div>
   );

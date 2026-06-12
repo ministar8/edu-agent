@@ -4,7 +4,6 @@ export const agentColors: Record<string, string> = {
   grading_agent: "bg-emerald-50 border-emerald-200",
   path_agent: "bg-amber-50 border-amber-200",
   supervisor: "bg-stone-100 border-stone-300",
-  prefetch_knowledge: "bg-teal-50 border-teal-200",
 };
 
 export const agentLabels: Record<string, string> = {
@@ -13,11 +12,12 @@ export const agentLabels: Record<string, string> = {
   grading_agent: "批改评估Agent",
   path_agent: "学习路径推荐Agent",
   supervisor: "Supervisor调度",
-  prefetch_knowledge: "知识预取(协作)",
 };
 
 export const toolLabels: Record<string, string> = {
-  search_knowledge_base: "检索知识库",
+  knowledge_search: "检索知识库",
+  text_search: "文本检索",
+  kg_search: "图谱检索",
   search_question_templates: "检索题库",
   search_standard_answer: "检索标准答案",
   search_learning_path: "检索学习路径",

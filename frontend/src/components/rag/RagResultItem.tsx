@@ -19,7 +19,7 @@ function RagResultItemComponent({ result, index }: RagResultItemProps) {
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-xs text-slate-400">
-            来源: {result.metadata?.source_file || "未知"}
+            来源: {String(result.metadata?.source_file || "未知")}
           </span>
           {typeof result.score === "number" && (
             <span

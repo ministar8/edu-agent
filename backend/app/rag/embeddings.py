@@ -15,8 +15,8 @@ from app.rag.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
-# 单批请求数量（本地 Ollama / 远程 API 均适用）
-BATCH_SIZE = 64  # bge-m3 on local Ollama handles 64-128 easily; 64 = ~2.5x fewer round trips vs 25
+# 单批请求数量（本地 TEI / 远程 API 均适用）
+BATCH_SIZE = 64  # bge-m3 on local TEI handles 64-128 easily; 64 = ~2.5x fewer round trips vs 25
 # 单条文本最大字符数（bge-m3 8192 tokens，中文约 1-2 token/字，保守取 3000）
 MAX_TEXT_LENGTH = 3000
 _sparse_probe_cache: dict[str, object] | None = None
@@ -32,16 +32,16 @@ def _embedding_limits() -> httpx.Limits:
 
 
 class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
-    """OpenAI 兼容 Embedding（支持 Ollama / DashScope / 任何 OpenAI 格式 API，自动分批）"""
+    """OpenAI 兼容 Embedding（支持 TEI / DashScope / 任何 OpenAI 格式 API，自动分批）"""
 
     api_key: str = ""
-    base_url: str = "http://localhost:11434/v1"
-    model: str = "bge-m3"
+    base_url: str = "http://localhost:11435"
+    model: str = "BAAI/bge-m3"
 
     model_config = {"arbitrary_types_allowed": True}
 
     def _build_headers(self) -> dict[str, str]:
-        """构建请求头：本地服务（Ollama）无需 Authorization"""
+        """构建请求头：本地服务（TEI）无需 Authorization"""
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self.api_key and self.api_key not in ("ollama", ""):
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -287,7 +287,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
 
 
 def get_embeddings() -> Embeddings:
-    """返回 Embedding 模型（通过 OpenAI 兼容接口，支持本地 Ollama / 远程 API）"""
+    """返回 Embedding 模型（通过 OpenAI 兼容接口，支持本地 TEI / 远程 API）"""
     return OpenAICompatibleEmbeddings(
         api_key=settings.EMBEDDING_API_KEY,
         base_url=settings.EMBEDDING_API_BASE,

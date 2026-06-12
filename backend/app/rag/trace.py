@@ -461,7 +461,6 @@ def retrieve_documents_with_trace(
             "after_rerank": len(before_hyde),
             "after_hyde": len(reranked),
             "after_window": len(expanded),
-            "after_expand": len(expanded),
             "final": len(final_docs),
         },
         "score_stats": {

@@ -36,6 +36,7 @@ class GradeResponse(BaseModel):
     score: float
     feedback: str
     is_wrong: bool
+    error_analysis: str = ""
 
 
 class WrongQuestionItem(BaseModel):
@@ -47,6 +48,8 @@ class WrongQuestionItem(BaseModel):
     explanation: str | None
     user_answer: str | None
     grading_score: float | None
+    error_analysis: str = ""
+    redo_count: int = 0
     created_at: str
 
 
@@ -89,6 +92,7 @@ async def generate_questions(
                 prompt=prompt,
                 user_id=current_user.id,
                 conversation_id=None,
+                topic=req.topic,
             ),
             timeout=settings.QUESTION_GEN_TIMEOUT,
         )
@@ -173,6 +177,8 @@ async def get_wrong_questions(
             explanation=r.explanation,
             user_answer=r.user_answer,
             grading_score=r.grading_score,
+            error_analysis=r.error_analysis or "",
+            redo_count=r.redo_count or 0,
             created_at=r.created_at.isoformat() if r.created_at else "",
         ))
 
@@ -248,6 +254,7 @@ async def weak_point_practice(
                 prompt=prompt,
                 user_id=current_user.id,
                 conversation_id=None,
+                topic=", ".join(topics) if topics else "",
             ),
             timeout=settings.QUESTION_GEN_TIMEOUT,
         )
@@ -321,17 +328,25 @@ async def grade_question(
         score = result["score"]
         feedback = result["feedback"]
         is_wrong = result["is_wrong"]
+        error_analysis = result.get("error_analysis", "")
 
         # 更新 QuestionRecord
         record.user_answer = req.user_answer
         record.grading_score = score
         record.is_wrong = is_wrong
+        record.error_analysis = error_analysis
+        # 如果是重做（之前是错题），更新 redo_count
+        if record.redo_count is not None and not is_wrong and record.is_wrong:
+            record.redo_count = (record.redo_count or 0) + 1
         db.commit()
 
         # 发出追踪事件，更新 StudentKnowledgeState
         try:
             from app.events import TrackingEvent, emit
+            from app.db.models import KnowledgePointRegistry
             if record.knowledge_point_id:
+                kp = db.get(KnowledgePointRegistry, record.knowledge_point_id)
+                category = kp.category if kp else "unknown"
                 if score >= 80:
                     event_type = "grading_excellent"
                     outcome = 1.0
@@ -345,6 +360,7 @@ async def grade_question(
                     user_id=current_user.id,
                     knowledge_point_ids=[record.knowledge_point_id],
                     event_type=event_type,
+                    category=category,
                     difficulty=record.difficulty,
                     outcome=outcome,
                 )
@@ -352,7 +368,7 @@ async def grade_question(
         except Exception as evt_err:
             logger.warning("Failed to publish grading event: %s", evt_err)
 
-        return GradeResponse(score=score, feedback=feedback, is_wrong=is_wrong)
+        return GradeResponse(score=score, feedback=feedback, is_wrong=is_wrong, error_analysis=error_analysis)
 
     except asyncio.TimeoutError:
         raise HTTPException(

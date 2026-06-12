@@ -29,7 +29,7 @@
 | RAG | ChromaDB + bge-m3 + 5路并行召回 + Reranker + 语义缓存 |
 | 知识图谱 | Neo4j + Cypher |
 | LLM | Qwen / DeepSeek / GLM (OpenAI 兼容接口) |
-| 嵌入 | bge-m3 (1024-dim, 本地 Ollama) |
+| 嵌入 | bge-m3 (1024-dim, 本地 TEI) |
 | 重排序 | bge-reranker-v2-m3 (本地 TEI) |
 
 ## 项目结构
@@ -68,14 +68,14 @@ cp .env.example .env            # 必填：LLM_API_KEY、JWT_SECRET
 conda create -n edu-agent python=3.12 && conda activate edu-agent
 pip install -r backend/requirements.txt
 cd frontend && npm install
-ollama pull bge-m3              # 下载 Embedding 模型（需先安装 Ollama）
+docker run -d --name tei-embedding --gpus all -p 11435:80 ghcr.io/huggingface/text-embeddings-inference:latest --model-id BAAI/bge-m3 --dtype float16 --pooling mean  # 启动 TEI Embedding 服务
 ```
 
 ### 2. 启动服务
 
 ```bash
-# 终端1：Ollama（Embedding 模型）
-ollama serve
+# 终端1：TEI Embedding + Reranker（Docker）
+docker start tei-embedding tei-reranker  # 或 docker compose up -d
 
 # 终端2：Neo4j（知识图谱，可选）
 neo4j console
@@ -115,8 +115,8 @@ python -m app.rag.ingest --no-graph  # 跳过图谱构建（Neo4j未启动时推
 | LLM_API_KEY | LLM API 密钥（**必填**） | — |
 | LLM_API_BASE | LLM API 地址 | DashScope 兼容接口 |
 | LLM_MODEL | LLM 主模型名 | qwen3.7-max-preview |
-| EMBEDDING_API_BASE | Embedding API 地址 | http://localhost:11434/v1 |
-| EMBEDDING_MODEL | Embedding 模型名 | bge-m3 |
+| EMBEDDING_API_BASE | Embedding API 地址 | http://localhost:11435 |
+| EMBEDDING_MODEL | Embedding 模型名 | BAAI/bge-m3 |
 | RERANK_LOCAL_URL | 本地 TEI Reranker 地址 | http://localhost:8080 |
 | HYDE_ENABLED | HyDE 假设文档嵌入开关 | true |
 | RERANK_ABSOLUTE_MIN_SCORE | Rerank 绝对最低分数 | 0.1 |

@@ -492,40 +492,435 @@ class KnowledgeGraphManager:
         self._cache_set(cache_key, subgraph)
         return subgraph
 
-    # ========== 可视化数据 ==========
+    # ========== 层级聚合可视化 ==========
 
-    def get_graph_data(self, category: str | None = None, limit: int = 50) -> dict:
-        """获取知识图谱可视化数据（节点+边）"""
-        limit = max(1, min(int(limit), 100))
-        with self._session() as s:
+    def get_hierarchical_graph_data(self, category: str | None = None, levels: int = 3) -> dict:
+        """获取层级聚合的知识图谱可视化数据
+
+        三层结构：学科(root) → 章(level1) → 知识点(level2)
+        levels=2 时仅展示 root + level1，不展示 level2
+        聚合策略：
+          - root: 每个 category 一个节点（仅4大核心学科）
+          - level1: 按 chapter 分组，每学科最多展示 8 个章
+          - level2: 具体知识点（最多展示每个 chapter 下 4 个）
+        边：
+          - root → level1: 包含关系
+          - level1 → level2: 包含关系
+          - level1 → level1: 跨章前置关系（从 Neo4j PREREQUISITE_OF 聚合）
+        """
+        from app.db.models import KnowledgePointRegistry
+        from app.db.session import SessionLocal
+
+        # 仅展示4大核心学科
+        _CORE_CATEGORIES = {"data_structure", "computer_organization", "operating_system", "computer_network"}
+
+        # 章节名称规范化映射：将数据中的杂乱名称映射为标准教材章节名
+        _CHAPTER_NORMALIZE: dict[str, dict[str, str]] = {
+            "data_structure": {
+                "线性表": "线性表",
+                "顺序表": "线性表",
+                "链表": "线性表",
+                "栈": "栈和队列",
+                "队列": "栈和队列",
+                "串": "串",
+                "KMP": "串",
+                "模式匹配": "串",
+                "树": "树与二叉树",
+                "二叉树": "树与二叉树",
+                "遍历": "树与二叉树",
+                "线索": "树与二叉树",
+                "森林": "树与二叉树",
+                "哈夫曼": "树与二叉树",
+                "红黑树": "树与二叉树",
+                "并查集": "树与二叉树",
+                "多路查找": "树与二叉树",
+                "图": "图",
+                "最短路径": "图",
+                "最小生成树": "图",
+                "关键路径": "图",
+                "拓扑": "图",
+                "查找": "查找",
+                "散列": "查找",
+                "排序": "排序",
+                "插入排序": "排序",
+                "冒泡": "排序",
+                "选择排序": "排序",
+                "归并": "排序",
+                "堆排序": "排序",
+                "基数排序": "排序",
+                "希尔": "排序",
+                "快速排序": "排序",
+                "数组": "数组与广义表",
+                "广义表": "数组与广义表",
+                "定义": "基本概念",
+                "数据结构三要素": "基本概念",
+                "算法": "基本概念",
+                "数据运算": "基本概念",
+                "递归": "基本概念",
+                "删除": "线性表",
+                "存储结构": "线性表",
+                "插入": "排序",
+            },
+            "computer_network": {
+                "物理层": "物理层",
+                "传输媒体": "物理层",
+                "编码": "物理层",
+                "调制": "物理层",
+                "信道": "物理层",
+                "复用": "物理层",
+                "数据链路层": "数据链路层",
+                "链路": "数据链路层",
+                "差错": "数据链路层",
+                "流量控制": "数据链路层",
+                "可靠传输": "数据链路层",
+                "CSMA": "数据链路层",
+                "PPP": "数据链路层",
+                "以太网": "数据链路层",
+                "MAC": "数据链路层",
+                "VLAN": "数据链路层",
+                "媒体接入": "数据链路层",
+                "介质访问": "数据链路层",
+                "网络层": "网络层",
+                "IP": "网络层",
+                "IPv4": "网络层",
+                "路由": "网络层",
+                "ICMP": "网络层",
+                "VPN": "网络层",
+                "NAT": "网络层",
+                "ARP": "网络层",
+                "传输层": "传输层",
+                "TCP": "传输层",
+                "UDP": "传输层",
+                "传输控制": "传输层",
+                "应用层": "应用层",
+                "HTTP": "应用层",
+                "DNS": "应用层",
+                "FTP": "应用层",
+                "电子邮件": "应用层",
+                "万维网": "应用层",
+                "WWW": "应用层",
+                "域名": "应用层",
+                "DHCP": "应用层",
+                "动态主机": "应用层",
+                "网际控制": "网络层",
+                "网际协议": "网络层",
+                "传输方式": "物理层",
+                "网络应用模型": "应用层",
+                "文件传送": "应用层",
+                "专用术语": "网络体系结构",
+                "补充": "网络体系结构",
+                "章节总结": "网络体系结构",
+                "透明传输": "数据链路层",
+                "基本概念": "网络体系结构",
+                "接口特性": "物理层",
+                "IEEE": "数据链路层",
+                "分层的必要性": "网络体系结构",
+                "分层模型": "网络体系结构",
+                "体系结构": "网络体系结构",
+                "性能指标": "网络体系结构",
+            },
+            "operating_system": {
+                "进程": "进程管理",
+                "处理机": "进程管理",
+                "调度": "进程管理",
+                "同步": "进程管理",
+                "互斥": "进程管理",
+                "死锁": "进程管理",
+                "信号量": "进程管理",
+                "管程": "进程管理",
+                "线程": "进程管理",
+                "进程控制": "进程管理",
+                "上下文": "进程管理",
+                "通信": "进程管理",
+                "消费者": "进程管理",
+                "哲学家": "进程管理",
+                "读者": "进程管理",
+                "写者": "进程管理",
+                "银行家": "进程管理",
+                "内存": "内存管理",
+                "虚拟存储": "内存管理",
+                "页面": "内存管理",
+                "页面置换": "内存管理",
+                "分配策略": "内存管理",
+                "驻留集": "内存管理",
+                "内存映射": "内存管理",
+                "常规存储": "内存管理",
+                "地址转换": "内存管理",
+                "文件": "文件管理",
+                "磁盘": "文件管理",
+                "目录": "文件管理",
+                "文件共享": "文件管理",
+                "文件保护": "文件管理",
+                "存储空间": "文件管理",
+                "逻辑结构": "文件管理",
+                "物理结构": "文件管理",
+                "I/O": "输入输出管理",
+                "输入输出": "输入输出管理",
+                "IO": "输入输出管理",
+                "接口": "输入输出管理",
+                "设备": "输入输出管理",
+                "控制方式": "输入输出管理",
+                "控制层": "输入输出管理",
+                "SPOOLing": "输入输出管理",
+                "减少延迟": "文件管理",
+                "延迟时间": "文件管理",
+                "处理方式": "操作系统概述",
+                "平均存取": "文件管理",
+                "组成": "操作系统概述",
+                "运行机制": "操作系统概述",
+                "特征": "操作系统概述",
+                "层次": "操作系统概述",
+                "分配": "内存管理",
+                "回收": "内存管理",
+                "临界": "进程管理",
+                "定义": "操作系统概述",
+                "概念": "操作系统概述",
+                "批处理": "操作系统概述",
+                "提供的功": "操作系统概述",
+                "分时": "操作系统概述",
+                "实时": "操作系统概述",
+                "并发": "进程管理",
+                "共享": "操作系统概述",
+                "虚拟": "内存管理",
+                "中断": "操作系统概述",
+                "异常": "操作系统概述",
+                "体系结构": "操作系统概述",
+                "大内核": "操作系统概述",
+                "微内核": "操作系统概述",
+                "库函数": "操作系统概述",
+                "系统调用": "操作系统概述",
+                "分层结构": "操作系统概述",
+                "模块化": "操作系统概述",
+                "外核": "操作系统概述",
+            },
+            "computer_organization": {
+                "概述": "计算机系统概述",
+                "发展": "计算机系统概述",
+                "性能": "计算机系统概述",
+                "分类": "计算机系统概述",
+                "层次结构": "计算机系统概述",
+                "数据表示": "数据的表示和运算",
+                "运算": "数据的表示和运算",
+                "定点": "数据的表示和运算",
+                "浮点": "数据的表示和运算",
+                "补码": "数据的表示和运算",
+                "十进制": "数据的表示和运算",
+                "检错": "数据的表示和运算",
+                "存储器": "存储系统",
+                "存储": "存储系统",
+                "Cache": "存储系统",
+                "高速缓冲": "存储系统",
+                "RAM": "存储系统",
+                "ROM": "存储系统",
+                "虚拟存储": "存储系统",
+                "页式": "存储系统",
+                "磁盘": "存储系统",
+                "指令": "指令系统",
+                "寻址": "指令系统",
+                "CISC": "指令系统",
+                "RISC": "指令系统",
+                "汇编": "指令系统",
+                "指令格式": "指令系统",
+                "CPU": "中央处理器",
+                "处理器": "中央处理器",
+                "数据通路": "中央处理器",
+                "控制器": "中央处理器",
+                "流水线": "中央处理器",
+                "多处理器": "中央处理器",
+                "功能": "中央处理器",
+                "结构": "中央处理器",
+                "总线": "总线",
+                "仲裁": "总线",
+                "总线标准": "总线",
+                "输入输出": "输入输出系统",
+                "I/O": "输入输出系统",
+                "外部设备": "输入输出系统",
+                "接口": "输入输出系统",
+                "定时": "输入输出系统",
+                "操作": "输入输出系统",
+                "补充": "计算机系统概述",
+                "术语": "计算机系统概述",
+                "二进制": "数据的表示和运算",
+                "对照": "数据的表示和运算",
+                "模4": "数据的表示和运算",
+                "真值": "数据的表示和运算",
+                "机器数": "数据的表示和运算",
+                "BCD": "数据的表示和运算",
+                "ASCII": "数据的表示和运算",
+                "汉字": "数据的表示和运算",
+                "UTF": "数据的表示和运算",
+            },
+        }
+
+        def _normalize_chapter(cat: str, raw_ch: str) -> str:
+            """将杂乱的章节名映射为标准教材章节名"""
+            # 先清理 markdown 标记和特殊符号
+            clean = raw_ch.replace("**", "").replace("❗", "").replace("【考点】", "").replace("【大题❗考点】", "").replace("【题】", "")
+            clean = clean.strip()
+
+            # 查找映射
+            mapping = _CHAPTER_NORMALIZE.get(cat, {})
+            for keyword, standard_name in mapping.items():
+                if keyword in clean:
+                    return standard_name
+
+            # 兜底：未匹配到的杂项归入"其他"
+            return "其他"
+
+        # 1. 从 Registry 获取知识点层级
+        with SessionLocal() as db:
+            query = db.query(KnowledgePointRegistry)
             if category:
-                node_query = (
-                    "MATCH (k:Knowledge) WHERE k.category = $category "
-                    "RETURN k.name AS id, k.category AS category, k.description AS description "
-                    "LIMIT $limit"
-                )
-                edge_query = (
-                    "MATCH (k1:Knowledge)-[r]->(k2:Knowledge) WHERE k1.category = $category "
-                    "RETURN k1.name AS source, k2.name AS target, type(r) AS relation "
-                    "LIMIT $edge_limit"
-                )
-                nodes = self._collect_records(self._run(s, node_query, category=category, limit=limit), limit=limit)
-                edges = self._collect_records(self._run(s, edge_query, category=category, edge_limit=limit * 2), limit=limit * 2)
-            else:
-                node_query = (
-                    "MATCH (k:Knowledge) "
-                    "RETURN k.name AS id, k.category AS category, k.description AS description "
-                    "LIMIT $limit"
-                )
-                edge_query = (
-                    "MATCH (k1:Knowledge)-[r]->(k2:Knowledge) "
-                    "RETURN k1.name AS source, k2.name AS target, type(r) AS relation "
-                    "LIMIT $edge_limit"
-                )
-                nodes = self._collect_records(self._run(s, node_query, limit=limit), limit=limit)
-                edges = self._collect_records(self._run(s, edge_query, edge_limit=limit * 2), limit=limit * 2)
+                query = query.filter(KnowledgePointRegistry.category == category)
+            all_kps = query.all()
 
-        return {"nodes": nodes, "edges": edges}
+        if not all_kps:
+            return {"nodes": [], "edges": [], "stats": {"root_count": 0, "chapter_count": 0, "kp_count": 0}}
+
+        # 2. 按学科→章→知识点 聚合（使用规范化后的章节名）
+        subject_map: dict[str, dict[str, list]] = {}  # category → {chapter → [kp_names]}
+        for kp in all_kps:
+            cat = kp.category or "unknown"
+            if cat not in _CORE_CATEGORIES:
+                continue
+            raw_ch = kp.chapter or kp.name
+            ch = _normalize_chapter(cat, raw_ch)
+            subject_map.setdefault(cat, {}).setdefault(ch, []).append(kp.name)
+
+        # 3. 构建 Neo4j 跨章关系映射
+        prereq_records = []
+        cross_cat_records = []
+        try:
+            with self._session() as s:
+                # 同科跨章 PREREQUISITE_OF
+                cypher = (
+                    "MATCH (k1:Knowledge)-[r:PREREQUISITE_OF]->(k2:Knowledge) "
+                    "WHERE k1.category = k2.category "
+                    "RETURN k1.name AS source, k2.name AS target, k1.category AS category"
+                )
+                params = {}
+                if category:
+                    cypher = (
+                        "MATCH (k1:Knowledge)-[r:PREREQUISITE_OF]->(k2:Knowledge) "
+                        "WHERE k1.category = $category AND k2.category = $category "
+                        "RETURN k1.name AS source, k2.name AS target, k1.category AS category"
+                    )
+                    params = {"category": category}
+                prereq_records = self._collect_records(self._run(s, cypher, **params), limit=2000)
+
+                # 跨学科 RELATED_TO（用于 root 之间连线）
+                if not category:
+                    cypher2 = (
+                        "MATCH (k1:Knowledge)-[r:RELATED_TO]->(k2:Knowledge) "
+                        "WHERE k1.category <> k2.category "
+                        "RETURN k1.category AS src_cat, k2.category AS tgt_cat, count(r) AS cnt "
+                        "ORDER BY cnt DESC LIMIT 20"
+                    )
+                    cross_cat_records = self._collect_records(self._run(s, cypher2), limit=20)
+        except Exception as e:
+            logger.debug("Failed to fetch cross-chapter edges: %s", e)
+
+        # 4. 构建可视化节点和边
+        nodes = []
+        edges = []
+
+        cat_labels = {
+            "data_structure": "数据结构",
+            "computer_organization": "计算机组成原理",
+            "operating_system": "操作系统",
+            "computer_network": "计算机网络",
+        }
+
+        total_chapters = 0
+        total_kps = sum(len(v) for chapters in subject_map.values() for v in chapters.values())
+
+        for cat, chapters in subject_map.items():
+            cat_label = cat_labels.get(cat, cat)
+            root_id = f"root:{cat}"
+            total_in_cat = sum(len(v) for v in chapters.values())
+            nodes.append({
+                "id": root_id,
+                "name": cat_label,
+                "category": cat,
+                "kind": "root",
+                "description": f"{cat_label}：共 {total_in_cat} 个知识点",
+            })
+
+            # 按 chapter 中知识点数量排序（归一化后章节数已合理，无需截断）
+            sorted_chapters = sorted(chapters.items(), key=lambda x: len(x[1]), reverse=True)
+
+            for ch_name, kp_names in sorted_chapters:
+                total_chapters += 1
+                ch_id = f"level1:{cat}:{ch_name}"
+
+                nodes.append({
+                    "id": ch_id,
+                    "name": ch_name,
+                    "category": cat,
+                    "kind": "level1",
+                    "description": f"共 {len(kp_names)} 个知识点",
+                    "child_count": len(kp_names),
+                })
+                edges.append({"source": root_id, "target": ch_id, "relation": "CONTAINS"})
+
+                if levels >= 3:
+                    for kp_name in kp_names:
+                        kp_id = f"level2:{cat}:{ch_name}:{kp_name}"
+                        nodes.append({
+                            "id": kp_id,
+                            "name": kp_name,
+                            "category": cat,
+                            "kind": "level2",
+                            "description": "",
+                        })
+                        edges.append({"source": ch_id, "target": kp_id, "relation": "CONTAINS"})
+
+
+        # 5. 从 PREREQUISITE_OF 聚合跨章关系
+        kp_chapter_map: dict[str, str] = {}
+        for cat, chapters in subject_map.items():
+            for ch_name, kp_names in chapters.items():
+                for kp_name in kp_names:
+                    kp_chapter_map[f"{cat}:{kp_name}"] = f"level1:{cat}:{ch_name}"
+
+        seen_cross = set()
+        for rec in prereq_records:
+            src_key = f"{rec.get('category', '')}:{rec.get('source', '')}"
+            tgt_key = f"{rec.get('category', '')}:{rec.get('target', '')}"
+            src_ch = kp_chapter_map.get(src_key)
+            tgt_ch = kp_chapter_map.get(tgt_key)
+            if src_ch and tgt_ch and src_ch != tgt_ch:
+                edge_key = f"{src_ch}->{tgt_ch}"
+                if edge_key not in seen_cross:
+                    seen_cross.add(edge_key)
+                    edges.append({"source": src_ch, "target": tgt_ch, "relation": "PREREQUISITE_OF"})
+
+        # 6. 跨学科 RELATED_TO（root 之间连线）
+        seen_cross_cat = set()
+        for rec in cross_cat_records:
+            src_cat = rec.get("src_cat", "")
+            tgt_cat = rec.get("tgt_cat", "")
+            if src_cat in _CORE_CATEGORIES and tgt_cat in _CORE_CATEGORIES:
+                edge_key = f"root:{src_cat}->root:{tgt_cat}"
+                rev_key = f"root:{tgt_cat}->root:{src_cat}"
+                if edge_key not in seen_cross_cat and rev_key not in seen_cross_cat:
+                    seen_cross_cat.add(edge_key)
+                    edges.append({
+                        "source": f"root:{src_cat}",
+                        "target": f"root:{tgt_cat}",
+                        "relation": "RELATED_TO",
+                        "weight": rec.get("cnt", 1),
+                    })
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "stats": {
+                "root_count": len(subject_map),
+                "chapter_count": total_chapters,
+                "kp_count": total_kps,
+            },
+        }
 
     # ========== 删除同步 ==========
 

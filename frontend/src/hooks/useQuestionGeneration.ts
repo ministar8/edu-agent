@@ -1,5 +1,6 @@
 import { useCallback, useRef } from "react";
 
+import { useTrackingRefresh } from "@/contexts/TrackingRefreshContext";
 import { getErrorMessage } from "@/lib/errors";
 import { http } from "@/lib/http";
 import type { QuestionPanelState, StructuredQuestion } from "@/types/question";
@@ -10,6 +11,7 @@ type UseQuestionGenerationParams = {
 };
 
 export function useQuestionGeneration({ state, setState }: UseQuestionGenerationParams) {
+  const { triggerRefresh: triggerTrackingRefresh } = useTrackingRefresh();
   const generatingRef = useRef(false);
 
   const updateState = useCallback((patch: Partial<QuestionPanelState>) => {
@@ -28,7 +30,6 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
     updateState({
       result: raw,
       questions,
-      batchId: res.data.batch_id || null,
       ...extraPatch,
     });
   }, [updateState]);
@@ -43,7 +44,6 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
       result: "",
       resultTopic: currentTopic,
       questions: [],
-      batchId: null,
     });
 
     try {
@@ -95,6 +95,7 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
         };
         return { ...prev, questions: newQuestions };
       });
+      triggerTrackingRefresh();
     } catch (error: unknown) {
       setState((prev) => {
         const newQuestions = [...prev.questions];
@@ -105,7 +106,7 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
         return { ...prev, questions: newQuestions };
       });
     }
-  }, [setState]);
+  }, [setState, triggerTrackingRefresh]);
 
   const updateQuestionAnswer = useCallback((questionIndex: number, answer: string) => {
     const newQuestions = [...state.questions];
@@ -126,7 +127,7 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
   const weakPointPractice = useCallback(async () => {
     if (generatingRef.current) return;
     generatingRef.current = true;
-    updateState({ loading: true, result: "", questions: [], batchId: null });
+    updateState({ loading: true, result: "", questions: [] });
 
     try {
       const res = await http.post("/api/questions/weak-point-practice", {
@@ -144,5 +145,63 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
     }
   }, [updateState, handleGenerateResult]);
 
-  return { generate, updateState, gradeQuestion, updateQuestionAnswer, loadWrongQuestions, weakPointPractice };
+  const redoAnswerChange = useCallback((qId: number, answer: string) => {
+    setState((prev) => ({
+      ...prev,
+      wrongQuestions: prev.wrongQuestions.map((wq) =>
+        wq.id === qId ? { ...wq, redoAnswer: answer } : wq
+      ),
+    }));
+  }, [setState]);
+
+  const redoWrongQuestion = useCallback(async (qId: number) => {
+    let answer = "";
+    setState((prev) => {
+      const wq = prev.wrongQuestions.find((w) => w.id === qId);
+      if (!wq || wq.redoStatus === "loading") return prev;
+      answer = wq.redoAnswer || "";
+      return {
+        ...prev,
+        wrongQuestions: prev.wrongQuestions.map((w) =>
+          w.id === qId ? { ...w, redoStatus: "loading" as const } : w
+        ),
+      };
+    });
+    if (!answer.trim()) return;
+
+    try {
+      const res = await http.post(`/api/questions/${qId}/grade`, {
+        user_answer: answer,
+      });
+
+      setState((prev) => ({
+        ...prev,
+        wrongQuestions: prev.wrongQuestions.map((w) =>
+          w.id === qId
+            ? {
+                ...w,
+                redoStatus: "done" as const,
+                redoScore: res.data.score,
+                redoFeedback: res.data.feedback,
+                redoIsWrong: res.data.is_wrong,
+                redoErrorAnalysis: res.data.error_analysis || "",
+                // If correct, also update the main record
+                grading_score: res.data.is_wrong ? w.grading_score : res.data.score,
+                error_analysis: res.data.error_analysis || w.error_analysis,
+              }
+            : w
+        ),
+      }));
+      triggerTrackingRefresh();
+    } catch {
+      setState((prev) => ({
+        ...prev,
+        wrongQuestions: prev.wrongQuestions.map((w) =>
+          w.id === qId ? { ...w, redoStatus: "idle" as const } : w
+        ),
+      }));
+    }
+  }, [setState, triggerTrackingRefresh]);
+
+  return { generate, updateState, gradeQuestion, updateQuestionAnswer, loadWrongQuestions, weakPointPractice, redoWrongQuestion, redoAnswerChange };
 }

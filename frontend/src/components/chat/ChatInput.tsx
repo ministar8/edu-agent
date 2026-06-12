@@ -5,9 +5,10 @@ type ChatInputProps = {
   loading: boolean;
   onInputChange: (value: string) => void;
   onSubmit: () => void;
+  onStop?: () => void;
 };
 
-function ChatInputComponent({ input, loading, onInputChange, onSubmit }: ChatInputProps) {
+function ChatInputComponent({ input, loading, onInputChange, onSubmit, onStop }: ChatInputProps) {
   return (
     <div className="border-t border-stone-100 bg-white/80 px-6 pb-5 pt-4 backdrop-blur-sm">
       <div className="mx-auto max-w-3xl rounded-2xl border border-stone-200/80 bg-white px-4 py-2.5 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-emerald-300">
@@ -27,21 +28,29 @@ function ChatInputComponent({ input, loading, onInputChange, onSubmit }: ChatInp
             maxLength={2000}
             className="flex-1 bg-transparent px-2 py-1.5 text-[14px] text-slate-700 outline-none placeholder:text-slate-400"
           />
-          <button
-            onClick={onSubmit}
-            disabled={loading || !input.trim()}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-400 disabled:shadow-none"
-            aria-label="发送消息"
-          >
-            {loading ? (
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-            ) : (
+          {loading && onStop ? (
+            <button
+              onClick={onStop}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500 text-white shadow-sm transition hover:bg-red-600"
+              aria-label="停止生成"
+            >
+              <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="1.5" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              onClick={onSubmit}
+              disabled={!input.trim()}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-stone-200 disabled:text-stone-400 disabled:shadow-none"
+              aria-label="发送消息"
+            >
               <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 19V5" />
                 <path d="M5 12l7-7 7 7" />
               </svg>
-            )}
-          </button>
+            </button>
+          )}
         </div>
       </div>
     </div>

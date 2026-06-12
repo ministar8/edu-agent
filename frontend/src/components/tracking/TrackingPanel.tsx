@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useTrackingRefresh } from "@/contexts/TrackingRefreshContext";
 import { http } from "@/lib/http";
 import { getErrorMessage } from "@/lib/errors";
-import { knowledgeCategories } from "@/lib/collections";
+import { CATEGORY_LABELS } from "@/lib/collections";
+import LearningPathView from "./LearningPathView";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -12,6 +14,7 @@ interface CategoryStat {
   avg_mastery: number;
   avg_score: number;
   total_points: number;
+  tracked_points: number;
   mastered: number;
   weak: number;
 }
@@ -25,7 +28,6 @@ interface WeakPoint {
   confidence: number;
   effective_score: number;
   interaction_count: number;
-  last_interaction_at: string | null;
 }
 
 interface Recommendation {
@@ -56,14 +58,24 @@ interface KnowledgePointDetail {
   tracked: boolean;
 }
 
-// ── Category label map ───────────────────────────────────────
+interface TrendPoint {
+  date: string;
+  avg_mastery: number;
+  avg_effective_score: number;
+  event_count: number;
+  event_types: string[];
+}
 
-const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(
-  knowledgeCategories.map((c) => [c.value, c.label]),
-);
-// Extra categories not in knowledgeCategories but returned by tracking API
-CATEGORY_LABELS.learning_paths = "学习路径";
-CATEGORY_LABELS.answers = "标准答案";
+interface RecentInteraction {
+  id: number;
+  name: string;
+  category: string;
+  mastery: number;
+  effective_score: number;
+  interaction_count: number;
+  source: string;
+  time_ago: string;
+}
 
 // ── Radar Chart (pure SVG) ───────────────────────────────────
 
@@ -161,12 +173,116 @@ function MasteryBar({ value, label }: { value: number; label?: string }) {
   );
 }
 
+// ── Mastery Trend Chart (pure SVG) ──────────────────────────────
+
+function MasteryTrendChart({ data }: { data: TrendPoint[] }) {
+  if (data.length < 2) {
+    return (
+      <div className="flex items-center justify-center h-[160px] text-xs text-slate-400">
+        {data.length === 0 ? "暂无趋势数据，开始学习后将记录掌握度变化" : "数据不足，至少需要2个数据点"}
+      </div>
+    );
+  }
+
+  const W = 480;
+  const H = 160;
+  const padL = 36;
+  const padR = 12;
+  const padT = 12;
+  const padB = 24;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  // X: date index, Y: 0~1
+  const xStep = plotW / (data.length - 1);
+  const toX = (i: number) => padL + i * xStep;
+  const toY = (v: number) => padT + plotH * (1 - Math.max(0, Math.min(1, v)));
+
+  // Mastery line
+  const masteryPath = data.map((d, i) => `${i === 0 ? "M" : "L"}${toX(i)},${toY(d.avg_mastery)}`).join(" ");
+  // Effective score line
+  const scorePath = data.map((d, i) => `${i === 0 ? "M" : "L"}${toX(i)},${toY(d.avg_effective_score)}`).join(" ");
+
+  // Area fill under mastery
+  const areaPath = masteryPath + ` L${toX(data.length - 1)},${padT + plotH} L${padL},${padT + plotH} Z`;
+
+  // Grid lines at 0.2, 0.4, 0.6, 0.8
+  const gridLines = [0.2, 0.4, 0.6, 0.8].map((v) => (
+    <line key={v} x1={padL} y1={toY(v)} x2={W - padR} y2={toY(v)} stroke="#e2e8f0" strokeWidth={0.5} />
+  ));
+
+  // Y-axis labels
+  const yLabels = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map((v) => (
+    <text key={v} x={padL - 4} y={toY(v)} textAnchor="end" dominantBaseline="middle" fontSize={9} fill="#94a3b8">
+      {Math.round(v * 100)}%
+    </text>
+  ));
+
+  // X-axis date labels (show first, last, and some middle ones)
+  const xLabels = data.length <= 8
+    ? data.map((d, i) => (
+        <text key={i} x={toX(i)} y={H - 2} textAnchor="middle" fontSize={8} fill="#94a3b8">
+          {d.date.slice(5)}
+        </text>
+      ))
+    : [0, Math.floor(data.length / 2), data.length - 1].map((idx) => (
+        <text key={idx} x={toX(idx)} y={H - 2} textAnchor="middle" fontSize={8} fill="#94a3b8">
+          {data[idx].date.slice(5)}
+        </text>
+      ));
+
+  // Data dots with event count
+  const dots = data.map((d, i) => {
+    const isUp = i === 0 ? d.avg_mastery > 0 : d.avg_mastery >= data[i - 1].avg_mastery;
+    return (
+      <g key={i}>
+        <circle cx={toX(i)} cy={toY(d.avg_mastery)} r={3} fill={isUp ? "#10b981" : "#ef4444"} />
+        {d.event_count > 1 && (
+          <circle cx={toX(i)} cy={toY(d.avg_mastery)} r={5} fill="none" stroke={isUp ? "#10b981" : "#ef4444"} strokeWidth={0.5} opacity={0.4} />
+        )}
+      </g>
+    );
+  });
+
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="w-full">
+      {/* Grid */}
+      {gridLines}
+      {/* Y labels */}
+      {yLabels}
+      {/* Area fill */}
+      <path d={areaPath} fill="rgba(59,130,246,0.08)" />
+      {/* Mastery line */}
+      <path d={masteryPath} fill="none" stroke="#3b82f6" strokeWidth={2} />
+      {/* Effective score line (dashed) */}
+      <path d={scorePath} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" />
+      {/* Dots */}
+      {dots}
+      {/* X labels */}
+      {xLabels}
+      {/* Legend */}
+      <line x1={padL + 4} y1={padT + 4} x2={padL + 20} y2={padT + 4} stroke="#3b82f6" strokeWidth={2} />
+      <text x={padL + 24} y={padT + 7} fontSize={9} fill="#64748b">掌握度</text>
+      <line x1={padL + 68} y1={padT + 4} x2={padL + 84} y2={padT + 4} stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" />
+      <text x={padL + 88} y={padT + 7} fontSize={9} fill="#64748b">有效分</text>
+    </svg>
+  );
+}
+
 // ── Main Panel ───────────────────────────────────────────────
 
-export default function TrackingPanel() {
+type TrackingPanelProps = {
+  onGenerateSimilarPractice?: (topic: string) => void;
+};
+
+export default function TrackingPanel({ onGenerateSimilarPractice }: TrackingPanelProps) {
+  const { refreshVersion } = useTrackingRefresh();
   const [profile, setProfile] = useState<CategoryStat[]>([]);
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [recentInteractions, setRecentInteractions] = useState<RecentInteraction[]>([]);
+  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
+  const [trendCategory, setTrendCategory] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [categoryDetail, setCategoryDetail] = useState<CategoryDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -183,15 +299,19 @@ export default function TrackingPanel() {
     (async () => {
       setLoading(true);
       try {
-        const [pRes, wRes, rRes] = await Promise.all([
+        const [pRes, wRes, rRes, recentRes, trendRes] = await Promise.all([
           http.get("/api/tracking/profile"),
           http.get("/api/tracking/weak-points", { params: { threshold: 0.3, limit: 10 } }),
           http.get("/api/tracking/recommendations", { params: { limit: 5 } }),
+          http.get("/api/tracking/recent", { params: { limit: 20 } }),
+          http.get("/api/tracking/mastery-trend", { params: { days: 30 } }),
         ]);
         if (!mountedRef.current) return;
         setProfile(pRes.data?.data?.categories || []);
         setWeakPoints(wRes.data?.data || []);
         setRecommendations(rRes.data?.data || []);
+        setRecentInteractions(recentRes.data?.data || []);
+        setTrendData(trendRes.data?.data?.points || []);
       } catch (e: unknown) {
         if (!mountedRef.current) return;
         setError(getErrorMessage(e, "加载失败"));
@@ -199,7 +319,7 @@ export default function TrackingPanel() {
         if (mountedRef.current) setLoading(false);
       }
     })();
-  }, []);
+  }, [refreshVersion]);
 
   // Fetch category detail on selection
   useEffect(() => {
@@ -212,6 +332,14 @@ export default function TrackingPanel() {
       .then((res) => { if (mountedRef.current) setCategoryDetail(res.data?.data || null); })
       .catch(() => { if (mountedRef.current) setCategoryDetail(null); });
   }, [selectedCategory]);
+
+  // Fetch trend data when category filter changes
+  useEffect(() => {
+    http
+      .get("/api/tracking/mastery-trend", { params: { days: 30, category: trendCategory || undefined } })
+      .then((res) => { if (mountedRef.current) setTrendData(res.data?.data?.points || []); })
+      .catch(() => { if (mountedRef.current) setTrendData([]); });
+  }, [trendCategory, refreshVersion]);
 
   if (loading) {
     return (
@@ -255,10 +383,41 @@ export default function TrackingPanel() {
           </div>
         </div>
 
+        {/* Mastery Trend Chart */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-slate-700">掌握度趋势</h3>
+            <select
+              value={trendCategory}
+              onChange={(e) => setTrendCategory(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 focus:border-emerald-300 focus:outline-none"
+            >
+              <option value="">全部学科</option>
+              {profile.map((c) => (
+                <option key={c.category} value={c.category}>{CATEGORY_LABELS[c.category] || c.category}</option>
+              ))}
+            </select>
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-3">
+            <MasteryTrendChart data={trendData} />
+          </div>
+        </div>
+
         {/* Radar chart */}
         {profile.length > 0 && (
-          <div className="flex justify-center">
-            <RadarChart data={profile} />
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-slate-700">核心维度掌握对比</h3>
+            <div className="rounded-xl border border-slate-100 bg-white p-4 flex flex-col items-center justify-center shadow-sm">
+              <RadarChart data={profile} />
+              <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-slate-400 select-none">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
+                  当前学力分布
+                </span>
+                <span className="text-slate-200">|</span>
+                <span>408 核心考纲覆盖</span>
+              </div>
+            </div>
           </div>
         )}
 
@@ -282,7 +441,7 @@ export default function TrackingPanel() {
                   {CATEGORY_LABELS[cat.category] || cat.category}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {cat.mastered}/{cat.total_points} 已掌握
+                  {cat.mastered}/{cat.total_points} 已掌握 · 已追踪 {cat.tracked_points}
                 </span>
               </div>
               <MasteryBar value={cat.avg_score} />
@@ -346,9 +505,20 @@ export default function TrackingPanel() {
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-700">{wp.name}</span>
-                      <span className="text-xs text-red-500">
-                        {CATEGORY_LABELS[wp.category] || wp.category}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-red-500">
+                          {CATEGORY_LABELS[wp.category] || wp.category}
+                        </span>
+                        {onGenerateSimilarPractice && (
+                          <button
+                            type="button"
+                            onClick={() => onGenerateSimilarPractice(wp.name)}
+                            className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-200 transition-colors"
+                          >
+                            去练习
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <MasteryBar value={wp.effective_score} label="有效分" />
                     <div className="flex gap-4 text-xs text-slate-400">
@@ -362,32 +532,81 @@ export default function TrackingPanel() {
             )}
 
             {/* Recommendations */}
-            <h2 className="text-lg font-semibold text-slate-800 mt-4">学习建议</h2>
-            {recommendations.length === 0 ? (
-              <div className="text-sm text-slate-400">暂无推荐，保持学习即可！</div>
-            ) : (
-              <div className="space-y-2">
-                {recommendations.map((rec, i) => (
-                  <div
-                    key={i}
-                    className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3 space-y-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-700">
-                        {rec.weak_point}
-                      </span>
-                      <span className="text-xs text-emerald-600">
-                        {CATEGORY_LABELS[rec.category] || rec.category}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600">{rec.reason}</p>
-                    {rec.prerequisites.length > 0 && (
-                      <div className="text-xs text-slate-400">
-                        前置知识：{rec.prerequisites.map((p) => p.name).join("、")}
+            {recommendations.length > 0 && (
+              <>
+                <h2 className="text-lg font-semibold text-slate-800 mt-4">学习建议</h2>
+                <div className="space-y-2">
+                  {recommendations.map((rec, i) => (
+                    <div key={i} className="rounded-lg border border-amber-100 bg-amber-50/30 p-3 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium text-slate-700">{rec.weak_point}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-amber-600">
+                            {CATEGORY_LABELS[rec.category] || rec.category}
+                          </span>
+                          {onGenerateSimilarPractice && (
+                            <button
+                              type="button"
+                              onClick={() => onGenerateSimilarPractice(rec.weak_point)}
+                              className="rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-medium text-orange-700 hover:bg-orange-200 transition-colors"
+                            >
+                              去练习
+                            </button>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div className="text-xs text-slate-500">{rec.reason}</div>
+                      {rec.prerequisites.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <span className="text-[10px] text-slate-400">前置：</span>
+                          {rec.prerequisites.map((p, j) => (
+                            <span key={j} className="text-[10px] rounded bg-slate-100 px-1.5 py-0.5 text-slate-500">
+                              {p.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Learning Path Visualization */}
+            <h2 className="text-lg font-semibold text-slate-800 mt-4">学习路径</h2>
+            <LearningPathView onGenerateSimilarPractice={onGenerateSimilarPractice} />
+
+            {/* Recent Interactions */}
+            <h2 className="text-lg font-semibold text-slate-800 mt-6">最近学习记录</h2>
+            {recentInteractions.length === 0 ? (
+              <div className="text-sm text-slate-400">暂无学习记录，开始智能问答或练习吧！</div>
+            ) : (
+              <div className="space-y-1.5">
+                {recentInteractions.map((ri) => {
+                  const pct = Math.round(Math.max(0, Math.min(1, ri.effective_score)) * 100);
+                  const scoreColor = pct >= 60 ? "text-emerald-600" : pct >= 30 ? "text-amber-600" : "text-red-500";
+                  const sourceIcon = ri.source === "批改" ? "📝" : ri.source === "智能问答" ? "💬" : ri.source === "练习" ? "✏️" : "📌";
+                  return (
+                    <div key={ri.id} className="flex items-center gap-2 rounded-lg border border-slate-100 px-3 py-2">
+                      <span className="text-sm">{sourceIcon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-slate-700 truncate">{ri.name}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">{CATEGORY_LABELS[ri.category] || ri.category}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-slate-400">{ri.source}</span>
+                          <span className="text-[10px] text-slate-300">·</span>
+                          <span className="text-[10px] text-slate-400">{ri.interaction_count}次</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className={`text-sm font-medium ${scoreColor}`}>{pct}%</div>
+                        <div className="text-[10px] text-slate-400">{ri.time_ago}</div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </>

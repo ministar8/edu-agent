@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getErrorMessage } from "@/lib/errors";
 import { http } from "@/lib/http";
-import type { RAGStep } from "@/types/rag";
+import type { RAGStep, RAGTrace } from "@/types/rag";
 
 export function useRagProcess() {
   const [query, setQuery] = useState("");
   const [collection, setCollection] = useState("data_structure");
   const [steps, setSteps] = useState<RAGStep[]>([]);
+  const [trace, setTrace] = useState<RAGTrace | null>(null);
+  const [resultText, setResultText] = useState("");
   const [loading, setLoading] = useState(false);
   const [activeStep, setActiveStep] = useState<number>(0);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -37,6 +39,8 @@ export function useRagProcess() {
     setLoading(true);
     setActiveStep(0);
     setSteps([]);
+    setTrace(null);
+    setResultText("");
 
     try {
       const res = await http.get("/api/visualization/rag-process", {
@@ -47,6 +51,14 @@ export function useRagProcess() {
       if (!mountedRef.current || ac.signal.aborted) return;
 
       const resultSteps = (res.data.steps || []) as RAGStep[];
+      const resultTrace = (res.data.trace || null) as RAGTrace | null;
+      const resultTextVal = (res.data.result_text || "") as string;
+
+      // Set trace and result immediately
+      setTrace(resultTrace);
+      setResultText(resultTextVal);
+
+      // Animate steps one by one
       for (let i = 0; i < resultSteps.length; i++) {
         if (!mountedRef.current || ac.signal.aborted) break;
         await new Promise((resolve) => {
@@ -67,5 +79,5 @@ export function useRagProcess() {
     }
   }, [collection, query]);
 
-  return { query, collection, steps, loading, activeStep, setQuery, setCollection, searchRAG };
+  return { query, collection, steps, trace, resultText, loading, activeStep, setQuery, setCollection, searchRAG };
 }

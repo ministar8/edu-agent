@@ -6,8 +6,11 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/app-shell/Sidebar";
 import { WorkspaceContent } from "@/components/app-shell/WorkspaceContent";
 import { WorkspaceHeader } from "@/components/app-shell/WorkspaceHeader";
+import { AgentActivityProvider } from "@/contexts/AgentActivityContext";
+import { TrackingRefreshProvider } from "@/contexts/TrackingRefreshContext";
 import { useAuth } from "@/lib/auth";
 import { generateThreadId } from "@/lib/thread";
+import { ReactFlowProvider } from "@xyflow/react";
 import type { ChatPanelState } from "@/types/chat";
 import type { TabType } from "@/types/navigation";
 import type { QuestionPanelState } from "@/types/question";
@@ -40,6 +43,7 @@ export default function Home() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>("chat");
+  const [knowledgeGraphFocus, setKnowledgeGraphFocus] = useState("");
   const [questionState, setQuestionState] = useState<QuestionPanelState>({
     topic: "",
     count: 1,
@@ -48,7 +52,6 @@ export default function Home() {
     result: "",
     resultTopic: "",
     questions: [],
-    batchId: null,
     wrongQuestions: [],
     wrongLoading: false,
     activeTab: "generate",
@@ -64,6 +67,7 @@ export default function Home() {
     statusLabel: "",
     baseThreadId: generateThreadId(),
     conversationId: null,
+    activeLeafId: null,
   });
 
   useEffect(() => {
@@ -87,6 +91,9 @@ export default function Home() {
 
   return (
     <ErrorBoundary>
+    <ReactFlowProvider>
+    <AgentActivityProvider>
+    <TrackingRefreshProvider>
     <div className="flex h-screen gap-4 bg-stone-50 p-4">
       <Sidebar activeTab={activeTab} user={user} onTabChange={setActiveTab} onLogout={logout} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-stone-200/60 bg-white shadow-sm">
@@ -97,9 +104,37 @@ export default function Home() {
           setChatState={setChatState}
           questionState={questionState}
           setQuestionState={setQuestionState}
+          knowledgeGraphFocus={knowledgeGraphFocus}
+          onOpenKnowledgeGraph={(focus) => {
+            setKnowledgeGraphFocus(focus);
+            setActiveTab("kgraph");
+          }}
+          onGenerateSimilarPractice={(topic) => {
+            setQuestionState((prev) => ({
+              ...prev,
+              topic,
+              count: 3,
+              difficulty: "medium",
+              result: "",
+              resultTopic: "",
+              questions: [],
+              activeTab: "generate",
+            }));
+            setActiveTab("questions");
+          }}
+          onJumpToChat={(question) => {
+            setChatState((prev) => ({
+              ...prev,
+              input: question,
+            }));
+            setActiveTab("chat");
+          }}
         />
       </div>
     </div>
+    </TrackingRefreshProvider>
+    </AgentActivityProvider>
+    </ReactFlowProvider>
     </ErrorBoundary>
   );
 }

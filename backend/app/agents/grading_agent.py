@@ -73,6 +73,12 @@ async def grade_single_question(
 标准答案：{standard_answer or "（无标准答案，请基于知识库依据判断）"}
 学生答案：{user_answer}
 
+批改要求：
+1. 给出0-100分
+2. 给出批改反馈（指出对错和关键点）
+3. 如果学生答错（score<60），必须填写error_analysis字段：分析答错原因（概念混淆/遗漏要点/推理错误/记忆偏差等），并给出针对性改进建议
+4. 如果学生答对，error_analysis留空
+
 请以JSON格式输出。
 """
 
@@ -80,7 +86,7 @@ async def grade_single_question(
     structured_llm = llm.with_structured_output(GradingResult)
     try:
         result = await structured_llm.ainvoke(grade_prompt)
-        return {"score": float(result.score), "feedback": result.feedback, "is_wrong": result.is_wrong}
+        return {"score": float(result.score), "feedback": result.feedback, "is_wrong": result.is_wrong, "error_analysis": result.error_analysis or ""}
     except Exception as e:
         logger.warning("Structured grading failed, fallback to regex: %s", e)
         # 兜底：用原始 LLM 调用 + 正则解析
@@ -91,7 +97,7 @@ async def grade_single_question(
         score = float(score_match.group(0)) if score_match else 50.0
         score = max(0.0, min(100.0, score))
         feedback = text[:500] if not score_match else text
-        return {"score": score, "feedback": feedback, "is_wrong": score < 60}
+        return {"score": score, "feedback": feedback, "is_wrong": score < 60, "error_analysis": ""}
 
 
 def create_grading_agent():

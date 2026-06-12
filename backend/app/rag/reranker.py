@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import time
 
 import httpx
@@ -88,7 +89,11 @@ def rerank(
             return cached_docs
         del _rerank_cache[cache_key]
 
-    texts = [doc.page_content[:_MAX_DOC_CHARS] for doc in documents]
+    # ── 去噪：去掉 heading_path 前缀（如 "[进程管理] > [PV操作]\n"） ──
+    # heading_path 已存在于 metadata (section.path) 和 LLM 上下文 (format_text_evidence)，
+    # 保留在 page_content 中会干扰 reranker 对正文相关性的判断。
+    _HEADING_PATH_RE = re.compile(r"^(?:\[[^\]]*\]\s*(?:>\s*)*)+\n")
+    texts = [_HEADING_PATH_RE.sub("", doc.page_content)[:_MAX_DOC_CHARS] for doc in documents]
 
     # ── 调用本地 TEI /rerank ──
     api_url = f"{settings.RERANK_LOCAL_URL}/rerank"

@@ -159,10 +159,18 @@ def build_metadata_routes(
             ("answer_meta", normalized, combine_filters(base_filter, {"content_type": "answer"}))
         )
 
-    # concept + comparison 合并为一条 section 路由（filter 相同，避免重复）
-    if cat.is_concept or cat.is_comparison:
+    # concept 查询走 section 路由；comparison 查询额外走 table 路由（对比表多为 table 类型）
+    if cat.is_concept:
         metadata_routes.append(
             ("concept_meta", focus_query, combine_filters(base_filter, {"content_type": "section"}))
+        )
+    if cat.is_comparison:
+        metadata_routes.append(
+            ("concept_meta", focus_query, combine_filters(base_filter, {"content_type": "section"}))
+        )
+        # 对比查询的核心内容多为对比表，补充 table 路由
+        metadata_routes.append(
+            ("comparison_meta", focus_query, combine_filters(base_filter, {"content_type": "table"}))
         )
 
     if cat.is_structured:
@@ -179,7 +187,8 @@ def build_metadata_routes(
     # ── 粒度补充：formula / table / merged_qa ──
     # 结构化/概念查询可能涉及公式或表格，补充精准路由
     # 短查询跳过 formula/table（命中率极低，浪费 Chroma 调用）
-    if (cat.is_structured or cat.is_concept) and not cat.is_short:
+    # 对比查询已通过 comparison_meta 覆盖 table，此处不再重复
+    if (cat.is_structured or cat.is_concept) and not cat.is_short and not cat.is_comparison:
         metadata_routes.append(
             ("formula_meta", focus_query, combine_filters(base_filter, {"content_type": "formula"}))
         )
@@ -187,8 +196,13 @@ def build_metadata_routes(
             ("table_meta", focus_query, combine_filters(base_filter, {"content_type": "table"}))
         )
 
-    # 习题/答案查询补充 merged_qa 路由（真题 Q&A 合并块）
+    # 习题/答案/常考题查询补充 merged_qa 路由（真题 Q&A 合并块）
     if cat.is_exercise or cat.is_answer:
+        metadata_routes.append(
+            ("merged_qa_meta", normalized, combine_filters(base_filter, {"content_type": "merged_qa"}))
+        )
+    # 对比查询也可能涉及 merged_qa（如"TCP和UDP有什么区别"在常考题型中）
+    if cat.is_comparison:
         metadata_routes.append(
             ("merged_qa_meta", normalized, combine_filters(base_filter, {"content_type": "merged_qa"}))
         )
@@ -231,6 +245,7 @@ _ROUTE_WEIGHTS: dict[tuple[str, str], float] = {
     ("answer_meta", "answer"):          2.5,
     ("concept_meta", "concept"):        1.5,
     ("concept_meta", "comparison"):      1.5,
+    ("comparison_meta", "comparison"):    2.0,  # 对比表精准路由
     ("structured_meta", "structured"):   2.0,
     ("section_meta", "default"):         1.2,
     ("formula_meta", "concept"):         1.8,
@@ -239,6 +254,7 @@ _ROUTE_WEIGHTS: dict[tuple[str, str], float] = {
     ("table_meta", "structured"):        1.5,
     ("merged_qa_meta", "exercise"):      2.0,
     ("merged_qa_meta", "answer"):        2.0,
+    ("merged_qa_meta", "comparison"):    1.5,  # 对比类常考题
 }
 
 # 查询类型优先级：精确匹配 > default 回退

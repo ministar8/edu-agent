@@ -25,5 +25,8 @@ export interface ConversationMessage {
   agent_name: string | null;
   sources: string[];
   governance: Record<string, unknown> | null;
+  parent_id: number | null;
+  siblings_order: number;
+  child_count: number;
   created_at: string;
 }

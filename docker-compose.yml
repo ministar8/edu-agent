@@ -1,0 +1,148 @@
+# ═══════════════════════════════════════════════════════════════
+#  智能教学辅导多Agent系统 — Docker Compose 部署配置
+#
+#  使用方式:
+#    cp .env.example .env   # 编辑 .env 填入真实密钥
+#    docker compose up -d   # 启动所有服务
+#    docker compose logs -f # 查看日志
+#
+#  服务清单:
+#    nginx      — 反向代理 (80端口, 统一入口)
+#    backend    — FastAPI 后端
+#    frontend   — Next.js 前端
+#    tei-emb    — 本地 Embedding (bge-m3, TEI)
+#    neo4j      — 知识图谱
+#    tei-rerank — 本地 Reranker (bge-reranker-v2-m3, TEI)
+# ═══════════════════════════════════════════════════════════════
+
+services:
+  # ── 反向代理 (统一入口) ──────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    restart: unless-stopped
+
+  # ── 后端 (FastAPI + Uvicorn) ─────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    environment:
+      # 覆盖 .env 中的本地地址，指向 Docker 内部服务名
+      BACKEND_HOST: "0.0.0.0"
+      EMBEDDING_API_BASE: "http://tei-emb:80"
+      EMBEDDING_MODEL: "BAAI/bge-m3"
+      RERANK_LOCAL_URL: "http://tei-rerank:80"
+      NEO4J_URI: "bolt://neo4j:7687"
+      CHROMA_PERSIST_DIR: "/data/chroma_db"
+      KNOWLEDGE_DIR: "/data/knowledge"
+      CORS_ORIGINS: "http://localhost,http://127.0.0.1,http://${HOST_IP:-localhost}"
+    volumes:
+      - backend-data:/data
+      - ./knowledge:/data/knowledge:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── 前端 (Next.js standalone) ────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Docker 内部走 nginx → backend，前端 rewrite 代理指向 backend 服务名
+        NEXT_PUBLIC_API_BASE_URL: "http://backend:8000"
+    environment:
+      # 运行时 API 地址（Next.js rewrite 用）
+      NEXT_PUBLIC_API_BASE_URL: "http://backend:8000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── TEI Embedding (bge-m3) ──────────────────────────
+  tei-emb:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    command: --model-id BAAI/bge-m3 --dtype float16 --pooling mean --max-batch-tokens 16384 --max-client-batch-size 64
+    volumes:
+      - tei-emb-cache:/data
+    # GPU 加速 (推荐)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+
+  # ── Neo4j (知识图谱) ────────────────────────────────
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-eduagent2026}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_server_memory_pagecache_size: 256M
+      NEO4J_server_memory_heap_initial__size: 512M
+      NEO4J_server_memory_heap_max__size: 512M
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    ports:
+      - "7474:7474"   # Neo4j Browser (可选，调试用)
+      - "7687:7687"   # Bolt 协议
+    restart: unless-stopped
+
+  # ── TEI Reranker (bge-reranker-v2-m3) ────────────────
+  tei-rerank:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    command: --model-id BAAI/bge-reranker-v2-m3 --dtype float16 --pooling cls
+    volumes:
+      - tei-rerank-cache:/data
+    # GPU 加速 (推荐)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+# ── 持久化卷 ──────────────────────────────────────────
+volumes:
+  backend-data:
+    driver: local
+  tei-emb-cache:
+    driver: local
+  neo4j-data:
+    driver: local
+  neo4j-logs:
+    driver: local
+  tei-rerank-cache:
+    driver: local

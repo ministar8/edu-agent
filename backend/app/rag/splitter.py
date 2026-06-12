@@ -225,18 +225,18 @@ _LIST_ITEM_RE = re.compile(r"^(?:[-*+]|\d+[.．])\s+", re.MULTILINE)
 # 例题模式：> 例题 / > 例N / > 例1：
 _EXAMPLE_Q_RE = re.compile(r"^>\s*(?:例[题\d]|例\d+[：:])", re.MULTILINE)
 # 答案模式：答案： / 正确答案： / 正确答案选择 X
-_ANSWER_RE = re.compile(r"答案[：:；;]|正确答案[：:]", re.MULTILINE)
+_ANSWER_RE = re.compile(r"(?:解答|答案|正确答案)[：:；;]", re.MULTILINE)
 # 答案字母提取：正确答案：D / 答案：B
-_ANSWER_KEY_RE = re.compile(r"(?:正确答案|答案)[：:；;]\s*([A-E])")
-# 真题模式：##### N (纯数字标题)
-_EXAM_Q_HEADING_RE = re.compile(r"^#{4,5}\s*\d+\s*$", re.MULTILINE)
+_ANSWER_KEY_RE = re.compile(r"(?:正确答案|答案)[：:；;]\s*([A-E](?:,[A-E])*)")
+# 真题模式：##### N (纯数字标题) 或 ### 第N题（学科·题型）(新格式)
+_EXAM_Q_HEADING_RE = re.compile(r"^(?:#{4,5}\s*\d+\s*$|#{2,4}\s*第\d+题)", re.MULTILINE)
 
 
 def _merge_qa_blockquotes(text: str) -> str:
     """预扫描文本，将 Q&A 模式合并为原子块
 
     识别两种模式：
-    1. 例题模式：> 例题/例N 开头，到 答案：/正确答案： 结束的 blockquote 区域
+    1. 例题模式：> 例题/例N 开头，到 答案：/解答：/正确答案： 结束的 blockquote 区域
     2. 真题模式：##### N 标题行 + 题干 + 正确答案：X + 解析，到下一个 ##### N 或文件结束
 
     合并后的块以 __QA_PAIR_START__ 标记，后续 _parse_semantic_units 会将其识别为原子单元。
@@ -261,7 +261,7 @@ def _merge_qa_blockquotes(text: str) -> str:
             qa_buffer.append(line)
             continue
 
-        # ── 检测真题开头（##### N 纯数字标题） ──
+        # ── 检测真题开头（##### N 或 ### 第N题） ──
         if _EXAM_Q_HEADING_RE.match(stripped):
             # 如果之前有未关闭的 QA buffer，先输出
             if in_qa and qa_buffer:
@@ -323,12 +323,21 @@ def _extract_qa_fields(text: str) -> dict:
         {
             "question": str,    # 题干部分（答案之前的文本）
             "answer": str,      # 答案+解析部分（从答案标记开始）
-            "answer_key": str,  # 正确答案字母（A/B/C/D/E），可能为空
+            "answer_key": str,  # 正确答案：选择题为字母(A-E)，计算/简答题为答案摘要
         }
     """
-    # 提取答案字母
+    # 提取答案标识：先尝试字母(A-E)，失败则提取答案:后到分号/行尾的内容
     key_match = _ANSWER_KEY_RE.search(text)
-    answer_key = key_match.group(1) if key_match else ""
+    if key_match:
+        answer_key = key_match.group(1)
+    else:
+        # 非选择题：提取 答案:XXX 或 解答:XXX 中到 ; 或行尾的部分
+        _non_letter_key_re = re.compile(r"(?:答案|解答)[：:；;]\s*(.+?)(?:[；;]|$)", re.MULTILINE)
+        nl_match = _non_letter_key_re.search(text)
+        answer_key = nl_match.group(1).strip()[:120] if nl_match else ""
+    # 清理 blockquote 前缀和加粗标记
+    answer_key = re.sub(r"^>\s*", "", answer_key, flags=re.MULTILINE)
+    answer_key = re.sub(r"\*{1,2}", "", answer_key).strip()
 
     # 按答案标记分割题目和答案
     answer_match = _ANSWER_RE.search(text)
@@ -347,7 +356,7 @@ def _extract_qa_fields(text: str) -> dict:
     question = question.strip()
 
     # 清理 answer 中的前缀
-    answer = re.sub(r"^(?:正确)?答案[：:；;]\s*", "", answer, count=1)
+    answer = re.sub(r"^(?:正确)?(?:答案|解答)[：:；;]\s*", "", answer, count=1)
     answer = answer.strip()
 
     return {
@@ -663,8 +672,8 @@ def _split_qa_oversized(text: str, limit: int) -> list[str]:
 
     每个题目+答案保持原子性，不跨题拆分。
     """
-    # 按真题标题拆分
-    parts = re.split(r"(?=^#{4,5}\s*\d+\s*$)", text, flags=re.MULTILINE)
+    # 按真题标题拆分（支持旧格式 ##### N 和新格式 ### 第N题）
+    parts = re.split(r"(?=^#{2,5}\s*(?:\d+\s*$|第\d+题))", text, flags=re.MULTILINE)
     if len(parts) > 1:
         result: list[str] = []
         buf: list[str] = []
@@ -988,15 +997,14 @@ def split_documents(
                             continue
                         qa_fields = _extract_qa_fields(sub)
                         chunk = _make_chunk(doc.metadata, sub)
-                        if section["heading_path"] and not chunk.page_content.startswith(section["heading_path"]):
-                            chunk.page_content = f"{section['heading_path']}\n{chunk.page_content}"
+                        # heading_path 不拼入 page_content，避免干扰 embedding/reranker
+                        # section 上下文已通过 metadata (section.path) 传递给 LLM
                         chunk.metadata["_qa_fields"] = qa_fields
                         detail_chunks.append((chunk, "merged_qa"))
                 else:
                     qa_fields = _extract_qa_fields(section_text)
                     chunk = _make_chunk(doc.metadata, section_text.strip())
-                    if section["heading_path"] and not chunk.page_content.startswith(section["heading_path"]):
-                        chunk.page_content = f"{section['heading_path']}\n{chunk.page_content}"
+                    # heading_path 不拼入 page_content，避免干扰 embedding/reranker
                     chunk.metadata["_qa_fields"] = qa_fields
                     detail_chunks.append((chunk, "merged_qa"))
             else:
@@ -1007,8 +1015,7 @@ def split_documents(
                     is_qa = sc.get("is_qa", False) if isinstance(sc, dict) else False
                     qa_fields = sc.get("qa_fields") if isinstance(sc, dict) else None
                     chunk = _make_chunk(doc.metadata, chunk_text)
-                    if section["heading_path"] and not chunk.page_content.startswith(section["heading_path"]):
-                        chunk.page_content = f"{section['heading_path']}\n{chunk.page_content}"
+                    # heading_path 不拼入 page_content，避免干扰 embedding/reranker
                     # 临时存储 qa_fields，后续 _append_chunk_metadata 会消费
                     if is_qa and qa_fields:
                         chunk.metadata["_qa_fields"] = qa_fields

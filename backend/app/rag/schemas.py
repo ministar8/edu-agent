@@ -18,6 +18,7 @@ class GradingResult(BaseModel):
     score: int = Field(ge=0, le=100, description="0-100 的整数得分")
     feedback: str = Field(max_length=800, description="不超过200字的批改反馈，指出对错和关键点")
     is_wrong: bool = Field(description="学生答案是否错误（score < 60 视为错误）")
+    error_analysis: str = Field(default="", max_length=500, description="当is_wrong=True时，分析学生答错的原因：是概念混淆、遗漏要点、还是推理错误，给出具体错因分类和改进建议")
 
 
 # ── 出题结果 ──────────────────────────────────────────

@@ -9,6 +9,8 @@ type QuestionResultProps = {
   onLoadWrong: () => void;
   onWeakPointPractice: () => void;
   onSwitchTab: (tab: "generate" | "wrong") => void;
+  onRedoWrongQuestion: (qId: number) => void;
+  onRedoAnswerChange: (qId: number, answer: string) => void;
 };
 
 const DIFFICULTY_LABELS: Record<number, string> = {
@@ -38,13 +40,13 @@ function QuestionCard({
   const isGraded = question.gradingStatus === "done";
 
   return (
-    <div className={`rounded-2xl border p-5 transition-colors ${
-      isGraded && question.isWrong ? "border-red-200 bg-red-50/30" :
-      isGraded && !question.isWrong ? "border-green-200 bg-green-50/30" :
-      "border-slate-200 bg-white"
+    <div className={`rounded-2xl border p-5 transition-all shadow-sm ${
+      isGraded && question.isWrong ? "border-red-200 bg-red-50/20" :
+      isGraded && !question.isWrong ? "border-green-200 bg-green-50/20" :
+      "border-slate-200 bg-white hover:border-slate-300"
     }`}>
       {/* Header */}
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="rounded-lg bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
           题目{index + 1}
         </span>
@@ -54,24 +56,27 @@ function QuestionCard({
         <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
           {getDifficultyLabel(question.difficulty)}
         </span>
+        <span className="rounded-lg bg-amber-50 border border-amber-200/50 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+          闭环：生成 → 批改 → 反馈
+        </span>
         {isGraded && (
           <span className={`ml-auto rounded-lg px-2 py-0.5 text-xs font-medium ${
             question.isWrong ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
           }`}>
-            {question.isWrong ? "错误" : "正确"}{question.gradingScore != null ? ` · ${question.gradingScore}分` : ""}
+            {question.isWrong ? "需巩固" : "已掌握"}{question.gradingScore != null ? ` · ${question.gradingScore}分` : ""}
           </span>
         )}
       </div>
 
       {/* Stem */}
-      <div className="mb-3 text-sm leading-6 text-slate-800 whitespace-pre-wrap">
+      <div className="mb-3 text-sm leading-6 text-slate-800 whitespace-pre-wrap font-medium">
         {question.stem}
       </div>
 
       {/* Answer input */}
       <div className="mb-3">
         <textarea
-          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700 placeholder:text-stone-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+          className="w-full rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-700 placeholder:text-stone-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-200 disabled:opacity-80 disabled:bg-slate-50"
           rows={2}
           placeholder="输入你的答案..."
           value={question.userAnswer || ""}
@@ -96,41 +101,98 @@ function QuestionCard({
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          批改中...
+          AI 智能判分批改中...
         </span>
+      )}
+
+      {/* Grading Score Breakdown (visual) */}
+      {isGraded && question.gradingScore != null && (
+        <div className="mt-3 flex items-center gap-2 border-t border-dashed border-slate-100 pt-3">
+          <span className="text-xs text-slate-500 font-medium">答分比对：</span>
+          <div className="h-2 w-24 rounded-full bg-slate-100 overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${
+              question.isWrong ? "bg-red-500" : "bg-emerald-500"
+            }`} style={{ width: `${question.gradingScore}%` }} />
+          </div>
+          <span className="text-xs font-bold text-slate-700">{question.gradingScore}分</span>
+        </div>
       )}
 
       {/* Grading feedback */}
       {isGraded && question.gradingFeedback && (
-        <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        <div className="mt-2 rounded-xl bg-slate-50 px-3 py-2.5 text-xs text-slate-600 leading-relaxed border border-slate-100">
+          <div className="font-semibold text-slate-700 mb-1 flex items-center gap-1">
+            <span className="inline-block w-1 h-3 rounded-full bg-blue-500" />
+            AI 批改评语：
+          </div>
           {question.gradingFeedback}
+        </div>
+      )}
+
+      {/* Standard answer (reference) */}
+      {isGraded && question.answer && (
+        <div className="mt-2 rounded-xl bg-green-50/50 px-3 py-2.5 text-xs text-green-800 border border-green-100/50">
+          <span className="font-semibold text-green-900 block mb-1">参考答案：</span>
+          <div className="whitespace-pre-wrap">{question.answer}</div>
         </div>
       )}
 
       {/* Explanation (show after grading) */}
       {isGraded && question.explanation && (
-        <div className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          <span className="font-medium">解析：</span>{question.explanation}
+        <div className="mt-2 rounded-xl bg-amber-50/50 px-3 py-2.5 text-xs text-amber-800 border border-amber-100/50">
+          <span className="font-semibold text-amber-900 block mb-1">考点解析：</span>
+          <div className="whitespace-pre-wrap">{question.explanation}</div>
         </div>
       )}
     </div>
   );
 }
 
-function WrongQuestionCard({ q }: { q: WrongQuestion }) {
+function WrongQuestionCard({
+  q,
+  onRedo,
+  onRedoAnswerChange,
+}: {
+  q: WrongQuestion;
+  onRedo: (qId: number) => void;
+  onRedoAnswerChange: (qId: number, answer: string) => void;
+}) {
+  const isRedoing = q.redoStatus === "loading";
+  const isRedone = q.redoStatus === "done";
+
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50/20 p-5">
+    <div className={`rounded-2xl border p-5 transition-colors ${
+      isRedone && !q.redoIsWrong ? "border-green-200 bg-green-50/20" : "border-red-200 bg-red-50/20"
+    }`}>
       <div className="mb-2 flex items-center gap-2">
-        <span className="rounded-lg bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">错题</span>
+        <span className={`rounded-lg px-2 py-0.5 text-xs font-medium ${
+          isRedone && !q.redoIsWrong ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+        }`}>
+          {isRedone && !q.redoIsWrong ? "已掌握" : "错题"}
+        </span>
         <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
           {q.question_type || "未知类型"}
         </span>
         <span className="text-xs text-slate-400">{q.created_at?.slice(0, 10)}</span>
         {q.grading_score !== null && (
-          <span className="ml-auto text-xs text-red-600">{q.grading_score}分</span>
+          <span className="text-xs text-red-600">{q.grading_score}分</span>
+        )}
+        {q.redo_count > 0 && (
+          <span className="rounded-lg bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-600">
+            重做{q.redo_count}次
+          </span>
         )}
       </div>
       <div className="text-sm leading-6 text-slate-800 whitespace-pre-wrap">{q.stem}</div>
+
+      {/* Error analysis */}
+      {q.error_analysis && (
+        <div className="mt-2 rounded-xl bg-purple-50 px-3 py-2 text-xs text-purple-800">
+          <span className="font-medium">错因分析：</span>{q.error_analysis}
+        </div>
+      )}
+
+      {/* Standard answer & explanation */}
       {q.standard_answer && (
         <div className="mt-2 rounded-xl bg-green-50 px-3 py-2 text-xs text-green-800">
           <span className="font-medium">标准答案：</span>{q.standard_answer}
@@ -139,6 +201,52 @@ function WrongQuestionCard({ q }: { q: WrongQuestion }) {
       {q.explanation && (
         <div className="mt-1 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
           <span className="font-medium">解析：</span>{q.explanation}
+        </div>
+      )}
+
+      {/* Redo section */}
+      {!isRedone && (
+        <div className="mt-3 border-t border-red-100 pt-3">
+          <div className="mb-2 text-xs font-medium text-slate-600">重新作答</div>
+          <textarea
+            className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 placeholder:text-stone-400 focus:border-emerald-300 focus:outline-none focus:ring-1 focus:ring-emerald-200"
+            rows={2}
+            placeholder="输入你的新答案..."
+            value={q.redoAnswer || ""}
+            onChange={(e) => onRedoAnswerChange(q.id, e.target.value)}
+            disabled={isRedoing}
+          />
+          <button
+            onClick={() => onRedo(q.id)}
+            disabled={isRedoing || !(q.redoAnswer || "").trim()}
+            className="mt-2 rounded-xl bg-orange-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-orange-600 disabled:bg-stone-300 disabled:text-stone-500 transition-colors"
+          >
+            {isRedoing ? "批改中..." : "提交重做"}
+          </button>
+        </div>
+      )}
+
+      {/* Redo result */}
+      {isRedone && (
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`rounded-lg px-2 py-0.5 text-xs font-medium ${
+              q.redoIsWrong ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+            }`}>
+              {q.redoIsWrong ? `重做错误 · ${q.redoScore}分` : `重做正确 · ${q.redoScore}分`}
+            </span>
+          </div>
+          {q.redoFeedback && (
+            <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">{q.redoFeedback}</div>
+          )}
+          {q.redoIsWrong && q.redoErrorAnalysis && (
+            <div className="mt-1 rounded-xl bg-purple-50 px-3 py-2 text-xs text-purple-800">
+              <span className="font-medium">错因分析：</span>{q.redoErrorAnalysis}
+            </div>
+          )}
+          {!q.redoIsWrong && (
+            <div className="mt-1 text-xs text-emerald-600">恭喜！你已掌握此题，掌握度已更新。</div>
+          )}
         </div>
       )}
     </div>
@@ -152,6 +260,8 @@ function QuestionResultComponent({
   onLoadWrong,
   onWeakPointPractice,
   onSwitchTab,
+  onRedoWrongQuestion,
+  onRedoAnswerChange,
 }: QuestionResultProps) {
   const hasContent = state.loading || state.result || state.wrongQuestions.length > 0;
   if (!hasContent && state.questions.length === 0) return null;
@@ -234,7 +344,7 @@ function QuestionResultComponent({
           ) : state.wrongQuestions.length > 0 ? (
             <div className="space-y-4">
               {state.wrongQuestions.map((q) => (
-                <WrongQuestionCard key={q.id} q={q} />
+                <WrongQuestionCard key={q.id} q={q} onRedo={onRedoWrongQuestion} onRedoAnswerChange={onRedoAnswerChange} />
               ))}
             </div>
           ) : (

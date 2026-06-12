@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ChatRequest(BaseModel):
     message: str
     thread_id: str | None = "default"
+    parent_message_id: int | None = None  # for branching: attach new message under this parent
 
 
 class ChatResponse(BaseModel):
@@ -27,6 +28,9 @@ class MessageItem(BaseModel):
     agent_name: str | None = None
     sources: list[str] = Field(default_factory=list)
     governance: dict | None = None
+    parent_id: int | None = None
+    siblings_order: int = 0
+    child_count: int = 0  # number of child messages (for branch navigation)
     created_at: datetime
 
 

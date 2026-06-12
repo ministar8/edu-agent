@@ -19,7 +19,7 @@ function UploadResultViewComponent({ result }: UploadResultViewProps) {
           <div className="mt-3 space-y-2">
             {result.results.map((item, index) => (
               <div key={`${item.filename}-${index}`} className="rounded-2xl bg-white px-4 py-3 text-slate-600 shadow-sm">
-                {item.filename}: {item.chunk_count} 个文本块
+                {item.filename}: {item.chunk_count} 个文本块{item.graph_nodes > 0 ? `，图谱 ${item.graph_nodes} 节点 ${item.graph_edges} 边` : ""}
               </div>
             ))}
           </div>

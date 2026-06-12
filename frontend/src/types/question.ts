@@ -6,8 +6,6 @@ export type StructuredQuestion = {
   stem: string;
   answer: string;
   explanation: string;
-  quality_score?: number;
-  batch_id?: string;
   // Frontend-only state
   id?: number;           // from DB after persist
   gradingStatus?: "idle" | "loading" | "done";
@@ -26,7 +24,16 @@ export type WrongQuestion = {
   explanation: string | null;
   user_answer: string | null;
   grading_score: number | null;
+  error_analysis: string;
+  redo_count: number;
   created_at: string;
+  // Frontend-only redo state
+  redoAnswer?: string;
+  redoStatus?: "idle" | "loading" | "done";
+  redoScore?: number;
+  redoFeedback?: string;
+  redoIsWrong?: boolean;
+  redoErrorAnalysis?: string;
 };
 
 export type QuestionPanelState = {
@@ -37,7 +44,6 @@ export type QuestionPanelState = {
   result: string;
   resultTopic: string;
   questions: StructuredQuestion[];
-  batchId: string | null;
   wrongQuestions: WrongQuestion[];
   wrongLoading: boolean;
   activeTab: "generate" | "wrong";

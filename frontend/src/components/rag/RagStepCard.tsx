@@ -43,7 +43,7 @@ function RagStepCardComponent({ step, index, activeStep }: RagStepCardProps) {
               </div>
             )}
             {(step.data as RAGResult[]).map((result, resultIndex) => (
-              <RagResultItem key={`${result.metadata?.source_file || "source"}-${resultIndex}`} result={result} index={resultIndex} />
+              <RagResultItem key={`${String(result.metadata?.source_file || "source")}-${resultIndex}`} result={result} index={resultIndex} />
             ))}
           </div>
         ) : (

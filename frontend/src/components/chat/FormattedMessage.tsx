@@ -1,9 +1,11 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
+import katex from "katex";
 
 type Block =
   | { type: "blank" }
   | { type: "h1" | "h2" | "h3" | "p" | "quote" | "li" | "oli"; text: string }
-  | { type: "code"; text: string };
+  | { type: "code"; text: string }
+  | { type: "math"; text: string };
 
 function parseBlocks(content: string): Block[] {
   const lines = content.split("\n");
@@ -18,6 +20,27 @@ function parseBlocks(content: string): Block[] {
     if (trimmed.length === 0) {
       blocks.push({ type: "blank" });
       i++;
+      continue;
+    }
+
+    // Block-level LaTeX: $$...$$
+    if (trimmed.startsWith("$$")) {
+      const mathLines: string[] = [];
+      // Single-line $$...$$
+      if (trimmed.endsWith("$$") && trimmed.length > 4) {
+        blocks.push({ type: "math", text: trimmed.slice(2, -2).trim() });
+        i++;
+        continue;
+      }
+      const opener = trimmed.length > 2 ? trimmed.slice(2).trim() : "";
+      if (opener) mathLines.push(opener);
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("$$")) {
+        mathLines.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length) i++; // skip closing $$
+      blocks.push({ type: "math", text: mathLines.join("\n").trim() });
       continue;
     }
 
@@ -96,6 +119,8 @@ function FormattedMessageComponent({ content }: { content: string }) {
             return <h3 key={key} className="pt-2 text-base font-semibold text-slate-900">{renderInline(block.text)}</h3>;
           case "h3":
             return <h4 key={key} className="pt-1 text-sm font-semibold text-slate-900">{renderInline(block.text)}</h4>;
+          case "math":
+            return <div key={key} className="my-2 overflow-x-auto"><LatexMath math={block.text} displayMode /></div>;
           case "code":
             return (
               <pre key={key} className="my-2 overflow-x-auto rounded-xl bg-slate-800 p-4 text-xs leading-5 text-slate-100">
@@ -117,9 +142,15 @@ function FormattedMessageComponent({ content }: { content: string }) {
 }
 
 function renderInline(text: string) {
-  // Split on **bold**, `code`, and [links](url)
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
+  // Split on $$...$$ (inline display), $...$ (inline), **bold**, `code`, and [links](url)
+  const parts = text.split(/(\$\$[^$]+\$\$|\$[^$]+\$|\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
   return parts.map((part, i) => {
+    if (part.startsWith("$$") && part.endsWith("$$")) {
+      return <LatexMath key={i} math={part.slice(2, -2).trim()} displayMode />;
+    }
+    if (part.startsWith("$") && part.endsWith("$") && !part.startsWith("$$")) {
+      return <LatexMath key={i} math={part.slice(1, -1).trim()} />;
+    }
     if (part.startsWith("**") && part.endsWith("**")) {
       return <strong key={i} className="font-semibold text-slate-900">{part.slice(2, -2)}</strong>;
     }
@@ -135,6 +166,21 @@ function renderInline(text: string) {
     }
     return part;
   });
+}
+
+function LatexMath({ math, displayMode }: { math: string; displayMode?: boolean }) {
+  const html = useMemo(() => {
+    try {
+      return katex.renderToString(math, {
+        displayMode: !!displayMode,
+        throwOnError: false,
+        trust: true,
+      });
+    } catch {
+      return `<span class="text-red-500">${math}</span>`;
+    }
+  }, [math, displayMode]);
+  return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export const FormattedMessage = memo(FormattedMessageComponent);

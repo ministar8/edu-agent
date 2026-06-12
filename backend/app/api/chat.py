@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
@@ -47,11 +48,22 @@ def _ensure_conversation(db: Session, user_id: int, base_thread: str, first_mess
 def _save_message(db: Session, conversation_id: int, role: str, content: str,
                   agent_name: str | None = None,
                   sources: list[str] | None = None,
-                  governance: dict | None = None) -> Message:
+                  governance: dict | None = None,
+                  parent_id: int | None = None) -> Message:
     """写入一条消息记录"""
     conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
     if conv is not None:
         conv.updated_at = datetime.now(timezone.utc)
+
+    # Determine siblings_order: count existing siblings with same parent
+    parent_filter = Message.parent_id == parent_id if parent_id is not None else Message.parent_id.is_(None)
+    max_order = (
+        db.query(func.max(Message.siblings_order))
+        .filter(parent_filter, Message.conversation_id == conversation_id)
+        .scalar()
+    )
+    siblings_order = (max_order or 0) + 1
+
     msg = Message(
         conversation_id=conversation_id,
         role=role,
@@ -59,6 +71,8 @@ def _save_message(db: Session, conversation_id: int, role: str, content: str,
         agent_name=agent_name,
         sources=json.dumps(sources or [], ensure_ascii=False),
         governance=json.dumps(governance, ensure_ascii=False) if governance else None,
+        parent_id=parent_id,
+        siblings_order=siblings_order,
     )
     db.add(msg)
     db.commit()
@@ -254,7 +268,7 @@ async def _maybe_summarize_conversation(conversation_id: int) -> None:
             logger.warning("Summary generation failed (non-fatal): %s", e)
 
 
-def _build_input_messages(conv: Conversation, user_message: str, db: Session | None = None, *, conv_id: int | None = None, conv_summary: str | None = None) -> list:
+def _build_input_messages(conv: Conversation, user_message: str, db: Session | None = None, *, conv_id: int | None = None, conv_summary: str | None = None, leaf_message_id: int | None = None) -> list:
     from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
     # Use pre-extracted values if provided (avoids DetachedInstanceError in async generators)
@@ -281,23 +295,42 @@ def _build_input_messages(conv: Conversation, user_message: str, db: Session | N
             content=f"【会话早期摘要】\n{_conv_summary}\n---"
         ))
 
-    # 加载最近 6 轮历史消息（12 条，跳过已被摘要覆盖的更早消息）
     if db is not None:
-        history_msgs = (
-            db.query(Message)
-            .filter(Message.conversation_id == _conv_id)
-            .order_by(Message.created_at.desc())
-            .limit(12)
-            .all()
-        )
-        history_msgs.reverse()  # 恢复时间正序
-        for msg in history_msgs:
-            if msg.role == "user":
-                messages.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                # 截断过长的 assistant 回复，避免 token 爆炸
-                content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
-                messages.append(AIMessage(content=content))
+        # Branch-aware: if leaf_message_id provided, trace parent chain
+        if leaf_message_id is not None:
+            chain: list[Message] = []
+            current = db.query(Message).filter(Message.id == leaf_message_id).first()
+            while current is not None:
+                chain.append(current)
+                if current.parent_id is not None:
+                    current = db.query(Message).filter(Message.id == current.parent_id).first()
+                else:
+                    break
+            chain.reverse()  # oldest first
+            # Take last 12 messages from the chain
+            chain = chain[-12:]
+            for msg in chain:
+                if msg.role == "user":
+                    messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
+                    messages.append(AIMessage(content=content))
+        else:
+            # Legacy: load last 12 messages by time
+            history_msgs = (
+                db.query(Message)
+                .filter(Message.conversation_id == _conv_id)
+                .order_by(Message.created_at.desc())
+                .limit(12)
+                .all()
+            )
+            history_msgs.reverse()  # 恢复时间正序
+            for msg in history_msgs:
+                if msg.role == "user":
+                    messages.append(HumanMessage(content=msg.content))
+                elif msg.role == "assistant":
+                    content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
+                    messages.append(AIMessage(content=content))
 
     messages.append(HumanMessage(content=user_message))
     return messages
@@ -327,7 +360,9 @@ async def chat(
     conv = _ensure_conversation(db, current_user.id, base_thread, request.message)
     conv_id = conv.id
     conv_summary = conv.summary or ""
-    _save_message(db, conv_id, "user", request.message)
+    parent_msg_id = request.parent_message_id
+    leaf_message_id: int | None = parent_msg_id
+    user_msg = _save_message(db, conv_id, "user", request.message, parent_id=parent_msg_id)
 
     try:
         logger.info("Chat request started thread_id=%s", thread_id)
@@ -336,7 +371,7 @@ async def chat(
         result = await asyncio.wait_for(
             graph.ainvoke(
                 {
-                    "messages": _build_input_messages(conv, request.message, db=db, conv_id=conv_id, conv_summary=conv_summary),
+                    "messages": _build_input_messages(conv, request.message, db=db, conv_id=conv_id, conv_summary=conv_summary, leaf_message_id=leaf_message_id),
                 },
                 config=config,
             ),
@@ -356,7 +391,7 @@ async def chat(
         metric_steps = agent_steps
 
         _save_message(db, conv_id, "assistant", final_answer,
-                      agent_name=agent_name, sources=sources)
+                      parent_id=user_msg.id, agent_name=agent_name, sources=sources)
 
         # M2: 同步触发增量摘要（非流式端点，阻塞无碍）
         await _maybe_summarize_conversation(conv_id)
@@ -374,7 +409,7 @@ async def chat(
         metric_agent = "system"
         metric_status = "timeout"
         metric_error = "TimeoutError"
-        _save_message(db, conv_id, "assistant", timeout_answer, agent_name="system")
+        _save_message(db, conv_id, "assistant", timeout_answer, parent_id=user_msg.id, agent_name="system")
         return ChatResponse(
             answer=timeout_answer,
             agent_name="system",
@@ -388,7 +423,7 @@ async def chat(
         metric_agent = "system"
         metric_status = "error"
         metric_error = e.__class__.__name__
-        _save_message(db, conv_id, "assistant", error_answer, agent_name="system")
+        _save_message(db, conv_id, "assistant", error_answer, parent_id=user_msg.id, agent_name="system")
         return ChatResponse(
             answer=error_answer,
             agent_name="system",
@@ -436,11 +471,12 @@ def _chunk_text(chunk) -> str:
     return str(content or "")
 
 
-def _persist_message(conv_id: int, role: str, text: str, **kwargs) -> None:
-    """Save a message in an independent DB session (safe from generator closure)."""
+def _persist_message(conv_id: int, role: str, text: str, *, parent_id: int | None = None, **kwargs) -> int:
+    """Save a message in an independent DB session (safe from generator closure). Returns the message id."""
     from app.db.session import SessionLocal
     with SessionLocal() as _db:
-        _save_message(_db, conv_id, role, text, **kwargs)
+        msg = _save_message(_db, conv_id, role, text, parent_id=parent_id, **kwargs)
+        return msg.id
 
 
 def _should_fast_stream_simple_knowledge(query: str) -> bool:
@@ -491,7 +527,12 @@ async def chat_stream(
     conv = _ensure_conversation(db, current_user.id, base_thread, request.message)
     conv_id = conv.id
     conv_summary = conv.summary or ""
-    _save_message(db, conv_id, "user", request.message)
+    parent_msg_id = request.parent_message_id
+
+    # Determine leaf_message_id for branch-aware history loading
+    leaf_message_id: int | None = parent_msg_id
+
+    user_msg = _save_message(db, conv_id, "user", request.message, parent_id=parent_msg_id)
 
     async def _rag_fallback_stream(query: str):
         """Graph 构建失败时的兜底：直接 RAG 检索 + LLM 生成"""
@@ -527,7 +568,7 @@ async def chat_stream(
             logger.error("RAG fallback also failed: %s", e, exc_info=True)
             if not full_text:
                 yield _sse("token", {"text": f"系统暂时不可用，请稍后重试。错误：{e}"})
-        yield _sse("done", {"agent_name": "rag_fallback", "sources": []})
+        yield _sse("done", {"agent_name": "rag_fallback", "sources": [], "user_msg_id": user_msg.id})
 
     async def _simple_knowledge_fast_stream(query: str):
         """简单知识问答真流式路径：检索完成后直接 LLM astream 输出 token。"""
@@ -680,7 +721,7 @@ async def chat_stream(
             })
 
             _persist_message(conv_id, "assistant", full_text,
-                             agent_name=agent_name, sources=latest_sources, governance=governance)
+                             parent_id=user_msg.id, agent_name=agent_name, sources=latest_sources, governance=governance)
 
             kp_ids = extract_kp_ids_from_docs(docs)
             if kp_ids:
@@ -706,7 +747,7 @@ async def chat_stream(
                 evidence_metadata=evidence_metadata,
             )
             logger.info("Fast-stream completed thread_id=%s elapsed_ms=%.2f", thread_id, elapsed_ms)
-            yield _sse("done", {"agent_name": agent_name, "sources": latest_sources})
+            yield _sse("done", {"agent_name": agent_name, "sources": latest_sources, "user_msg_id": user_msg.id})
             asyncio.create_task(_maybe_summarize_conversation(conv_id))
         except asyncio.TimeoutError:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
@@ -736,8 +777,8 @@ async def chat_stream(
                     "streaming_mode": "fast_stream_partial",
                 })
                 _persist_message(conv_id, "assistant", full_text,
-                                 agent_name=agent_name, sources=latest_sources, governance=partial_governance)
-                yield _sse("done", {"agent_name": agent_name, "sources": latest_sources, "partial": True})
+                                 parent_id=user_msg.id, agent_name=agent_name, sources=latest_sources, governance=partial_governance)
+                yield _sse("done", {"agent_name": agent_name, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
             else:
                 emit_metric(
                     agent_name=agent_name,
@@ -807,7 +848,7 @@ async def chat_stream(
             # 因为 _wrap_agent 是黑盒节点，astream_events 无法捕获其内部 LLM token
             graph_stream = graph.astream(
                 {
-                    "messages": _build_input_messages(conv, request.message, db=db, conv_id=conv_id, conv_summary=conv_summary),
+                    "messages": _build_input_messages(conv, request.message, db=db, conv_id=conv_id, conv_summary=conv_summary, leaf_message_id=leaf_message_id),
                 },
                 config=config,
                 stream_mode="updates",
@@ -825,7 +866,7 @@ async def chat_stream(
                                 "agent_steps": latest_agent_steps,
                                 "streaming_mode": "graph_partial",
                             })
-                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True})
+                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
                             done_emitted = True
                             partial_timeout_governance = _build_timeout_governance(
                                 latest_sources,
@@ -850,7 +891,7 @@ async def chat_stream(
                                 "agent_steps": latest_agent_steps,
                                 "streaming_mode": "graph_partial",
                             })
-                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True})
+                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
                             done_emitted = True
                             partial_timeout_governance = _build_timeout_governance(
                                 latest_sources,
@@ -873,7 +914,7 @@ async def chat_stream(
                                 "agent_steps": latest_agent_steps,
                                 "streaming_mode": "graph_partial",
                             })
-                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True})
+                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
                             done_emitted = True
                             partial_timeout_governance = _build_timeout_governance(
                                 latest_sources,
@@ -1031,7 +1072,7 @@ async def chat_stream(
             )
             # 在独立 session 中写入，避免 generator 关闭后 session 失效
             _persist_message(conv_id, "assistant", full_text,
-                             agent_name=current_agent, sources=latest_sources, governance=latest_governance)
+                             parent_id=user_msg.id, agent_name=current_agent, sources=latest_sources, governance=latest_governance)
 
             # ── 知识追踪事件 ──
             try:
@@ -1101,7 +1142,7 @@ async def chat_stream(
                 error_type=graph_metric_error,
             )
             if not done_emitted:
-                yield _sse("done", {"agent_name": current_agent, "sources": latest_sources})
+                yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "user_msg_id": user_msg.id})
 
             # M2: 异步触发增量摘要（不阻塞 SSE 流）
             asyncio.create_task(_maybe_summarize_conversation(conv_id))
@@ -1123,7 +1164,7 @@ async def chat_stream(
                     "streaming_mode": "graph_partial",
                 })
                 _persist_message(conv_id, "assistant", full_text,
-                                 agent_name=current_agent, sources=latest_sources, governance=partial_governance)
+                                 parent_id=user_msg.id, agent_name=current_agent, sources=latest_sources, governance=partial_governance)
                 emit_metric(
                     agent_name=current_agent,
                     final_answer=full_text,
@@ -1138,7 +1179,7 @@ async def chat_stream(
                     status="timeout",
                     error_type="TimeoutError",
                 )
-                yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True})
+                yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
             else:
                 emit_metric(
                     agent_name=current_agent,
@@ -1191,7 +1232,8 @@ async def chat_rag_stream(
     base_thread = request.thread_id or str(uuid.uuid4())
     conv = _ensure_conversation(db, current_user.id, base_thread, request.message)
     conv_id = conv.id
-    _save_message(db, conv_id, "user", request.message)
+    parent_msg_id = request.parent_message_id
+    user_msg = _save_message(db, conv_id, "user", request.message, parent_id=parent_msg_id)
 
     async def event_generator():
         from langchain_core.messages import HumanMessage, SystemMessage
@@ -1308,7 +1350,7 @@ async def chat_rag_stream(
                                     "agent_steps": [],
                                     "streaming_mode": "rag_direct_partial",
                                 })
-                                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True})
+                                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
                                 rag_done_emitted = True
                             else:
                                 yield _sse("error", {"message": "响应超时，请稍后重试"})
@@ -1365,7 +1407,7 @@ async def chat_rag_stream(
             })
 
             _persist_message(conv_id, "assistant", full_text,
-                             agent_name="rag_direct", sources=latest_sources, governance=governance)
+                             parent_id=user_msg.id, agent_name="rag_direct", sources=latest_sources, governance=governance)
 
             # ── 知识追踪事件 ──
             kp_ids = extract_kp_ids_from_docs(docs)
@@ -1395,7 +1437,7 @@ async def chat_rag_stream(
             )
             logger.info("Direct RAG stream completed conversation_id=%s elapsed_ms=%.2f", conv_id, elapsed_ms)
             if not rag_done_emitted:
-                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources})
+                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "user_msg_id": user_msg.id})
 
             # M2: 异步触发增量摘要（不阻塞 SSE 流）
             asyncio.create_task(_maybe_summarize_conversation(conv_id))
@@ -1420,7 +1462,7 @@ async def chat_rag_stream(
                     "agent_steps": [],
                     "streaming_mode": "rag_direct_partial",
                 })
-                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True})
+                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
             else:
                 yield _sse("error", {"message": "响应超时，请稍后重试"})
         except Exception as e:
@@ -1444,7 +1486,7 @@ async def chat_rag_stream(
                     "agent_steps": [],
                     "streaming_mode": "rag_direct_partial",
                 })
-                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True})
+                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
             else:
                 yield _sse("error", {"message": str(e)})
 
@@ -1458,7 +1500,7 @@ async def chat_rag_stream(
 # ── 对话历史 API ──────────────────────────────
 
 
-def _msg_to_item(msg: Message) -> MessageItem:
+def _msg_to_item(msg: Message, *, child_count: int = 0) -> MessageItem:
     """ORM Message → Pydantic MessageItem"""
     sources = json.loads(msg.sources) if msg.sources else []
     governance = json.loads(msg.governance) if msg.governance else None
@@ -1469,6 +1511,9 @@ def _msg_to_item(msg: Message) -> MessageItem:
         agent_name=msg.agent_name,
         sources=sources,
         governance=governance,
+        parent_id=msg.parent_id,
+        siblings_order=msg.siblings_order,
+        child_count=child_count,
         created_at=msg.created_at,
     )
 
@@ -1506,7 +1551,7 @@ async def get_conversation(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """获取对话详情（含全部历史消息）"""
+    """获取对话详情（含全部历史消息，含分支结构）"""
     conv = db.query(Conversation).filter(
         Conversation.id == conversation_id,
         Conversation.user_id == current_user.id,
@@ -1520,6 +1565,13 @@ async def get_conversation(
         .order_by(Message.created_at.asc())
         .all()
     )
+
+    # Compute child_count for each message
+    child_counts: dict[int, int] = {}
+    for m in msgs:
+        if m.parent_id is not None:
+            child_counts[m.parent_id] = child_counts.get(m.parent_id, 0) + 1
+
     return ConversationDetail(
         id=conv.id,
         thread_id=conv.thread_id,
@@ -1527,7 +1579,7 @@ async def get_conversation(
         summary=conv.summary or "",
         created_at=conv.created_at,
         updated_at=conv.updated_at,
-        messages=[_msg_to_item(m) for m in msgs],
+        messages=[_msg_to_item(m, child_count=child_counts.get(m.id, 0)) for m in msgs],
     )
 
 

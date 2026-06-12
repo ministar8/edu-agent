@@ -39,17 +39,17 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "qwen3.7-max-preview"
     LLM_MODEL_FAST: str = "qwen3.6-27b"  # 分类/路由/简单任务用
 
-    # ── Embedding (OpenAI 兼容接口，默认本地 Ollama) ───
-    EMBEDDING_API_KEY: str = "ollama"
-    EMBEDDING_API_BASE: str = "http://localhost:11434/v1"
-    EMBEDDING_MODEL: str = "bge-m3"
+    # ── Embedding (TEI bge-m3，本地 Docker 部署) ───
+    EMBEDDING_API_KEY: str = ""
+    EMBEDDING_API_BASE: str = "http://localhost:11435"
+    EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DIM: int = 1024  # bge-m3 向量维度
 
     # ── Reranker (本地 TEI bge-reranker-v2-m3) ──────
     RERANK_ENABLED: bool = True
     RERANK_LOCAL_URL: str = "http://localhost:8080"  # 本地 TEI reranker 地址
     RERANK_MIN_SCORE: float = 0.3  # rerank 最低可信分数比例（相对阈值：top_score * 此值）
-    RERANK_ABSOLUTE_MIN_SCORE: float = 0.1  # rerank 绝对最低分数（低于此值直接丢弃，兜底保留 top-2）
+    RERANK_ABSOLUTE_MIN_SCORE: float = 0.15  # rerank 绝对最低分数（低于此值直接丢弃，兜底保留 top-2）
 
     HYDE_ENABLED: bool = True
     HYDE_MIN_DOCS: int = 2

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 
 from app.db.session import Base
 
@@ -42,7 +42,14 @@ class Message(Base):
     agent_name = Column(String(50), nullable=True)
     sources = Column(Text, nullable=True, default="[]")  # JSON list
     governance = Column(Text, nullable=True)  # JSON dict
+    parent_id = Column(Integer, ForeignKey("messages.id"), nullable=True, index=True)  # tree: parent message
+    siblings_order = Column(Integer, default=0)  # order among siblings with same parent
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_messages_parent_siblings", "parent_id", "siblings_order"),
+        {"sqlite_autoincrement": True},
+    )
 
 
 class KnowledgePointRegistry(Base):
@@ -90,6 +97,32 @@ class StudentKnowledgeState(Base):
     )
 
 
+class MasteryHistory(Base):
+    """掌握度变化历史 — 每次 TrackingEvent 更新时追加一条"""
+    __tablename__ = "mastery_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    knowledge_point_id = Column(Integer, ForeignKey("knowledge_point_registry.id"), nullable=False, index=True)
+
+    # 快照值
+    mastery = Column(Float, nullable=False)             # 本次更新后的掌握度
+    confidence = Column(Float, nullable=False)           # 本次更新后的置信度
+    effective_score = Column(Float, nullable=False)      # mastery * confidence
+
+    # 变化信息
+    event_type = Column(String(30), nullable=False)     # qa_high_confidence / grading_pass / grading_fail 等
+    delta = Column(Float, default=0.0)                  # 掌握度变化量（正=进步，负=退步）
+    source = Column(String(20), default="")             # qa / quiz / grading
+
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_mastery_history_user_kp_time", "user_id", "knowledge_point_id", "created_at"),
+        {"sqlite_autoincrement": True},
+    )
+
+
 class QuestionRecord(Base):
     """题目记录 — 生成/模板题目持久化 + 批改追踪"""
     __tablename__ = "question_records"
@@ -106,12 +139,13 @@ class QuestionRecord(Base):
     standard_answer = Column(Text)                                   # 标准答案
     explanation = Column(Text)                                      # 解析
 
-    source = Column(String(20), default="generated")                # generated / template
     quality_score = Column(Float, nullable=True)                     # 出题质量自动评分 0-1
 
     user_answer = Column(Text, nullable=True)                       # 学生提交的答案
     grading_score = Column(Float, nullable=True)                     # 批改分数 0-100
     is_wrong = Column(Boolean, default=False)                        # 是否错题
+    redo_count = Column(Integer, default=0)                          # 错题重做成功次数
+    error_analysis = Column(Text, default="")                       # 错因分析（批改时生成）
 
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 

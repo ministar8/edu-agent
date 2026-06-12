@@ -201,7 +201,7 @@ def _apply_disclaimer(answer: str, agent_name: str, warnings: list[str], confide
     suffix_parts = []
 
     if confidence == "low":
-        suffix_parts.append("⚠️ 系统提示：此回答可能包含未经验证的内容，请谨慎参考。")
+        suffix_parts.append("⚠️ 此回答可能包含未经验证的内容，请谨慎参考。")
 
     elif confidence == "medium":
         if "工具返回无结果，但回答未说明依据不足" in warnings:
@@ -211,14 +211,14 @@ def _apply_disclaimer(answer: str, agent_name: str, warnings: list[str], confide
         has_explicit_source = any(kw in answer for kw in source_keywords) if source_keywords else False
 
         if not suffix_parts and not has_explicit_source and agent_name in ("knowledge_agent", "grading_agent", "path_agent"):
-            suffix_parts.append("📌 补充说明：以上回答未检索到充分依据，部分内容为模型推断，仅供参考。")
+            suffix_parts.append("📌 以上回答未检索到充分依据，部分内容为模型推断，仅供参考。")
 
         if agent_name == "grading_agent" and "参考评分" not in answer and "评分依据" not in answer:
             # 在评分行后插入"参考评分"标记
             answer = answer.replace("评分：", "评分（参考）：", 1)
 
     if suffix_parts:
-        answer = answer.rstrip() + "\n\n" + "\n".join(suffix_parts)
+        answer = answer.rstrip() + "\n" + "\n".join(suffix_parts)
 
     return answer
 

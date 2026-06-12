@@ -22,6 +22,7 @@ from app.evaluation.config import EvaluationConfig
 from app.evaluation.dataset import EvalSample
 from app.evaluation.adapters import get_retriever
 from app.rag.rag_utils import estimate_tokens as _estimate_tokens
+from app.rag.llm_provider import create_llm, detect_provider
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +170,9 @@ _ANSWER_PROMPT = ChatPromptTemplate.from_messages([
         "   - 严禁幻觉：绝不可引入上下文之外的预训练知识（如外部代码库、超纲考点）。\n"
         "   - 优雅拒答：如果上下文完全不足以回答该问题（即无法提取到任何与核心问题直接相关的事实），"
         "请不要生硬拒绝，必须使用以下标准句式回答：\"关于【此处复述用户的核心问题】，"
-        "当前提供的参考资料中未包含足够的信息来解答，建议查阅相关教材的【推测所属章节】部分。\""
+        "当前提供的参考资料中未包含足够的信息来解答，建议查阅相关教材的【推测所属章节】部分。\"\n"
+        "8. 【学习路径类问题】如果问题涉及\"怎么学\"、\"怎么复习\"、\"学习路线\"、\"重点章节\"等学习方法，"
+        "请按\"复习路线 → 重点章节 → 学习建议\"的结构组织答案，直接引用上下文中的路线和章节排序。"
     )),
     ("human", "【上下文】\n{context}\n\n【问题】{question}"),
 ])
@@ -198,23 +201,6 @@ def _resolve_eval_llm_config(
     return resolved_model, resolved_base, resolved_key
 
 
-def _needs_thinking_disabled(api_base: str, model: str) -> bool:
-    """判断是否需要禁用思考模式（DeepSeek / Qwen3.x 等支持思考的模型）
-
-    RAGAS judge 需要结构化输出（function calling），思考模式会导致输出不稳定。
-    DeepSeek: 通过 enable_thinking header 禁用
-    Qwen3.x: 通过 enable_thinking header 禁用（百炼 OpenAI 兼容接口）
-    """
-    m = (model or "").lower()
-    b = (api_base or "").lower()
-    if "deepseek" in b or "deepseek" in m:
-        return True
-    # Qwen3.x 系列支持思考模式，需禁用
-    if "qwen3" in m:
-        return True
-    return False
-
-
 def _create_eval_llm(
     model: str,
     api_base: str,
@@ -223,24 +209,17 @@ def _create_eval_llm(
 ) -> ChatOpenAI:
     """创建评估专用的 ChatOpenAI 实例（不污染全局 settings/缓存）
 
-    注意：RAGAS 0.4.x 的 evaluate() 接受 LangchainLLM 并自动包装为
-    LangchainLLMWrapper（已 deprecated，未来应迁移到 llm_factory）。
-    当前保留 ChatOpenAI 是因为 llm_factory 使用 instructor 补丁，
-    无法传递 DeepSeek 专有的 enable_thinking 参数。
+    委托 llm_provider.create_llm() 构建，provider 专有参数统一管理。
     """
-    kwargs: dict[str, Any] = dict(
-        api_key=api_key,
-        base_url=api_base,
+    return create_llm(
         model=model,
+        api_base=api_base,
+        api_key=api_key,
         temperature=temperature,
         streaming=False,
-        max_retries=3,
         timeout=120,
+        max_retries=3,
     )
-    # enable_thinking 是 DeepSeek 专有参数，禁用思考模式以保证结构化输出稳定
-    if _needs_thinking_disabled(api_base, model):
-        kwargs["extra_body"] = {"enable_thinking": False}
-    return ChatOpenAI(**kwargs)
 
 
 _answer_llm_cache: ChatOpenAI | None = None
@@ -263,14 +242,6 @@ def _get_answer_llm(cfg: EvaluationConfig) -> ChatOpenAI:
     return _answer_llm_cache
 
 
-def _is_dashscope_api(api_base: str, model: str) -> bool:
-    """判断是否为阿里云百炼 DashScope API
-
-    DashScope 的 OpenAI 兼容接口不支持 instructor 的 content=list[dict] 格式，
-    必须使用 LangchainLLMWrapper 而非 InstructorLLM。
-    """
-    return "dashscope" in (api_base or "").lower()
-
 
 def _get_judge_llm_instructor(cfg: EvaluationConfig):
     """获取评测 LLM（自动选择最佳模式）
@@ -285,7 +256,7 @@ def _get_judge_llm_instructor(cfg: EvaluationConfig):
     )
 
     # ── DashScope: LangchainLLMWrapper ──
-    if _is_dashscope_api(base, model):
+    if detect_provider(base, model).is_dashscope:
         from ragas.llms import LangchainLLMWrapper
         logger.info("Eval judge LLM (LangchainLLMWrapper for DashScope): model=%s base=%s", model, base)
         lc_llm = _create_eval_llm(model, base, key, temperature=0.0)
@@ -304,8 +275,9 @@ def _get_judge_llm_instructor(cfg: EvaluationConfig):
     from ragas.llms import llm_factory
 
     logger.info("Eval judge LLM (InstructorLLM): model=%s base=%s", model, base)
+    pc = detect_provider(base, model)
     default_headers = {}
-    if _needs_thinking_disabled(base, model):
+    if pc.needs_thinking_disabled:
         default_headers["enable_thinking"] = "false"
     client = AsyncOpenAI(
         api_key=key,
@@ -405,12 +377,15 @@ def retrieve_contexts(
 
     retriever = get_retriever()
 
-    # 评估场景不全局搜索 learning_paths：该集合内容与大多数单科查询无关，
-    # 引入噪声严重拉低 context_precision（AP 对排序敏感）
-    # 但跨学科/对比型查询需要 learning_paths 中的「跨学科知识关联与对比」专题
+    # 评估场景不全局搜索 learning_paths：该集合仅含学习路线与重点章节，
+    # 与大多数单科查询无关，引入噪声严重拉低 context_precision（AP 对排序敏感）
+    # 学习路径类查询（怎么学/复习路线/重点章节）需搜索 learning_paths
+    _LEARNING_PATH_INDICATORS = ("怎么学", "怎么复习", "学习路线", "学习路径", "复习路线",
+                                  "复习路径", "重点章节", "如何学", "应该怎么学", "学习建议")
     is_cross_intent = (bool(cross_subject_collections) or
                        any(p in query for p in _CROSS_SUBJECT_INDICATORS))
-    always_search: list[str] = ["learning_paths"] if is_cross_intent else []
+    is_learning_path_query = any(p in query for p in _LEARNING_PATH_INDICATORS)
+    always_search: list[str] = ["learning_paths"] if is_learning_path_query else []
     primary_collections = [collection_name] if collection_name and collection_name in _VALID_COLLECTIONS else []
     if cross_subject_collections:
         primary_collections.extend(c for c in cross_subject_collections if c in _VALID_COLLECTIONS)
@@ -575,8 +550,21 @@ def run_ragas_evaluation(
     skipped = 0
     refusal_indices: list[int] = []  # 拒答样本在 ragas_records 中的索引
     record_sample_indices: list[int] = []  # ragas_records[i] 对应的 samples 索引
+
+    # 学习路径类查询由 path_agent（KG + learning_paths 集合）处理，
+    # 不走知识问答 RAG 管线，纳入 RAGAS 评估会不公平地拉低分数
+    _LP_INDICATORS = ("怎么学", "怎么复习", "学习路线", "学习路径", "复习路线",
+                      "复习路径", "重点章节", "如何学", "应该怎么学", "学习建议",
+                      "前置知识")
+
     for idx, sample in enumerate(samples):
         logger.info("RAGAS [%d/%d] %s", idx + 1, len(samples), sample.query[:60])
+
+        # 跳过学习路径类查询（由 path_agent 处理，不属于知识问答 RAG 管线）
+        if any(p in sample.query for p in _LP_INDICATORS):
+            logger.info("RAGAS [%d/%d] 跳过学习路径查询: %s", idx + 1, len(samples), sample.query[:40])
+            skipped += 1
+            continue
 
         # 检索上下文（如果未预置）
         if not sample.contexts:
@@ -689,7 +677,7 @@ def run_ragas_evaluation(
         return {"_meta": {"n": len(ragas_records), "error": "no metrics enabled"}}
 
     # 获取 embedding（仅 answer_relevancy 需要）
-    # 使用 LangChain OpenAIEmbeddings 对接 Ollama，带重试避免 500 错误
+    # 使用 LangChain OpenAIEmbeddings 对接 TEI，带重试避免 500 错误
     lc_embeddings = None
     if "answer_relevancy" in cfg.ragas_metrics:
         try:

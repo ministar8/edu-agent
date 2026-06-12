@@ -51,6 +51,24 @@ def init_db() -> None:
                     "ALTER TABLE knowledge_point_registry ADD COLUMN difficulty_source VARCHAR(10) DEFAULT 'auto'"
                 ))
 
+    # ── messages: 添加 parent_id + siblings_order 列（对话分支） ──
+    if "messages" in inspector.get_table_names():
+        msg_columns = {column["name"] for column in inspector.get_columns("messages")}
+        if "parent_id" not in msg_columns:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE messages ADD COLUMN parent_id INTEGER REFERENCES messages(id)"))
+                conn.execute(text("ALTER TABLE messages ADD COLUMN siblings_order INTEGER DEFAULT 0"))
+                # Backfill: set parent_id chain for existing linear conversations
+                conn.execute(text("""
+                    UPDATE messages SET parent_id = (
+                        SELECT m2.id FROM messages m2
+                        WHERE m2.conversation_id = messages.conversation_id
+                          AND m2.id < messages.id
+                        ORDER BY m2.id DESC LIMIT 1
+                    )
+                    WHERE parent_id IS NULL
+                """))
+
     # ── student_knowledge_state: 确保 (user_id, knowledge_point_id) 唯一索引 ──
     if "student_knowledge_state" in inspector.get_table_names():
         idx_names = {idx["name"] for idx in inspector.get_indexes("student_knowledge_state")}

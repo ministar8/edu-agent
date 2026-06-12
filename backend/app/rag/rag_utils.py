@@ -127,72 +127,12 @@ def detect_content_type(text: str, metadata: dict) -> str:
     return "text"
 
 
-# ── LLM getter ───────────────────────────────────────
+# ── LLM getter（已迁移至 llm_provider.py） ────────
 
-def _is_deepseek_api(api_base: str, model: str) -> bool:
-    """判断当前 LLM 是否为 DeepSeek 系列（需传 enable_thinking 等专有参数）
-
-    检测逻辑：
-    1. API base 含 "deepseek" → DeepSeek 官方 API
-    2. 模型名含 "deepseek" → 通过第三方代理（如 DashScope）调用的 DeepSeek 模型
-    """
-    return "deepseek" in (api_base or "").lower() or "deepseek" in (model or "").lower()
-
-
-_LLM_INSTANCES: dict = {}
-
-def get_llm(streaming: bool = True, temperature: float = 0.3, use_fast: bool = False):
-    """获取 LLM 实例（单例缓存）
-
-    从 retriever.py 迁移至此，消除各模块对 retriever.py 的耦合。
-
-    Args:
-        streaming: 是否启用流式输出（默认 True，用于 Agent 对话）
-        temperature: 生成温度（0.0=确定性评估，0.3=创造性生成）
-    """
-    from langchain_openai import ChatOpenAI
-    from app.config import settings
-
-    if not settings.LLM_API_KEY:
-        raise RuntimeError("LLM_API_KEY must be set in .env or environment variables")
-
-    cache_key = "|".join([
-        settings.LLM_API_BASE,
-        settings.LLM_MODEL,
-        settings.LLM_API_KEY[-8:],
-        "stream" if streaming else "no_stream",
-        f"temperature={temperature}",
-        f"timeout={settings.LLM_TIMEOUT}|fast={use_fast}",
-        f"deepseek={_is_deepseek_api(settings.LLM_API_BASE, settings.LLM_MODEL)}",
-    ])
-
-    if cache_key not in _LLM_INSTANCES:
-        logger.debug(
-            "Creating LLM client: base=%s model=%s streaming=%s fast=%s",
-            settings.LLM_API_BASE,
-            settings.LLM_MODEL,
-            streaming,
-            use_fast,
-        )
-        model = settings.LLM_MODEL_FAST if use_fast and settings.LLM_MODEL_FAST else settings.LLM_MODEL
-        kwargs = dict(
-            api_key=settings.LLM_API_KEY,
-            base_url=settings.LLM_API_BASE,
-            model=model,
-            temperature=temperature,
-            streaming=streaming,
-            request_timeout=settings.LLM_TIMEOUT,
-            max_retries=2,
-        )
-        # DeepSeek v4: 禁用思考模式以避免 reasoning token 暴增输出费用
-        # 官方参数: extra_body={"thinking": {"type": "disabled"}}
-        if _is_deepseek_api(settings.LLM_API_BASE, model):
-            kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
-        # Qwen 思考模型（max 系列）通过 DashScope 必须 enable_thinking=True
-        # 非思考模型不传该参数（用 API 默认行为），传 False 会导致 400 错误
-        if "qwen" in model.lower() and "dashscope" in (settings.LLM_API_BASE or "").lower():
-            # qwen3.x-max、qwen3.x-max-* 等思考模型必须传 True
-            if re.search(r"qwen[\d.]+-max", model.lower()):
-                kwargs.setdefault("extra_body", {})["enable_thinking"] = True
-        _LLM_INSTANCES[cache_key] = ChatOpenAI(**kwargs)
-    return _LLM_INSTANCES[cache_key]
+from app.rag.llm_provider import (    # noqa: F401 — 向后兼容导出
+    get_llm,
+    create_llm,
+    detect_provider,
+    build_llm_kwargs,
+    ProviderConfig,
+)
