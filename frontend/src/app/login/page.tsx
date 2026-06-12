@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth";
-import { getErrorMessage } from "@/lib/errors";
+import { useAuth } from "@/shared/lib/auth";
+import { getErrorMessage } from "@/shared/lib/errors";
 
 export default function LoginPage() {
   const { login, register, user, loading } = useAuth();

@@ -3,17 +3,15 @@
 import { Component, type ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { Sidebar } from "@/components/app-shell/Sidebar";
-import { WorkspaceContent } from "@/components/app-shell/WorkspaceContent";
-import { WorkspaceHeader } from "@/components/app-shell/WorkspaceHeader";
-import { AgentActivityProvider } from "@/contexts/AgentActivityContext";
-import { TrackingRefreshProvider } from "@/contexts/TrackingRefreshContext";
-import { useAuth } from "@/lib/auth";
-import { generateThreadId } from "@/lib/thread";
+import { Sidebar, WorkspaceContent, WorkspaceHeader } from "@/features/app-shell";
+import { AgentActivityProvider } from "@/shared/contexts/AgentActivityContext";
+import { TrackingRefreshProvider } from "@/shared/contexts/TrackingRefreshContext";
+import { useAuth } from "@/shared/lib/auth";
+import { generateThreadId } from "@/shared/lib/thread";
 import { ReactFlowProvider } from "@xyflow/react";
-import type { ChatPanelState } from "@/types/chat";
-import type { TabType } from "@/types/navigation";
-import type { QuestionPanelState } from "@/types/question";
+import type { ChatPanelState } from "@/shared/types/chat";
+import type { TabType } from "@/shared/types/navigation";
+import type { QuestionPanelState } from "@/shared/types/question";
 
 class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNode }, { hasError: boolean; errorMsg: string }> {
   constructor(props: { children: ReactNode }) {
@@ -42,7 +40,7 @@ class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNod
 export default function Home() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<TabType>("chat");
+  const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [knowledgeGraphFocus, setKnowledgeGraphFocus] = useState("");
   const [questionState, setQuestionState] = useState<QuestionPanelState>({
     topic: "",
@@ -120,7 +118,7 @@ export default function Home() {
               questions: [],
               activeTab: "generate",
             }));
-            setActiveTab("questions");
+            setActiveTab("practice");
           }}
           onJumpToChat={(question) => {
             setChatState((prev) => ({
@@ -129,6 +127,7 @@ export default function Home() {
             }));
             setActiveTab("chat");
           }}
+          onOpenDebug={() => setActiveTab("debug")}
         />
       </div>
     </div>

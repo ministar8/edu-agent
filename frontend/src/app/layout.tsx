@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider } from "@/shared/lib/auth";
 import "katex/dist/katex.min.css";
 import "./globals.css";
 
