@@ -1,10 +1,8 @@
-import { AgentFlow } from "@/features/agent-flow";
+import { DebugPanel } from "@/features/admin-debug";
 import { ChatPanel } from "@/features/chat";
-import { KnowledgePanel } from "@/features/knowledge-base";
+import { StudyDashboardPanel } from "@/features/dashboard";
 import { KnowledgeGraphPanel } from "@/features/knowledge-map";
 import { QuestionPanel } from "@/features/practice";
-import { RAGProcessPanel } from "@/features/rag-process";
-import { TrackingPanel } from "@/features/tracking";
 import type { ChatPanelState } from "@/shared/types/chat";
 import type { TabType } from "@/shared/types/navigation";
 import type { QuestionPanelState } from "@/shared/types/question";
@@ -19,6 +17,7 @@ type WorkspaceContentProps = {
   onOpenKnowledgeGraph: (focus: string) => void;
   onGenerateSimilarPractice: (topic: string) => void;
   onJumpToChat: (question: string) => void;
+  onOpenDebug: () => void;
 };
 
 export function WorkspaceContent({
@@ -31,9 +30,18 @@ export function WorkspaceContent({
   onOpenKnowledgeGraph,
   onGenerateSimilarPractice,
   onJumpToChat,
+  onOpenDebug,
 }: WorkspaceContentProps) {
   return (
     <main className="min-h-0 flex-1 overflow-hidden bg-stone-50">
+      {activeTab === "dashboard" && (
+        <StudyDashboardPanel
+          onStartChat={onJumpToChat}
+          onGeneratePractice={onGenerateSimilarPractice}
+          onOpenKnowledgeMap={onOpenKnowledgeGraph}
+          onOpenDebug={onOpenDebug}
+        />
+      )}
       {activeTab === "chat" && (
         <ChatPanel
           state={chatState}
@@ -42,10 +50,7 @@ export function WorkspaceContent({
           onGenerateSimilarPractice={onGenerateSimilarPractice}
         />
       )}
-      {activeTab === "questions" && <QuestionPanel state={questionState} setState={setQuestionState} />}
-      {activeTab === "agents" && <AgentFlow />}
-      {activeTab === "knowledge" && <KnowledgePanel />}
-      {activeTab === "rag" && <RAGProcessPanel />}
+      {activeTab === "practice" && <QuestionPanel state={questionState} setState={setQuestionState} />}
       {activeTab === "kgraph" && (
         <KnowledgeGraphPanel
           focusLabel={knowledgeGraphFocus}
@@ -53,7 +58,7 @@ export function WorkspaceContent({
           onJumpToQuestions={onGenerateSimilarPractice}
         />
       )}
-      {activeTab === "tracking" && <TrackingPanel onGenerateSimilarPractice={onGenerateSimilarPractice} />}
+      {activeTab === "debug" && <DebugPanel />}
     </main>
   );
 }

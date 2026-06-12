@@ -1,15 +1,18 @@
 import type { AppTab, TabType } from "@/shared/types/navigation";
-import { IconChat, IconQuiz, IconAgents, IconLibrary, IconSearch, IconGraph, IconDashboard } from "@/shared/ui/icons";
+import { IconChat, IconQuiz, IconAgents, IconGraph, IconDashboard } from "@/shared/ui/icons";
 
-export const tabs: AppTab[] = [
+export const primaryTabs: AppTab[] = [
+  { id: "dashboard", label: "学习工作台", icon: IconDashboard },
   { id: "chat", label: "智能问答", icon: IconChat },
-  { id: "questions", label: "题目生成", icon: IconQuiz },
-  { id: "agents", label: "Agent 协作", icon: IconAgents },
-  { id: "knowledge", label: "知识库", icon: IconLibrary },
-  { id: "rag", label: "RAG 过程", icon: IconSearch },
-  { id: "kgraph", label: "知识图谱", icon: IconGraph },
-  { id: "tracking", label: "学习仪表盘", icon: IconDashboard },
+  { id: "practice", label: "练习与错题", icon: IconQuiz },
+  { id: "kgraph", label: "知识地图", icon: IconGraph },
 ];
+
+export const utilityTabs: AppTab[] = [
+  { id: "debug", label: "管理调试", icon: IconAgents },
+];
+
+export const tabs: AppTab[] = [...primaryTabs, ...utilityTabs];
 
 export const roleLabels: Record<string, string> = {
   student: "学生",
@@ -18,11 +21,9 @@ export const roleLabels: Record<string, string> = {
 };
 
 export const tabDescriptions: Record<TabType, string> = {
+  dashboard: "今日建议、薄弱点与下一步行动",
   chat: "多 Agent 协同教学问答",
-  questions: "练习题目生成与评测",
-  agents: "Agent 调度与协作流程",
-  knowledge: "知识库上传与索引管理",
-  rag: "检索增强生成过程追踪",
-  kgraph: "知识点关系网络浏览",
-  tracking: "知识掌握度与学习进度",
+  practice: "专项练习、批改反馈与错题复练",
+  kgraph: "知识结构、前置依赖与学习入口",
+  debug: "知识库、Agent 与 RAG 技术视图",
 };
