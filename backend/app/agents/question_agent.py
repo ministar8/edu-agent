@@ -1,7 +1,6 @@
 import logging
 import re
 import threading
-import uuid
 from difflib import SequenceMatcher
 
 from langchain_core.tools import tool
@@ -14,6 +13,7 @@ from app.rag.schemas import QuestionList
 from app.rag.parse_utils import parse_llm_json
 from app.agents.kg_tools import aquery_knowledge_graph
 from app.agents.prompts import QUESTION_AGENT_SYSTEM_PROMPT as QUESTION_AGENT_PROMPT
+from app.repositories.knowledge_registry_repository import KnowledgeRegistryRepository
 
 logger = logging.getLogger(__name__)
 
@@ -71,20 +71,7 @@ def _difficulty_label(d: float) -> str:
 
 def _lookup_registry_difficulty(kp_name: str) -> float | None:
     """从 KnowledgePointRegistry 查询知识点难度"""
-    try:
-        from app.db.session import SessionLocal
-        from app.db.models import KnowledgePointRegistry
-        with SessionLocal() as db:
-            reg = db.query(KnowledgePointRegistry).filter(
-                KnowledgePointRegistry.name == kp_name,
-            ).first()
-            if reg and reg.difficulty_source == "manual":
-                return reg.difficulty
-            if reg and _has_difficulty_keyword(reg.heading_path or ""):
-                return reg.difficulty
-            return None  # 未标注
-    except Exception:
-        return None
+    return KnowledgeRegistryRepository.lookup_difficulty_with_managed_session(kp_name)
 
 
 def _extract_difficulty_annotations(evidences: list[TextEvidence], subject: str) -> str:
@@ -131,6 +118,10 @@ _local = threading.local()
 
 def _get_cached_evidences() -> list[TextEvidence]:
     return getattr(_local, "last_evidences", [])
+
+
+def get_cached_evidences() -> list[TextEvidence]:
+    return _get_cached_evidences()
 
 
 def _set_cached_evidences(evidences: list[TextEvidence]) -> None:
@@ -368,13 +359,8 @@ async def generate_questions_with_retrieval(prompt: str) -> QuestionList | str:
         return raw.strip()
 
 
-async def generate_and_persist_questions(
-    prompt: str,
-    user_id: int,
-    conversation_id: int | None = None,
-    topic: str = "",
-) -> list[dict]:
-    """出题 + 解析 + 质量评估 + 持久化，返回结构化题目列表"""
+async def generate_questions_from_prompt(prompt: str) -> list[dict]:
+    """出题 + 解析 + 质量评估，返回结构化题目列表"""
     # 一次检索，同时用于生成 + 质量评估
     retrieval_query = _extract_topic(prompt)
     retrieval_context = await asearch_question_templates.ainvoke({"query": retrieval_query})
@@ -426,106 +412,33 @@ async def generate_and_persist_questions(
             return [{"raw_text": raw.strip()}]
 
     questions = compute_quality_scores(questions, template_texts)
-
-    # 持久化
-    batch_id = str(uuid.uuid4())
-    _persist_questions(questions, user_id, conversation_id, batch_id, topic or retrieval_query)
-
-    for q in questions:
-        q["batch_id"] = batch_id
-
     return questions
 
 
-def _persist_questions(
-    questions: list[dict],
+async def generate_and_persist_questions(
+    prompt: str,
     user_id: int,
-    conversation_id: int | None,
-    batch_id: str,
-    topic: str,
-) -> None:
-    """将解析后的题目存入 QuestionRecord，并回写 DB id 到 question dict"""
-    from app.db.session import SessionLocal
-    from app.db.models import QuestionRecord, KnowledgePointRegistry
+    conversation_id: int | None = None,
+    topic: str = "",
+) -> list[dict]:
+    """兼容入口：旧调用方仍可请求出题并持久化。"""
+    from app.services.question_service import persist_generated_questions_with_managed_session
 
-    # Try to resolve knowledge point from cached evidences first
-    evidences = _get_cached_evidences()
-    kp_id = None
-    if evidences:
-        with SessionLocal() as db:
-            for ev in evidences:
-                # Try structured knowledge_points list first
-                for kp_name in ev.knowledge_points:
-                    if kp_name:
-                        reg = db.query(KnowledgePointRegistry).filter(
-                            KnowledgePointRegistry.name == kp_name
-                        ).first()
-                        if reg:
-                            kp_id = reg.id
-                            logger.debug(f"Resolved KP from evidence.knowledge_points: {kp_name} -> id={reg.id}")
-                            break
-                if kp_id:
-                    break
-                # Fallback: try section_path (heading_path) last segment
-                if ev.section_path:
-                    heading = ev.section_path.split(">")[-1].strip()
-                    if heading:
-                        reg = db.query(KnowledgePointRegistry).filter(
-                            KnowledgePointRegistry.name == heading
-                        ).first()
-                        if reg:
-                            kp_id = reg.id
-                            logger.debug(f"Resolved KP from evidence.section_path: {heading} -> id={reg.id}")
-                            break
+    questions = await generate_questions_from_prompt(prompt)
+    if not questions or questions[0].get("error") or questions[0].get("raw_text"):
+        return questions
 
-    # Fallback: try to match from evidences collection names
-    if not kp_id and evidences:
-        collections = set(ev.collection for ev in evidences if ev.collection)
-        for coll in collections:
-            if coll in ["data_structure", "computer_organization", "operating_system", "computer_network"]:
-                with SessionLocal() as db:
-                    reg = db.query(KnowledgePointRegistry).filter(
-                        KnowledgePointRegistry.category == coll
-                    ).first()
-                    if reg:
-                        kp_id = reg.id
-                        logger.debug(f"Resolved KP from collection: {coll} -> id={reg.id}")
-                        break
-
-    # Final fallback: try to match topic directly to a knowledge point name
-    if not kp_id and topic:
-        with SessionLocal() as db:
-            reg = db.query(KnowledgePointRegistry).filter(
-                KnowledgePointRegistry.name == topic
-            ).first()
-            if reg:
-                kp_id = reg.id
-                logger.debug(f"Resolved KP from topic: {topic} -> id={reg.id}")
-
-    logger.debug(f"Using kp_id={kp_id} for batch {batch_id}")
-
-    with SessionLocal() as db:
-        try:
-            for q in questions:
-                record = QuestionRecord(
-                    user_id=user_id,
-                    conversation_id=conversation_id,
-                    batch_id=batch_id,
-                    knowledge_point_id=kp_id,
-                    question_type=q.get("question_type", "简答"),
-                    difficulty=q.get("difficulty", 1.0),
-                    stem=q.get("stem", ""),
-                    standard_answer=q.get("answer", ""),
-                    explanation=q.get("explanation", ""),
-                    quality_score=q.get("quality_score"),
-                )
-                db.add(record)
-                db.flush()  # flush to get record.id
-                q["id"] = record.id
-            db.commit()
-        except Exception as e:
-            logger.warning("Failed to persist questions: %s", e)
-            db.rollback()
+    try:
+        persist_generated_questions_with_managed_session(
+            questions,
+            user_id=user_id,
+            conversation_id=conversation_id,
+            topic=topic or _extract_topic(prompt),
+            evidences=_get_cached_evidences(),
+        )
+    except Exception as e:
+        logger.warning("Failed to persist questions: %s", e)
+    return questions
 
 
 # ── Agent 定义 ──────────────────────────────────────────────────
