@@ -1,12 +1,11 @@
 import logging
 
 from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
 
 from app.config import settings
-from app.rag.rag_utils import get_llm
 from app.agents.kg_tools import aquery_knowledge_graph
 from app.agents.prompts import PATH_AGENT_SYSTEM_PROMPT as PATH_AGENT_PROMPT
+from app.agents.agent_factory import ReactAgentSpec, create_react_tool_agent
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +35,14 @@ async def asearch_learning_path(query: str) -> str:
 
 def create_path_agent():
     """创建学习路径推荐Agent"""
-    llm = get_llm(temperature=settings.TEMP_PRECISE, use_fast=True)  # ReAct 工具选择用 fast
-    agent = create_react_agent(
-        model=llm,
-        tools=[
-            aquery_knowledge_graph,
-            asearch_learning_path,
-        ],
-        prompt=PATH_AGENT_PROMPT,
+    return create_react_tool_agent(
+        ReactAgentSpec(
+            name="path_agent",
+            prompt=PATH_AGENT_PROMPT,
+            tools=[
+                aquery_knowledge_graph,
+                asearch_learning_path,
+            ],
+            temperature=settings.TEMP_PRECISE,
+        )
     )
-    return agent

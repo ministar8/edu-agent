@@ -5,10 +5,10 @@ import uuid
 from difflib import SequenceMatcher
 
 from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
 
 from app.config import settings
 from app.rag.evidence import TextEvidence
+from app.agents.agent_factory import ReactAgentSpec, create_react_tool_agent
 from app.rag.rag_utils import get_llm
 from app.rag.schemas import QuestionList
 from app.rag.parse_utils import parse_llm_json
@@ -533,13 +533,14 @@ def _persist_questions(
 
 def create_question_agent():
     """创建题目生成Agent（ReAct 模式，供 Supervisor 路由使用）"""
-    llm = get_llm(temperature=settings.TEMP_CREATIVE, use_fast=True)  # ReAct 工具选择用 fast
-    agent = create_react_agent(
-        model=llm,
-        tools=[
-            asearch_question_templates,
-            aquery_knowledge_graph,
-        ],
-        prompt=QUESTION_AGENT_PROMPT,
+    return create_react_tool_agent(
+        ReactAgentSpec(
+            name="question_agent",
+            prompt=QUESTION_AGENT_PROMPT,
+            tools=[
+                asearch_question_templates,
+                aquery_knowledge_graph,
+            ],
+            temperature=settings.TEMP_CREATIVE,
+        )
     )
-    return agent

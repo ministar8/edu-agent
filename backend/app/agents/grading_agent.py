@@ -1,7 +1,6 @@
 import logging
 
 from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
 
 from app.rag.retriever import aretrieve_evidence_with_retry
 from app.rag.rag_utils import get_llm
@@ -9,6 +8,7 @@ from app.config import settings
 from app.rag.schemas import GradingResult
 from app.agents.kg_tools import aquery_knowledge_graph
 from app.agents.prompts import GRADING_AGENT_SYSTEM_PROMPT as GRADING_AGENT_PROMPT
+from app.agents.agent_factory import ReactAgentSpec, create_react_tool_agent
 
 logger = logging.getLogger(__name__)
 
@@ -102,13 +102,14 @@ async def grade_single_question(
 
 def create_grading_agent():
     """创建批改评估Agent"""
-    llm = get_llm(temperature=settings.TEMP_PRECISE, use_fast=True)  # ReAct 工具选择用 fast
-    agent = create_react_agent(
-        model=llm,
-        tools=[
-            asearch_standard_answer,
-            aquery_knowledge_graph,
-        ],
-        prompt=GRADING_AGENT_PROMPT,
+    return create_react_tool_agent(
+        ReactAgentSpec(
+            name="grading_agent",
+            prompt=GRADING_AGENT_PROMPT,
+            tools=[
+                asearch_standard_answer,
+                aquery_knowledge_graph,
+            ],
+            temperature=settings.TEMP_PRECISE,
+        )
     )
-    return agent
