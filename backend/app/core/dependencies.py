@@ -8,6 +8,7 @@ from app.services.chat_message_service import ChatMessageService
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services.question_service import QuestionService
 from app.services.tracking_query_service import TrackingQueryService
+from app.services.visualization_service import VisualizationService
 
 
 def get_question_service(db: Session = Depends(get_db)) -> QuestionService:
@@ -24,3 +25,7 @@ def get_tracking_query_service(db: Session = Depends(get_db)) -> TrackingQuerySe
 
 def get_knowledge_base_service() -> KnowledgeBaseService:
     return KnowledgeBaseService()
+
+
+def get_visualization_service() -> VisualizationService:
+    return VisualizationService()
