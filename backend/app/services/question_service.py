@@ -149,7 +149,8 @@ class QuestionService:
         )
 
     async def _generate_question_dicts(self, prompt: str) -> tuple[list[dict], list[object]]:
-        from app.agents.question_agent import generate_questions_from_prompt, get_cached_evidences
+        from app.agents.question_tools import get_cached_evidences
+        from app.services.question_generation_service import generate_questions_from_prompt
 
         questions = await asyncio.wait_for(
             generate_questions_from_prompt(prompt),
