@@ -1,230 +1,32 @@
 import asyncio
-import json
 import logging
-import re
 import time
 import uuid
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
-from sqlalchemy import func
-from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.config import settings
 from app.agents.trace_utils import collect_sources_from_steps
-from app.db import Conversation, Message, User, get_db
-from app.events import TrackingEvent, emit, extract_kp_ids_from_docs, extract_kp_ids_from_steps
-from app.schemas import ChatRequest, ChatResponse, ConversationDetail, ConversationItem, MessageItem
-from app.rag.feedback import log_feedback
-from app.rag.metrics import metrics
-from app.rag.rag_utils import estimate_tokens
+from app.core.dependencies import get_chat_message_service
+from app.db import User
+from app.schemas import ChatRequest, ChatResponse, ConversationDetail, ConversationItem, FeedbackRequest
+from app.services.chat_message_service import ChatMessageService
+from app.services.chat_metrics_service import emit_chat_baseline_metric as _emit_chat_baseline_metric
+from app.services.chat_metrics_service import make_metric_emitter as _make_metric_emitter
+from app.services.chat_stream_helpers import append_source_line_if_missing as _append_source_line_if_missing
+from app.services.chat_stream_helpers import build_governance_from_agent as _build_governance_from_agent
+from app.services.chat_stream_helpers import build_timeout_governance as _build_timeout_governance
+from app.services.chat_stream_helpers import chunk_text as _chunk_text
+from app.services.chat_stream_helpers import deadline_remaining as _deadline_remaining
+from app.services.chat_stream_helpers import sse as _sse
+from app.services.chat_feedback_service import ChatFeedbackService
+from app.services.chat_tracking_service import ChatTrackingService
+from app.services.chat_stream_policy import should_fast_stream_simple_knowledge as _should_fast_stream_simple_knowledge
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-_SOURCE_MARKER_RE = re.compile(
-    r"(\[(?:来源|Source)\s*\d*\s*:)|(^|\n)\s*(?:来源依据|来源|Sources?|参考来源)\s*[:：]",
-    re.IGNORECASE,
-)
-
-
-def _ensure_conversation(db: Session, user_id: int, base_thread: str, first_message: str) -> Conversation:
-    """确保 Conversation 记录存在，不存在则创建"""
-    thread_id = f"{user_id}:{base_thread}"
-    conv = db.query(Conversation).filter(Conversation.thread_id == thread_id).first()
-    if conv:
-        return conv
-    title = first_message[:50] if first_message else "新对话"
-    conv = Conversation(user_id=user_id, thread_id=thread_id, title=title)
-    db.add(conv)
-    db.commit()
-    db.refresh(conv)
-    return conv
-
-
-def _save_message(db: Session, conversation_id: int, role: str, content: str,
-                  agent_name: str | None = None,
-                  sources: list[str] | None = None,
-                  governance: dict | None = None,
-                  parent_id: int | None = None) -> Message:
-    """写入一条消息记录"""
-    conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-    if conv is not None:
-        conv.updated_at = datetime.now(timezone.utc)
-
-    # Determine siblings_order: count existing siblings with same parent
-    parent_filter = Message.parent_id == parent_id if parent_id is not None else Message.parent_id.is_(None)
-    max_order = (
-        db.query(func.max(Message.siblings_order))
-        .filter(parent_filter, Message.conversation_id == conversation_id)
-        .scalar()
-    )
-    siblings_order = (max_order or 0) + 1
-
-    msg = Message(
-        conversation_id=conversation_id,
-        role=role,
-        content=content,
-        agent_name=agent_name,
-        sources=json.dumps(sources or [], ensure_ascii=False),
-        governance=json.dumps(governance, ensure_ascii=False) if governance else None,
-        parent_id=parent_id,
-        siblings_order=siblings_order,
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    return msg
-
-
-def _append_source_line_if_missing(answer: str, sources: list[str]) -> str:
-    if not answer or not sources:
-        return answer
-    if _SOURCE_MARKER_RE.search(answer):
-        return answer
-    return answer.rstrip() + "\n\n来源依据：" + "，".join(sources[:5])
-
-
-def _build_governance_from_agent(gov: dict, guard: dict | None) -> dict:
-    """从 Agent 节点输出构建 governance 字典（graph_stream 路径）"""
-    return {
-        "confidence": gov.get("confidence", "unknown"),
-        "has_source": gov.get("has_source", False),
-        "passed": gov.get("passed", True),
-        "flags": gov.get("flags", []),
-        "has_sufficient_evidence": guard.get("has_sufficient_evidence", True) if guard else True,
-    }
-
-
-def _build_timeout_governance(sources: list[str], **extra) -> dict:
-    """构建超时降级 governance 字典"""
-    return {
-        "confidence": "low",
-        "has_source": bool(sources),
-        "passed": False,
-        "flags": ["timeout_partial"],
-        **extra,
-    }
-
-
-def _make_metric_emitter(
-    *,
-    endpoint: str,
-    query: str,
-    route_type: str,
-    start_time: float,
-):
-    """创建绑定固定参数的 metric 发射器，减少重复传参"""
-    def emit(
-        agent_name: str,
-        final_answer: str = "",
-        sources: list[str] | None = None,
-        first_token_at: float | None = None,
-        governance: dict | None = None,
-        evidence_metadata: dict | None = None,
-        agent_steps: list[dict] | None = None,
-        status: str = "ok",
-        error_type: str = "",
-    ) -> None:
-        _emit_chat_baseline_metric(
-            endpoint=endpoint,
-            query=query,
-            route_type=route_type,
-            agent_name=agent_name,
-            start_time=start_time,
-            final_answer=final_answer,
-            sources=sources,
-            first_token_at=first_token_at,
-            governance=governance,
-            evidence_metadata=evidence_metadata,
-            agent_steps=agent_steps,
-            status=status,
-            error_type=error_type,
-        )
-    return emit
-
-
-def _emit_chat_baseline_metric(
-    *,
-    endpoint: str,
-    query: str,
-    route_type: str,
-    agent_name: str,
-    start_time: float,
-    final_answer: str = "",
-    sources: list[str] | None = None,
-    first_token_at: float | None = None,
-    governance: dict | None = None,
-    evidence_metadata: dict | None = None,
-    agent_steps: list[dict] | None = None,
-    status: str = "ok",
-    error_type: str = "",
-) -> None:
-    sources = sources or []
-    governance = governance or {}
-    evidence_metadata = evidence_metadata or {}
-    agent_steps = agent_steps or []
-    total_ms = round((time.perf_counter() - start_time) * 1000, 3)
-    first_token_ms = round((first_token_at - start_time) * 1000, 3) if first_token_at is not None else None
-    prompt_tokens = estimate_tokens(query or "")
-    completion_tokens = estimate_tokens(final_answer or "")
-    raw_evidence_verdict = governance.get("evidence_verdict", evidence_metadata.get("evidence_verdict", ""))
-    if isinstance(raw_evidence_verdict, dict):
-        evidence_verdict = raw_evidence_verdict.get("verdict", "")
-        evidence_score = raw_evidence_verdict.get("overall_score", evidence_metadata.get("evidence_score", 0.0))
-    else:
-        evidence_verdict = raw_evidence_verdict
-        evidence_score = governance.get("evidence_score", evidence_metadata.get("evidence_score", 0.0))
-    metrics.emit_chat_baseline(
-        endpoint=endpoint,
-        query=query,
-        route_type=route_type,
-        agent_name=agent_name,
-        status=status,
-        duration_ms=total_ms,
-        values={
-            "total_latency_ms": total_ms,
-            "first_token_ms": first_token_ms,
-            "answer_chars": len(final_answer or ""),
-            "answer_tokens_est": completion_tokens,
-            "query_tokens_est": prompt_tokens,
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "llm_call_count": evidence_metadata.get("llm_call_count", 1 if final_answer else 0),
-            "embedding_call_count": evidence_metadata.get("embedding_call_count", 0),
-            "reranker_call_count": evidence_metadata.get("reranker_call_count", 1 if evidence_metadata.get("use_rerank") else 0),
-            "source_count": len(sources),
-            "agent_step_count": len(agent_steps),
-            "governance_confidence": governance.get("confidence", ""),
-            "governance_passed": governance.get("passed", None),
-            "governance_flags": governance.get("flags", []),
-            "evidence_verdict": evidence_verdict,
-            "evidence_score": evidence_score,
-            "retrieval_depth": evidence_metadata.get("retrieval_depth", ""),
-            "retrieval_layer": evidence_metadata.get("retrieval_layer", ""),
-            "retrieval_route_type": evidence_metadata.get("route_type", ""),
-            "text_evidence_count": evidence_metadata.get("text_evidence_count", 0),
-            "hit_docs_count": evidence_metadata.get("result_count", evidence_metadata.get("text_evidence_count", 0)),
-            "used_evidence_count": evidence_metadata.get("text_evidence_count", 0),
-            "kg_used": evidence_metadata.get("kg_used", False),
-            "kg_skipped": evidence_metadata.get("kg_skipped", False),
-            "hyde_triggered": evidence_metadata.get("hyde_triggered", False),
-            "verifier_retry_triggered": bool(evidence_metadata.get("retry_count", 0)),
-            "agentic_path_triggered": route_type in {"graph_stream", "graph_non_stream"},
-            "context_tokens": evidence_metadata.get("context_tokens", 0),
-            "retrieval_latency_ms": evidence_metadata.get("retrieval_latency_ms", None),
-            "rerank_latency_ms": evidence_metadata.get("rerank_latency_ms", None),
-            "kg_latency_ms": evidence_metadata.get("kg_latency_ms", None),
-            "generation_latency_ms": evidence_metadata.get("generation_latency_ms", None),
-            "governance_latency_ms": evidence_metadata.get("governance_latency_ms", None),
-            "semantic_cache_hit": evidence_metadata.get("semantic_cache_hit", False),
-            "semantic_cache_similarity": evidence_metadata.get("semantic_cache_similarity", 0.0),
-            "error_type": error_type,
-        },
-    )
 
 
 async def _maybe_summarize_conversation(conversation_id: int) -> None:
@@ -232,115 +34,30 @@ async def _maybe_summarize_conversation(conversation_id: int) -> None:
 
     每 12 条消息触发一次：取已有 summary + 最早 6 轮（12条）→ LLM → 更新 summary。
     """
-    from app.agents.memory_manager import summarize_messages, should_trigger_summary
-    from app.db.session import SessionLocal
-
-    with SessionLocal() as db:
-        try:
-            msg_count = db.query(Message).filter(Message.conversation_id == conversation_id).count()
-            if not should_trigger_summary(msg_count):
-                return
-
-            conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
-            if not conv:
-                return
-
-            # 取最早 12 条（6 轮）用于摘要
-            early_msgs = (
-                db.query(Message)
-                .filter(Message.conversation_id == conversation_id)
-                .order_by(Message.created_at.asc())
-                .limit(12)
-                .all()
-            )
-            if not early_msgs:
-                return
-
-            new_messages = [{"role": m.role, "content": m.content} for m in early_msgs]
-            existing_summary = conv.summary or ""
-
-            summary = await summarize_messages(new_messages, existing_summary=existing_summary)
-            if summary:
-                conv.summary = summary
-                db.commit()
-                logger.info("Conversation summary updated conv_id=%s", conversation_id)
-        except Exception as e:
-            logger.warning("Summary generation failed (non-fatal): %s", e)
+    await ChatMessageService.summarize_with_managed_session(conversation_id)
 
 
-def _build_input_messages(conv: Conversation, user_message: str, db: Session | None = None, *, conv_id: int | None = None, conv_summary: str | None = None, leaf_message_id: int | None = None) -> list:
-    from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-
-    # Use pre-extracted values if provided (avoids DetachedInstanceError in async generators)
-    _conv_id = conv_id if conv_id is not None else conv.id
-    _conv_summary = conv_summary if conv_summary is not None else (conv.summary or "")
-
-    messages: list = [
-        SystemMessage(
-            content=(
-                "请用简洁、规范、整洁的中文分点回答。"
-                "除非用户明确要求表格、长文或完整试卷，否则不要使用表格和大段说明；"
-                "优先使用有序编号或短横线列表，每一点控制在1到2句话；"
-                "必要时只保留少量二级标题，不要输出三级标题；"
-                "不要使用 Markdown 加粗符号 **，需要强调时使用空格或普通文字表达；"
-                "408题目或解析必须包含题干、答案、解析三个部分；"
-                "不要输出原始JSON、调试信息或无意义前缀。"
-            )
-        ),
-    ]
-
-    # 注入会话摘要（更早的对话已被压缩）
-    if _conv_summary:
-        messages.append(SystemMessage(
-            content=f"【会话早期摘要】\n{_conv_summary}\n---"
-        ))
-
-    if db is not None:
-        # Branch-aware: if leaf_message_id provided, trace parent chain
-        if leaf_message_id is not None:
-            chain: list[Message] = []
-            current = db.query(Message).filter(Message.id == leaf_message_id).first()
-            while current is not None:
-                chain.append(current)
-                if current.parent_id is not None:
-                    current = db.query(Message).filter(Message.id == current.parent_id).first()
-                else:
-                    break
-            chain.reverse()  # oldest first
-            # Take last 12 messages from the chain
-            chain = chain[-12:]
-            for msg in chain:
-                if msg.role == "user":
-                    messages.append(HumanMessage(content=msg.content))
-                elif msg.role == "assistant":
-                    content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
-                    messages.append(AIMessage(content=content))
-        else:
-            # Legacy: load last 12 messages by time
-            history_msgs = (
-                db.query(Message)
-                .filter(Message.conversation_id == _conv_id)
-                .order_by(Message.created_at.desc())
-                .limit(12)
-                .all()
-            )
-            history_msgs.reverse()  # 恢复时间正序
-            for msg in history_msgs:
-                if msg.role == "user":
-                    messages.append(HumanMessage(content=msg.content))
-                elif msg.role == "assistant":
-                    content = msg.content[:500] + "..." if len(msg.content) > 500 else msg.content
-                    messages.append(AIMessage(content=content))
-
-    messages.append(HumanMessage(content=user_message))
-    return messages
+def _build_input_messages(
+    service: ChatMessageService,
+    user_message: str,
+    *,
+    conv_id: int,
+    conv_summary: str,
+    leaf_message_id: int | None = None,
+) -> list:
+    return service.build_input_messages(
+        user_message=user_message,
+        conversation_id=conv_id,
+        conversation_summary=conv_summary,
+        leaf_message_id=leaf_message_id,
+    )
 
 
 @router.post("", response_model=ChatResponse)
 async def chat(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    service: ChatMessageService = Depends(get_chat_message_service),
 ):
     """与多Agent系统对话（非流式）"""
     base_thread = request.thread_id or str(uuid.uuid4())
@@ -356,13 +73,22 @@ async def chat(
     metric_steps: list[dict] = []
     metric_status = "ok"
     metric_error = ""
+    metric_retrieval_layer = ""
+    metric_route_type = ""
 
-    conv = _ensure_conversation(db, current_user.id, base_thread, request.message)
+    conv = service.ensure_conversation(current_user.id, base_thread, request.message)
     conv_id = conv.id
     conv_summary = conv.summary or ""
     parent_msg_id = request.parent_message_id
     leaf_message_id: int | None = parent_msg_id
-    user_msg = _save_message(db, conv_id, "user", request.message, parent_id=parent_msg_id)
+    user_msg = service.save_message(conv_id, "user", request.message, parent_id=parent_msg_id)
+    input_messages = _build_input_messages(
+        service,
+        request.message,
+        conv_id=conv_id,
+        conv_summary=conv_summary,
+        leaf_message_id=leaf_message_id,
+    )
 
     try:
         logger.info("Chat request started thread_id=%s", thread_id)
@@ -371,7 +97,7 @@ async def chat(
         result = await asyncio.wait_for(
             graph.ainvoke(
                 {
-                    "messages": _build_input_messages(conv, request.message, db=db, conv_id=conv_id, conv_summary=conv_summary, leaf_message_id=leaf_message_id),
+                    "messages": input_messages,
                 },
                 config=config,
             ),
@@ -390,8 +116,8 @@ async def chat(
         metric_sources = sources
         metric_steps = agent_steps
 
-        _save_message(db, conv_id, "assistant", final_answer,
-                      parent_id=user_msg.id, agent_name=agent_name, sources=sources)
+        service.save_message(conv_id, "assistant", final_answer,
+                             parent_id=user_msg.id, agent_name=agent_name, sources=sources)
 
         # M2: 同步触发增量摘要（非流式端点，阻塞无碍）
         await _maybe_summarize_conversation(conv_id)
@@ -409,7 +135,7 @@ async def chat(
         metric_agent = "system"
         metric_status = "timeout"
         metric_error = "TimeoutError"
-        _save_message(db, conv_id, "assistant", timeout_answer, parent_id=user_msg.id, agent_name="system")
+        service.save_message(conv_id, "assistant", timeout_answer, parent_id=user_msg.id, agent_name="system")
         return ChatResponse(
             answer=timeout_answer,
             agent_name="system",
@@ -423,7 +149,7 @@ async def chat(
         metric_agent = "system"
         metric_status = "error"
         metric_error = e.__class__.__name__
-        _save_message(db, conv_id, "assistant", error_answer, parent_id=user_msg.id, agent_name="system")
+        service.save_message(conv_id, "assistant", error_answer, parent_id=user_msg.id, agent_name="system")
         return ChatResponse(
             answer=error_answer,
             agent_name="system",
@@ -452,69 +178,22 @@ async def chat(
         logger.info("Chat request finished thread_id=%s elapsed_ms=%.2f", thread_id, elapsed_ms)
 
 
-def _sse(event: str, data: dict) -> str:
-    """格式化 SSE 事件"""
-    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-def _deadline_remaining(deadline_at: float) -> float:
-    return max(0.0, deadline_at - time.perf_counter())
-
-
-def _chunk_text(chunk) -> str:
-    content = chunk.content if hasattr(chunk, "content") else str(chunk)
-    if isinstance(content, list):
-        return "".join(
-            item.get("text", "") if isinstance(item, dict) else str(item)
-            for item in content
-        )
-    return str(content or "")
-
-
 def _persist_message(conv_id: int, role: str, text: str, *, parent_id: int | None = None, **kwargs) -> int:
     """Save a message in an independent DB session (safe from generator closure). Returns the message id."""
-    from app.db.session import SessionLocal
-    with SessionLocal() as _db:
-        msg = _save_message(_db, conv_id, role, text, parent_id=parent_id, **kwargs)
-        return msg.id
-
-
-def _should_fast_stream_simple_knowledge(query: str) -> bool:
-    try:
-        from app.agents.supervisor import _rule_based_route
-        from app.rag.query_classifier import classify_query
-        from app.rag.rag_utils import extract_query_terms, normalize_query_text
-        from app.rag.retrieval_strategy import resolve_retrieval_strategy
-
-        if _rule_based_route(query) != "knowledge_agent":
-            return False
-        normalized = normalize_query_text(query)
-        terms = extract_query_terms(normalized)
-        cat = classify_query(query, terms)
-        strategy = resolve_retrieval_strategy(cat)
-        if strategy.layer not in {"L1", "L2"}:
-            return False
-        if (
-            cat.is_code
-            or cat.is_exercise
-            or cat.is_answer
-            or cat.is_comparison
-            or cat.is_learning_path
-        ):
-            return False
-        if strategy.layer == "L2" and (cat.is_long or not cat.is_concept):
-            return False
-        return True
-    except Exception as e:
-        logger.debug("Fast-stream eligibility check skipped: %s", e)
-        return False
+    return ChatMessageService.persist_message_with_managed_session(
+        conv_id,
+        role,
+        text,
+        parent_id=parent_id,
+        **kwargs,
+    )
 
 
 @router.post("/stream")
 async def chat_stream(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    service: ChatMessageService = Depends(get_chat_message_service),
 ):
     """流式对话（SSE，前端逐字显示）"""
     base_thread = request.thread_id or str(uuid.uuid4())
@@ -524,7 +203,7 @@ async def chat_stream(
         "recursion_limit": 25,
     }
 
-    conv = _ensure_conversation(db, current_user.id, base_thread, request.message)
+    conv = service.ensure_conversation(current_user.id, base_thread, request.message)
     conv_id = conv.id
     conv_summary = conv.summary or ""
     parent_msg_id = request.parent_message_id
@@ -532,7 +211,14 @@ async def chat_stream(
     # Determine leaf_message_id for branch-aware history loading
     leaf_message_id: int | None = parent_msg_id
 
-    user_msg = _save_message(db, conv_id, "user", request.message, parent_id=parent_msg_id)
+    user_msg = service.save_message(conv_id, "user", request.message, parent_id=parent_msg_id)
+    input_messages = _build_input_messages(
+        service,
+        request.message,
+        conv_id=conv_id,
+        conv_summary=conv_summary,
+        leaf_message_id=leaf_message_id,
+    )
 
     async def _rag_fallback_stream(query: str):
         """Graph 构建失败时的兜底：直接 RAG 检索 + LLM 生成"""
@@ -723,19 +409,12 @@ async def chat_stream(
             _persist_message(conv_id, "assistant", full_text,
                              parent_id=user_msg.id, agent_name=agent_name, sources=latest_sources, governance=governance)
 
-            kp_ids = extract_kp_ids_from_docs(docs)
-            if kp_ids:
-                try:
-                    await emit(TrackingEvent(
-                        event_type="qa_high_confidence" if governance.get("confidence") == "high" else "qa_low_confidence",
-                        user_id=current_user.id,
-                        knowledge_point_ids=kp_ids,
-                        category=(docs[0].metadata.get("category") or docs[0].collection or "") if docs else "",
-                        difficulty=1.0,
-                        outcome=1.0 if governance.get("confidence") == "high" else 0.3,
-                    ))
-                except Exception as e:
-                    logger.warning("Tracking event emission failed (fast-stream): %s", e)
+            await ChatTrackingService.emit_document_qa_event(
+                user_id=current_user.id,
+                docs=docs,
+                governance=governance,
+                context="fast-stream",
+            )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             emit_metric(
@@ -848,7 +527,7 @@ async def chat_stream(
             # 因为 _wrap_agent 是黑盒节点，astream_events 无法捕获其内部 LLM token
             graph_stream = graph.astream(
                 {
-                    "messages": _build_input_messages(conv, request.message, db=db, conv_id=conv_id, conv_summary=conv_summary, leaf_message_id=leaf_message_id),
+                    "messages": input_messages,
                 },
                 config=config,
                 stream_mode="updates",
@@ -1074,56 +753,13 @@ async def chat_stream(
             _persist_message(conv_id, "assistant", full_text,
                              parent_id=user_msg.id, agent_name=current_agent, sources=latest_sources, governance=latest_governance)
 
-            # ── 知识追踪事件 ──
-            try:
-                kp_ids = extract_kp_ids_from_steps(latest_agent_steps)
-                if kp_ids and current_agent in ("knowledge_agent", "grading_agent", "path_agent"):
-                    gov_confidence = (latest_governance or {}).get("confidence", "low")
-                    if current_agent == "grading_agent":
-                        # 从批改结果中提取分数、知识点、难度
-                        import re
-                        score_match = re.search(r'评分[：:]\s*(\d+)\s*/\s*100', full_text)
-                        score = int(score_match.group(1)) if score_match else 50
-                        if score >= 80:
-                            event_type = "grading_excellent"
-                        elif score >= 50:
-                            event_type = "grading_pass"
-                        else:
-                            event_type = "grading_fail"
-                        outcome = score / 100.0
-                        # 解析难度
-                        diff_match = re.search(r'难度[：:]\s*(基础|理解|综合|创新)', full_text)
-                        diff_map = {"基础": 1.0, "理解": 1.3, "综合": 1.6, "创新": 2.0}
-                        difficulty = diff_map.get(diff_match.group(1), 1.3) if diff_match else 1.3
-                        # 解析知识点名称 → 匹配 Registry
-                        kp_match = re.search(r'知识点[：:]\s*(.+)', full_text)
-                        if kp_match and not kp_ids:
-                            kp_name = kp_match.group(1).strip()
-                            try:
-                                from app.db.models import KnowledgePointRegistry
-                                from app.db.session import SessionLocal
-                                with SessionLocal() as _lookup_db:
-                                    kp_reg = _lookup_db.query(KnowledgePointRegistry).filter(
-                                        KnowledgePointRegistry.name == kp_name,
-                                    ).first()
-                                    if kp_reg:
-                                        kp_ids = [kp_reg.id]
-                            except Exception as e:
-                                logger.debug("Knowledge point registry lookup skipped: %s", e)
-                    else:
-                        event_type = "qa_high_confidence" if gov_confidence == "high" else "qa_low_confidence"
-                        outcome = 1.0 if gov_confidence == "high" else 0.3
-                        difficulty = 1.0
-                    await emit(TrackingEvent(
-                        event_type=event_type,
-                        user_id=current_user.id,
-                        knowledge_point_ids=kp_ids,
-                        category="",
-                        difficulty=difficulty,
-                        outcome=outcome,
-                    ))
-            except Exception as e:
-                logger.warning("Tracking event emission failed (multi-agent): %s", e)
+            await ChatTrackingService.emit_multi_agent_event(
+                user_id=current_user.id,
+                current_agent=current_agent,
+                agent_steps=latest_agent_steps,
+                governance=latest_governance,
+                final_answer=full_text,
+            )
 
             graph_metric_status = "timeout" if "timeout_partial" in ((latest_governance or {}).get("flags") or []) else "ok"
             graph_metric_error = "TimeoutError" if graph_metric_status == "timeout" else ""
@@ -1226,14 +862,14 @@ async def chat_stream(
 async def chat_rag_stream(
     request: ChatRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    service: ChatMessageService = Depends(get_chat_message_service),
 ):
     """直接RAG流式问答：跳过Supervisor和多Agent，只做检索+LLM生成"""
     base_thread = request.thread_id or str(uuid.uuid4())
-    conv = _ensure_conversation(db, current_user.id, base_thread, request.message)
+    conv = service.ensure_conversation(current_user.id, base_thread, request.message)
     conv_id = conv.id
     parent_msg_id = request.parent_message_id
-    user_msg = _save_message(db, conv_id, "user", request.message, parent_id=parent_msg_id)
+    user_msg = service.save_message(conv_id, "user", request.message, parent_id=parent_msg_id)
 
     async def event_generator():
         from langchain_core.messages import HumanMessage, SystemMessage
@@ -1409,22 +1045,12 @@ async def chat_rag_stream(
             _persist_message(conv_id, "assistant", full_text,
                              parent_id=user_msg.id, agent_name="rag_direct", sources=latest_sources, governance=governance)
 
-            # ── 知识追踪事件 ──
-            kp_ids = extract_kp_ids_from_docs(docs)
-            if kp_ids:
-                gov_confidence = governance.get("confidence", "low") if governance else "low"
-                event_type = "qa_high_confidence" if gov_confidence == "high" else "qa_low_confidence"
-                try:
-                    await emit(TrackingEvent(
-                        event_type=event_type,
-                        user_id=current_user.id,
-                        knowledge_point_ids=kp_ids,
-                        category=(docs[0].metadata.get("category") or docs[0].collection or "") if docs else "",
-                        difficulty=1.0,
-                        outcome=1.0 if gov_confidence == "high" else 0.3,
-                    ))
-                except Exception as e:
-                    logger.warning("Tracking event emission failed: %s", e)
+            await ChatTrackingService.emit_document_qa_event(
+                user_id=current_user.id,
+                docs=docs,
+                governance=governance,
+                context="direct-rag",
+            )
 
             elapsed_ms = (time.perf_counter() - start_time) * 1000
             emit_metric(
@@ -1500,115 +1126,38 @@ async def chat_rag_stream(
 # ── 对话历史 API ──────────────────────────────
 
 
-def _msg_to_item(msg: Message, *, child_count: int = 0) -> MessageItem:
-    """ORM Message → Pydantic MessageItem"""
-    sources = json.loads(msg.sources) if msg.sources else []
-    governance = json.loads(msg.governance) if msg.governance else None
-    return MessageItem(
-        id=msg.id,
-        role=msg.role,
-        content=msg.content,
-        agent_name=msg.agent_name,
-        sources=sources,
-        governance=governance,
-        parent_id=msg.parent_id,
-        siblings_order=msg.siblings_order,
-        child_count=child_count,
-        created_at=msg.created_at,
-    )
-
-
 @router.get("/conversations", response_model=list[ConversationItem])
 async def list_conversations(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    service: ChatMessageService = Depends(get_chat_message_service),
 ):
     """获取当前用户的对话列表"""
-    convs = (
-        db.query(Conversation)
-        .filter(Conversation.user_id == current_user.id)
-        .order_by(Conversation.updated_at.desc())
-        .all()
-    )
-    items = []
-    for conv in convs:
-        msg_count = db.query(Message).filter(Message.conversation_id == conv.id).count()
-        items.append(ConversationItem(
-            id=conv.id,
-            thread_id=conv.thread_id,
-            title=conv.title,
-            summary=conv.summary or "",
-            created_at=conv.created_at,
-            updated_at=conv.updated_at,
-            message_count=msg_count,
-        ))
-    return items
+    return service.list_conversations(current_user.id)
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    service: ChatMessageService = Depends(get_chat_message_service),
 ):
     """获取对话详情（含全部历史消息，含分支结构）"""
-    conv = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
-        Conversation.user_id == current_user.id,
-    ).first()
-    if not conv:
+    detail = service.get_conversation_detail(conversation_id, current_user.id)
+    if not detail:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
-
-    msgs = (
-        db.query(Message)
-        .filter(Message.conversation_id == conv.id)
-        .order_by(Message.created_at.asc())
-        .all()
-    )
-
-    # Compute child_count for each message
-    child_counts: dict[int, int] = {}
-    for m in msgs:
-        if m.parent_id is not None:
-            child_counts[m.parent_id] = child_counts.get(m.parent_id, 0) + 1
-
-    return ConversationDetail(
-        id=conv.id,
-        thread_id=conv.thread_id,
-        title=conv.title,
-        summary=conv.summary or "",
-        created_at=conv.created_at,
-        updated_at=conv.updated_at,
-        messages=[_msg_to_item(m, child_count=child_counts.get(m.id, 0)) for m in msgs],
-    )
+    return detail
 
 
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
+    service: ChatMessageService = Depends(get_chat_message_service),
 ):
     """删除对话及其全部消息"""
-    conv = db.query(Conversation).filter(
-        Conversation.id == conversation_id,
-        Conversation.user_id == current_user.id,
-    ).first()
-    if not conv:
+    if not service.delete_conversation(conversation_id, current_user.id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
-
-    db.query(Message).filter(Message.conversation_id == conv.id).delete()
-    db.delete(conv)
-    db.commit()
     return {"success": True}
-
-
-class FeedbackRequest(BaseModel):
-    thread_id: str
-    rating: int = 0  # 1=like, -1=dislike
-    query: str = ""
-    answer: str = ""
-    metadata: dict = Field(default_factory=dict)
 
 
 @router.post("/feedback")
@@ -1621,17 +1170,14 @@ async def submit_feedback(
     Records like/dislike with query context for periodic bad case clustering.
     """
     try:
-        log_feedback(
-            query=request.query or "",
-            answer=request.answer or "",
+        return ChatFeedbackService.submit_feedback(
+            user_id=current_user.id,
+            thread_id=request.thread_id,
             rating=request.rating,
-            metadata={
-                "thread_id": request.thread_id,
-                "user_id": current_user.id,
-                **(request.metadata or {}),
-            },
+            query=request.query,
+            answer=request.answer,
+            metadata=request.metadata,
         )
-        return {"status": "ok", "rating": request.rating}
     except Exception as e:
         logger.error("Feedback submission failed: %s", e)
         return {"status": "error", "detail": str(e)}
@@ -1640,8 +1186,4 @@ async def submit_feedback(
 @router.get("/feedback/stats")
 async def get_feedback_stats(days: int = 7, current_user: User = Depends(get_current_user)):
     """Get feedback statistics for data flywheel dashboard."""
-    from app.rag.feedback import get_feedback_stats, cluster_bad_cases
-    stats = get_feedback_stats(days=days)
-    clusters = cluster_bad_cases(days=days)
-    stats["bad_case_clusters"] = clusters
-    return stats
+    return ChatFeedbackService.get_feedback_summary(days=days)

@@ -18,6 +18,14 @@ class ChatResponse(BaseModel):
     agent_steps: list[dict] = Field(default_factory=list)
 
 
+class FeedbackRequest(BaseModel):
+    thread_id: str
+    rating: int = 0  # 1=like, -1=dislike
+    query: str = ""
+    answer: str = ""
+    metadata: dict = Field(default_factory=dict)
+
+
 # ── 对话历史 schemas ──────────────────────────
 
 
