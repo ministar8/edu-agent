@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.dependencies import get_visualization_service
+from app.core.error_responses import GENERIC_VISUALIZATION_ERROR
 from app.services.visualization_service import VisualizationService
 
 logger = logging.getLogger(__name__)
@@ -36,4 +37,4 @@ async def get_hierarchical_knowledge_graph(
         return service.get_hierarchical_knowledge_graph(category=category, levels=levels)
     except Exception as e:
         logger.error("Hierarchical knowledge graph fetch failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"知识图谱查询失败: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=GENERIC_VISUALIZATION_ERROR)

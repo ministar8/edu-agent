@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.auth import get_current_user
 from app.core.dependencies import get_question_service
+from app.core.error_responses import GENERIC_GRADING_ERROR, GENERIC_QUESTION_ERROR
 from app.db import User
 from app.schemas.questions import (
     GradeRequest,
@@ -58,7 +59,7 @@ async def generate_questions(
         logger.error("Question generation error: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"题目生成失败：{e}",
+            detail=GENERIC_QUESTION_ERROR,
         )
 
 
@@ -99,7 +100,7 @@ async def weak_point_practice(
         logger.error("Weak-point practice error: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"练习题生成失败：{e}",
+            detail=GENERIC_QUESTION_ERROR,
         )
 
 
@@ -126,5 +127,5 @@ async def grade_question(
         logger.error("Grading error: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"批改失败：{e}",
+            detail=GENERIC_GRADING_ERROR,
         )

@@ -7,20 +7,35 @@ import os
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import HTTPException, status
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-JWT_SECRET = settings.JWT_SECRET
-if not JWT_SECRET:
-    raise RuntimeError("JWT_SECRET must be set in .env or environment variables")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = 2
 PASSWORD_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 260_000
 PASSWORD_SALT_BYTES = 16
+
+
+class AuthTokenError(ValueError):
+    detail = "无效 Token"
+
+
+class AuthTokenExpiredError(AuthTokenError):
+    detail = "Token 已过期"
+
+
+class AuthServiceConfigError(RuntimeError):
+    detail = "认证服务未正确配置"
+
+
+def _jwt_secret() -> str:
+    if settings.JWT_SECRET:
+        return settings.JWT_SECRET
+    logger.error("JWT_SECRET is not configured")
+    raise AuthServiceConfigError(AuthServiceConfigError.detail)
 
 def hash_password(password: str) -> str:
     salt = os.urandom(PASSWORD_SALT_BYTES).hex()
@@ -67,12 +82,12 @@ def create_access_token(user_id: int, username: str, role: str) -> str:
         "exp": now + timedelta(hours=JWT_EXPIRE_HOURS),
         "iat": now,
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, _jwt_secret(), algorithm=JWT_ALGORITHM)
 
 def decode_access_token(token: str) -> dict:
     try:
-        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return jwt.decode(token, _jwt_secret(), algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token 已过期") from exc
+        raise AuthTokenExpiredError(AuthTokenExpiredError.detail) from exc
     except jwt.InvalidTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效 Token") from exc
+        raise AuthTokenError(AuthTokenError.detail) from exc

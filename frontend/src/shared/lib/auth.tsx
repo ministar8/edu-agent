@@ -3,10 +3,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import {
   AUTH_UNAUTHORIZED_EVENT,
-  clearStoredToken,
-  getStoredToken,
+  clearAccessToken,
   http,
-  saveStoredToken,
+  setAccessToken,
 } from "./http";
 
 interface User {
@@ -18,7 +17,6 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
   loading: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string, displayName: string, role: string) => Promise<void>;
@@ -30,26 +28,17 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const clearSession = useCallback(() => {
-    setToken(null);
     setUser(null);
-    clearStoredToken();
+    clearAccessToken();
   }, []);
 
   useEffect(() => {
-    const savedToken = getStoredToken();
-    if (!savedToken) {
-      setLoading(false);
-      return;
-    }
-
     const restoreSession = async () => {
       try {
         const res = await http.get("/api/auth/me");
-        setToken(savedToken);
         setUser(res.data);
       } catch {
         clearSession();
@@ -62,9 +51,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [clearSession]);
 
   const saveSession = useCallback((newToken: string, newUser: User) => {
-    setToken(newToken);
     setUser(newUser);
-    saveStoredToken(newToken);
+    setAccessToken(newToken);
   }, []);
 
   useEffect(() => {
@@ -84,10 +72,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     saveSession(res.data.access_token, res.data.user);
   }, [saveSession]);
 
-  const logout = clearSession;
+  const logout = useCallback(() => {
+    void http.post("/api/auth/logout").catch(() => undefined).finally(clearSession);
+  }, [clearSession]);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, clearSession }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, clearSession }}>
       {children}
     </AuthContext.Provider>
   );

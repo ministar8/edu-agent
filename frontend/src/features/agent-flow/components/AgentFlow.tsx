@@ -299,7 +299,7 @@ function AgentFlowInner() {
           )}
         </p>
       </div>
-      <div className="flex-1 min-h-0 w-full">
+      <div className="h-[420px] w-full shrink-0">
         <ReactFlow
           nodes={nodes}
           edges={edges}

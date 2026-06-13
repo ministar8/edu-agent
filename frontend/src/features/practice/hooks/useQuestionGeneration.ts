@@ -3,12 +3,24 @@ import { useCallback, useRef } from "react";
 import { useTrackingRefresh } from "@/shared/contexts/TrackingRefreshContext";
 import { getErrorMessage } from "@/shared/lib/errors";
 import { http } from "@/shared/lib/http";
-import type { QuestionPanelState, StructuredQuestion } from "@/shared/types/question";
+import type { QuestionPanelState, StructuredQuestion, WrongQuestion } from "@/shared/types/question";
 
 type UseQuestionGenerationParams = {
   state: QuestionPanelState;
   setState: React.Dispatch<React.SetStateAction<QuestionPanelState>>;
 };
+
+function updateAt<T>(items: T[], index: number, patch: Partial<T>) {
+  return items.map((item, itemIndex) => (
+    itemIndex === index ? { ...item, ...patch } : item
+  ));
+}
+
+function updateById<T extends { id: number }>(items: T[], id: number, patch: Partial<T>) {
+  return items.map((item) => (
+    item.id === id ? { ...item, ...patch } : item
+  ));
+}
 
 export function useQuestionGeneration({ state, setState }: UseQuestionGenerationParams) {
   const { triggerRefresh: triggerTrackingRefresh } = useTrackingRefresh();
@@ -73,9 +85,7 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
       if (!q || !q.id || q.gradingStatus === "loading") return prev;
       qId = q.id;
       qAnswer = q.userAnswer || "";
-      const newQuestions = [...prev.questions];
-      newQuestions[questionIndex] = { ...q, gradingStatus: "loading" };
-      return { ...prev, questions: newQuestions };
+      return { ...prev, questions: updateAt(prev.questions, questionIndex, { gradingStatus: "loading" }) };
     });
     if (!qId) return;
 
@@ -85,33 +95,33 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
       });
 
       setState((prev) => {
-        const newQuestions = [...prev.questions];
-        newQuestions[questionIndex] = {
-          ...newQuestions[questionIndex],
-          gradingStatus: "done",
-          gradingScore: res.data.score,
-          gradingFeedback: res.data.feedback,
-          isWrong: res.data.is_wrong,
+        return {
+          ...prev,
+          questions: updateAt(prev.questions, questionIndex, {
+            gradingStatus: "done",
+            gradingScore: res.data.score,
+            gradingFeedback: res.data.feedback,
+            isWrong: res.data.is_wrong,
+          }),
         };
-        return { ...prev, questions: newQuestions };
       });
       triggerTrackingRefresh();
     } catch (error: unknown) {
+      const msg = getErrorMessage(error, "批改失败");
       setState((prev) => {
-        const newQuestions = [...prev.questions];
-        newQuestions[questionIndex] = {
-          ...newQuestions[questionIndex],
-          gradingStatus: "idle",
+        return {
+          ...prev,
+          questions: updateAt(prev.questions, questionIndex, {
+            gradingStatus: "idle",
+            gradingFeedback: msg,
+          }),
         };
-        return { ...prev, questions: newQuestions };
       });
     }
   }, [setState, triggerTrackingRefresh]);
 
   const updateQuestionAnswer = useCallback((questionIndex: number, answer: string) => {
-    const newQuestions = [...state.questions];
-    newQuestions[questionIndex] = { ...newQuestions[questionIndex], userAnswer: answer };
-    updateState({ questions: newQuestions });
+    updateState({ questions: updateAt(state.questions, questionIndex, { userAnswer: answer }) });
   }, [state.questions, updateState]);
 
   const loadWrongQuestions = useCallback(async () => {
@@ -119,8 +129,9 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
     try {
       const res = await http.get("/api/questions/wrong", { params: { limit: 20 } });
       updateState({ wrongQuestions: res.data || [], wrongLoading: false, activeTab: "wrong" as const });
-    } catch {
-      updateState({ wrongLoading: false });
+    } catch (error: unknown) {
+      const msg = getErrorMessage(error, "错题加载失败");
+      updateState({ wrongLoading: false, result: `错题加载失败: ${msg}` });
     }
   }, [updateState]);
 
@@ -148,26 +159,25 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
   const redoAnswerChange = useCallback((qId: number, answer: string) => {
     setState((prev) => ({
       ...prev,
-      wrongQuestions: prev.wrongQuestions.map((wq) =>
-        wq.id === qId ? { ...wq, redoAnswer: answer } : wq
-      ),
+      wrongQuestions: updateById(prev.wrongQuestions, qId, { redoAnswer: answer }),
     }));
   }, [setState]);
 
   const redoWrongQuestion = useCallback(async (qId: number) => {
     let answer = "";
+    let shouldSubmit = false;
     setState((prev) => {
       const wq = prev.wrongQuestions.find((w) => w.id === qId);
       if (!wq || wq.redoStatus === "loading") return prev;
       answer = wq.redoAnswer || "";
+      if (!answer.trim()) return prev;
+      shouldSubmit = true;
       return {
         ...prev,
-        wrongQuestions: prev.wrongQuestions.map((w) =>
-          w.id === qId ? { ...w, redoStatus: "loading" as const } : w
-        ),
+        wrongQuestions: updateById(prev.wrongQuestions, qId, { redoStatus: "loading" }),
       };
     });
-    if (!answer.trim()) return;
+    if (!shouldSubmit) return;
 
     try {
       const res = await http.post(`/api/questions/${qId}/grade`, {
@@ -176,29 +186,29 @@ export function useQuestionGeneration({ state, setState }: UseQuestionGeneration
 
       setState((prev) => ({
         ...prev,
-        wrongQuestions: prev.wrongQuestions.map((w) =>
-          w.id === qId
-            ? {
-                ...w,
-                redoStatus: "done" as const,
-                redoScore: res.data.score,
-                redoFeedback: res.data.feedback,
-                redoIsWrong: res.data.is_wrong,
-                redoErrorAnalysis: res.data.error_analysis || "",
-                // If correct, also update the main record
-                grading_score: res.data.is_wrong ? w.grading_score : res.data.score,
-                error_analysis: res.data.error_analysis || w.error_analysis,
-              }
-            : w
-        ),
+        wrongQuestions: prev.wrongQuestions.map((wrongQuestion): WrongQuestion => {
+          if (wrongQuestion.id !== qId) return wrongQuestion;
+          return {
+            ...wrongQuestion,
+            redoStatus: "done",
+            redoScore: res.data.score,
+            redoFeedback: res.data.feedback,
+            redoIsWrong: res.data.is_wrong,
+            redoErrorAnalysis: res.data.error_analysis || "",
+            grading_score: res.data.is_wrong ? wrongQuestion.grading_score : res.data.score,
+            error_analysis: res.data.error_analysis || wrongQuestion.error_analysis,
+          };
+        }),
       }));
       triggerTrackingRefresh();
-    } catch {
+    } catch (error: unknown) {
+      const msg = getErrorMessage(error, "重练批改失败");
       setState((prev) => ({
         ...prev,
-        wrongQuestions: prev.wrongQuestions.map((w) =>
-          w.id === qId ? { ...w, redoStatus: "idle" as const } : w
-        ),
+        wrongQuestions: updateById(prev.wrongQuestions, qId, {
+          redoStatus: "idle",
+          redoFeedback: msg,
+        }),
       }));
     }
   }, [setState, triggerTrackingRefresh]);

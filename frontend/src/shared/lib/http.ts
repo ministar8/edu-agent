@@ -5,25 +5,22 @@ import { API_BASE_URL } from "./api";
 
 export const AUTH_UNAUTHORIZED_EVENT = "auth:unauthorized";
 
-const TOKEN_KEY = "token";
+let accessToken: string | null = null;
 
-export function getStoredToken(): string | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  return localStorage.getItem(TOKEN_KEY);
+export function getAccessToken(): string | null {
+  return accessToken;
 }
 
-export function saveStoredToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
+export function setAccessToken(token: string) {
+  accessToken = token;
 }
 
-export function clearStoredToken() {
-  localStorage.removeItem(TOKEN_KEY);
+export function clearAccessToken() {
+  accessToken = null;
 }
 
 export function getAuthHeaders(): Record<string, string> {
-  const token = getStoredToken();
+  const token = getAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -36,10 +33,11 @@ export function notifyUnauthorized() {
 export const http = axios.create({
   baseURL: API_BASE_URL,
   timeout: 120000,
+  withCredentials: true,
 });
 
 http.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = getStoredToken();
+  const token = getAccessToken();
   if (token) {
     config.headers.set("Authorization", `Bearer ${token}`);
   }

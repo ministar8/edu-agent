@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest import TestCase
 
@@ -9,6 +10,7 @@ from app.services.chat_stream_helpers import (
     build_timeout_governance,
     chunk_text,
     sse,
+    stream_text_chunks,
 )
 
 
@@ -52,3 +54,9 @@ class ChatStreamHelpersTests(TestCase):
         chunk = SimpleNamespace(content=[{"text": "你"}, {"text": "好"}])
 
         self.assertEqual(chunk_text(chunk), "你好")
+
+    def test_stream_text_chunks_splits_text(self) -> None:
+        async def collect() -> list[str]:
+            return [chunk async for chunk in stream_text_chunks("abcdef", chunk_size=2, delay=0)]
+
+        self.assertEqual(asyncio.run(collect()), ["ab", "cd", "ef"])
