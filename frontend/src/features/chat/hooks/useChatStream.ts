@@ -8,28 +8,15 @@ import { getAuthHeaders, notifyUnauthorized } from "@/shared/lib/http";
 import { getBaseThreadId, generateThreadId } from "@/shared/lib/thread";
 import type { AgentStep, ChatPanelState, Governance, Message } from "@/shared/types/chat";
 import type { ConversationDetail } from "@/shared/types/conversation";
+import { parseStreamEvents, toAgentSteps, toGovernance } from "../lib/streamEvents";
 
 type UseChatStreamParams = {
-  token: string | null;
+  authenticated: boolean;
   state: ChatPanelState;
   setState: React.Dispatch<React.SetStateAction<ChatPanelState>>;
 };
 
 const MAX_CACHED_THREADS = 20;
-
-function toGovernance(data: Record<string, unknown>): Governance {
-  return {
-    confidence: typeof data.confidence === "string" ? data.confidence : "unknown",
-    has_source: typeof data.has_source === "boolean" ? data.has_source : false,
-    passed: typeof data.passed === "boolean" ? data.passed : true,
-    flags: Array.isArray(data.flags) ? data.flags.filter((flag): flag is string => typeof flag === "string") : [],
-  };
-}
-
-function toAgentSteps(value: unknown): AgentStep[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((step): step is AgentStep => step !== null && typeof step === "object");
-}
 
 type StreamTerminalState = Pick<ChatPanelState, "loading" | "streamingText" | "streamingAgent" | "activeTool" | "streamingGovernance" | "statusLabel">;
 
@@ -41,13 +28,24 @@ function finalizeThreadState(cached: ChatPanelState, msg: Message): ChatPanelSta
   return { ...cached, messages: [...cached.messages, msg], ...CLEARED_STREAM };
 }
 
-export function useChatStream({ token, state, setState }: UseChatStreamParams) {
+function getLastUserMessageId(messages: Message[]): number | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user" && typeof message.id === "number") {
+      return message.id;
+    }
+  }
+  return null;
+}
+
+export function useChatStream({ authenticated, state, setState }: UseChatStreamParams) {
   const { setActiveAgent, setStatusLabel, setActiveTool, setStreaming, reset: resetActivity } = useAgentActivity();
   const { triggerRefresh: triggerTrackingRefresh } = useTrackingRefresh();
   const stateRef = useRef(state);
   const streamStateByThreadRef = useRef<Map<string, ChatPanelState>>(new Map());
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const localMessageIdRef = useRef(-Date.now());
   stateRef.current = state;
 
   // Cleanup on unmount: abort stream, clear timers
@@ -90,15 +88,20 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
     }
   }, []);
 
+  const nextLocalMessageId = useCallback(() => {
+    localMessageIdRef.current -= 1;
+    return localMessageIdRef.current;
+  }, []);
+
   const sendMessage = useCallback(async (parentMessageId?: number | null) => {
     const { input, loading, baseThreadId } = stateRef.current;
 
-    if (!token) {
+    if (!authenticated) {
       setState((prev) => ({
         ...prev,
         messages: [
           ...prev.messages,
-          { role: "assistant", content: "登录状态已失效，请重新登录后再试。", agentName: "system", parentId: null, siblingsOrder: 0, childCount: 0, timestamp: new Date() },
+          { id: nextLocalMessageId(), role: "assistant", content: "登录状态已失效，请重新登录后再试。", agentName: "system", parentId: null, siblingsOrder: 0, childCount: 0, timestamp: new Date() },
         ],
       }));
       return;
@@ -107,7 +110,7 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
     if (!input.trim() || loading) return;
 
     // Temporary negative id until backend responds with real id via SSE done event
-    const tempId = -Date.now();
+    const tempId = nextLocalMessageId();
     const userMsg: Message = {
       id: tempId, role: "user", content: input,
       parentId: parentMessageId ?? null, siblingsOrder: 0, childCount: 0,
@@ -136,6 +139,7 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
         method: "POST",
         headers: { "Content-Type": "application/json", ...getAuthHeaders() },
         body: JSON.stringify({ message: input, thread_id: baseThreadId, parent_message_id: parentMessageId ?? undefined }),
+        credentials: "include",
         signal: ac.signal,
       });
 
@@ -161,17 +165,14 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
         const { done, value } = await reader.read();
         if (done || !mountedRef.current || ac.signal.aborted) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        const parsed = parseStreamEvents(
+          { buffer, eventType },
+          decoder.decode(value, { stream: true })
+        );
+        buffer = parsed.buffer;
+        eventType = parsed.eventType;
 
-        for (const line of lines) {
-          if (line.startsWith("event: ")) { eventType = line.slice(7).trim(); continue; }
-          if (!line.startsWith("data: ")) continue;
-
-          let data: Record<string, unknown>;
-          try { data = JSON.parse(line.slice(6)); } catch { continue; }
-          const currentEventType = eventType;
+        for (const { eventType: currentEventType, data } of parsed.events) {
 
           if (currentEventType === "error") {
             throw new Error(typeof data.message === "string" ? data.message : "流式响应失败");
@@ -217,7 +218,7 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
               }
               streamCompleted = true;
             }
-          } catch { /* skip malformed SSE data */ } finally { eventType = ""; }
+          } catch { /* skip malformed SSE data */ }
           if (streamCompleted) break;
         }
       }
@@ -225,6 +226,7 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
       if (!mountedRef.current) return;
 
       const assistantMsg: Message = {
+        id: nextLocalMessageId(),
         role: "assistant", content: fullText || "（未收到回复内容）", agentName,
         sources: latestSources, agentSteps: latestAgentSteps,
         governance: latestGovernance ?? undefined,
@@ -248,7 +250,7 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
       if (!mountedRef.current) return;
       if (error instanceof DOMException && error.name === "AbortError") return;
       const msg = getErrorMessage(error, "聊天请求失败");
-      const errorMsg: Message = { role: "assistant", content: `系统错误: ${msg}`, agentName: "system", parentId: null, siblingsOrder: 0, childCount: 0, timestamp: new Date() };
+      const errorMsg: Message = { id: nextLocalMessageId(), role: "assistant", content: `系统错误: ${msg}`, agentName: "system", parentId: tempId, siblingsOrder: 0, childCount: 0, timestamp: new Date() };
       const cached = streamStateByThreadRef.current.get(baseThreadId) ?? stateRef.current;
       const failedState = finalizeThreadState(cached, errorMsg);
       streamStateByThreadRef.current.set(baseThreadId, failedState);
@@ -257,12 +259,12 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
       stateRef.current = stateRef.current.baseThreadId === baseThreadId ? failedState : stateRef.current;
       setState((prev) => prev.baseThreadId === baseThreadId ? failedState : prev);
     }
-  }, [setState, token, updateThreadState, evictCache, setActiveAgent, setStatusLabel, setActiveTool, setStreaming, triggerTrackingRefresh]);
+  }, [setState, authenticated, updateThreadState, evictCache, nextLocalMessageId, setActiveAgent, setStatusLabel, setActiveTool, setStreaming, triggerTrackingRefresh]);
 
   const loadConversation = useCallback(async (conversationId: number) => {
-    if (!token) return;
+    if (!authenticated) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/api/chat/conversations/${conversationId}`, { headers: { ...getAuthHeaders() } });
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversations/${conversationId}`, { headers: { ...getAuthHeaders() }, credentials: "include" });
       if (!res.ok) { if (res.status === 401) notifyUnauthorized(); return; }
       const detail: ConversationDetail = await res.json();
       // Map API snake_case fields → frontend camelCase
@@ -315,15 +317,16 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
       stateRef.current = loadedState;
       setState(loadedState);
     } catch { /* Load conversation failed — non-critical */ }
-  }, [setState, token]);
+  }, [setState, authenticated]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
     const cur = stateRef.current;
     if (cur.loading) {
       const partialText = cur.streamingText;
+      const parentId = getLastUserMessageId(cur.messages);
       const partialMsg: Message | undefined = partialText
-        ? { role: "assistant", content: partialText, agentName: cur.streamingAgent || undefined, parentId: null, siblingsOrder: 0, childCount: 0, timestamp: new Date() }
+        ? { id: nextLocalMessageId(), role: "assistant", content: partialText, agentName: cur.streamingAgent || undefined, parentId, siblingsOrder: 0, childCount: 0, timestamp: new Date() }
         : undefined;
       const nextMessages = partialMsg ? [...cur.messages, partialMsg] : cur.messages;
       const stoppedState: ChatPanelState = {
@@ -334,7 +337,7 @@ export function useChatStream({ token, state, setState }: UseChatStreamParams) {
       resetActivity();
       setStreaming(false);
     }
-  }, [setState, resetActivity, setStreaming]);
+  }, [nextLocalMessageId, setState, resetActivity, setStreaming]);
 
   const regenerate = useCallback(() => {
     const cur = stateRef.current;

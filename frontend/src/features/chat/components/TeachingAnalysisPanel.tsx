@@ -245,9 +245,13 @@ function levelStyle(level: DiagnosisLevel) {
 }
 
 function TeachingAnalysisPanelComponent(props: TeachingAnalysisPanelProps) {
-  const trace = useMemo(() => buildTeachingTrace(props), [props]);
-  const confidence = props.governance?.confidence || "unknown";
-  const hasSource = props.governance?.has_source ?? (props.sources || []).length > 0;
+  const { answer, agentName, agentSteps, governance, query, sources } = props;
+  const trace = useMemo(
+    () => buildTeachingTrace({ answer, agentName, agentSteps, governance, query, sources }),
+    [answer, agentName, agentSteps, governance, query, sources],
+  );
+  const confidence = governance?.confidence || "unknown";
+  const hasSource = governance?.has_source ?? (sources || []).length > 0;
 
   return (
     <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">

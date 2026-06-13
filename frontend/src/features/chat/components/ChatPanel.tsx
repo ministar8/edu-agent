@@ -18,8 +18,8 @@ type ChatPanelProps = {
 };
 
 export default function ChatPanel({ state, setState, onOpenKnowledgeGraph, onGenerateSimilarPractice }: ChatPanelProps) {
-  const { token } = useAuth();
-  const { sendMessage, stop, regenerate, updateState, loadConversation, newChat } = useChatStream({ token, state, setState });
+  const { user } = useAuth();
+  const { sendMessage, stop, regenerate, updateState, loadConversation, newChat } = useChatStream({ authenticated: !!user, state, setState });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [convRefreshKey, setConvRefreshKey] = useState(0);
 

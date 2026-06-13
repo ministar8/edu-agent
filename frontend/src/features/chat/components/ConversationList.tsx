@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { log } from "@/shared/lib/logger";
 import { http } from "@/shared/lib/http";
 import { getBaseThreadId } from "@/shared/lib/thread";
 import type { ConversationItem } from "@/shared/types/conversation";
@@ -20,10 +21,12 @@ export function ConversationList({ activeThreadId, onSelect, onNewChat, refreshK
 
   const loadConversations = useCallback(async () => {
     try {
+      setLoadError(false);
       const res = await http.get("/api/chat/conversations");
       setConversations(res.data || []);
     } catch {
       setLoadError(true);
+      setConversations([]);
     } finally {
       setLoading(false);
     }
@@ -41,7 +44,7 @@ export function ConversationList({ activeThreadId, onSelect, onNewChat, refreshK
       await http.delete("/api/chat/conversations/" + convId);
       setConversations((prev) => prev.filter((c) => c.id !== convId));
     } catch (err) {
-      console.error("[ConversationList] delete failed", err instanceof Error ? err.message : err);
+      log.error("ConversationList", "delete failed", err instanceof Error ? err.message : err);
     } finally {
       setDeletingId(null);
     }

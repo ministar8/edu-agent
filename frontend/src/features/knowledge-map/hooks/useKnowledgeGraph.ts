@@ -144,12 +144,6 @@ interface HierarchicalEdge {
   weight?: number;
 }
 
-interface HierarchicalStats {
-  root_count: number;
-  chapter_count: number;
-  kp_count: number;
-}
-
 // Root positions: 4 subjects in a wide diamond layout, well-separated
 const ROOT_POSITIONS: Record<string, { x: number; y: number }> = {
   data_structure: { x: 300, y: 150 },
@@ -161,7 +155,6 @@ const ROOT_POSITIONS: Record<string, { x: number; y: number }> = {
 function buildHierarchicalMap(
   apiNodes: HierarchicalNode[],
   apiEdges: HierarchicalEdge[],
-  apiStats: HierarchicalStats,
 ) {
   const nodes: Node<KnowledgeMapNodeData>[] = [];
   const edges: KnowledgeGraphEdge[] = [];
@@ -240,7 +233,7 @@ function buildHierarchicalMap(
     }
   }
 
-  return { nodes, edges, stats: apiStats };
+  return { nodes, edges };
 }
 
 // ── Edge converter ─────────────────────────────────────────────
@@ -345,10 +338,8 @@ export function useKnowledgeGraph(focusLabel: string = "") {
 
       const apiNodes: HierarchicalNode[] = res.data?.nodes || [];
       const apiEdges: HierarchicalEdge[] = res.data?.edges || [];
-      const apiStats: HierarchicalStats = res.data?.stats || { root_count: 0, chapter_count: 0, kp_count: 0 };
-
       if (apiNodes.length > 0) {
-        const map = buildHierarchicalMap(apiNodes, apiEdges, apiStats);
+        const map = buildHierarchicalMap(apiNodes, apiEdges);
         setNodes(map.nodes);
         setEdges(toReactEdges(map.edges));
         setError("");

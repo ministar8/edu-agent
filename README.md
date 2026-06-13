@@ -23,7 +23,7 @@
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Next.js 14 + React 18 + @xyflow/react + TailwindCSS |
+| 前端 | Next.js 15 + React 18 + @xyflow/react + TailwindCSS |
 | 后端 | FastAPI + Pydantic Settings + Uvicorn |
 | Agent | LangChain + LangGraph (StateGraph + Command) |
 | RAG | ChromaDB + bge-m3 + 5路并行召回 + Reranker + 语义缓存 |
@@ -114,17 +114,18 @@ python -m app.rag.ingest --no-graph  # 跳过图谱构建（Neo4j未启动时推
 |------|------|--------|
 | LLM_API_KEY | LLM API 密钥（**必填**） | — |
 | LLM_API_BASE | LLM API 地址 | DashScope 兼容接口 |
-| LLM_MODEL | LLM 主模型名 | qwen3.7-max-preview |
+| LLM_MODEL | LLM 主模型名 | qwen3.7-max |
 | EMBEDDING_API_BASE | Embedding API 地址 | http://localhost:11435 |
 | EMBEDDING_MODEL | Embedding 模型名 | BAAI/bge-m3 |
 | RERANK_LOCAL_URL | 本地 TEI Reranker 地址 | http://localhost:8080 |
 | HYDE_ENABLED | HyDE 假设文档嵌入开关 | true |
-| RERANK_ABSOLUTE_MIN_SCORE | Rerank 绝对最低分数 | 0.1 |
+| RERANK_MODE | Reranker 模式 | local |
+| RERANK_ABSOLUTE_MIN_SCORE | Rerank 绝对最低分数 | 0.15 |
 | SEMANTIC_CACHE_ENABLED | 语义缓存开关 | true |
 | NEO4J_URI / NEO4J_PASSWORD | Neo4j 连接 | bolt://localhost:7687 |
 | JWT_SECRET | JWT 签名密钥（**必填**） | — |
 
-LLM 和 Embedding 均使用 OpenAI 兼容接口，更换服务商只需修改 `LLM_API_BASE` 和 `LLM_MODEL`。
+LLM 使用 DashScope/OpenAI 兼容接口；Embedding 与 Reranker 默认使用本地 TEI 服务。
 
 ## 评估
 

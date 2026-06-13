@@ -174,12 +174,15 @@ function LatexMath({ math, displayMode }: { math: string; displayMode?: boolean 
       return katex.renderToString(math, {
         displayMode: !!displayMode,
         throwOnError: false,
-        trust: true,
+        trust: false,
       });
     } catch {
-      return `<span class="text-red-500">${math}</span>`;
+      return null;
     }
   }, [math, displayMode]);
+  if (!html) {
+    return <span className="text-red-500">{math}</span>;
+  }
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }
 

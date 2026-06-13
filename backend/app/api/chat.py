@@ -10,23 +10,38 @@ from app.api.auth import get_current_user
 from app.config import settings
 from app.agents.trace_utils import collect_sources_from_steps
 from app.core.dependencies import get_chat_message_service
+from app.core.error_responses import GENERIC_CHAT_ERROR, GENERIC_STREAM_ERROR
 from app.db import User
 from app.schemas import ChatRequest, ChatResponse, ConversationDetail, ConversationItem, FeedbackRequest
 from app.services.chat_message_service import ChatMessageService
 from app.services.chat_metrics_service import emit_chat_baseline_metric as _emit_chat_baseline_metric
 from app.services.chat_metrics_service import make_metric_emitter as _make_metric_emitter
 from app.services.chat_stream_helpers import append_source_line_if_missing as _append_source_line_if_missing
+from app.services.chat_stream_helpers import build_done_payload as _build_done_payload
+from app.services.chat_stream_helpers import build_evidence_metadata as _build_evidence_metadata
+from app.services.chat_stream_helpers import build_partial_final_payload as _build_partial_final_payload
 from app.services.chat_stream_helpers import build_governance_from_agent as _build_governance_from_agent
 from app.services.chat_stream_helpers import build_timeout_governance as _build_timeout_governance
 from app.services.chat_stream_helpers import chunk_text as _chunk_text
+from app.services.chat_stream_helpers import close_async_stream as _close_async_stream
 from app.services.chat_stream_helpers import deadline_remaining as _deadline_remaining
 from app.services.chat_stream_helpers import sse as _sse
+from app.services.chat_stream_helpers import stream_text_chunks as _stream_text_chunks
 from app.services.chat_feedback_service import ChatFeedbackService
 from app.services.chat_tracking_service import ChatTrackingService
 from app.services.chat_stream_policy import should_fast_stream_simple_knowledge as _should_fast_stream_simple_knowledge
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+STREAM_STAGE_LABELS = {
+    "supervisor": "正在分析问题...",
+    "knowledge_agent": "正在检索知识库...",
+    "question_agent": "正在生成题目...",
+    "grading_agent": "正在批改答案...",
+    "path_agent": "正在规划学习路径...",
+    "synthesis_node": "正在综合多个来源...",
+}
 
 
 async def _maybe_summarize_conversation(conversation_id: int) -> None:
@@ -143,8 +158,8 @@ async def chat(
             agent_steps=[],
         )
     except Exception as e:
-        logger.error("Chat error: %s", e)
-        error_answer = f"抱歉，系统处理时出错：{e}"
+        logger.error("Chat error: %s", e, exc_info=True)
+        error_answer = GENERIC_CHAT_ERROR
         metric_answer = error_answer
         metric_agent = "system"
         metric_status = "error"
@@ -253,8 +268,15 @@ async def chat_stream(
         except Exception as e:
             logger.error("RAG fallback also failed: %s", e, exc_info=True)
             if not full_text:
-                yield _sse("token", {"text": f"系统暂时不可用，请稍后重试。错误：{e}"})
-        yield _sse("done", {"agent_name": "rag_fallback", "sources": [], "user_msg_id": user_msg.id})
+                full_text = GENERIC_STREAM_ERROR
+                yield _sse("token", {"text": full_text})
+        if full_text:
+            _persist_message(conv_id, "assistant", full_text, parent_id=user_msg.id, agent_name="rag_fallback")
+        yield _sse("done", _build_done_payload(
+            agent_name="rag_fallback",
+            sources=[],
+            user_msg_id=user_msg.id,
+        ))
 
     async def _simple_knowledge_fast_stream(query: str):
         """简单知识问答真流式路径：检索完成后直接 LLM astream 输出 token。"""
@@ -315,11 +337,7 @@ async def chat_stream(
             latest_sources = fused.sources
             docs = fused.text_evidences
             context = fused.final_context
-            evidence_metadata = {
-                **(fused.metadata or {}),
-                "text_evidence_count": len(fused.text_evidences),
-                "context_tokens": fused.used_token_budget,
-            }
+            evidence_metadata = _build_evidence_metadata(fused)
             if not context:
                 full_text = "未在知识库中找到相关内容。请换一种问法，或明确学科与知识点。"
                 if first_token_at is None:
@@ -349,9 +367,7 @@ async def chat_stream(
                             first_token_at = time.perf_counter()
                         yield _sse("token", {"text": text})
                 finally:
-                    aclose = getattr(stream_iter, "aclose", None)
-                    if aclose:
-                        await aclose()
+                    await _close_async_stream(stream_iter)
 
             source_augmented = _append_source_line_if_missing(full_text, latest_sources)
             if source_augmented != full_text:
@@ -426,7 +442,11 @@ async def chat_stream(
                 evidence_metadata=evidence_metadata,
             )
             logger.info("Fast-stream completed thread_id=%s elapsed_ms=%.2f", thread_id, elapsed_ms)
-            yield _sse("done", {"agent_name": agent_name, "sources": latest_sources, "user_msg_id": user_msg.id})
+            yield _sse("done", _build_done_payload(
+                agent_name=agent_name,
+                sources=latest_sources,
+                user_msg_id=user_msg.id,
+            ))
             asyncio.create_task(_maybe_summarize_conversation(conv_id))
         except asyncio.TimeoutError:
             elapsed_ms = (time.perf_counter() - start_time) * 1000
@@ -457,7 +477,12 @@ async def chat_stream(
                 })
                 _persist_message(conv_id, "assistant", full_text,
                                  parent_id=user_msg.id, agent_name=agent_name, sources=latest_sources, governance=partial_governance)
-                yield _sse("done", {"agent_name": agent_name, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                yield _sse("done", _build_done_payload(
+                    agent_name=agent_name,
+                    sources=latest_sources,
+                    partial=True,
+                    user_msg_id=user_msg.id,
+                ))
             else:
                 emit_metric(
                     agent_name=agent_name,
@@ -483,7 +508,7 @@ async def chat_stream(
                 status="error",
                 error_type=e.__class__.__name__,
             )
-            yield _sse("error", {"message": str(e)})
+            yield _sse("error", {"message": GENERIC_STREAM_ERROR})
 
     async def event_generator():
         if _should_fast_stream_simple_knowledge(request.message):
@@ -538,14 +563,19 @@ async def chat_stream(
                     if remaining <= 0:
                         logger.error("Stream global deadline exceeded thread_id=%s elapsed_ms=%.2f", thread_id, (time.perf_counter() - start_time) * 1000)
                         if full_text:
-                            yield _sse("final", {
-                                "agent_name": current_agent,
-                                "final_answer": full_text,
-                                "sources": latest_sources,
-                                "agent_steps": latest_agent_steps,
-                                "streaming_mode": "graph_partial",
-                            })
-                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                            yield _sse("final", _build_partial_final_payload(
+                                agent_name=current_agent,
+                                final_answer=full_text,
+                                sources=latest_sources,
+                                agent_steps=latest_agent_steps,
+                                streaming_mode="graph_partial",
+                            ))
+                            yield _sse("done", _build_done_payload(
+                                agent_name=current_agent,
+                                sources=latest_sources,
+                                partial=True,
+                                user_msg_id=user_msg.id,
+                            ))
                             done_emitted = True
                             partial_timeout_governance = _build_timeout_governance(
                                 latest_sources,
@@ -563,14 +593,19 @@ async def chat_stream(
                     except asyncio.TimeoutError:
                         logger.error("Stream global deadline timeout thread_id=%s elapsed_ms=%.2f", thread_id, (time.perf_counter() - start_time) * 1000)
                         if full_text:
-                            yield _sse("final", {
-                                "agent_name": current_agent,
-                                "final_answer": full_text,
-                                "sources": latest_sources,
-                                "agent_steps": latest_agent_steps,
-                                "streaming_mode": "graph_partial",
-                            })
-                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                            yield _sse("final", _build_partial_final_payload(
+                                agent_name=current_agent,
+                                final_answer=full_text,
+                                sources=latest_sources,
+                                agent_steps=latest_agent_steps,
+                                streaming_mode="graph_partial",
+                            ))
+                            yield _sse("done", _build_done_payload(
+                                agent_name=current_agent,
+                                sources=latest_sources,
+                                partial=True,
+                                user_msg_id=user_msg.id,
+                            ))
                             done_emitted = True
                             partial_timeout_governance = _build_timeout_governance(
                                 latest_sources,
@@ -586,14 +621,19 @@ async def chat_stream(
                     if (time.perf_counter() - start_time) > min(settings.GLOBAL_DEADLINE, _STREAM_TIMEOUT):
                         logger.error("Stream timeout thread_id=%s elapsed_ms=%.2f", thread_id, (time.perf_counter() - start_time) * 1000)
                         if full_text:
-                            yield _sse("final", {
-                                "agent_name": current_agent,
-                                "final_answer": full_text,
-                                "sources": latest_sources,
-                                "agent_steps": latest_agent_steps,
-                                "streaming_mode": "graph_partial",
-                            })
-                            yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                            yield _sse("final", _build_partial_final_payload(
+                                agent_name=current_agent,
+                                final_answer=full_text,
+                                sources=latest_sources,
+                                agent_steps=latest_agent_steps,
+                                streaming_mode="graph_partial",
+                            ))
+                            yield _sse("done", _build_done_payload(
+                                agent_name=current_agent,
+                                sources=latest_sources,
+                                partial=True,
+                                user_msg_id=user_msg.id,
+                            ))
                             done_emitted = True
                             partial_timeout_governance = _build_timeout_governance(
                                 latest_sources,
@@ -611,15 +651,7 @@ async def chat_stream(
                         logger.debug("Stream node=%s elapsed_ms=%.2f", node_name, (now - start_time) * 1000)
 
                         # ── 阶段性状态事件：让前端知道当前进度 ──
-                        _STAGE_LABELS = {
-                            "supervisor": "正在分析问题...",
-                            "knowledge_agent": "正在检索知识库...",
-                            "question_agent": "正在生成题目...",
-                            "grading_agent": "正在批改答案...",
-                            "path_agent": "正在规划学习路径...",
-                            "synthesis_node": "正在综合多个来源...",
-                        }
-                        _stage_label = _STAGE_LABELS.get(node_name)
+                        _stage_label = STREAM_STAGE_LABELS.get(node_name)
                         if _stage_label:
                             yield _sse("status", {"stage": node_name, "label": _stage_label, "elapsed_ms": round((now - start_time) * 1000)})
 
@@ -661,16 +693,12 @@ async def chat_stream(
 
                             if final_answer:
                                 full_text = final_answer
-                                # 逐块推送 final_answer（模拟流式效果）
-                                _CHUNK_SIZE = 20  # 每次推送字符数
-                                for i in range(0, len(final_answer), _CHUNK_SIZE):
-                                    chunk_text = final_answer[i:i + _CHUNK_SIZE]
+                                async for text_chunk in _stream_text_chunks(final_answer):
                                     if first_token_at is None:
                                         first_token_at = time.perf_counter()
                                         logger.info("Chat stream first_token thread_id=%s agent=%s elapsed_ms=%.2f",
                                                     thread_id, current_agent, (first_token_at - start_time) * 1000)
-                                    yield _sse("token", {"text": chunk_text})
-                                    await asyncio.sleep(0.01)
+                                    yield _sse("token", {"text": text_chunk})
 
                             if gov:
                                 latest_governance = _build_governance_from_agent(gov, guard)
@@ -695,13 +723,10 @@ async def chat_stream(
                             syn_answer = syn_data.get("final_answer", "")
                             if syn_answer:
                                 full_text = syn_answer
-                                _CHUNK_SIZE = 20
-                                for i in range(0, len(syn_answer), _CHUNK_SIZE):
-                                    chunk_text = syn_answer[i:i + _CHUNK_SIZE]
+                                async for text_chunk in _stream_text_chunks(syn_answer):
                                     if first_token_at is None:
                                         first_token_at = time.perf_counter()
-                                    yield _sse("token", {"text": chunk_text})
-                                    await asyncio.sleep(0.01)
+                                    yield _sse("token", {"text": text_chunk})
                             gov = syn_data.get("governance")
                             guard = syn_data.get("guard_result")
                             agent_steps = syn_data.get("agent_steps", [])
@@ -719,9 +744,7 @@ async def chat_stream(
                             continue
 
             finally:
-                aclose = getattr(graph_stream, "aclose", None)
-                if aclose:
-                    await aclose()
+                await _close_async_stream(graph_stream)
 
             if stream_failed and not full_text:
                 emit_metric(
@@ -778,7 +801,11 @@ async def chat_stream(
                 error_type=graph_metric_error,
             )
             if not done_emitted:
-                yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "user_msg_id": user_msg.id})
+                yield _sse("done", _build_done_payload(
+                    agent_name=current_agent,
+                    sources=latest_sources,
+                    user_msg_id=user_msg.id,
+                ))
 
             # M2: 异步触发增量摘要（不阻塞 SSE 流）
             asyncio.create_task(_maybe_summarize_conversation(conv_id))
@@ -792,13 +819,13 @@ async def chat_stream(
                     has_sufficient_evidence=False,
                 )
                 yield _sse("governance", {"agent_name": current_agent, **partial_governance})
-                yield _sse("final", {
-                    "agent_name": current_agent,
-                    "final_answer": full_text,
-                    "sources": latest_sources,
-                    "agent_steps": latest_agent_steps,
-                    "streaming_mode": "graph_partial",
-                })
+                yield _sse("final", _build_partial_final_payload(
+                    agent_name=current_agent,
+                    final_answer=full_text,
+                    sources=latest_sources,
+                    agent_steps=latest_agent_steps,
+                    streaming_mode="graph_partial",
+                ))
                 _persist_message(conv_id, "assistant", full_text,
                                  parent_id=user_msg.id, agent_name=current_agent, sources=latest_sources, governance=partial_governance)
                 emit_metric(
@@ -815,7 +842,12 @@ async def chat_stream(
                     status="timeout",
                     error_type="TimeoutError",
                 )
-                yield _sse("done", {"agent_name": current_agent, "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                yield _sse("done", _build_done_payload(
+                    agent_name=current_agent,
+                    sources=latest_sources,
+                    partial=True,
+                    user_msg_id=user_msg.id,
+                ))
             else:
                 emit_metric(
                     agent_name=current_agent,
@@ -849,7 +881,7 @@ async def chat_stream(
                 status="error",
                 error_type=e.__class__.__name__,
             )
-            yield _sse("error", {"message": str(e)})
+            yield _sse("error", {"message": GENERIC_STREAM_ERROR})
 
     return StreamingResponse(
         event_generator(),
@@ -924,11 +956,7 @@ async def chat_rag_stream(
 
             latest_sources = fused.sources
             docs = fused.text_evidences
-            evidence_metadata = {
-                **(fused.metadata or {}),
-                "text_evidence_count": len(fused.text_evidences),
-                "context_tokens": fused.used_token_budget,
-            }
+            evidence_metadata = _build_evidence_metadata(fused)
             if not fused.final_context:
                 full_text = "未在知识库中找到相关内容。请换一种问法，或明确学科与知识点。"
                 if first_token_at is None:
@@ -979,14 +1007,19 @@ async def chat_rag_stream(
                         if (time.perf_counter() - start_time) > min(settings.GLOBAL_DEADLINE, _STREAM_TIMEOUT):
                             logger.error("Direct RAG stream timeout conversation_id=%s", conv_id)
                             if full_text:
-                                yield _sse("final", {
-                                    "agent_name": "rag_direct",
-                                    "final_answer": full_text,
-                                    "sources": latest_sources,
-                                    "agent_steps": [],
-                                    "streaming_mode": "rag_direct_partial",
-                                })
-                                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                                yield _sse("final", _build_partial_final_payload(
+                                    agent_name="rag_direct",
+                                    final_answer=full_text,
+                                    sources=latest_sources,
+                                    agent_steps=[],
+                                    streaming_mode="rag_direct_partial",
+                                ))
+                                yield _sse("done", _build_done_payload(
+                                    agent_name="rag_direct",
+                                    sources=latest_sources,
+                                    partial=True,
+                                    user_msg_id=user_msg.id,
+                                ))
                                 rag_done_emitted = True
                             else:
                                 yield _sse("error", {"message": "响应超时，请稍后重试"})
@@ -999,9 +1032,7 @@ async def chat_rag_stream(
                             first_token_at = time.perf_counter()
                         yield _sse("token", {"text": text})
                 finally:
-                    aclose = getattr(stream_iter, "aclose", None)
-                    if aclose:
-                        await aclose()
+                    await _close_async_stream(stream_iter)
 
             if rag_done_emitted:
                 emit_metric(
@@ -1063,7 +1094,11 @@ async def chat_rag_stream(
             )
             logger.info("Direct RAG stream completed conversation_id=%s elapsed_ms=%.2f", conv_id, elapsed_ms)
             if not rag_done_emitted:
-                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "user_msg_id": user_msg.id})
+                yield _sse("done", _build_done_payload(
+                    agent_name="rag_direct",
+                    sources=latest_sources,
+                    user_msg_id=user_msg.id,
+                ))
 
             # M2: 异步触发增量摘要（不阻塞 SSE 流）
             asyncio.create_task(_maybe_summarize_conversation(conv_id))
@@ -1081,14 +1116,19 @@ async def chat_rag_stream(
                 error_type="TimeoutError",
             )
             if full_text:
-                yield _sse("final", {
-                    "agent_name": "rag_direct",
-                    "final_answer": full_text,
-                    "sources": latest_sources,
-                    "agent_steps": [],
-                    "streaming_mode": "rag_direct_partial",
-                })
-                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                yield _sse("final", _build_partial_final_payload(
+                    agent_name="rag_direct",
+                    final_answer=full_text,
+                    sources=latest_sources,
+                    agent_steps=[],
+                    streaming_mode="rag_direct_partial",
+                ))
+                yield _sse("done", _build_done_payload(
+                    agent_name="rag_direct",
+                    sources=latest_sources,
+                    partial=True,
+                    user_msg_id=user_msg.id,
+                ))
             else:
                 yield _sse("error", {"message": "响应超时，请稍后重试"})
         except Exception as e:
@@ -1105,16 +1145,21 @@ async def chat_rag_stream(
                 error_type=e.__class__.__name__,
             )
             if full_text:
-                yield _sse("final", {
-                    "agent_name": "rag_direct",
-                    "final_answer": full_text,
-                    "sources": latest_sources,
-                    "agent_steps": [],
-                    "streaming_mode": "rag_direct_partial",
-                })
-                yield _sse("done", {"agent_name": "rag_direct", "sources": latest_sources, "partial": True, "user_msg_id": user_msg.id})
+                yield _sse("final", _build_partial_final_payload(
+                    agent_name="rag_direct",
+                    final_answer=full_text,
+                    sources=latest_sources,
+                    agent_steps=[],
+                    streaming_mode="rag_direct_partial",
+                ))
+                yield _sse("done", _build_done_payload(
+                    agent_name="rag_direct",
+                    sources=latest_sources,
+                    partial=True,
+                    user_msg_id=user_msg.id,
+                ))
             else:
-                yield _sse("error", {"message": str(e)})
+                yield _sse("error", {"message": GENERIC_STREAM_ERROR})
 
     return StreamingResponse(
         event_generator(),

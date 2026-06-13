@@ -44,7 +44,7 @@ export default function DebugPanel() {
           {debugViews.find((view) => view.id === activeView)?.description}
         </div>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0 flex-1 h-full">
         {activeView === "knowledge" && <KnowledgePanel />}
         {activeView === "agents" && <AgentFlow />}
         {activeView === "rag" && <RAGProcessPanel />}
