@@ -35,12 +35,12 @@
 ## 项目结构
 
 ```
-毕业设计/
-├── .env.example          # 环境变量模板
-├── knowledge/            # 知识库 Markdown（4科+题库）
-├── chroma_db/            # ChromaDB 向量数据库（4科+题库，HNSW M=32）
-├── edu_agent.db          # SQLite 用户/对话数据库
-├── docs/                 # 论文素材
+edu-agent/
+├── .env.example          # 本地运行配置模板（复制为 .env 后填写密钥）
+├── .gitignore            # 忽略本地缓存、数据库、日志和生成产物
+├── docker-compose.yml    # Docker Compose 生产/演示部署入口
+├── deploy.sh             # Linux/macOS 部署脚本
+├── deploy.bat            # Windows 部署脚本
 ├── backend/
 │   ├── app/
 │   │   ├── api/          # REST API（chat/auth/knowledge/questions/tracking/visualization）
@@ -55,9 +55,14 @@
 │   │   └── config.py     # Pydantic Settings 配置
 │   ├── data/             # 评估数据集 + 结果（.gitignore）
 │   └── requirements.txt  # Python 依赖
-└── frontend/             # Next.js 前端
-    └── src/              # App Router + 组件(chat/questions/knowledge/KG/RAG/tracking)
+├── frontend/             # Next.js 前端
+│   └── src/              # App Router + 组件(chat/questions/knowledge/KG/RAG/tracking)
+├── knowledge/            # 可追踪的 408 知识库 Markdown 与题库资料
+├── nginx/                # Docker 部署下的反向代理配置
+└── scripts/              # 保留的维护/初始化脚本
 ```
+
+> 本地运行产生的 `chroma_db/`、`edu_agent.db`、`backend/data/`、`node_modules/` 和 `.next/` 均为运行时产物，不应提交到仓库。
 
 ## 快速启动
 

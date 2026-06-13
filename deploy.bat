@@ -1,6 +1,7 @@
 @echo off
 REM ═══════════════════════════════════════════════════════════════
 REM  deploy.bat — Windows 一键部署脚本
+REM  面向本机 Docker Compose 部署；不会修改源码或提交文件。
 REM ═══════════════════════════════════════════════════════════════
 setlocal enabledelayedexpansion
 
