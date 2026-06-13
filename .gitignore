@@ -1,3 +1,6 @@
+# Edu Agent repository ignore rules.
+# Keep source/docs trackable; ignore local runtime data and generated artifacts.
+
 # ── Python ─────────────────────────────────────────────
 __pycache__/
 *.py[cod]
