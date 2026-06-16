@@ -6,11 +6,16 @@ type ChatInputProps = {
   onInputChange: (value: string) => void;
   onSubmit: () => void;
   onStop?: () => void;
+  variant?: "docked" | "centered";
 };
 
-function ChatInputComponent({ input, loading, onInputChange, onSubmit, onStop }: ChatInputProps) {
+function ChatInputComponent({ input, loading, onInputChange, onSubmit, onStop, variant = "docked" }: ChatInputProps) {
+  const wrapperClass =
+    variant === "centered"
+      ? "px-4"
+      : "border-t border-stone-100 bg-white/80 px-6 pb-5 pt-4 backdrop-blur-sm";
   return (
-    <div className="border-t border-stone-100 bg-white/80 px-6 pb-5 pt-4 backdrop-blur-sm">
+    <div className={wrapperClass}>
       <div className="mx-auto max-w-3xl rounded-2xl border border-stone-200/80 bg-white px-4 py-2.5 shadow-sm transition-shadow focus-within:shadow-md focus-within:border-emerald-300">
         <div className="flex items-center gap-2">
           <input
