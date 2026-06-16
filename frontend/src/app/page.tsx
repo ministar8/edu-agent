@@ -24,7 +24,7 @@ class ErrorBoundary extends Component<{ children: ReactNode; fallback?: ReactNod
   render() {
     if (this.state.hasError) {
       return this.props.fallback || (
-        <div className="flex h-screen items-center justify-center bg-stone-50">
+        <div className="flex h-screen items-center justify-center bg-[#F5F5F5]">
           <div className="text-center">
             <p className="text-slate-500 text-sm mb-2">页面加载出错</p>
             <p className="text-slate-400 text-xs">{this.state.errorMsg}</p>
@@ -76,7 +76,7 @@ export default function Home() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-[#f4f6fb]">
+      <div className="flex h-screen items-center justify-center bg-[#F5F5F5]">
         <div className="flex items-center gap-3 text-slate-400">
           <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
           <span className="text-sm">加载中...</span>
@@ -92,9 +92,9 @@ export default function Home() {
     <ReactFlowProvider>
     <AgentActivityProvider>
     <TrackingRefreshProvider>
-    <div className="flex h-screen gap-4 bg-stone-50 p-4">
+    <div className="flex h-screen gap-4 bg-[#F5F5F5] p-4">
       <Sidebar activeTab={activeTab} user={user} onTabChange={setActiveTab} onLogout={logout} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-stone-200/60 bg-white shadow-sm">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-white">
         <WorkspaceHeader activeTab={activeTab} />
         <WorkspaceContent
           activeTab={activeTab}

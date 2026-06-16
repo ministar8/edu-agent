@@ -33,7 +33,7 @@ export function WorkspaceContent({
   onOpenDebug,
 }: WorkspaceContentProps) {
   return (
-    <main className="min-h-0 flex-1 overflow-hidden bg-stone-50">
+    <main className="min-h-0 flex-1 overflow-hidden bg-[#F5F5F5]">
       {activeTab === "dashboard" && (
         <StudyDashboardPanel
           onStartChat={onJumpToChat}

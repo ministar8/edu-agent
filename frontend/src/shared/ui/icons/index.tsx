@@ -109,3 +109,76 @@ export function IconGraduation(props: IconProps) {
     </SvgIcon>
   );
 }
+
+export function IconSparkles(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M12 3v4M12 17v4M3 12h4M17 12h4" />
+      <path d="M12 8.5 13.2 11l2.5 1-2.5 1L12 15.5 10.8 13l-2.5-1 2.5-1z" />
+    </SvgIcon>
+  );
+}
+
+export function IconTarget(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="5" />
+      <circle cx="12" cy="12" r="1.5" />
+    </SvgIcon>
+  );
+}
+
+export function IconMap(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2-6-2z" />
+      <path d="M9 4v14" />
+      <path d="M15 6v14" />
+    </SvgIcon>
+  );
+}
+
+export function IconArrowRight(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </SvgIcon>
+  );
+}
+
+export function IconClock(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </SvgIcon>
+  );
+}
+
+export function IconLayers(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="m12 3 9 5-9 5-9-5 9-5z" />
+      <path d="m3 13 9 5 9-5" />
+    </SvgIcon>
+  );
+}
+
+export function IconCheckCircle(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.5 12 2.5 2.5 4.5-5" />
+    </SvgIcon>
+  );
+}
+
+export function IconFlame(props: IconProps) {
+  return (
+    <SvgIcon {...props}>
+      <path d="M12 3c1.5 3 4.5 4.5 4.5 8a4.5 4.5 0 0 1-9 0c0-1 .3-1.8.8-2.5C9 10 10 11 10.5 12c.5-2 .5-6 1.5-9z" />
+    </SvgIcon>
+  );
+}
