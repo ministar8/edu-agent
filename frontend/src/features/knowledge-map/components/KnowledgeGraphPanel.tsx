@@ -26,16 +26,16 @@ export default function KnowledgeGraphPanel({
   return (
     <div className="flex flex-col h-full">
       {focusLabel && (
-        <div className="border-b border-cyan-100 bg-cyan-50 px-5 py-2 text-sm text-cyan-900 flex items-center justify-between">
+        <div className="flex items-center justify-between border-b border-emerald-100 bg-emerald-50/70 px-5 py-2 text-sm text-emerald-900">
           <div>
             已从智能问答聚焦知识点：
-            <span className="ml-1 font-bold">{focusLabel}</span>
-            <span className="ml-2 text-xs text-cyan-600">相关节点与一跳关系已高亮</span>
+            <span className="ml-1 font-semibold">{focusLabel}</span>
+            <span className="ml-2 text-xs text-emerald-600">相关节点与一跳关系已高亮</span>
           </div>
         </div>
       )}
       <div className="flex min-h-0 flex-1 relative flex-row overflow-hidden bg-slate-50">
-        <div className="flex-1 min-w-0">
+        <div className="flex h-full min-h-0 flex-1 min-w-0">
           <KnowledgeGraphCanvas
             nodes={nodes}
             edges={edges}
@@ -45,6 +45,17 @@ export default function KnowledgeGraphPanel({
             onNodesChange={onNodesChange}
           />
         </div>
+
+        {nodes.length > 0 && (
+          <div className="pointer-events-none absolute bottom-4 left-4 z-10 rounded-xl border border-slate-200 bg-white/90 px-3.5 py-2.5 shadow-sm backdrop-blur-sm">
+            <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">关系图例</div>
+            <div className="space-y-1.5 text-[11px] text-slate-600">
+              <div className="flex items-center gap-2"><span className="h-0.5 w-5 rounded bg-slate-300" />包含关系</div>
+              <div className="flex items-center gap-2"><span className="h-0.5 w-5 rounded bg-indigo-400" />前置依赖</div>
+              <div className="flex items-center gap-2"><span className="w-5 border-t-2 border-dashed border-rose-300" />跨学科关联</div>
+            </div>
+          </div>
+        )}
 
         {/* Selected Node Details Drawer (交互联动核心) */}
         {selectedNode && (
@@ -115,7 +126,7 @@ export default function KnowledgeGraphPanel({
                 onClick={() => {
                   onJumpToQuestions(selectedNode.data.label);
                 }}
-                className="w-full rounded-xl bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-semibold py-2.5 text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+                className="w-full rounded-xl bg-[#FFF1E6] border border-[#FFD9B8] hover:bg-[#FFE6D0] text-[#C2410C] font-semibold py-2.5 text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />

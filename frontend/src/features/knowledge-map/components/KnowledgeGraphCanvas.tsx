@@ -166,7 +166,7 @@ function KnowledgeGraphCanvasComponent({ nodes, edges, error, selectedNodeId, on
   }, [edges, nodes, selectedNodeId]);
 
   return (
-    <div className="min-h-0 flex-1">
+    <div className="h-full min-h-0 w-full flex-1">
       {nodes.length > 0 ? (
         <div className="relative h-full overflow-hidden bg-white">
           <ReactFlow
