@@ -38,9 +38,6 @@
 edu-agent/
 ├── .env.example          # 本地运行配置模板（复制为 .env 后填写密钥）
 ├── .gitignore            # 忽略本地缓存、数据库、日志和生成产物
-├── docker-compose.yml    # Docker Compose 生产/演示部署入口
-├── deploy.sh             # Linux/macOS 部署脚本
-├── deploy.bat            # Windows 部署脚本
 ├── backend/
 │   ├── app/
 │   │   ├── api/          # REST API（chat/auth/knowledge/questions/tracking/visualization）
@@ -57,9 +54,7 @@ edu-agent/
 │   └── requirements.txt  # Python 依赖
 ├── frontend/             # Next.js 前端
 │   └── src/              # App Router + 组件(chat/questions/knowledge/KG/RAG/tracking)
-├── knowledge/            # 可追踪的 408 知识库 Markdown 与题库资料
-├── nginx/                # Docker 部署下的反向代理配置
-└── scripts/              # 保留的维护/初始化脚本
+└── knowledge/            # 可追踪的 408 知识库 Markdown 与题库资料
 ```
 
 > 本地运行产生的 `chroma_db/`、`edu_agent.db`、`backend/data/`、`node_modules/` 和 `.next/` 均为运行时产物，不应提交到仓库。
@@ -73,23 +68,34 @@ cp .env.example .env            # 必填：LLM_API_KEY、JWT_SECRET
 conda create -n edu-agent python=3.12 && conda activate edu-agent
 pip install -r backend/requirements.txt
 cd frontend && npm install
-docker run -d --name tei-embedding --gpus all -p 11435:80 ghcr.io/huggingface/text-embeddings-inference:latest --model-id BAAI/bge-m3 --dtype float16 --pooling mean  # 启动 TEI Embedding 服务
 ```
 
-### 2. 启动服务
+### 2. 启动外部服务
+
+TEI Embedding 和 Reranker 模型服务可自行部署。推荐使用 Hugging Face TEI 镜像：
+```bash
+# Embedding 服务 (bge-m3)
+docker run -d --name tei-embedding --gpus all -p 11435:80 \
+  ghcr.io/huggingface/text-embeddings-inference:latest \
+  --model-id BAAI/bge-m3 --dtype float16 --pooling mean
+
+# Reranker 服务 (bge-reranker-v2-m3)
+docker run -d --name tei-reranker --gpus all -p 8080:80 \
+  ghcr.io/huggingface/text-embeddings-inference:latest \
+  --model-id BAAI/bge-reranker-v2-m3 --dtype float16 --pooling cls
+```
+
+### 3. 启动应用
 
 ```bash
-# 终端1：TEI Embedding + Reranker（Docker）
-docker start tei-embedding tei-reranker  # 或 docker compose up -d
-
-# 终端2：Neo4j（知识图谱，可选）
+# 终端1：Neo4j（知识图谱，可选）
 neo4j console
 
-# 终端3：后端
+# 终端2：后端
 # ChromaDB 使用嵌入式 PersistentClient，无需单独启动服务
 cd backend && python -m app.main     # http://127.0.0.1:8000
 
-# 终端4：前端
+# 终端3：前端
 cd frontend && npm run dev           # http://localhost:3000
 ```
 
@@ -102,7 +108,7 @@ cd frontend && npm run dev           # http://localhost:3000
 >
 > **Neo4j**：不启动时系统自动跳过知识图谱功能，其余功能正常运行。知识库入库时加 `--no-graph` 跳过图谱构建。
 
-### 3. 构建知识库
+### 4. 构建知识库
 
 ```bash
 cd backend
