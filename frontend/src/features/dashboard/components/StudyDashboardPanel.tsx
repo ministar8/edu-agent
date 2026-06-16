@@ -55,7 +55,6 @@ export default function StudyDashboardPanel({
   const { user } = useAuth();
   const [profile, setProfile] = useState<CategoryStat[]>([]);
   const [weakPoints, setWeakPoints] = useState<WeakPoint[]>([]);
-  const [input, setInput] = useState("");
   const [error, setError] = useState("");
   const mountedRef = useRef(true);
 
@@ -87,19 +86,13 @@ export default function StudyDashboardPanel({
   const primaryWeakPoint = weakPoints[0]?.name || "408 核心知识点";
   const displayName = user?.display_name?.trim() || "同学";
 
-  const submitChat = () => {
-    const question = input.trim();
-    if (!question) return;
-    onStartChat(question);
-    setInput("");
-  };
-
   const modules = [
     {
       key: "explain",
       icon: IconSparkles,
       title: "AI 讲解薄弱点",
       desc: "结构化讲解、重点与例题",
+      accent: "emerald" as const,
       onClick: () => onStartChat(`请用适合考研408复习的方式，系统讲解「${primaryWeakPoint}」，并给出常见题型。`),
     },
     {
@@ -107,6 +100,7 @@ export default function StudyDashboardPanel({
       icon: IconQuiz,
       title: "专项练习",
       desc: "围绕薄弱点出题与批改",
+      accent: "orange" as const,
       onClick: () => onGeneratePractice(primaryWeakPoint),
     },
     {
@@ -114,9 +108,25 @@ export default function StudyDashboardPanel({
       icon: IconMap,
       title: "知识地图",
       desc: "查看知识点位置与依赖",
+      accent: "emerald" as const,
       onClick: () => onOpenKnowledgeMap(primaryWeakPoint),
     },
   ];
+
+  const accentStyles = {
+    emerald: {
+      hoverBorder: "hover:border-emerald-300",
+      hoverShadow: "hover:shadow-[0_2px_10px_rgba(16,185,129,0.08)]",
+      iconHover: "group-hover:bg-emerald-50 group-hover:text-emerald-600",
+      arrowHover: "group-hover:text-emerald-500",
+    },
+    orange: {
+      hoverBorder: "hover:border-[#FFC18A]",
+      hoverShadow: "hover:shadow-[0_2px_10px_rgba(255,122,0,0.14)]",
+      iconHover: "group-hover:bg-[#FFF1E6] group-hover:text-[#FF7A00]",
+      arrowHover: "group-hover:text-[#FF7A00]",
+    },
+  };
 
   const stats = [
     { key: "total", icon: IconLayers, label: "知识点总数", value: totalPoints, valueTone: "text-slate-900", iconTone: "bg-slate-100 text-slate-500" },
@@ -134,51 +144,32 @@ export default function StudyDashboardPanel({
           <h1 className="mt-5 text-[28px] font-semibold tracking-tight text-slate-900">
             {greetingForNow()}，{displayName}
           </h1>
-          <p className="mt-2 text-sm text-slate-500">今天想学点什么？把问题交给多 Agent 教学助手。</p>
-        </div>
-
-        <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm transition focus-within:border-emerald-300 focus-within:ring-2 focus-within:ring-emerald-100">
-          <textarea
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                submitChat();
-              }
-            }}
-            rows={2}
-            placeholder="有什么可以帮你的？例如：讲讲 TCP 拥塞控制的核心机制"
-            className="block w-full resize-none border-0 bg-transparent px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-0"
-          />
-          <div className="flex items-center justify-between px-2 pb-1">
-            <span className="text-[11px] text-slate-400">Enter 发送 · Shift+Enter 换行</span>
-            <button
-              type="button"
-              onClick={submitChat}
-              disabled={!input.trim()}
-              aria-label="发送"
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400"
-            >
-              <IconArrowRight size={16} />
-            </button>
-          </div>
+          <p className="mt-2 text-sm text-slate-500">今天想学点什么？从下面的入口开始，或直接发起一轮提问。</p>
+          <button
+            type="button"
+            onClick={() => onStartChat("")}
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#FF7A00] px-6 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-[#E86E00]"
+          >
+            开始提问
+            <IconArrowRight size={16} />
+          </button>
         </div>
 
         <div className="mt-8 grid gap-3 sm:grid-cols-3">
           {modules.map((module) => {
             const Icon = module.icon;
+            const accent = accentStyles[module.accent];
             return (
               <button
                 key={module.key}
                 onClick={module.onClick}
-                className="group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-emerald-300 hover:shadow-[0_2px_10px_rgba(16,185,129,0.08)]"
+                className={`group flex flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left transition ${accent.hoverBorder} ${accent.hoverShadow}`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition group-hover:bg-emerald-50 group-hover:text-emerald-600">
+                  <span className={`flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition ${accent.iconHover}`}>
                     <Icon size={18} />
                   </span>
-                  <IconArrowRight size={16} className="text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-emerald-500" />
+                  <IconArrowRight size={16} className={`text-slate-300 transition group-hover:translate-x-0.5 ${accent.arrowHover}`} />
                 </div>
                 <div className="mt-3 text-sm font-semibold text-slate-900">{module.title}</div>
                 <p className="mt-1 text-xs leading-5 text-slate-500">{module.desc}</p>
@@ -190,7 +181,7 @@ export default function StudyDashboardPanel({
         <div className="mt-8">
           <div className="mb-2 flex items-center justify-between px-1">
             <h2 className="text-[13px] font-semibold text-slate-700">学习概览</h2>
-            <span className="text-xs text-slate-400">掌握 {masteryRate}%</span>
+            <span className="text-xs font-medium text-[#FF7A00]">掌握 {masteryRate}%</span>
           </div>
           <div className="grid grid-cols-3 gap-3">
             {stats.map((stat) => {
