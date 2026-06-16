@@ -1,7 +1,7 @@
 import { memo } from "react";
 
-import type { TabType } from "@/shared/types/navigation";
-import { primaryTabs, roleLabels, tabDescriptions, utilityTabs } from "@/features/app-shell/config/navigationConfig";
+import type { AppTab, TabType } from "@/shared/types/navigation";
+import { primaryTabs, roleLabels, utilityTabs } from "@/features/app-shell/config/navigationConfig";
 
 type SidebarProps = {
   activeTab: TabType;
@@ -9,6 +9,22 @@ type SidebarProps = {
   onTabChange: (tab: TabType) => void;
   onLogout: () => void;
 };
+
+function NavItem({ tab, isActive, onClick }: { tab: AppTab; isActive: boolean; onClick: () => void }) {
+  const Icon = tab.icon;
+  return (
+    <button
+      onClick={onClick}
+      aria-current={isActive ? "page" : undefined}
+      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-[13px] transition-colors ${
+        isActive ? "bg-emerald-50 font-medium text-emerald-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+      }`}
+    >
+      <Icon size={18} className={`shrink-0 ${isActive ? "text-emerald-600" : "text-slate-400"}`} />
+      <span className="truncate">{tab.label}</span>
+    </button>
+  );
+}
 
 function SidebarComponent({ activeTab, user, onTabChange, onLogout }: SidebarProps) {
   return (
@@ -37,58 +53,22 @@ function SidebarComponent({ activeTab, user, onTabChange, onLogout }: SidebarPro
         </span>
       </div>
 
-      <nav className="flex-1 space-y-4">
+      <nav className="flex-1 space-y-6">
         <div>
-          <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-widest text-slate-400">学习</div>
-          <div className="space-y-0.5">
-            {primaryTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
-                  className={`group relative w-full rounded-xl px-3 py-2.5 text-left transition-all duration-150 ${
-                    isActive ? "bg-emerald-600 text-white" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon size={18} className={`shrink-0 transition-colors ${isActive ? "text-white" : "text-slate-400 group-hover:text-slate-600"}`} />
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium">{tab.label}</div>
-                      {isActive && <div className="mt-0.5 truncate text-[11px] text-slate-300/80">{tabDescriptions[tab.id]}</div>}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400">学习</div>
+          <div className="space-y-1">
+            {primaryTabs.map((tab) => (
+              <NavItem key={tab.id} tab={tab} isActive={activeTab === tab.id} onClick={() => onTabChange(tab.id)} />
+            ))}
           </div>
         </div>
 
         <div>
-          <div className="mb-1 px-2 py-1 text-[10px] font-medium uppercase tracking-widest text-slate-400">管理</div>
-          <div className="space-y-0.5">
-            {utilityTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
-                  className={`group relative w-full rounded-xl px-3 py-2.5 text-left transition-all duration-150 ${
-                    isActive ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon size={18} className={`shrink-0 transition-colors ${isActive ? "text-white" : "text-slate-400 group-hover:text-slate-600"}`} />
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium">{tab.label}</div>
-                      {isActive && <div className="mt-0.5 truncate text-[11px] text-slate-300/80">{tabDescriptions[tab.id]}</div>}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+          <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-slate-400">管理</div>
+          <div className="space-y-1">
+            {utilityTabs.map((tab) => (
+              <NavItem key={tab.id} tab={tab} isActive={activeTab === tab.id} onClick={() => onTabChange(tab.id)} />
+            ))}
           </div>
         </div>
       </nav>
