@@ -4,8 +4,7 @@
 checkpointer、缺失时间戳、查询失败。过滤、排序、标题、子图线程这些真实数据库能验证的
 行为放在 test_threads_sqlite.py 里用 SQLite 测。
 
-与参考项目的差异：edu-agent 只有 /api/threads（无 /{agent_id}/threads 前缀路由），
-且用户身份来自 JWT，路由按 token 中的用户 id 过滤并忽略入参 user_id。
+与参考项目的差异：用户身份来自 JWT，路由按 token 中的用户 id 过滤并忽略入参 user_id。
 """
 
 from unittest.mock import patch

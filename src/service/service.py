@@ -27,6 +27,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
+from agents import agents as agent_registry
 from agents.question_agent import question_gen_agent
 from core import settings
 from db import User, init_db
@@ -70,6 +71,16 @@ warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 def custom_generate_unique_id(route: APIRoute) -> str:
     """用函数名作为 OpenAPI operationId。"""
     return route.name
+
+
+def _resolve_agent(agent_id: str) -> Any:
+    """按路径取 agent 图；未注册时返回 404，避免 KeyError 变成 500。"""
+    if agent_id not in agent_registry:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown agent: {agent_id}",
+        )
+    return get_agent(agent_id)
 
 
 @asynccontextmanager
@@ -184,13 +195,19 @@ async def _handle_input(
     return {"input": input, "config": config}, str(run_id)
 
 
+@router.post("/{agent_id}/invoke", operation_id="invoke_with_agent_id")
 @router.post("/invoke")
 async def invoke(
-    user_input: UserInput, current_user: User = Depends(get_current_user)
+    user_input: UserInput,
+    current_user: User = Depends(get_current_user),
+    agent_id: str = DEFAULT_AGENT,
 ) -> ChatMessage:
-    """单次调用 agent，返回最后一条消息。"""
-    agent = get_agent(DEFAULT_AGENT)
-    kwargs, run_id = await _handle_input(user_input, agent, DEFAULT_AGENT, str(current_user.id))
+    """单次调用 agent，返回最后一条消息。
+
+    未指定 agent_id 时使用默认 agent；路径形式为 `/{agent_id}/invoke`。
+    """
+    agent = _resolve_agent(agent_id)
+    kwargs, run_id = await _handle_input(user_input, agent, agent_id, str(current_user.id))
     try:
         response_events: list[tuple[str, Any]] = await agent.ainvoke(**kwargs, stream_mode=["updates", "values"])  # type: ignore[no-matching-overload]  # fmt: skip
         response_type, response = response_events[-1]
@@ -312,32 +329,49 @@ def _sse_response_example() -> dict[int | str, Any]:
     }
 
 
+@router.post(
+    "/{agent_id}/stream",
+    response_class=StreamingResponse,
+    responses=_sse_response_example(),
+    operation_id="stream_with_agent_id",
+)
 @router.post("/stream", response_class=StreamingResponse, responses=_sse_response_example())
 async def stream(
-    user_input: StreamInput, current_user: User = Depends(get_current_user)
+    user_input: StreamInput,
+    current_user: User = Depends(get_current_user),
+    agent_id: str = DEFAULT_AGENT,
 ) -> StreamingResponse:
-    """流式返回 agent 响应（含中间消息与 token）。"""
-    agent = get_agent(DEFAULT_AGENT)
+    """流式返回 agent 响应（含中间消息与 token）。
+
+    未指定 agent_id 时使用默认 agent；路径形式为 `/{agent_id}/stream`。
+    """
+    agent = _resolve_agent(agent_id)
     # 先解析参数（含归属校验），再开始流，保证错误以 4xx 返回而非流中断
-    kwargs, run_id = await _handle_input(user_input, agent, DEFAULT_AGENT, str(current_user.id))
+    kwargs, run_id = await _handle_input(user_input, agent, agent_id, str(current_user.id))
     return StreamingResponse(
         message_generator(user_input, agent, kwargs, run_id),
         media_type="text/event-stream",
     )
 
 
+@router.post("/{agent_id}/history", operation_id="history_with_agent_id")
 @router.post("/history")
 async def history(
-    input: ChatHistoryInput, current_user: User = Depends(get_current_user)
+    input: ChatHistoryInput,
+    current_user: User = Depends(get_current_user),
+    agent_id: str = DEFAULT_AGENT,
 ) -> ChatHistory:
-    """获取某 thread 的会话历史。"""
-    agent = get_agent(DEFAULT_AGENT)
+    """获取某 thread 的会话历史。
+
+    未指定 agent_id 时使用默认 agent；路径形式为 `/{agent_id}/history`。
+    """
+    agent = _resolve_agent(agent_id)
     config = RunnableConfig(configurable={"thread_id": input.thread_id})
     try:
         checkpointer = getattr(agent, "checkpointer", None)
         tup = await checkpointer.aget_tuple(config) if checkpointer else None
         # thread_id 来自客户端，必须校验归属后才能返回内容
-        _check_thread_owner(tup.metadata if tup else None, str(current_user.id), DEFAULT_AGENT)
+        _check_thread_owner(tup.metadata if tup else None, str(current_user.id), agent_id)
 
         messages: list[BaseMessage] = []
         if tup is not None and "__previous__" in (tup.checkpoint.get("channel_values") or {}):
@@ -353,18 +387,24 @@ async def history(
         raise HTTPException(status_code=500, detail="Unexpected error") from e
 
 
+@router.get("/{agent_id}/threads", operation_id="threads_with_agent_id")
 @router.get("/threads")
 async def threads(
-    input: UserThreadsInput = Depends(), current_user: User = Depends(get_current_user)
+    input: UserThreadsInput = Depends(),
+    current_user: User = Depends(get_current_user),
+    agent_id: str = DEFAULT_AGENT,
 ) -> UserThreads:
-    """列出当前用户的会话线程。"""
-    agent = get_agent(DEFAULT_AGENT)
+    """列出当前用户的会话线程。
+
+    未指定 agent_id 时使用默认 agent；路径形式为 `/{agent_id}/threads`。
+    """
+    agent = _resolve_agent(agent_id)
     checkpointer = getattr(agent, "checkpointer", None)
     if not checkpointer:
         return UserThreads(threads=[])
     try:
         summaries = await list_user_threads(
-            checkpointer, str(current_user.id), DEFAULT_AGENT, input.limit
+            checkpointer, str(current_user.id), agent_id, input.limit
         )
     except Exception as e:
         logger.error("Threads failed: %s", e)

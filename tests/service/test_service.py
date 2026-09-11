@@ -143,3 +143,73 @@ class TestCheckThreadOwner:
         with pytest.raises(HTTPException) as exc:
             _check_thread_owner({"user_id": "1", "agent_id": "other"}, "1", "edu-assistant")
         assert exc.value.status_code == 404
+
+
+class TestAgentIdRoutes:
+    """/{agent_id}/… 与默认路径并存；未知 agent 应 404 而非 500。"""
+
+    def test_unknown_agent_invoke_returns_404(self, test_client, auth_user):
+        r = test_client.post(
+            "/api/no-such-agent/invoke",
+            json={"message": "hi"},
+            headers=auth_user.headers,
+        )
+        assert r.status_code == 404
+        assert "Unknown agent" in r.json()["detail"]
+
+    def test_unknown_agent_stream_returns_404(self, test_client, auth_user):
+        r = test_client.post(
+            "/api/no-such-agent/stream",
+            json={"message": "hi"},
+            headers=auth_user.headers,
+        )
+        assert r.status_code == 404
+
+    def test_unknown_agent_history_returns_404(self, test_client, auth_user):
+        r = test_client.post(
+            "/api/no-such-agent/history",
+            json={"thread_id": "t-1"},
+            headers=auth_user.headers,
+        )
+        assert r.status_code == 404
+
+    def test_unknown_agent_threads_returns_404(self, test_client, auth_user):
+        r = test_client.get(
+            "/api/no-such-agent/threads",
+            params={"user_id": auth_user.user_id},
+            headers=auth_user.headers,
+        )
+        assert r.status_code == 404
+
+    def test_default_path_still_works(self, test_client, auth_user):
+        r = test_client.get(
+            "/api/threads",
+            params={"user_id": auth_user.user_id},
+            headers=auth_user.headers,
+        )
+        assert r.status_code == 200
+        assert "threads" in r.json()
+
+    def test_explicit_default_agent_path(self, test_client, auth_user):
+        r = test_client.get(
+            "/api/edu-assistant/threads",
+            params={"user_id": auth_user.user_id},
+            headers=auth_user.headers,
+        )
+        assert r.status_code == 200
+
+    def test_explicit_path_requires_auth(self, test_client):
+        r = test_client.post("/api/edu-assistant/invoke", json={"message": "hi"})
+        assert r.status_code == 401
+
+    def test_openapi_lists_agent_id_operations(self, test_client):
+        r = test_client.get("/openapi.json")
+        assert r.status_code == 200
+        ops = r.json()["paths"]
+        assert "/api/{agent_id}/invoke" in ops
+        assert "/api/{agent_id}/stream" in ops
+        assert "/api/{agent_id}/history" in ops
+        assert "/api/{agent_id}/threads" in ops
+        # 默认路径仍保留
+        assert "/api/invoke" in ops
+        assert "/api/stream" in ops

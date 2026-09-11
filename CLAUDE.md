@@ -64,6 +64,7 @@ docker compose up --build                # 容器化启动
   配了哪个网关的 key 就启用哪个网关；模型清单与各网关提供的模型见 `schema/models.py`
   的 `GATEWAY_MODELS`。相关入口：`settings.gateway_for` / `api_base_for_model` / `api_key_for_model`。
 - **注册新 agent 需同步三处**：`src/agents/agents.py` 的 import、`agents` 字典条目、`langgraph.json` 的 `graphs`。
+  注册后可通过 `/api/{agent_id}/invoke|stream|history|threads` 直接寻址；未知 agent 返回 404。
 - **密钥字段用 `SecretStr`**，取值需 `.get_secret_value()`。
 - **LangSmith 追踪**：`LANGCHAIN_*` 由 `Settings.export_langsmith_env()` 在 lifespan 中写入
   `os.environ`（LangChain 只从进程环境读取并自动埋点，放 Settings 里无效）。

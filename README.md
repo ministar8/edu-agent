@@ -109,10 +109,10 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 | POST | `/api/auth/register` `/login` `/logout` | 注册 / 登录（JWT）/ 退出 |
 | GET | `/api/auth/me` | 当前用户 |
 | GET | `/api/info` | 可用 agent 与模型 |
-| POST | `/api/invoke` | 单次问答（非流式） |
-| POST | `/api/stream` | 流式问答（SSE：token + message 双流） |
-| POST | `/api/history` | 会话历史 |
-| GET | `/api/threads` | 会话线程列表 |
+| POST | `/api/invoke` 或 `/api/{agent_id}/invoke` | 单次问答（非流式；缺省用默认 agent） |
+| POST | `/api/stream` 或 `/api/{agent_id}/stream` | 流式问答（SSE：token + message 双流） |
+| POST | `/api/history` 或 `/api/{agent_id}/history` | 会话历史 |
+| GET | `/api/threads` 或 `/api/{agent_id}/threads` | 会话线程列表 |
 | POST | `/api/questions/generate` | 出题，返回**结构化题目**（题干 / 标准答案 / 解析分开） |
 | POST | `/api/questions/grade` | 批改，需传**单题**的题干 + 该题标准答案 |
 | GET | `/health` | 健康检查（含各外部依赖状态） |
