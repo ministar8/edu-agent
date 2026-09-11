@@ -1,8 +1,16 @@
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from fastapi import HTTPException
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+)
+from langchain_core.messages import (
+    ChatMessage as LangchainChatMessage,
+)
 
 from core import settings
 from schema import ChatMessage
@@ -54,6 +62,14 @@ def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
                 content=convert_message_content_to_string(message.content),
                 tool_call_id=message.tool_call_id,
             )
+        case LangchainChatMessage():
+            if message.role == "custom":
+                return ChatMessage(
+                    type="custom",
+                    content="",
+                    custom_data=cast(dict[str, Any], message.content[0]),
+                )
+            raise ValueError(f"Unsupported chat message role: {message.role}")
         case _:
             raise ValueError(f"Unsupported message type: {message.__class__.__name__}")
 

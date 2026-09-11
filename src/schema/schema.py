@@ -67,15 +67,16 @@ class ToolCall(TypedDict):
 class ChatMessage(BaseModel):
     """聊天消息。"""
 
-    type: Literal["human", "ai", "tool"] = Field(
+    type: Literal["human", "ai", "tool", "custom"] = Field(
         description="消息角色。",
-        examples=["human", "ai", "tool"],
+        examples=["human", "ai", "tool", "custom"],
     )
     content: str = Field(description="消息内容。", examples=["Hello, world!"])
     tool_calls: list[ToolCall] = Field(description="消息中的工具调用。", default=[])
     tool_call_id: str | None = Field(description="此消息响应的工具调用 ID。", default=None)
     run_id: str | None = Field(description="消息的 run ID。", default=None)
     response_metadata: dict[str, Any] = Field(description="响应元数据。", default={})
+    custom_data: dict[str, Any] = Field(description="custom 消息的数据载荷。", default={})
 
     def pretty_repr(self) -> str:
         base_title = self.type.title() + " Message"
