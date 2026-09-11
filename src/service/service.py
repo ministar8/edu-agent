@@ -28,13 +28,12 @@ from langgraph.types import Command
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
 from agents import agents as agent_registry
+from agents.grading_core import agrade_answer
 from agents.question_core import agenerate_question_set
 from core import settings
 from db import User, init_db
 from memory import initialize_database, initialize_store
-from prompts import GRADE_PROMPT, PROMPT_SET_VERSION
-from rag.llm_calls import call_structured
-from rag.schemas import GradingResult
+from prompts import PROMPT_SET_VERSION
 from schema import (
     ChatHistory,
     ChatHistoryInput,
@@ -439,21 +438,19 @@ async def generate_questions(
 async def grade_question(
     req: GradeRequest, current_user: User = Depends(get_current_user)
 ) -> GradeResponse:
-    """批改：基于题干与标准答案给出评分与反馈。"""
-    messages = GRADE_PROMPT.format_messages(
-        stem=req.stem,
-        standard_answer=req.standard_answer or "（无标准答案，请基于学科知识判断）",
-        user_answer=req.user_answer,
-    )
-    result = await call_structured(
-        messages,
-        GradingResult,
-        temperature=settings.TEMP_PRECISE,
-        timeout=settings.LLM_TIMEOUT,
-        stage="grading",
-    )
-    if result is None:
-        raise HTTPException(status_code=500, detail="批改失败")
+    """批改：基于题干与标准答案给出评分与反馈。
+
+    评分实现见 `agents.grading_core`；本路由只做 HTTP 映射（契约不变）。
+    """
+    try:
+        result = await agrade_answer(
+            stem=req.stem,
+            user_answer=req.user_answer,
+            standard_answer=req.standard_answer or "",
+        )
+    except Exception as e:
+        logger.error("Grading failed: %s", e)
+        raise HTTPException(status_code=500, detail="批改失败") from e
     return GradeResponse(
         score=float(result.score),
         feedback=result.feedback,

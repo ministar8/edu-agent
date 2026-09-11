@@ -10,7 +10,6 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import ValidationError
 
-import service.service as service_module
 from agents.question_core import question_gen_agent
 from rag.schemas import GradingResult
 from schema.questions import GeneratedQuestion, GeneratedQuestionSet
@@ -84,7 +83,7 @@ class TestGenerateEndpoint:
 class TestGradeEndpoint:
     @pytest.fixture
     def capture_prompt(self, monkeypatch):
-        """替换 call_structured，把实际发给模型的消息抓出来。"""
+        """替换 grading_core.call_structured，抓出实际发给模型的消息。"""
         captured: dict[str, Any] = {}
 
         async def fake_call_structured(prompt, _schema, **_kwargs):
@@ -92,7 +91,9 @@ class TestGradeEndpoint:
             captured["text"] = "\n".join(m.content for m in prompt)
             return GradingResult(score=90, feedback="答对了", is_wrong=False)
 
-        monkeypatch.setattr(service_module, "call_structured", fake_call_structured)
+        import agents.grading_core as grading_core
+
+        monkeypatch.setattr(grading_core, "call_structured", fake_call_structured)
         return captured
 
     def test_provided_standard_answer_reaches_prompt(self, auth_user, test_client, capture_prompt):
