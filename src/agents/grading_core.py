@@ -6,7 +6,7 @@ service 层只做 HTTP 映射，不再直接依赖 `rag.llm_calls` / `GRADE_PROM
 from core import settings
 from prompts import GRADE_PROMPT
 from rag.llm_calls import call_structured
-from rag.schemas import GradingResult
+from schema.grading import GradingResult
 
 _NO_STANDARD_ANSWER = "（无标准答案，请基于学科知识判断）"
 

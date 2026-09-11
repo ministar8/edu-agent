@@ -1,50 +1,12 @@
-"""LLM 结构化输出 Pydantic Schema 定义
+"""检索链内部的 LLM 结构化输出 Schema。
 
-用于 with_structured_output()，替代裸 Prompt + 正则/手动 JSON 解析。
-DeepSeek / qwen 系列均支持 Function Calling，with_structured_output 内部优先使用 tool_call，
-模型不支持时自动回退到 JSON Schema 注入（= PydanticOutputParser 行为）。
+领域模型（如批改 `GradingResult`）见 `schema/grading.py`，不要放这里。
+出题 HTTP/LLM 模型见 `schema/questions.py`。
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, model_validator
-
-# ── 批改结果 ──────────────────────────────────────────
-
-
-class GradingResult(BaseModel):
-    """单题批改结构化输出"""
-
-    score: int = Field(ge=0, le=100, description="0-100 的整数得分")
-    feedback: str = Field(max_length=800, description="不超过200字的批改反馈，指出对错和关键点")
-    is_wrong: bool = Field(description="学生答案是否错误（score < 60 视为错误）")
-    error_analysis: str = Field(
-        default="",
-        max_length=500,
-        description="当is_wrong=True时，分析学生答错的原因：是概念混淆、遗漏要点、还是推理错误，给出具体错因分类和改进建议",
-    )
-
-
-# ── 出题结果 ──────────────────────────────────────────
-
-
-class QuestionItem(BaseModel):
-    """单道题目"""
-
-    question_type: str = Field(description="题目类型：选择/填空/简答/综合")
-    difficulty: float = Field(ge=1.0, le=2.0, description="难度：1.0基础 1.3中等 1.6较难 2.0困难")
-    stem: str = Field(description="题干全文")
-    answer: str = Field(description="标准答案")
-    explanation: str = Field(description="解析，不超过80字")
-
-
-class QuestionList(BaseModel):
-    """出题结果结构化输出"""
-
-    questions: list[QuestionItem] = Field(description="生成的题目列表")
-
-
-# ── 查询分解结果 ──────────────────────────────────────
 
 
 class DecomposeResult(BaseModel):
@@ -66,9 +28,6 @@ class DecomposeResult(BaseModel):
         if isinstance(data, list):
             return {"sub_queries": data}
         return data
-
-
-# ── 查询分类结果 ──────────────────────────────────────
 
 
 class QueryClassifyResult(BaseModel):

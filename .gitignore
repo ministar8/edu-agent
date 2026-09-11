@@ -68,7 +68,9 @@ Thumbs.db
 Desktop.ini
 
 # ── Temporary / Scratch Scripts ────────────────────────
-_*.py
+# 仅忽略仓库根目录的临时脚本；src/**/_*.py（如 _validate.py、_metadata_spec.py）
+# 是正式模块，必须入库 —— 曾用 `_*.py` 全局匹配导致 clone/CI 缺文件。
+/_*.py
 !__init__.py
 
 # ── Claude Code 会话状态 ────────────────────────────────
