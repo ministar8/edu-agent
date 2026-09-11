@@ -28,11 +28,11 @@ from langgraph.types import Command
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
 from agents import agents as agent_registry
-from agents.question_agent import question_gen_agent
+from agents.question_core import agenerate_question_set
 from core import settings
 from db import User, init_db
 from memory import initialize_database, initialize_store
-from prompts import GRADE_PROMPT, PROMPT_SET_VERSION, QUESTION_GEN_PROMPT
+from prompts import GRADE_PROMPT, PROMPT_SET_VERSION
 from rag.llm_calls import call_structured
 from rag.schemas import GradingResult
 from schema import (
@@ -49,7 +49,6 @@ from schema import (
     UserThreads,
     UserThreadsInput,
 )
-from schema.questions import GeneratedQuestionSet
 from service.auth import get_current_user
 from service.auth import router as auth_router
 from service.health import collect_health
@@ -423,19 +422,16 @@ async def generate_questions(
 
     返回结构化而非整页 Markdown，是为了让前端把「单题题干 + 该题标准答案」原样交给
     批改端点 —— 否则批改只能拿到一份含答案的整页文本。
+
+    生成核心与聊天出题共用 `agenerate_question_set`（HTTP 契约不变）。
     """
-    messages = QUESTION_GEN_PROMPT.format_messages(
-        count=req.count, topic=req.topic, difficulty=req.difficulty
-    )
     try:
-        state = await question_gen_agent.ainvoke({"messages": messages})
-        result: GeneratedQuestionSet | None = state.get("structured_response")
+        result = await agenerate_question_set(
+            topic=req.topic, count=req.count, difficulty=req.difficulty
+        )
     except Exception as e:
         logger.error("Question generation failed: %s", e)
         raise HTTPException(status_code=500, detail="出题失败") from e
-    if result is None:
-        logger.error("Question generation produced no structured_response")
-        raise HTTPException(status_code=500, detail="出题失败：未返回结构化结果")
     return QuestionResponse(questions=result.questions, batch_id=str(uuid4()))
 
 
