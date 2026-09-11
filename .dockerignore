@@ -1,0 +1,38 @@
+# 构建上下文排除项：只保留 Dockerfile 真正需要的内容（pyproject.toml / uv.lock /
+# src / static / knowledge），避免把虚拟环境、向量库与 worktree 副本打包进构建上下文。
+
+# ── 版本控制与本地配置 ──────────────────────
+.git
+.gitignore
+.env
+.env.example
+
+# Claude Code 的 worktree 里各自含一份完整仓库副本，必须排除
+.claude
+
+# ── Python 缓存与虚拟环境 ───────────────────
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+.venv
+venv
+env
+.pytest_cache
+.ruff_cache
+.pre-commit-config.yaml
+
+# ── 运行时产物 ──────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+chroma_db
+
+# ── 非运行时内容 ────────────────────────────
+tests
+docs
+data
+scripts
+media
+privatecredentials

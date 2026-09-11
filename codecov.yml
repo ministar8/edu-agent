@@ -1,0 +1,18 @@
+coverage:
+  status:
+    # 总覆盖率下降超过 2% 时让 PR 检查失败
+    project:
+      default:
+        target: auto
+        threshold: 2%
+    # 单次改动的增量覆盖率仅作参考，不阻塞 PR
+    patch:
+      default:
+        informational: true
+  ignore:
+    - "tests/"
+    # 离线数据清洗工具，不参与运行时，不拉低覆盖率评价
+    - "src/tools/"
+
+comment:
+  hide_project_coverage: false

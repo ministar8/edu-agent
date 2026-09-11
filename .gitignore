@@ -45,9 +45,12 @@ pnpm-debug.log*
 
 # ── Database / Runtime Storage ─────────────────────────
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 chroma_db/
+data/
 
 # ── Generated Data / Logs ──────────────────────────────
 backend/data/
@@ -67,3 +70,8 @@ Desktop.ini
 # ── Temporary / Scratch Scripts ────────────────────────
 _*.py
 !__init__.py
+
+# ── Claude Code 会话状态 ────────────────────────────────
+# 只忽略 worktrees（每次会话的临时检出，内含整份仓库副本）；
+# .claude/ 下的 hooks / settings / skills 属于可版本化的项目配置，保留可提交。
+.claude/worktrees/

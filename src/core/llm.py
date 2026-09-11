@@ -1,0 +1,156 @@
+"""LLM 工厂：整合 DashScope/DeepSeek 的思考模式处理，提供两类入口。
+
+- get_model(model_name, temperature): agent 层使用，传入模型枚举
+- get_llm(streaming, temperature, use_fast): RAG 检索链使用，模型来自 settings
+
+两条入口共用一份缓存，键用真实 API 模型名，因此「同一模型经不同入口获取」会拿到同一实例。
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langchain_openai import ChatOpenAI
+
+from core.cache import BoundedCache
+from core.settings import settings
+from schema.models import Gateway, make_model_ref, parse_model_ref
+
+logger = logging.getLogger(__name__)
+
+
+class FakeToolModel(FakeListChatModel):
+    """支持 bind_tools 的假模型，用于测试。
+
+    注意：本模型**有状态**（responses 队列会被消费，且耗尽后静默循环复用），
+    因此绝不能进缓存 —— 共享实例会让多个 agent 的响应互相穿插。详见 core.cache 文档。
+    """
+
+    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        return self
+
+
+def _is_deepseek(model: str, api_base: str) -> bool:
+    return "deepseek" in (api_base or "").lower() or "deepseek" in (model or "").lower()
+
+
+def _is_qwen3(model: str) -> bool:
+    return "qwen3" in (model or "").lower()
+
+
+def _is_qwen3_max(model: str) -> bool:
+    return bool(re.search(r"qwen[\d.]+-max", (model or "").lower()))
+
+
+# 缓存键 = 网关 + 模型 ID + 温度 + 是否流式。
+# - **必须含网关**：同一个模型 ID 可以走不同网关（如 dashscope:deepseek-v4-flash 与
+#   deepseek:deepseek-v4-flash），不含网关会让两家的客户端互相串用
+# - 含 streaming → agent 层恒 True、RAG 层多为 False，行为不同必须区分
+type LlmCacheKey = tuple[str, str, float, bool]
+
+# 实际用量 = 模型数 × 温度（常量）× streaming，上限设 64 几乎不会触发淘汰。
+_MAX_CACHED_CLIENTS = 64
+
+
+def _close_llm_client(model: ChatOpenAI) -> None:
+    """淘汰时释放客户端，避免 httpx 连接池随缓存项一起泄漏。
+
+    已知限制：langchain-openai 的异步客户端是懒建的，关闭需要 ``await aclose()``，
+    而淘汰发生在同步路径里无法 await —— 这里只关同步客户端，异步池交给 GC 兜底。
+    """
+    client = getattr(model, "root_client", None)
+    if client is None:
+        return
+    try:
+        client.close()
+    except Exception:
+        logger.debug("关闭被淘汰的 LLM 客户端失败", exc_info=True)
+
+
+# 缓存只存真实客户端（假模型走早返回，永不入库）
+_LLM_CACHE: BoundedCache[LlmCacheKey, ChatOpenAI] = BoundedCache(
+    max_size=_MAX_CACHED_CLIENTS, name="llm", on_evict=_close_llm_client
+)
+
+
+def reset_llm_cache(*, notify: bool = False) -> None:
+    """清空 LLM 缓存，仅用于测试隔离（本项目不需要配置热更新）。
+
+    notify=False 时不触发 on_evict —— 测试中客户端通常从未真正建立过连接。
+    """
+    _LLM_CACHE.clear(notify=notify)
+
+
+def _build_client(
+    model_ref: str, model_id: str, temperature: float, *, streaming: bool
+) -> ChatOpenAI:
+    """构建 ChatOpenAI，并按厂商注入思考模式参数。"""
+    api_base = settings.api_base_for_model(model_ref)
+
+    extra_body: dict = {}
+    is_deepseek = _is_deepseek(model_id, api_base)
+    is_dashscope = "dashscope" in (api_base or "").lower()
+    is_qwen3_max = _is_qwen3_max(model_id)
+
+    # DeepSeek / Qwen3.x：默认禁用思考模式（reasoning token 暴增输出费用）
+    if (is_deepseek or _is_qwen3(model_id)) and not (is_qwen3_max and is_dashscope):
+        if is_deepseek:
+            extra_body["thinking"] = {"type": "disabled"}
+        else:
+            extra_body["enable_thinking"] = False
+
+    # Qwen3.x-max 思考模型通过 DashScope 必须 enable_thinking=True
+    if is_qwen3_max and is_dashscope:
+        extra_body["enable_thinking"] = True
+
+    kwargs: dict = dict(
+        api_key=settings.api_key_for_model(model_ref),
+        base_url=api_base,
+        model=model_id,
+        temperature=temperature,
+        streaming=streaming,
+        request_timeout=settings.LLM_TIMEOUT,
+        max_retries=2,
+    )
+    if extra_body:
+        kwargs["extra_body"] = extra_body
+
+    return ChatOpenAI(**kwargs)
+
+
+def _cached_client(model_ref: str, temperature: float, *, streaming: bool) -> ChatOpenAI:
+    """按 (网关, 模型 ID, 温度, streaming) 单飞获取客户端，两条入口共用。"""
+    gateway, model_id = parse_model_ref(model_ref)
+    return _LLM_CACHE.get_or_create(
+        (gateway, model_id, temperature, streaming),
+        lambda: _build_client(model_ref, model_id, temperature, streaming=streaming),
+    )
+
+
+def get_model(
+    model_ref: str | None = None, /, temperature: float | None = None
+) -> ChatOpenAI | FakeToolModel:
+    """获取 LLM 实例（单飞缓存），agent 层使用。
+
+    model_ref 形如 ``<gateway>:<model_id>``，见 schema.models 的模块文档。
+    """
+    if model_ref is None:
+        model_ref = settings.DEFAULT_MODEL or make_model_ref(Gateway.DASHSCOPE, "qwen3.7-max")
+
+    temp = settings.TEMP_DEFAULT if temperature is None else temperature
+
+    # 假模型刻意不进缓存：FakeToolModel 有状态，共享会让响应互相穿插（见 core.cache 文档）
+    if parse_model_ref(model_ref)[0] is Gateway.FAKE:
+        return FakeToolModel(responses=["This is a test response from the fake model."])
+
+    return _cached_client(model_ref, temp, streaming=True)
+
+
+def get_llm(streaming: bool = True, temperature: float = 0.3, use_fast: bool = False) -> ChatOpenAI:
+    """基于 settings 配置获取 LLM 实例（RAG 检索链使用，兼容旧签名）。"""
+    model_ref = (
+        settings.LLM_MODEL_FAST if use_fast and settings.LLM_MODEL_FAST else settings.LLM_MODEL
+    )
+    return _cached_client(model_ref, temperature, streaming=streaming)

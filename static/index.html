@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>408 智能辅导</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="logo">EduAgent</div>
+      <div class="user-card">
+        <div class="name" id="user-name"></div>
+        <div class="role" id="user-role"></div>
+      </div>
+      <button class="nav-item active" data-view="chat">智能问答</button>
+      <button class="nav-item" data-view="practice">练习与批改</button>
+      <div class="spacer"></div>
+      <button class="logout" id="logout">退出登录</button>
+    </aside>
+    <main class="main">
+      <div class="main-header" id="view-title">智能问答</div>
+
+      <section class="view active" id="view-chat">
+        <div class="messages" id="messages">
+          <div class="empty-hint">
+            <h2>408 考研智能辅导</h2>
+            <p>提问知识点、让我出题、或提交答案批改</p>
+            <div class="cta"><button class="btn-primary" id="start-btn">开始提问</button></div>
+          </div>
+        </div>
+        <form class="input-bar" id="chat-form">
+          <input id="chat-input" placeholder="输入你的问题…" autocomplete="off">
+          <button type="submit" class="send-btn" id="send-btn">发送</button>
+        </form>
+      </section>
+
+      <section class="view" id="view-practice">
+        <div class="practice">
+          <form class="practice-form" id="gen-form">
+            <input id="topic" placeholder="知识点，如：进程死锁" required>
+            <select id="difficulty">
+              <option value="mixed">混合难度</option>
+              <option value="basic">基础</option>
+              <option value="medium">中等</option>
+              <option value="hard">困难</option>
+            </select>
+            <button type="submit" class="btn-primary" id="gen-btn">生成题目</button>
+          </form>
+          <div id="questions"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,53 @@
+services:
+  agent_service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./knowledge:/app/knowledge
+      - ./chroma_db:/app/chroma_db
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # 开发热同步：源码改动后自动同步进容器并重启服务。
+    # 注意 target 是 /app/src/...（Dockerfile 中代码位于 /app/src，PYTHONPATH=/app/src）
+    develop:
+      watch:
+        - path: src/agents/
+          action: sync+restart
+          target: /app/src/agents/
+        - path: src/core/
+          action: sync+restart
+          target: /app/src/core/
+        - path: src/db/
+          action: sync+restart
+          target: /app/src/db/
+        - path: src/memory/
+          action: sync+restart
+          target: /app/src/memory/
+        - path: src/rag/
+          action: sync+restart
+          target: /app/src/rag/
+        - path: src/schema/
+          action: sync+restart
+          target: /app/src/schema/
+        - path: src/service/
+          action: sync+restart
+          target: /app/src/service/
+        - path: src/tools/
+          action: sync+restart
+          target: /app/src/tools/
+        - path: src/run_service.py
+          action: sync+restart
+          target: /app/src/run_service.py

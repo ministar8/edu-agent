@@ -1,169 +1,140 @@
-# 智能教学辅导多Agent系统
+# EDU-Agent · 408 考研智能教学辅导多 Agent 系统
 
-基于 LangChain + LangGraph 的多智能体协作教学辅导系统，面向 408 计算机考研课程，集成 RAG 检索增强生成与知识图谱，支持可视化展示 Agent 协作过程。
+基于 **LangGraph v1.0 + FastAPI + RAG** 的 408 考研辅导系统，支持知识问答、智能出题与答案批改。
+工程骨架对齐 [agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit)。
 
-## 系统架构
+## 架构
 
+```text
+用户提问 → Supervisor（create_supervisor 路由）
+  ├─ knowledge_agent   知识讲解（RAG 检索）
+  ├─ question_agent    出题（题库模板检索）
+  └─ grading_agent     批改（标准答案检索）
+        │
+   RAG 检索管线: 查询归一 → 分类 → 多路召回(语义 + BM25 + 元数据 + 同义词)
+                 → RRF 融合 → Reranker → HyDE → 语义缓存
 ```
-用户提问 → Supervisor(查询分类 + 检索深度路由)
-  ├─ L1 快速: 直接检索 + fast LLM → 治理          (2-7s, 缓存命中 ~800ms)
-  ├─ L2 标准: 预检索 + LLM → 多级降级 fallback     (50-120s)
-  └─ L3 深度: deep检索(KG+HyDE) + LLM → fallback (60-180s)
-       │
-  knowledge_agent / question_agent / grading_agent / path_agent
-       │
-  三阶段治理: 前置守卫(防幻觉) → 回答生成 → 后治理(来源校验/反思重试)
-```
 
-**RAG 检索管线**: 查询 → 分类 → 集合路由(跨4科) → 5路并行召回(语义+BM25+元数据+同义词+KG) → RRF融合 → Reranker → 语义缓存(≥0.92复用)
+**存储**：ChromaDB（向量检索 + 语义缓存）｜SQLite（用户 `edu_agent.db` + LangGraph checkpointer `checkpoints.db`）
 
-**存储**: ChromaDB(4科+题库, HNSW M=32) | Neo4j(知识图谱) | SQLite(用户/对话, PBKDF2认证)
+**流式**：`/stream` 同时输出 token 流与 message 流（对齐 agent-service-toolkit）。
 
 ## 技术栈
 
 | 层级 | 技术 |
 |------|------|
-| 前端 | Next.js 15 + React 18 + @xyflow/react + TailwindCSS |
-| 后端 | FastAPI + Pydantic Settings + Uvicorn |
-| Agent | LangChain + LangGraph (StateGraph + Command) |
-| RAG | ChromaDB + bge-m3 + 5路并行召回 + Reranker + 语义缓存 |
-| 知识图谱 | Neo4j + Cypher |
-| LLM | Qwen / DeepSeek / GLM (OpenAI 兼容接口) |
-| 嵌入 | bge-m3 (1024-dim, 本地 TEI) |
-| 重排序 | bge-reranker-v2-m3 (本地 TEI) |
+| 前端 | 纯静态 HTML + CSS + JavaScript（无框架无构建） |
+| 后端 | FastAPI + Uvicorn + Pydantic v2 |
+| Agent | LangChain 1.x `create_agent` + LangGraph `create_supervisor` + checkpointer |
+| RAG | ChromaDB + bge-m3(TEI) + BM25 + RRF + bge-reranker-v2-m3(TEI) + HyDE + 语义缓存 |
+| LLM | DashScope / DeepSeek（OpenAI 兼容接口） |
+| 依赖管理 | uv + pyproject.toml |
+| 质量 | ruff + pyrefly + pytest + pre-commit + GitHub Actions |
 
 ## 项目结构
 
-```
+```text
 edu-agent/
-├── .env.example          # 本地运行配置模板（复制为 .env 后填写密钥）
-├── .gitignore            # 忽略本地缓存、数据库、日志和生成产物
-├── backend/
-│   ├── app/
-│   │   ├── api/          # REST API（chat/auth/knowledge/questions/tracking/visualization）
-│   │   ├── agents/       # 多Agent编排（supervisor + 4专业agent + 治理/守卫/反思）
-│   │   ├── rag/          # RAG 管线（retriever/fusion/reranker/verifier/hyde/cache/KG/嵌入/入库）
-│   │   ├── evaluation/   # RAGAS 评估 + 诊断
-│   │   ├── db/           # SQLAlchemy ORM + 会话管理
-│   │   ├── schemas/      # Pydantic 请求/响应模型
-│   │   ├── services/     # 认证 + 知识追踪 + 一致性检查
-│   │   ├── tools/        # 离线工具（去重/规范化/异常检测/缺失值填充）
-│   │   ├── main.py       # FastAPI 入口
-│   │   └── config.py     # Pydantic Settings 配置
-│   ├── data/             # 评估数据集 + 结果（.gitignore）
-│   └── requirements.txt  # Python 依赖
-├── frontend/             # Next.js 前端
-│   └── src/              # App Router + 组件(chat/questions/knowledge/KG/RAG/tracking)
-└── knowledge/            # 可追踪的 408 知识库 Markdown 与题库资料
+├── pyproject.toml        # uv 依赖 + ruff/pyrefly/pytest 配置
+├── langgraph.json        # LangGraph Studio 配置
+├── compose.yaml          # Docker 部署
+├── src/
+│   ├── agents/           # 多 Agent（supervisor + 3 专业 agent + 共享 RAG 工具）
+│   ├── rag/              # RAG 检索（retriever/fusion/reranker/hyde/cache/ingest）
+│   ├── core/             # Settings + LLM 工厂（get_model / get_llm）
+│   ├── schema/           # Pydantic 协议模型
+│   ├── memory/           # LangGraph checkpointer（SQLite）
+│   ├── db/               # SQLAlchemy User 表
+│   ├── service/          # FastAPI（service / auth / threads / utils）
+│   ├── tools/            # 离线数据清洗工具
+│   └── run_service.py    # 服务入口
+├── static/               # 静态前端（login.html / index.html / app.js / style.css）
+├── tests/                # pytest 测试
+├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
+├── docker/               # Dockerfile
+└── scripts/              # 运维脚本（TEI 部署）
 ```
 
-> 本地运行产生的 `chroma_db/`、`edu_agent.db`、`backend/data/`、`node_modules/` 和 `.next/` 均为运行时产物，不应提交到仓库。
+## 快速开始
 
-## 快速启动
-
-### 1. 环境配置
+### 1. 安装依赖
 
 ```bash
-cp .env.example .env            # 必填：LLM_API_KEY、JWT_SECRET
-conda create -n edu-agent python=3.12 && conda activate edu-agent
-pip install -r backend/requirements.txt
-cd frontend && npm install
+uv sync                       # 创建 .venv 并安装依赖
 ```
 
-### 2. 启动外部服务
+### 2. 配置
 
-TEI Embedding 和 Reranker 模型服务可自行部署。推荐使用 Hugging Face TEI 镜像：
 ```bash
-# Embedding 服务 (bge-m3)
+cp .env.example .env          # 必填：LLM_API_KEY、JWT_SECRET
+```
+
+### 3. 启动外部服务（Embedding / Reranker）
+
+```bash
+# Embedding (bge-m3)
 docker run -d --name tei-embedding --gpus all -p 11435:80 \
   ghcr.io/huggingface/text-embeddings-inference:latest \
   --model-id BAAI/bge-m3 --dtype float16 --pooling mean
 
-# Reranker 服务 (bge-reranker-v2-m3)
+# Reranker (bge-reranker-v2-m3)
 docker run -d --name tei-reranker --gpus all -p 8080:80 \
   ghcr.io/huggingface/text-embeddings-inference:latest \
   --model-id BAAI/bge-reranker-v2-m3 --dtype float16 --pooling cls
 ```
 
-### 3. 启动应用
-
-```bash
-# 终端1：Neo4j（知识图谱，可选）
-neo4j console
-
-# 终端2：后端
-# ChromaDB 使用嵌入式 PersistentClient，无需单独启动服务
-cd backend && python -m app.main     # http://127.0.0.1:8000
-
-# 终端3：前端
-cd frontend && npm run dev           # http://localhost:3000
-```
-
-> **ChromaDB**：默认使用嵌入式 `PersistentClient`（数据存 `./chroma_db/`），无需单独启动。如需更高并发，可切换为 HTTP 模式：
-> ```bash
-> pip install chromadb[server]
-> chroma run --host 127.0.0.1 --port 8100 --path ./chroma_db
-> # 然后在 .env 中设置 CHROMA_HOST=127.0.0.1 CHROMA_PORT=8100
-> ```
->
-> **Neo4j**：不启动时系统自动跳过知识图谱功能，其余功能正常运行。知识库入库时加 `--no-graph` 跳过图谱构建。
+Windows 也可用 `scripts/tei_deploy.ps1`。
 
 ### 4. 构建知识库
 
 ```bash
-cd backend
-python -m app.rag.ingest             # 增量入库
-python -m app.rag.ingest --rebuild   # 全量重建
-python -m app.rag.ingest --no-graph  # 跳过图谱构建（Neo4j未启动时推荐）
+uv run python -m rag.ingest            # 增量入库
+uv run python -m rag.ingest --rebuild  # 全量重建
 ```
 
-## 环境变量
+> 需 `PYTHONPATH=src` 或在 `src/` 目录下运行。
 
-完整配置见 `.env.example`。核心变量：
-
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| LLM_API_KEY | LLM API 密钥（**必填**） | — |
-| LLM_API_BASE | LLM API 地址 | DashScope 兼容接口 |
-| LLM_MODEL | LLM 主模型名 | qwen3.7-max |
-| EMBEDDING_API_BASE | Embedding API 地址 | http://localhost:11435 |
-| EMBEDDING_MODEL | Embedding 模型名 | BAAI/bge-m3 |
-| RERANK_LOCAL_URL | 本地 TEI Reranker 地址 | http://localhost:8080 |
-| HYDE_ENABLED | HyDE 假设文档嵌入开关 | true |
-| RERANK_MODE | Reranker 模式 | local |
-| RERANK_ABSOLUTE_MIN_SCORE | Rerank 绝对最低分数 | 0.15 |
-| SEMANTIC_CACHE_ENABLED | 语义缓存开关 | true |
-| NEO4J_URI / NEO4J_PASSWORD | Neo4j 连接 | bolt://localhost:7687 |
-| JWT_SECRET | JWT 签名密钥（**必填**） | — |
-
-LLM 使用 DashScope/OpenAI 兼容接口；Embedding 与 Reranker 默认使用本地 TEI 服务。
-
-## 评估
+### 5. 启动服务
 
 ```bash
-python run_full_eval.py              # 完整评估（RAGAS 4指标）
-python run_full_eval.py --quick      # 快速验证 (10条)
-python run_ablation.py --quick       # 消融实验 (5组条件)
+uv run python src/run_service.py       # http://127.0.0.1:8000
 ```
 
-## 性能优化
+浏览器访问 `http://127.0.0.1:8000/`（静态前端由 FastAPI 提供服务）。
 
-| 优化项 | 效果 |
-|--------|------|
-| L1/L2/L3 检索策略分层 | 简单查询 2-7s，复杂查询 60-120s |
-| 简单问答绕过 LangGraph | 省去 Agent 编排开销 |
-| 语义缓存 (ChromaDB) | 冷启动 3-5s → 缓存命中 ~800ms (2.7-4.4x) |
-| HyDE 按需触发 | 避免不必要的 LLM 调用 |
-| Fast LLM 模型 | 简单问答生成延迟降低 30-50% |
-| Chroma 读写锁 (RWLock) | 8路并行召回读查询真正并发，检索延迟 -30~50% |
-| Negative Sampling 软降级 | Window 噪声 chunk 排到末尾，Context Precision +0.08~0.15 |
-| L2/L3 no-rerank 降级 | TIMEOUT 率 15% → 0% |
-| Agent 检索查询提取 | COV_FAIL → 100% 覆盖 |
+## API
 
-## 量化数据
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/auth/register` `/login` `/logout` | 注册 / 登录（JWT）/ 退出 |
+| GET | `/api/auth/me` | 当前用户 |
+| GET | `/api/info` | 可用 agent 与模型 |
+| POST | `/api/invoke` | 单次问答（非流式） |
+| POST | `/api/stream` | 流式问答（SSE：token + message 双流） |
+| POST | `/api/history` | 会话历史 |
+| GET | `/api/threads` | 会话线程列表 |
+| POST | `/api/questions/generate` | 出题，返回**结构化题目**（题干 / 标准答案 / 解析分开） |
+| POST | `/api/questions/grade` | 批改，需传**单题**的题干 + 该题标准答案 |
+| GET | `/health` | 健康检查（含各外部依赖状态） |
 
-- Golden Set 通过率: 88/88 (100%)，4科全覆盖
-- 知识图谱: 4科全覆盖 (数据结构 / 操作系统 / 计算机网络 / 计算机组成原理)
-- 向量库: 3240 区块 (4科+题库+学习路线+代码实现+跨学科对比)，HNSW M=32
-- 语义缓存: 相似度阈值 0.88，TTL 30min，容量 500，命中率 ~90%
-- Negative Sampling: window 噪声覆盖率 <15% 软降级(×0.5)，对比查询豁免
+## 测试与质量
+
+```bash
+uv run pytest                  # 运行测试
+uv run ruff check src/ tests/  # Lint
+uv run ruff format src/        # 格式化
+uv run pyrefly check           # 类型检查
+pre-commit install             # 安装 git 钩子
+```
+
+## Docker
+
+```bash
+docker compose up --build      # 构建并启动 agent_service
+```
+
+## LangGraph Studio
+
+```bash
+langgraph dev                  # 打开 Studio 调试 agent 图
+```

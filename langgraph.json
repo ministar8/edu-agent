@@ -1,0 +1,8 @@
+{
+    "python_version": "3.12",
+    "dependencies": ["./src"],
+    "graphs": {
+        "edu_assistant": "./src/agents/supervisor.py:edu_supervisor"
+    },
+    "env": "./.env"
+}

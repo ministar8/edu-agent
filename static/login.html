@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 · 408 智能辅导</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <h1 class="brand">EduAgent</h1>
+    <p class="subtitle">408 考研智能辅导多 Agent 系统</p>
+    <div class="tabs">
+      <button class="tab active" data-mode="login">登录</button>
+      <button class="tab" data-mode="register">注册</button>
+    </div>
+    <form id="auth-form">
+      <input id="username" placeholder="用户名" required minlength="3" autocomplete="username">
+      <input id="password" type="password" placeholder="密码（至少 6 位）" required minlength="6" autocomplete="current-password">
+      <input id="display-name" placeholder="昵称（可选，注册用）" class="hidden">
+      <button type="submit" class="btn-primary" id="submit-btn">登录</button>
+    </form>
+    <p id="error" class="error"></p>
+  </div>
+  <script src="/auth.js"></script>
+</body>
+</html>

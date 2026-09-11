@@ -1,0 +1,93 @@
+[project]
+name = "edu-agent"
+version = "0.1.0"
+description = "408 考研智能教学辅导多 Agent 系统"
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "fastapi ~=0.139.0",
+    "uvicorn[standard] ~=0.51.0",
+    "pydantic ~=2.13.4",
+    "pydantic-settings ~=2.14.2",
+    "python-dotenv ~=1.2.2",
+    "httpx ~=0.28.1",
+    "httpx-sse ~=0.4.3",
+    "langchain ~=1.3.11",
+    "langchain-core ~=1.4.8",
+    "langchain-openai ~=1.3.3",
+    "langchain-community ~=0.4.2",
+    "langchain-chroma ~=1.1.0",
+    "langgraph ~=1.2.7",
+    "langgraph-supervisor ~=0.0.31",
+    "langgraph-checkpoint-sqlite ~=3.1.0",
+    "chromadb >=1.5.0,<2.0.0",
+    "jieba ==0.42.1",
+    "opencc-python-reimplemented ~=0.1.7",
+    "pymupdf4llm >=0.1.5,<2.0.0",
+    "pypdf >=6.0.0,<7.0.0",
+    "PyJWT ==2.10.1",
+    "sqlalchemy >=2.0.0,<3.0.0",
+    "python-multipart ==0.0.26",
+    "datasketch ~=1.6.5",
+    "chardet ==5.2.0",
+    "langsmith ~=0.12.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-asyncio",
+    "pytest-env",
+    "ruff ~=0.15.21",
+    "pyrefly ~=1.1.1",
+    "pre-commit",
+    "langgraph-cli[inmem]",
+    "pymarkdownlnt",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+extend-select = ["I", "U"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.pytest_env]
+# 测试环境：默认走假模型，另给一个假 provider key 以便构造真实模型实例（不联网）
+USE_FAKE_MODEL = "true"
+DASHSCOPE_API_KEY = "sk-fake-dashscope-key"
+JWT_SECRET = "test-secret-key"
+
+[tool.pymarkdown]
+# 文档使用长段落而非固定列宽硬换行，故不强制行宽
+plugins.md013.enabled = false
+# README.md 中有意使用内联 HTML（如带 width 的 <img>）
+plugins.md033.enabled = false
+# 并非每篇文档都需要以一级标题开头
+plugins.md041.enabled = false
+# 允许重复标题文本，只要不是相邻兄弟节点
+plugins.md024.siblings_only = true
+
+[tool.pyrefly]
+project-includes = ["src"]
+preset = "default"
+
+[tool.pyrefly.errors]
+# LangGraph 的 StateGraph(state_schema) 泛型对 MessagesState 子类的误报，非真实错误
+bad-specialization = false
+
+# 迁移自旧 backend 的 RAG 检索链类型注解尚不严格，暂放宽（技术债，后续逐步收紧）
+[[tool.pyrefly.sub-config]]
+matches = "src/rag/**"
+errors = { bad-argument-type = false, missing-attribute = false, not-iterable = false, bad-assignment = false, unbound-name = false, bad-return = false, not-callable = false, bad-unpacking = false, missing-import = false }
+
+# 迁移自旧 backend 的数据清洗工具同样类型注解不严格
+[[tool.pyrefly.sub-config]]
+matches = "src/tools/**"
+errors = { bad-argument-type = false, missing-attribute = false, not-iterable = false, bad-assignment = false, unbound-name = false, bad-return = false, not-callable = false, bad-unpacking = false, unsupported-operation = false }
