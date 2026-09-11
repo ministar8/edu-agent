@@ -28,3 +28,14 @@ async def agrade_answer(stem: str, user_answer: str, standard_answer: str = "") 
     if result is None:
         raise RuntimeError("批改失败")
     return result
+
+
+def format_grading_for_chat(result: GradingResult) -> str:
+    """把结构化批改结果渲染成对话体（与专用 API 同一真源）。"""
+    lines = [
+        f"评分：{result.score}/100",
+        f"结论：{result.feedback}",
+    ]
+    if result.is_wrong and result.error_analysis:
+        lines.append(f"错因与建议：{result.error_analysis}")
+    return "\n".join(lines)

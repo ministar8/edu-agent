@@ -139,3 +139,26 @@ async def agenerate_practice_questions(
     except Exception as e:
         return f"出题失败：{e}"
     return format_questions_for_chat(result)
+
+
+@tool("grade_student_answer")
+async def agrade_student_answer(stem: str, user_answer: str, standard_answer: str = "") -> str:
+    """对单题学生作答打分（与专用批改 API 共用 grading_core）。
+
+    standard_answer 可空：为空时会先用题干检索知识库作为评分依据。
+    返回已排版的评分/反馈文本，不要自行编造分数。
+    """
+    from agents.grading_core import agrade_answer, format_grading_for_chat
+
+    std = standard_answer
+    if not std.strip():
+        payload = await _retrieve_payload(stem)
+        if payload.get("status") == "ok":
+            std = str(payload.get("context") or "")
+        elif payload.get("status") == "error":
+            return f"批改失败：检索标准答案时出错（{payload.get('error') or '未知错误'}）"
+    try:
+        result = await agrade_answer(stem=stem, user_answer=user_answer, standard_answer=std)
+    except Exception as e:
+        return f"批改失败：{e}"
+    return format_grading_for_chat(result)
