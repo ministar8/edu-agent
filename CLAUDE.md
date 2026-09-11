@@ -29,6 +29,7 @@
 | `src/rag/` | 检索流水线：`retriever.py`（门面）、`postprocess.py`（RRF）、`fusion.py`（证据融合）、`reranker.py`、`hyde.py`、`semantic_cache.py`、`ingest.py` |
 | `src/core/` | `settings.py`（配置单例）、`llm.py`（`get_model` / `get_llm` 工厂） |
 | `src/service/` | FastAPI：`service.py`（路由 + SSE）、`auth.py`（JWT）、`threads.py`（会话列表）、`utils.py` |
+| `src/client/` | `AgentClient` SDK：路径根为 `/api`，JWT 登录/注入，invoke/stream/history/threads/出题批改 |
 | `src/schema/` | Pydantic 协议模型（`schema.py` / `models.py` / `auth.py` / `questions.py`） |
 | `src/memory/` | LangGraph checkpointer 与 store（SQLite） |
 | `src/db/` | SQLAlchemy User 表与建表逻辑 |

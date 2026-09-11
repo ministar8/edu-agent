@@ -46,6 +46,7 @@ edu-agent/
 │   ├── memory/           # LangGraph checkpointer（SQLite）
 │   ├── db/               # SQLAlchemy User 表
 │   ├── service/          # FastAPI（service / auth / threads / utils）
+│   ├── client/           # AgentClient SDK（JWT + /api，供脚本/测试复用）
 │   ├── tools/            # 离线数据清洗工具
 │   └── run_service.py    # 服务入口
 ├── static/               # 静态前端（login.html / index.html / app.js / style.css）
@@ -116,6 +117,18 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 | POST | `/api/questions/generate` | 出题，返回**结构化题目**（题干 / 标准答案 / 解析分开） |
 | POST | `/api/questions/grade` | 批改，需传**单题**的题干 + 该题标准答案 |
 | GET | `/health` | 健康检查（含各外部依赖状态） |
+
+### Python Client
+
+```python
+from client import AgentClient
+
+ac = AgentClient(base_url="http://127.0.0.1:8000")  # 拉取 /api/info
+ac.login("alice", "secret12")  # 或 ac.set_token(jwt)
+msg = ac.invoke("什么是虚拟内存？", thread_id="t1")
+for chunk in ac.stream("再举个例子", stream_tokens=True):
+    ...
+```
 
 ## 测试与质量
 
