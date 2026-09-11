@@ -1,17 +1,80 @@
-"""共享 RAG 检索工具：供 knowledge / question / grading agent 复用。"""
+"""共享 RAG 检索工具：供 knowledge / question / grading agent 复用。
+
+检索类工具统一返回 `schema.evidence.RetrievalResult` 的 dict 载荷
+（`as_tool_payload`），不再只给一截字符串 —— 引用 UI 与调试依赖 docs 中的
+chunk_id / 路径 / 分数。
+"""
+
+from __future__ import annotations
 
 import logging
+from typing import Any
 
 from langchain_core.tools import tool
 
+from rag.evidence import FusedEvidence
 from rag.query_classifier import TEXT_ONLY_DEPTH
 from rag.retriever import aretrieve_evidence_with_retry
+from rag.verifier import VerificationResult
+from schema.evidence import EvidenceDoc, RetrievalResult, _excerpt
 
 logger = logging.getLogger(__name__)
 
 
-async def _retrieve_context(query: str, *, depth=None, k: int = 5) -> str:
-    """统一的「检索 → 上下文字符串」封装。"""
+def build_retrieval_result(
+    *,
+    query: str,
+    fused: FusedEvidence,
+    verification: VerificationResult | None,
+) -> RetrievalResult:
+    """把检索链内部的 FusedEvidence 映射为对外契约。"""
+    docs = [
+        EvidenceDoc(
+            evidence_id=ev.evidence_id,
+            source=ev.source,
+            section_path=ev.section_path,
+            chunk_id=ev.chunk_id,
+            score=ev.score,
+            rerank_score=ev.rerank_score,
+            knowledge_points=list(ev.knowledge_points),
+            excerpt=_excerpt(ev.content),
+        )
+        for ev in fused.text_evidences
+    ]
+    sources = [str(s) for s in (fused.sources or [])]
+    verdict = str(verification.verdict.value) if verification else ""
+    reasons = [str(r) for r in (verification.reasons if verification else [])]
+
+    if not fused.final_context.strip():
+        return RetrievalResult(
+            status="empty",
+            query=query,
+            context="知识库中未找到相关内容。",
+            sources=sources,
+            docs=docs,
+            verification=verdict,
+            verification_reasons=reasons,
+        )
+
+    context = fused.final_context
+    if sources:
+        context += f"\n\n来源: {', '.join(sources[:5])}"
+    if verification and verification.verdict.value != "pass" and reasons:
+        context += f"\n\n证据质量: {verdict}; {'; '.join(reasons[:2])}"
+
+    return RetrievalResult(
+        status="ok",
+        query=query,
+        context=context,
+        sources=sources,
+        docs=docs,
+        verification=verdict,
+        verification_reasons=reasons,
+    )
+
+
+async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, Any]:
+    """统一的「检索 → 对外载荷」封装。"""
     try:
         fused, verification = await aretrieve_evidence_with_retry(
             query=query,
@@ -23,43 +86,40 @@ async def _retrieve_context(query: str, *, depth=None, k: int = 5) -> str:
         )
     except Exception as e:
         logger.error("Retrieval failed: %s", e, exc_info=True)
-        return f"检索失败: {e}"
+        return RetrievalResult(
+            status="error",
+            query=query,
+            context=f"检索失败: {e}",
+            error=str(e),
+        ).as_tool_payload()
 
-    if not fused.final_context:
-        return "知识库中未找到相关内容。"
-
-    result = fused.final_context
-    if fused.sources:
-        result += f"\n\n来源: {', '.join(fused.sources[:5])}"
-    if verification.verdict.value != "pass" and verification.reasons:
-        result += (
-            f"\n\n证据质量: {verification.verdict.value}; {'; '.join(verification.reasons[:2])}"
-        )
-    return result
+    return build_retrieval_result(
+        query=query, fused=fused, verification=verification
+    ).as_tool_payload()
 
 
 @tool("knowledge_search")
-async def aknowledge_search(query: str) -> str:
-    """知识库综合检索（多路召回+BM25+Reranker）。适合大多数概念讲解与原理理解问题。"""
-    return await _retrieve_context(query)
+async def aknowledge_search(query: str) -> dict[str, Any]:
+    """知识库综合检索（多路召回+BM25+Reranker）。返回含 context 与 docs 的结构化结果。"""
+    return await _retrieve_payload(query)
 
 
 @tool("text_search")
-async def atext_search(query: str) -> str:
-    """纯教材文本检索（更快的浅层检索）。适合快速查询概念定义、原理说明。"""
-    return await _retrieve_context(query, depth=TEXT_ONLY_DEPTH)
+async def atext_search(query: str) -> dict[str, Any]:
+    """纯教材文本检索（更快的浅层检索）。返回含 context 与 docs 的结构化结果。"""
+    return await _retrieve_payload(query, depth=TEXT_ONLY_DEPTH)
 
 
 @tool("search_standard_answer")
-async def asearch_standard_answer(query: str) -> str:
+async def asearch_standard_answer(query: str) -> dict[str, Any]:
     """检索教材知识库中的标准答案与评分依据。批改学生答案时使用。"""
-    return await _retrieve_context(query)
+    return await _retrieve_payload(query)
 
 
 @tool("search_question_templates")
-async def asearch_question_templates(query: str) -> str:
+async def asearch_question_templates(query: str) -> dict[str, Any]:
     """检索题库与教材中与知识点相关的题目模板、例题与知识依据。出题时使用。"""
-    return await _retrieve_context(query)
+    return await _retrieve_payload(query)
 
 
 @tool("generate_practice_questions")
