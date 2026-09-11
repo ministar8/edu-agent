@@ -60,3 +60,22 @@ async def asearch_standard_answer(query: str) -> str:
 async def asearch_question_templates(query: str) -> str:
     """检索题库与教材中与知识点相关的题目模板、例题与知识依据。出题时使用。"""
     return await _retrieve_context(query)
+
+
+@tool("generate_practice_questions")
+async def agenerate_practice_questions(
+    topic: str, count: int = 1, difficulty: str = "mixed"
+) -> str:
+    """按知识点生成练习题（选择/填空/简答/综合）。返回已排版的题目文本。
+
+    与专用出题 API 共用同一结构化生成核心；本工具只负责对话展示。
+    difficulty: basic | medium | hard | mixed
+    """
+    # 延迟导入：question_core 依赖本模块的 asearch_question_templates
+    from agents.question_core import agenerate_question_set, format_questions_for_chat
+
+    try:
+        result = await agenerate_question_set(topic=topic, count=count, difficulty=difficulty)
+    except Exception as e:
+        return f"出题失败：{e}"
+    return format_questions_for_chat(result)

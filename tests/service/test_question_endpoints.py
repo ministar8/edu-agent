@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import ValidationError
 
 import service.service as service_module
+from agents.question_core import question_gen_agent
 from rag.schemas import GradingResult
 from schema.questions import GeneratedQuestion, GeneratedQuestionSet
 
@@ -44,7 +45,7 @@ class TestGenerateEndpoint:
                 "structured_response": GeneratedQuestionSet(questions=[_QUESTION]),
             }
 
-        monkeypatch.setattr(service_module.question_gen_agent, "ainvoke", fake_ainvoke)
+        monkeypatch.setattr(question_gen_agent, "ainvoke", fake_ainvoke)
 
         response = test_client.post(
             "/api/questions/generate",
@@ -69,7 +70,7 @@ class TestGenerateEndpoint:
         async def fake_ainvoke(payload, **_kwargs):
             return {"messages": [AIMessage(content="只有文本，没有结构化结果")]}
 
-        monkeypatch.setattr(service_module.question_gen_agent, "ainvoke", fake_ainvoke)
+        monkeypatch.setattr(question_gen_agent, "ainvoke", fake_ainvoke)
 
         response = test_client.post(
             "/api/questions/generate",

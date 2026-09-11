@@ -1,29 +1,20 @@
-"""出题 Agent：基于题库模板与知识库内容生成 408 练习题。"""
+"""出题 Agent（聊天路径）：经共享工具调用结构化真源，只做对话修饰。
+
+专用出题 API 见 `agents.question_core` / `service.generate_questions`。
+"""
 
 from typing import Any
 
 from langchain.agents import create_agent
 
-from agents.tools import asearch_question_templates
+from agents.tools import agenerate_practice_questions
 from core import get_model, settings
-from prompts import QUESTION_AGENT_SYSTEM_PROMPT, QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
-from schema.questions import GeneratedQuestionSet
+from prompts import QUESTION_AGENT_SYSTEM_PROMPT
 
+# supervisor 子 agent：出题一律走 generate_practice_questions（内部共用结构化真源）。
 question_agent: Any = create_agent(
     model=get_model(settings.DEFAULT_MODEL, temperature=settings.TEMP_CREATIVE),
-    tools=[asearch_question_templates],
+    tools=[agenerate_practice_questions],
     name="question_agent",
     system_prompt=QUESTION_AGENT_SYSTEM_PROMPT,
-)
-
-
-# 出题端点专用：同样的 tools / 规则，但要求结构化输出。
-# 单独一个实例是因为 question_agent 同时是 supervisor 的子 agent —— 给它加 response_format
-# 会改变 chat 路径的产出形态，而这一点无法离线验证。
-question_gen_agent: Any = create_agent(
-    model=get_model(settings.DEFAULT_MODEL, temperature=settings.TEMP_CREATIVE),
-    tools=[asearch_question_templates],
-    name="question_gen_agent",
-    system_prompt=QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
-    response_format=GeneratedQuestionSet,
 )

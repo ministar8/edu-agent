@@ -114,6 +114,7 @@ class TestToolNameConsistency:
             "KNOWLEDGE_AGENT_SYSTEM_PROMPT",
             "GRADING_AGENT_SYSTEM_PROMPT",
             "QUESTION_AGENT_SYSTEM_PROMPT",
+            "QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT",
         ):
             for line in getattr(prompts, name).splitlines():
                 if match := self._TOOL_BULLET.match(line.strip()):
