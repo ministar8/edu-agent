@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import ValidationError
 
 from agents.question_core import question_gen_agent
-from rag.schemas import GradingResult
+from schema.grading import GradingResult
 from schema.questions import GeneratedQuestion, GeneratedQuestionSet
 
 _QUESTION = GeneratedQuestion(

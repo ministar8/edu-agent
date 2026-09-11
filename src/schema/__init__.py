@@ -1,4 +1,5 @@
 from schema.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from schema.grading import GradingResult
 from schema.models import (
     GATEWAY_DEFAULT_MODEL,
     GATEWAY_MODELS,
@@ -32,6 +33,7 @@ __all__ = [
     "Gateway",
     "GradeRequest",
     "GradeResponse",
+    "GradingResult",
     "LoginRequest",
     "QuestionRequest",
     "QuestionResponse",

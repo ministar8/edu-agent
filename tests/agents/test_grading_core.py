@@ -4,7 +4,7 @@ import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.grading_core import agrade_answer
-from rag.schemas import GradingResult
+from schema.grading import GradingResult
 
 
 @pytest.mark.asyncio
