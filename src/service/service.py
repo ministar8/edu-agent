@@ -236,7 +236,7 @@ async def message_generator(
     """
     try:
         async for stream_event in agent.astream(  # type: ignore[no-matching-overload]
-            **kwargs, stream_mode=["updates", "messages"], subgraphs=True
+            **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
         ):
             if not isinstance(stream_event, tuple):
                 continue
@@ -263,6 +263,9 @@ async def message_generator(
                         else:
                             update_messages = []
                     new_messages.extend(update_messages)
+            elif stream_mode == "custom":
+                # CustomData.dispatch 写出的 LangChain ChatMessage(role=custom)
+                new_messages = [event]
 
             processed_messages = []
             current_message: dict[str, Any] = {}
