@@ -1,14 +1,15 @@
 """service 层（HTTP 端点）的出题与批改模板。
 
-层级提醒：这两个模板属于**端点直调**，与 `prompts/agents.py` 的 agent system prompt
-是两套东西。尤其 `/api/questions/grade` 走的是 `GRADE_PROMPT`，**不经过 grading_agent**，
-因此 `GRADING_AGENT_SYSTEM_PROMPT` 在那条路径上不生效。
+层级提醒：这两个模板属于**端点直调**，经 `agents.question_core` / `agents.grading_core`
+使用，与 `prompts/agents.py` 里聊天专家的 system prompt 是两套东西。
+`/api/questions/grade` 走 `GRADE_PROMPT` + `grading_core`，**不经过 grading_agent**，
+因此 `GRADING_AGENT_SYSTEM_PROMPT` 在该路径上不生效。
 """
 
 from langchain_core.prompts import ChatPromptTemplate
 
-# 出题：指令本身就是用户请求，且 question_agent 另有自己的 system prompt，
-# 所以只组一条 human 消息，不塞第二个 system。
+# 出题：human 一条即可；结构化 system 在 question_gen_agent
+# （QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT），此处不重复。
 QUESTION_GEN_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
