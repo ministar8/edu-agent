@@ -63,6 +63,8 @@ asyncio_default_fixture_loop_scope = "function"
 USE_FAKE_MODEL = "true"
 DASHSCOPE_API_KEY = "sk-fake-dashscope-key"
 JWT_SECRET = "test-secret-key"
+# 单测不依赖 TEI embedding
+MEMORY_STORE_VECTOR_ENABLED = "false"
 
 [tool.pymarkdown]
 # 文档使用长段落而非固定列宽硬换行，故不强制行宽

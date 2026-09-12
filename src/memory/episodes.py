@@ -23,6 +23,12 @@ def _coerce_episode(raw: object) -> Episode | None:
         return None
 
 
+def episode_search_text(episode: Episode) -> str:
+    """拼入 store 的可嵌入字段（向量索引 fields=["search_text"]）。"""
+    parts = [episode.topic, episode.stem_excerpt, episode.error_analysis]
+    return " ".join(p for p in parts if p).strip()[:500]
+
+
 async def aappend_episode(
     store: BaseStore,
     user_id: int | str,
@@ -32,7 +38,9 @@ async def aappend_episode(
 ) -> str:
     """追加一条情节记忆，返回使用的 episode_id。"""
     eid = episode_id or uuid.uuid4().hex
-    await store.aput(student_episodes_ns(user_id), episode_key(eid), episode.model_dump())
+    value = episode.model_dump()
+    value["search_text"] = episode_search_text(episode)
+    await store.aput(student_episodes_ns(user_id), episode_key(eid), value)
     return eid
 
 
