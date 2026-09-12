@@ -36,11 +36,14 @@
 | `src/tools/` | 离线数据清洗工具（**不参与运行时**） |
 | `static/` | 静态前端（login.html / index.html / app.js / auth.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
+| `src/evaluation/` | RAGAS Layer-1 评测（dataset/adapters/ragas_eval/cli）+ `evals/` 样本 |
 
 ## 常用命令
 
 ```bash
 uv sync                                  # 安装依赖
+uv sync --group eval                     # RAGAS 评测依赖（可选）
+uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 5
 uv run python src/run_service.py         # 启动服务 → http://127.0.0.1:8000
 uv run python -m rag.ingest              # 知识库增量入库
 uv run python -m rag.ingest --rebuild    # 知识库全量重建
