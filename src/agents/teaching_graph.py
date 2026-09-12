@@ -14,8 +14,10 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState
 
 from agents.supervisor import inner_supervisor
+from core import settings
 from memory.runtime import get_store
 from memory.safe import safe_remember
+from memory.window import trim_conversation
 from memory.working import abuild_memory_card
 
 logger = logging.getLogger(__name__)
@@ -46,9 +48,10 @@ async def load_memory(state: TeachingState, config=None) -> dict:
 
 
 async def run_supervisor(state: TeachingState, config=None) -> dict:
-    result = await inner_supervisor.ainvoke(
-        {"messages": state.get("messages") or []}, config=config
-    )
+    raw = state.get("messages") or []
+    # 只裁剪「本轮送给模型的输入」；state/checkpointer 仍保留完整历史
+    trimmed = trim_conversation(raw, max_messages=settings.MEMORY_HISTORY_MAX_MESSAGES)
+    result = await inner_supervisor.ainvoke({"messages": trimmed}, config=config)
     if isinstance(result, dict):
         return {"messages": result.get("messages") or []}
     return {}

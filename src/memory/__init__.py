@@ -23,6 +23,7 @@ from memory.schemas import SCHEMA_VERSION, Episode, StudentProfile, utc_now_iso
 from memory.sqlite import get_sqlite_saver, get_sqlite_store
 from memory.topics import normalize_topic, normalize_topics
 from memory.weak_topics import a_recompute_weak_topics, compute_weak_topics
+from memory.window import trim_conversation
 from memory.working import abuild_memory_card, format_memory_card
 
 
@@ -60,5 +61,6 @@ __all__ = [
     "set_store",
     "student_episodes_ns",
     "student_profile_ns",
+    "trim_conversation",
     "utc_now_iso",
 ]
