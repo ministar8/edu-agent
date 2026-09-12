@@ -1,7 +1,7 @@
 // 凭证存放在 httpOnly cookie 中（JS 读不到，也不该读），改为向服务端确认会话。
 // 同源 fetch 默认携带 cookie，因此后续请求无需再手动附带 Authorization 头。
 async function loadUser() {
-  const res = await fetch("/api/auth/me");
+  const res = await apiGet(API.me);
   if (!res.ok) {
     localStorage.removeItem("user");
     location.href = "/login.html";
@@ -13,15 +13,6 @@ async function loadUser() {
   document.getElementById("user-role").textContent = u.role || "";
 }
 loadUser();
-
-/** 从 API 错误响应提取可展示文案（兼容 detail 字符串或 {code,message}）。 */
-async function readApiErrorMessage(res) {
-  const data = await res.json().catch(() => ({}));
-  const detail = data && data.detail;
-  if (detail && typeof detail === "object" && detail.message) return detail.message;
-  if (typeof detail === "string" && detail) return detail;
-  return `请求失败 (${res.status})`;
-}
 
 let threadId = localStorage.getItem("threadId") || crypto.randomUUID();
 localStorage.setItem("threadId", threadId);
@@ -38,7 +29,7 @@ document.querySelectorAll(".nav-item").forEach((item) => {
 });
 
 document.getElementById("logout").onclick = async () => {
-  await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+  await apiPost(API.logout).catch(() => {});
   localStorage.removeItem("user");
   location.href = "/login.html";
 };
@@ -66,11 +57,7 @@ async function sendMessage(message) {
   const aiDiv = addMessage("ai", "");
 
   try {
-    const res = await fetch("/api/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, thread_id: threadId }),
-    });
+    const res = await apiPost(API.stream, { message, thread_id: threadId });
     if (!res.ok || !res.body) {
       aiDiv.textContent = res.status === 401 ? "登录已失效，请重新登录" : `请求失败 (${res.status})`;
       return;
@@ -132,11 +119,7 @@ document.getElementById("gen-form").onsubmit = async (e) => {
   const container = document.getElementById("questions");
   container.innerHTML = "<p>正在生成题目…</p>";
   try {
-    const res = await fetch("/api/questions/generate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ topic, count: 1, difficulty }),
-    });
+    const res = await apiPost(API.questionsGenerate, { topic, count: 1, difficulty });
     if (!res.ok) {
       container.innerHTML = `<p class="error">${await readApiErrorMessage(res)}</p>`;
       return;
@@ -203,17 +186,13 @@ function buildQuestionCard(q, index) {
     result.textContent = "正在批改…";
     try {
       // 只提交这一题的题干与它自己的标准答案 —— 不再把含答案的整页文本传过去
-      const res = await fetch("/api/questions/grade", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          stem: q.stem,
-          standard_answer: q.standard_answer || "",
-          user_answer: userAnswer,
-        }),
+      const res = await apiPost(API.questionsGrade, {
+        stem: q.stem,
+        standard_answer: q.standard_answer || "",
+        user_answer: userAnswer,
       });
       if (!res.ok) {
-        result.textContent = `批改失败 (${res.status})`;
+        result.textContent = await readApiErrorMessage(res);
         return;
       }
       const g = await res.json();
