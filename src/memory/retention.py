@@ -13,9 +13,9 @@ from datetime import UTC, datetime, timedelta
 from langgraph.store.base import BaseStore
 
 from core.settings import settings
-from memory.episodes import _coerce_episode
+from memory.episodes import coerce_episode
 from memory.namespaces import student_episodes_ns
-from memory.schemas import Episode
+from memory.schemas import Episode, parse_iso
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +32,6 @@ class CleanupStats:
         return self.deleted_expired + self.deleted_over_cap
 
 
-def _parse_iso(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        dt = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt
-
-
 async def alist_episode_items(
     store: BaseStore, user_id: int | str, *, limit: int | None = None
 ) -> list[tuple[str, Episode]]:
@@ -53,7 +41,7 @@ async def alist_episode_items(
     items = await store.asearch(student_episodes_ns(user_id), limit=cap)
     out: list[tuple[str, Episode]] = []
     for item in items:
-        ep = _coerce_episode(item.value)
+        ep = coerce_episode(item.value)
         if ep is not None:
             out.append((item.key, ep))
     return out
@@ -84,7 +72,7 @@ async def acleanup_user_episodes(
 
     keep: list[tuple[str, Episode]] = []
     for key, ep in pairs:
-        at = _parse_iso(ep.at)
+        at = parse_iso(ep.at)
         if cutoff is not None and at is not None and at < cutoff:
             await store.adelete(student_episodes_ns(user_id), key)
             stats.deleted_expired += 1

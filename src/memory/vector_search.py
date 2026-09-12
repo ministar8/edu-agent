@@ -10,7 +10,7 @@ import logging
 from langgraph.store.base import BaseStore
 
 from core.settings import settings
-from memory.episodes import _coerce_episode, arecent_episodes
+from memory.episodes import arecent_episodes, coerce_episode
 from memory.namespaces import student_episodes_ns
 from memory.schemas import Episode
 
@@ -37,7 +37,7 @@ async def asearch_episodes(
 
     episodes: list[Episode] = []
     for item in items:
-        ep = _coerce_episode(item.value)
+        ep = coerce_episode(item.value)
         if ep is not None:
             episodes.append(ep)
     # 有 score 时可再按 score 排；SQLite store 一般已按相似度返回

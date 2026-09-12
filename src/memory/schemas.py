@@ -28,6 +28,19 @@ def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def parse_iso(value: str) -> datetime | None:
+    """解析 ISO 时间；非法或空返回 None；naive 按 UTC。"""
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
+
+
 def excerpt(text: str, limit: int = 120) -> str:
     text = (text or "").strip()
     if len(text) <= limit:
