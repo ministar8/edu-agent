@@ -35,7 +35,9 @@ from core import settings
 from db import User, init_db
 from memory import initialize_database, initialize_store
 from memory.remember import record_grade, record_question
+from memory.retention import acleanup_all_student_episodes
 from memory.runtime import set_store
+from memory.safe import safe_remember
 from prompts import PROMPT_SET_VERSION
 from schema import (
     ChatHistory,
@@ -116,6 +118,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             agent.checkpointer = saver
             agent.store = store
             logger.info("Agent configured with checkpointer: %s", a.key)
+        # 启动时清理过期/超量 episodes；失败不阻断启动
+        await safe_remember(lambda: acleanup_all_student_episodes(store), label="episode_retention")
         try:
             yield
         finally:

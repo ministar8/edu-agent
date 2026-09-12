@@ -17,6 +17,7 @@ from memory.namespaces import (
 )
 from memory.profile import aget_profile, aupsert_profile
 from memory.remember import record_grade, record_question
+from memory.retention import acleanup_all_student_episodes, acleanup_user_episodes
 from memory.runtime import get_store, set_store
 from memory.safe import safe_remember
 from memory.schemas import SCHEMA_VERSION, Episode, StudentProfile, utc_now_iso
@@ -44,6 +45,8 @@ __all__ = [
     "a_recompute_weak_topics",
     "aappend_episode",
     "abuild_memory_card",
+    "acleanup_all_student_episodes",
+    "acleanup_user_episodes",
     "aget_profile",
     "arecent_episodes",
     "aupsert_profile",
