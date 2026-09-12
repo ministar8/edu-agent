@@ -19,7 +19,7 @@
                  → RRF 融合 → Reranker → HyDE → 语义缓存
 ```
 
-**存储**：ChromaDB（向量检索 + 语义缓存）｜SQLite（用户 `edu_agent.db` + LangGraph checkpointer `checkpoints.db`）
+**存储**：ChromaDB（向量检索 + 语义缓存）｜SQLite（用户 `edu_agent.db` + 会话 `checkpoints.db` + 长期记忆 `store.db`）
 
 ## 目录职责
 
@@ -60,8 +60,8 @@ docker compose up --build                # 容器化启动
 ## 开发约定
 
 - **配置一律走 `core.settings.settings` 单例**，不要散落读 `os.environ`。新增配置项加到 `Settings` 并同步 `.env.example`。
-- **LLM 只通过工厂获取**：agent 层用 `get_model(model_name, temperature)`（按枚举名 + 温度缓存），
-  RAG 层用 `get_llm(streaming, temperature, use_fast)`（按 `settings.LLM_MODEL` 取）。
+- **LLM 只通过工厂获取**：agent 层用 `get_model(model_ref, temperature)`（网关+模型+温度缓存），
+  RAG 层用 `get_llm(streaming, temperature)`（按 `settings.LLM_MODEL` 取）。
 - **模型标识 = `<gateway>:<model_id>`**，如 `dashscope:qwen3.7-max`、`deepseek:deepseek-v4-flash`。
   **网关**（走哪家：决定 base_url + api_key）与**模型 ID**（哪个模型）是两个概念，
   同一模型 ID 可显式选择走不同网关（如 `dashscope:deepseek-v4-flash`），**不按模型名猜**。
