@@ -31,7 +31,7 @@
 | `src/service/` | FastAPI：`service.py`（路由 + SSE）、`auth.py`（JWT）、`threads.py`（会话列表）、`utils.py` |
 | `src/client/` | `AgentClient` SDK：路径根为 `/api`，JWT 登录/注入，invoke/stream/history/threads/出题批改 |
 | `src/schema/` | Pydantic 协议/领域模型（`schema.py` / `models.py` / `auth.py` / `questions.py` / `grading.py` / `evidence.py` 检索对外契约）；`rag/schemas.py` 只放检索链内部 LLM 输出 |
-| `src/memory/` | 短期 checkpointer + 长期 Store：命名空间工厂、版本化 schema、profile/episodes、weak_topics 防抖派生、safe_remember |
+| `src/memory/` | 短期 checkpointer + 消息窗口 `window.trim_conversation` + 长期 Store（工厂/schema/topic/weak_topics/记忆卡） |
 | `src/db/` | SQLAlchemy User 表与建表逻辑 |
 | `src/tools/` | 离线数据清洗工具（**不参与运行时**） |
 | `static/` | 静态前端（login.html / index.html / app.js / auth.js / style.css） |

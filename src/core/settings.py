@@ -166,6 +166,8 @@ class Settings(BaseSettings):
     MEMORY_WEAK_MIN_HITS: int = 2
     MEMORY_WEAK_CLEAR_MIN_GOOD_HITS: int = 2
     MEMORY_EPISODE_SCAN_LIMIT: int = 50
+    # 短期：送入 LLM 的非 system 消息条数上限；0 = 不裁剪
+    MEMORY_HISTORY_MAX_MESSAGES: int = 20
 
     # ── Auth（JWT）────────────────────────────────
     JWT_SECRET: SecretStr | None = None
