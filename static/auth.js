@@ -1,7 +1,7 @@
 let mode = "login";
 
 // 凭证在 httpOnly cookie 中，JS 读不到，只能问服务端是否已登录
-fetch("/api/auth/me").then((res) => {
+apiGet(API.me).then((res) => {
   if (res.ok) location.href = "/index.html";
 });
 
@@ -28,16 +28,10 @@ document.getElementById("auth-form").onsubmit = async (e) => {
     body.display_name = document.getElementById("display-name").value.trim();
   }
   try {
-    const res = await fetch(`/api/auth/${mode}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const path = mode === "register" ? API.register : API.login;
+    const res = await apiPost(path, body);
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      const detail = data.detail;
-      err.textContent =
-        (detail && typeof detail === "object" && detail.message) || detail || "请求失败";
+      err.textContent = await readApiErrorMessage(res);
       return;
     }
     const data = await res.json();
