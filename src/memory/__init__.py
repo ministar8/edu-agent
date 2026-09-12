@@ -10,11 +10,13 @@ from contextlib import AbstractAsyncContextManager
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from memory.episodes import aappend_episode, arecent_episodes
+from memory.metering import approx_tokens, meter_text
 from memory.namespaces import (
     episode_key,
     student_episodes_ns,
     student_profile_ns,
 )
+from memory.privacy import redact_pii
 from memory.profile import aget_profile, aupsert_profile
 from memory.remember import record_grade, record_question
 from memory.retention import acleanup_all_student_episodes, acleanup_user_episodes
@@ -50,16 +52,19 @@ __all__ = [
     "aget_profile",
     "arecent_episodes",
     "aupsert_profile",
+    "approx_tokens",
     "compute_weak_topics",
     "episode_key",
     "format_memory_card",
     "get_store",
     "initialize_database",
     "initialize_store",
+    "meter_text",
     "normalize_topic",
     "normalize_topics",
     "record_grade",
     "record_question",
+    "redact_pii",
     "safe_remember",
     "set_store",
     "student_episodes_ns",

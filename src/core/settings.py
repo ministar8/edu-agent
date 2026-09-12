@@ -171,6 +171,7 @@ class Settings(BaseSettings):
     # 长期 episodes 保留：TTL 天数 / 每用户上限；0 = 关闭该项
     MEMORY_EPISODE_TTL_DAYS: int = 90
     MEMORY_EPISODE_MAX_PER_USER: int = 200
+    MEMORY_PRIVACY_REDACT: bool = True
 
     # ── Auth（JWT）────────────────────────────────
     JWT_SECRET: SecretStr | None = None
