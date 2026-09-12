@@ -13,7 +13,7 @@ from memory.schemas import Episode
 logger = logging.getLogger(__name__)
 
 
-def _coerce_episode(raw: object) -> Episode | None:
+def coerce_episode(raw: object) -> Episode | None:
     if isinstance(raw, Episode):
         return raw
     try:
@@ -58,7 +58,7 @@ async def arecent_episodes(
     items = await store.asearch(student_episodes_ns(user_id), limit=limit)
     episodes: list[Episode] = []
     for item in items:
-        ep = _coerce_episode(item.value)
+        ep = coerce_episode(item.value)
         if ep is not None:
             episodes.append(ep)
     episodes.sort(key=lambda e: e.at, reverse=True)

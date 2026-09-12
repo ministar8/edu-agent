@@ -64,7 +64,11 @@ async def abuild_memory_card(store: BaseStore | None, user_id: int | str) -> str
         return ""
     try:
         profile = await aget_profile(store, user_id)
-        weak = [normalize_topic(t) for t in profile.weak_topics if normalize_topic(t)]
+        weak: list[str] = []
+        for t in profile.weak_topics:
+            nt = normalize_topic(t)
+            if nt:
+                weak.append(nt)
         if not weak and not profile.preferred_style.strip():
             return ""
         grades_by_topic: dict[str, list] = {}

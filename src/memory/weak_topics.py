@@ -13,26 +13,14 @@ from langgraph.store.base import BaseStore
 from core.settings import settings
 from memory.episodes import arecent_episodes
 from memory.profile import aget_profile, aupsert_profile
-from memory.schemas import Episode
+from memory.schemas import Episode, parse_iso
 from memory.topics import normalize_topic
 
 logger = logging.getLogger(__name__)
 
 
-def _parse_iso(value: str) -> datetime | None:
-    if not value:
-        return None
-    try:
-        dt = datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
-    return dt
-
-
 def _in_window(ep: Episode, now: datetime, days: int) -> bool:
-    at = _parse_iso(ep.at)
+    at = parse_iso(ep.at)
     if at is None:
         return False
     return at >= now - timedelta(days=days)
