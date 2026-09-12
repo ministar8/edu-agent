@@ -20,6 +20,11 @@ from schema.evidence import EvidenceDoc, RetrievalResult, _excerpt
 
 logger = logging.getLogger(__name__)
 
+# 工具失败文案统一用「动作失败：原因」全角冒号，便于模型与日志对齐
+_ERR_RETRIEVE = "检索失败"
+_ERR_GENERATE = "出题失败"
+_ERR_GRADE = "批改失败"
+
 
 def build_retrieval_result(
     *,
@@ -89,7 +94,7 @@ async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, 
         return RetrievalResult(
             status="error",
             query=query,
-            context=f"检索失败: {e}",
+            context=f"{_ERR_RETRIEVE}：{e}",
             error=str(e),
         ).as_tool_payload()
 
@@ -153,7 +158,7 @@ async def agenerate_practice_questions(
     try:
         result = await agenerate_question_set(topic=topic, count=count, difficulty=difficulty)
     except Exception as e:
-        return f"出题失败：{e}"
+        return f"{_ERR_GENERATE}：{e}"
     return format_questions_for_chat(result)
 
 
@@ -173,9 +178,9 @@ async def agrade_student_answer(stem: str, user_answer: str, standard_answer: st
         if payload.get("status") == "ok":
             std = str(payload.get("context") or "")
         elif payload.get("status") == "error":
-            return f"批改失败：检索标准答案时出错（{payload.get('error') or '未知错误'}）"
+            return f"{_ERR_GRADE}：检索标准答案失败（{payload.get('error') or '未知错误'}）"
     try:
         result = await agrade_answer(stem=stem, user_answer=user_answer, standard_answer=std)
     except Exception as e:
-        return f"批改失败：{e}"
+        return f"{_ERR_GRADE}：{e}"
     return format_grading_for_chat(result)
