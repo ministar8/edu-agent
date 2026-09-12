@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from rag.evidence import FusedEvidence
@@ -145,7 +146,10 @@ asearch_question_templates = _make_search_tool(
 
 @tool("generate_practice_questions")
 async def agenerate_practice_questions(
-    topic: str, count: int = 1, difficulty: str = "mixed"
+    topic: str,
+    count: int = 1,
+    difficulty: str = "mixed",
+    config: RunnableConfig | None = None,
 ) -> str:
     """按知识点生成练习题（选择/填空/简答/综合）。返回已排版的题目文本。
 
@@ -154,16 +158,31 @@ async def agenerate_practice_questions(
     """
     # 延迟导入：question_core 依赖本模块的 asearch_question_templates
     from agents.question_core import agenerate_question_set, format_questions_for_chat
+    from memory.remember import record_question, thread_id_from_config, user_id_from_config
 
     try:
         result = await agenerate_question_set(topic=topic, count=count, difficulty=difficulty)
     except Exception as e:
         return f"{_ERR_GENERATE}：{e}"
+    uid = user_id_from_config(config)
+    if uid:
+        await record_question(
+            user_id=uid,
+            topic=topic,
+            thread_id=thread_id_from_config(config),
+            agent_path="chat_question",
+            count=count,
+        )
     return format_questions_for_chat(result)
 
 
 @tool("grade_student_answer")
-async def agrade_student_answer(stem: str, user_answer: str, standard_answer: str = "") -> str:
+async def agrade_student_answer(
+    stem: str,
+    user_answer: str,
+    standard_answer: str = "",
+    config: RunnableConfig | None = None,
+) -> str:
     """对单题学生作答打分（与专用批改 API 共用 grading_core）。
 
     stem 必须是**题干本身**，不要包含标准答案或解析。
@@ -171,6 +190,7 @@ async def agrade_student_answer(stem: str, user_answer: str, standard_answer: st
     返回已排版的评分/反馈文本，不要自行编造分数。
     """
     from agents.grading_core import agrade_answer, format_grading_for_chat
+    from memory.remember import record_grade, thread_id_from_config, user_id_from_config
 
     std = standard_answer
     if not std.strip():
@@ -183,4 +203,15 @@ async def agrade_student_answer(stem: str, user_answer: str, standard_answer: st
         result = await agrade_answer(stem=stem, user_answer=user_answer, standard_answer=std)
     except Exception as e:
         return f"{_ERR_GRADE}：{e}"
+    uid = user_id_from_config(config)
+    if uid:
+        await record_grade(
+            user_id=uid,
+            topic=stem[:80],
+            score=float(result.score),
+            error_analysis=result.error_analysis or "",
+            stem=stem,
+            thread_id=thread_id_from_config(config),
+            agent_path="chat_grade",
+        )
     return format_grading_for_chat(result)

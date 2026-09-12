@@ -33,6 +33,8 @@ from agents.question_core import agenerate_question_set
 from core import settings
 from db import User, init_db
 from memory import initialize_database, initialize_store
+from memory.remember import record_grade, record_question
+from memory.runtime import set_store
 from prompts import PROMPT_SET_VERSION
 from schema import (
     ChatHistory,
@@ -107,12 +109,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with initialize_database() as saver, initialize_store() as store:
         if hasattr(saver, "setup"):
             await saver.setup()
+        set_store(store)
         for a in get_all_agent_info():
             agent = get_agent(a.key)
             agent.checkpointer = saver
             agent.store = store
             logger.info("Agent configured with checkpointer: %s", a.key)
-        yield
+        try:
+            yield
+        finally:
+            set_store(None)
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -437,6 +443,12 @@ async def generate_questions(
     except Exception as e:
         logger.error("Question generation failed: %s", e)
         raise internal_error("出题失败", CODE_GENERATE_FAILED) from e
+    await record_question(
+        user_id=str(current_user.id),
+        topic=req.topic,
+        agent_path="api_question",
+        count=req.count,
+    )
     return QuestionResponse(questions=result.questions, batch_id=str(uuid4()))
 
 
@@ -457,6 +469,14 @@ async def grade_question(
     except Exception as e:
         logger.error("Grading failed: %s", e)
         raise internal_error("批改失败", CODE_GRADE_FAILED) from e
+    await record_grade(
+        user_id=str(current_user.id),
+        topic=req.stem[:80],
+        score=float(result.score),
+        error_analysis=result.error_analysis or "",
+        stem=req.stem,
+        agent_path="api_grade",
+    )
     return GradeResponse(
         score=float(result.score),
         feedback=result.feedback,

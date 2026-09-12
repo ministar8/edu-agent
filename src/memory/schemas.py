@@ -1,7 +1,6 @@
-"""长期记忆文档模型：带 schema_version 与 UTC 时间戳。
+"""长期记忆文档模型：带 schema_version、UTC 时间戳与上下文锚点。
 
-Store 里是 JSON；改字段时递增 SCHEMA_VERSION，读侧对未知版本回退默认并打日志，
-避免旧文档把新代码打挂。
+Store 里是 JSON；改字段时保持向后兼容（新字段给默认），必要时再升 SCHEMA_VERSION。
 """
 
 from __future__ import annotations
@@ -14,10 +13,25 @@ from pydantic import BaseModel, Field
 SCHEMA_VERSION = 1
 
 EpisodeType = Literal["grade", "question", "chat_topic"]
+AgentPath = Literal[
+    "chat_grade",
+    "api_grade",
+    "chat_question",
+    "api_question",
+    "chat_topic",
+    "other",
+]
 
 
 def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def excerpt(text: str, limit: int = 120) -> str:
+    text = (text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
 
 
 class StudentProfile(BaseModel):
@@ -39,7 +53,7 @@ class StudentProfile(BaseModel):
 
 
 class Episode(BaseModel):
-    """单条情节记忆（出题/批改/主题轨迹）。"""
+    """单条情节记忆（出题/批改/主题轨迹），含回溯锚点。"""
 
     schema_version: int = Field(default=SCHEMA_VERSION)
     at: str = Field(default_factory=utc_now_iso)
@@ -48,4 +62,8 @@ class Episode(BaseModel):
     score: float | None = Field(default=None, description="批改得分 0-100，非批改为 None")
     error_analysis: str = Field(default="", max_length=500)
     thread_id: str = Field(default="")
+    run_id: str = Field(default="")
+    stem_excerpt: str = Field(default="", max_length=200, description="题干截断，便于回溯")
+    knowledge_points: list[str] = Field(default_factory=list)
+    agent_path: AgentPath = "other"
     meta: dict[str, Any] = Field(default_factory=dict)

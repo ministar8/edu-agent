@@ -1,7 +1,8 @@
 """记忆层：checkpointer（短期）+ Store 业务封装（长期）。
 
 - 连接与 lifespan 挂载：`initialize_database` / `initialize_store`
-- 业务读写长期记忆：经 `memory.profile` / `memory.episodes`，不要在 agents 里裸调 store
+- 业务读写：经 `memory.profile` / `memory.episodes` / `memory.remember`，
+  不要在 agents 里裸调 store
 """
 
 from contextlib import AbstractAsyncContextManager
@@ -15,8 +16,12 @@ from memory.namespaces import (
     student_profile_ns,
 )
 from memory.profile import aget_profile, aupsert_profile
+from memory.remember import record_grade, record_question
+from memory.runtime import get_store, set_store
+from memory.safe import safe_remember
 from memory.schemas import SCHEMA_VERSION, Episode, StudentProfile, utc_now_iso
 from memory.sqlite import get_sqlite_saver, get_sqlite_store
+from memory.weak_topics import a_recompute_weak_topics, compute_weak_topics
 
 
 def initialize_database() -> AbstractAsyncContextManager[AsyncSqliteSaver]:
@@ -33,13 +38,20 @@ __all__ = [
     "SCHEMA_VERSION",
     "Episode",
     "StudentProfile",
+    "a_recompute_weak_topics",
     "aappend_episode",
     "aget_profile",
     "arecent_episodes",
     "aupsert_profile",
+    "compute_weak_topics",
     "episode_key",
+    "get_store",
     "initialize_database",
     "initialize_store",
+    "record_grade",
+    "record_question",
+    "safe_remember",
+    "set_store",
     "student_episodes_ns",
     "student_profile_ns",
     "utc_now_iso",
