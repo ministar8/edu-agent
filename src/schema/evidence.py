@@ -52,7 +52,8 @@ class RetrievalResult(BaseModel):
         return self.model_dump()
 
 
-def _excerpt(text: str, limit: int = DOC_EXCERPT_MAX_CHARS) -> str:
+def excerpt(text: str, limit: int = DOC_EXCERPT_MAX_CHARS) -> str:
+    """截断正文摘录（超长加省略号）。"""
     text = text or ""
     if len(text) <= limit:
         return text
