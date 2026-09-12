@@ -171,6 +171,8 @@ class Settings(BaseSettings):
     # 长期 episodes 保留：TTL 天数 / 每用户上限；0 = 关闭该项
     MEMORY_EPISODE_TTL_DAYS: int = 90
     MEMORY_EPISODE_MAX_PER_USER: int = 200
+    # Store 向量索引（复用 RAG TEI）；测试可关以免依赖 TEI
+    MEMORY_STORE_VECTOR_ENABLED: bool = True
 
     # ── Auth（JWT）────────────────────────────────
     JWT_SECRET: SecretStr | None = None

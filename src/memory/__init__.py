@@ -23,6 +23,7 @@ from memory.safe import safe_remember
 from memory.schemas import SCHEMA_VERSION, Episode, StudentProfile, utc_now_iso
 from memory.sqlite import get_sqlite_saver, get_sqlite_store
 from memory.topics import normalize_topic, normalize_topics
+from memory.vector_search import asearch_episodes
 from memory.weak_topics import a_recompute_weak_topics, compute_weak_topics
 from memory.window import trim_conversation
 from memory.working import abuild_memory_card, format_memory_card
@@ -50,6 +51,7 @@ __all__ = [
     "aget_profile",
     "arecent_episodes",
     "aupsert_profile",
+    "asearch_episodes",
     "compute_weak_topics",
     "episode_key",
     "format_memory_card",
