@@ -1,9 +1,9 @@
 """LLM 工厂：整合 DashScope/DeepSeek 的思考模式处理，提供两类入口。
 
-- get_model(model_name, temperature): agent 层使用，传入模型枚举
-- get_llm(streaming, temperature, use_fast): RAG 检索链使用，模型来自 settings
+- get_model(model_ref, temperature): agent 层使用，model_ref 形如 ``<gateway>:<model_id>``
+- get_llm(streaming, temperature): RAG 检索链使用，模型来自 settings.LLM_MODEL
 
-两条入口共用一份缓存，键用真实 API 模型名，因此「同一模型经不同入口获取」会拿到同一实例。
+两条入口共用一份缓存，键为 ``(gateway, model_id, temperature, streaming)``。
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from langchain_openai import ChatOpenAI
 
 from core.cache import BoundedCache
 from core.settings import settings
-from schema.models import Gateway, make_model_ref, parse_model_ref
+from schema.models import Gateway, parse_model_ref
 
 logger = logging.getLogger(__name__)
 
@@ -134,10 +134,10 @@ def get_model(
 ) -> ChatOpenAI | FakeToolModel:
     """获取 LLM 实例（单飞缓存），agent 层使用。
 
-    model_ref 形如 ``<gateway>:<model_id>``，见 schema.models 的模块文档。
+    model_ref 形如 ``<gateway>:<model_id>``；缺省用 ``settings.DEFAULT_MODEL``。
     """
     if model_ref is None:
-        model_ref = settings.DEFAULT_MODEL or make_model_ref(Gateway.DASHSCOPE, "qwen3.7-max")
+        model_ref = settings.DEFAULT_MODEL
 
     temp = settings.TEMP_DEFAULT if temperature is None else temperature
 
@@ -148,9 +148,9 @@ def get_model(
     return _cached_client(model_ref, temp, streaming=True)
 
 
-def get_llm(streaming: bool = True, temperature: float = 0.3, use_fast: bool = False) -> ChatOpenAI:
-    """基于 settings 配置获取 LLM 实例（RAG 检索链使用，兼容旧签名）。"""
-    model_ref = (
-        settings.LLM_MODEL_FAST if use_fast and settings.LLM_MODEL_FAST else settings.LLM_MODEL
-    )
-    return _cached_client(model_ref, temperature, streaming=streaming)
+def get_llm(streaming: bool = False, temperature: float = 0.3) -> ChatOpenAI:
+    """基于 ``settings.LLM_MODEL`` 获取 LLM 实例（RAG 检索链使用）。
+
+    默认非流式 —— 与全部 RAG 调用点一致；需要流式时显式传 ``streaming=True``。
+    """
+    return _cached_client(settings.LLM_MODEL, temperature, streaming=streaming)

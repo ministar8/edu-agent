@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from schema.models import (
     GATEWAY_DEFAULT_MODEL,
+    GATEWAY_MODELS,
     Gateway,
     make_model_ref,
     model_refs_for,
@@ -87,7 +88,6 @@ class Settings(BaseSettings):
 
     # ── RAG 检索链使用的文本模型（格式 <gateway>:<model_id>）──────
     LLM_MODEL: str = "deepseek:deepseek-v4-flash"
-    LLM_MODEL_FAST: str = "deepseek:deepseek-v4-pro"
     # with_structured_output 策略：DashScope/DeepSeek 兼容端上 function_calling 最稳
     STRUCTURED_OUTPUT_METHOD: Literal["function_calling", "json_mode", "json_schema"] = (
         "function_calling"
@@ -143,11 +143,9 @@ class Settings(BaseSettings):
     # TEMP_PRECISE   批改评分：可复现
     # TEMP_CREATIVE  出题：多样性
     # TEMP_DEFAULT   知识讲解 / supervisor / 检索链多数步骤
-    # TEMP_SYNTHESIS 综合摘要（预留，当前无调用方）
     TEMP_PRECISE: float = 0.0
     TEMP_CREATIVE: float = 0.3
     TEMP_DEFAULT: float = 0.3
-    TEMP_SYNTHESIS: float = 0.15
 
     # ── ChromaDB ─────────────────────────────────────
     CHROMA_PERSIST_DIR: str = str(PROJECT_ROOT / "chroma_db")
@@ -208,13 +206,16 @@ class Settings(BaseSettings):
         return [gateway for gateway, value in credentials.items() if value]
 
     def model_post_init(self, __context: Any) -> None:
-        """依据已启用的网关推导默认模型与可用模型清单。"""
+        """推导默认模型与可用清单，并校验会实际用到的模型引用。"""
         active = self._active_gateways()
         if not active:
             raise ValueError(
                 "未配置任何 LLM 网关。请在 .env 中设置 DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY"
                 "（注意旧字段 LLM_API_KEY 已废弃），或设置 USE_FAKE_MODEL=true 用于测试。"
             )
+
+        if self.DEFAULT_MODEL:
+            self._validate_model_ref(self.DEFAULT_MODEL, field="DEFAULT_MODEL", active=active)
 
         # USE_FAKE_MODEL 必须赢过真实 key，保证测试环境不被真实模型污染
         if self.USE_FAKE_MODEL and not self.DEFAULT_MODEL:
@@ -227,6 +228,25 @@ class Settings(BaseSettings):
 
         if self.DEFAULT_MODEL:
             self.AVAILABLE_MODELS.add(self.DEFAULT_MODEL)
+
+        self._validate_model_ref(self.LLM_MODEL, field="LLM_MODEL", active=active)
+
+    def _validate_model_ref(self, model_ref: str, *, field: str, active: list[Gateway]) -> None:
+        """校验模型引用：可解析、网关已启用、model_id 在该网关清单内。"""
+        try:
+            gateway, model_id = parse_model_ref(model_ref)
+        except ValueError as exc:
+            raise ValueError(f"{field}={model_ref!r} 无效：{exc}") from exc
+        if gateway not in active:
+            raise ValueError(
+                f"{field}={model_ref!r} 需要网关 {gateway}，但该网关未启用"
+                f"（请配置对应 API key，或改用已启用网关上的模型）"
+            )
+        if model_id not in GATEWAY_MODELS[gateway]:
+            raise ValueError(
+                f"{field}={model_ref!r} 中的 model_id {model_id!r} 不在网关 {gateway} 的清单中；"
+                f"可用: {sorted(GATEWAY_MODELS[gateway])}"
+            )
 
     def gateway_for(self, model_ref: str) -> Gateway:
         """从 ``<gateway>:<model_id>`` 标识里解析出网关。

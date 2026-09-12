@@ -68,12 +68,12 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         )
         if resp.status_code != 200:
             logger.warning("Single embedding failed (%d), using zero vector", resp.status_code)
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
             logger.warning("NaN in single embedding, using zero vector for: %s", s[:80])
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         return vec
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -157,12 +157,12 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             logger.warning(
                 "Async single embedding failed (%d), using zero vector", resp.status_code
             )
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
             logger.warning("NaN in async single embedding, using zero vector for: %s", s[:80])
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         return vec
 
     async def _aembed_batch(
@@ -258,7 +258,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                         results[idx] = future.result()
                     except Exception as e:
                         logger.warning("Batch %d failed: %s", idx, e)
-                        results[idx] = [[0.0] * 1024] * len(batches[idx])
+                        results[idx] = [[0.0] * settings.EMBEDDING_DIM] * len(batches[idx])
             all_embeddings = []
             for i in range(len(batches)):
                 all_embeddings.extend(results.get(i, []))
@@ -299,7 +299,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 for i, result in enumerate(batch_results):
                     if isinstance(result, Exception):
                         logger.warning("Async batch %d failed: %s", i, result)
-                        all_embeddings.extend([[0.0] * 1024] * len(batches[i]))
+                        all_embeddings.extend([[0.0] * settings.EMBEDDING_DIM] * len(batches[i]))
                     else:
                         all_embeddings.extend(result)
 

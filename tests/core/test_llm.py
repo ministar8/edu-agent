@@ -48,7 +48,21 @@ def test_streaming_part_of_cache_key(dashscope_as_rag_model):
     assert get_llm(streaming=True) is not get_llm(streaming=False)
 
 
+def test_get_llm_default_is_non_streaming(dashscope_as_rag_model):
+    """RAG 调用点全部显式 streaming=False；默认值须与之一致，避免误导。"""
+    assert get_llm() is get_llm(streaming=False)
+    assert get_llm() is not get_llm(streaming=True)
+
+
 def test_reset_llm_cache_forces_rebuild():
     first = get_model(DASHSCOPE_REF)
     reset_llm_cache()
     assert get_model(DASHSCOPE_REF) is not first
+
+
+def test_use_fast_removed():
+    import inspect
+
+    from core import llm as llm_mod
+
+    assert "use_fast" not in inspect.signature(llm_mod.get_llm).parameters
