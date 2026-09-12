@@ -17,4 +17,6 @@ workflow = create_supervisor(
     output_mode="full_history",
 )
 
-edu_supervisor = workflow.compile()
+# 内层 supervisor（分派）；对外图见 agents.teaching_graph（含 load_memory）
+inner_supervisor = workflow.compile()
+edu_supervisor = inner_supervisor

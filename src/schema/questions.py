@@ -48,6 +48,8 @@ class GradeRequest(BaseModel):
     stem: str = Field(max_length=2000, description="题干（只含题干，不含答案）。")
     standard_answer: str = Field(default="", max_length=2000, description="标准答案，可为空。")
     user_answer: str = Field(max_length=5000, description="学生作答（不可信输入）。")
+    batch_id: str = Field(default="", max_length=64, description="出题 batch_id（显式外键，可选）")
+    question_id: str = Field(default="", max_length=64, description="单题 id（可选）")
 
 
 class GradeResponse(BaseModel):

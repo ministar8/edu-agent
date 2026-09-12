@@ -22,7 +22,7 @@ def _ep(score: float, topic: str = "死锁", days_ago: int = 0) -> Episode:
 
 def test_compute_weak_requires_min_hits():
     assert compute_weak_topics([_ep(40)], min_weak_hits=2) == []
-    assert compute_weak_topics([_ep(40), _ep(50)], min_weak_hits=2) == ["死锁"]
+    assert compute_weak_topics([_ep(40), _ep(50)], min_weak_hits=2) == ["进程死锁"]
 
 
 def test_compute_weak_ignores_old_and_good():
@@ -34,7 +34,7 @@ def test_compute_weak_ignores_old_and_good():
 def test_compute_weak_clears_after_good_hits():
     eps = [_ep(40), _ep(50), _ep(90), _ep(95)]
     # 2 good + 2 weak → 仍算 weak（weak >= min）
-    assert "死锁" in compute_weak_topics(eps, min_weak_hits=2, min_good_hits=2)
+    assert "进程死锁" in compute_weak_topics(eps, min_weak_hits=2, min_good_hits=2)
     # 只有 good 达标、weak 不足 → 不进列表
     only_good = [_ep(90), _ep(95), _ep(40)]
     assert compute_weak_topics(only_good, min_weak_hits=2, min_good_hits=2) == []
@@ -96,7 +96,7 @@ async def test_record_grade_updates_weak_topics(tmp_path, monkeypatch):
                 agent_path="api_grade",
             )
             profile = await aget_profile(store, 1)
-            assert "死锁" in profile.weak_topics
+            assert "进程死锁" in profile.weak_topics
         finally:
             set_store(None)
 
@@ -140,4 +140,4 @@ async def test_recompute_idempotent(tmp_path, monkeypatch):
         await aappend_episode(store, uid, _ep(55))
         w1 = await a_recompute_weak_topics(store, uid)
         w2 = await a_recompute_weak_topics(store, uid)
-        assert w1 == w2 == ["死锁"]
+        assert w1 == w2 == ["进程死锁"]

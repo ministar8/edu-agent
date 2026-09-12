@@ -56,8 +56,17 @@ def test_supervisor_prompt_lists_specialists():
 
 
 def test_supervisor_graph_contains_specialist_nodes():
-    from agents.supervisor import edu_supervisor
+    from agents.supervisor import inner_supervisor
 
-    node_names = set(edu_supervisor.get_graph().nodes.keys())
+    node_names = set(inner_supervisor.get_graph().nodes.keys())
     for name in SPECIALIST_NAMES:
         assert name in node_names, f"supervisor 缺少节点 {name}: {node_names}"
+
+
+def test_teaching_graph_has_load_memory():
+    from agents.agents import get_agent
+
+    graph = get_agent("edu-assistant")
+    nodes = set(graph.get_graph().nodes.keys())
+    assert "load_memory" in nodes
+    assert "supervisor" in nodes

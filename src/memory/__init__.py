@@ -21,7 +21,9 @@ from memory.runtime import get_store, set_store
 from memory.safe import safe_remember
 from memory.schemas import SCHEMA_VERSION, Episode, StudentProfile, utc_now_iso
 from memory.sqlite import get_sqlite_saver, get_sqlite_store
+from memory.topics import normalize_topic, normalize_topics
 from memory.weak_topics import a_recompute_weak_topics, compute_weak_topics
+from memory.working import abuild_memory_card, format_memory_card
 
 
 def initialize_database() -> AbstractAsyncContextManager[AsyncSqliteSaver]:
@@ -40,14 +42,18 @@ __all__ = [
     "StudentProfile",
     "a_recompute_weak_topics",
     "aappend_episode",
+    "abuild_memory_card",
     "aget_profile",
     "arecent_episodes",
     "aupsert_profile",
     "compute_weak_topics",
     "episode_key",
+    "format_memory_card",
     "get_store",
     "initialize_database",
     "initialize_store",
+    "normalize_topic",
+    "normalize_topics",
     "record_grade",
     "record_question",
     "safe_remember",

@@ -1,6 +1,7 @@
 """长期记忆文档模型：带 schema_version、UTC 时间戳与上下文锚点。
 
-Store 里是 JSON；改字段时保持向后兼容（新字段给默认），必要时再升 SCHEMA_VERSION。
+Store 里是 JSON；改字段时保持向后兼容（新字段给默认）。
+topic 一律经 `memory.topics.normalize_topic` 后再写入。
 """
 
 from __future__ import annotations
@@ -53,12 +54,12 @@ class StudentProfile(BaseModel):
 
 
 class Episode(BaseModel):
-    """单条情节记忆（出题/批改/主题轨迹），含回溯锚点。"""
+    """单条情节记忆；question ↔ grade 靠显式外键关联，禁止只靠 topic+时间邻近。"""
 
     schema_version: int = Field(default=SCHEMA_VERSION)
     at: str = Field(default_factory=utc_now_iso)
     type: EpisodeType
-    topic: str = Field(default="", max_length=200)
+    topic: str = Field(default="", max_length=200, description="须为 normalize_topic 结果")
     score: float | None = Field(default=None, description="批改得分 0-100，非批改为 None")
     error_analysis: str = Field(default="", max_length=500)
     thread_id: str = Field(default="")
@@ -66,4 +67,13 @@ class Episode(BaseModel):
     stem_excerpt: str = Field(default="", max_length=200, description="题干截断，便于回溯")
     knowledge_points: list[str] = Field(default_factory=list)
     agent_path: AgentPath = "other"
+    # ── 显式外键（闭环关联）────────────────────────
+    batch_id: str = Field(
+        default="", description="出题批次 ID（与 API QuestionResponse.batch_id 对齐）"
+    )
+    question_id: str = Field(default="", description="单题 ID（可选）")
+    ref_episode_id: str = Field(
+        default="",
+        description="grade episode → 所批改的 question episode id（显式外键）",
+    )
     meta: dict[str, Any] = Field(default_factory=dict)

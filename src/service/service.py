@@ -21,6 +21,7 @@ from langchain_core.messages import (
     AIMessageChunk,
     BaseMessage,
     HumanMessage,
+    SystemMessage,
     ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig
@@ -292,6 +293,9 @@ async def message_generator(
                 processed_messages.append(_create_ai_message(current_message))
 
             for message in processed_messages:
+                # 工作记忆 SystemMessage 只进模型上下文，不进 SSE
+                if isinstance(message, SystemMessage):
+                    continue
                 try:
                     chat_message = langchain_to_chat_message(message)
                     chat_message.run_id = run_id
@@ -443,13 +447,15 @@ async def generate_questions(
     except Exception as e:
         logger.error("Question generation failed: %s", e)
         raise internal_error("出题失败", CODE_GENERATE_FAILED) from e
+    batch_id = str(uuid4())
     await record_question(
         user_id=str(current_user.id),
         topic=req.topic,
         agent_path="api_question",
         count=req.count,
+        batch_id=batch_id,
     )
-    return QuestionResponse(questions=result.questions, batch_id=str(uuid4()))
+    return QuestionResponse(questions=result.questions, batch_id=batch_id)
 
 
 @router.post("/questions/grade", response_model=GradeResponse)
@@ -476,6 +482,8 @@ async def grade_question(
         error_analysis=result.error_analysis or "",
         stem=req.stem,
         agent_path="api_grade",
+        batch_id=req.batch_id,
+        question_id=req.question_id,
     )
     return GradeResponse(
         score=float(result.score),
