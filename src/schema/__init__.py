@@ -1,5 +1,5 @@
 from schema.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from schema.evidence import EvidenceDoc, RetrievalResult
+from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
 from schema.grading import GradingResult
 from schema.models import (
     GATEWAY_DEFAULT_MODEL,
@@ -30,6 +30,7 @@ __all__ = [
     "ChatHistoryInput",
     "ChatMessage",
     "EvidenceDoc",
+    "excerpt",
     "GATEWAY_DEFAULT_MODEL",
     "GATEWAY_MODELS",
     "Gateway",

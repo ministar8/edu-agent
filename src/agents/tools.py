@@ -17,7 +17,7 @@ from rag.evidence import FusedEvidence
 from rag.query_classifier import TEXT_ONLY_DEPTH
 from rag.retriever import aretrieve_evidence_with_retry
 from rag.verifier import VerificationResult
-from schema.evidence import EvidenceDoc, RetrievalResult, _excerpt
+from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ def build_retrieval_result(
             score=ev.score,
             rerank_score=ev.rerank_score,
             knowledge_points=list(ev.knowledge_points),
-            excerpt=_excerpt(ev.content),
+            excerpt=excerpt(ev.content),
         )
         for ev in fused.text_evidences
     ]
