@@ -88,6 +88,10 @@ class Settings(BaseSettings):
     # ── RAG 检索链使用的文本模型（格式 <gateway>:<model_id>）──────
     LLM_MODEL: str = "deepseek:deepseek-v4-flash"
     LLM_MODEL_FAST: str = "deepseek:deepseek-v4-pro"
+    # with_structured_output 策略：DashScope/DeepSeek 兼容端上 function_calling 最稳
+    STRUCTURED_OUTPUT_METHOD: Literal["function_calling", "json_mode", "json_schema"] = (
+        "function_calling"
+    )
 
     # 空串表示「尚未推导」；model_post_init 必定填入，否则构造期直接报错
     DEFAULT_MODEL: str = ""

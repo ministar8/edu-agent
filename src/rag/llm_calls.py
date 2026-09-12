@@ -20,6 +20,7 @@ from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
 
 from core.llm import get_llm
+from core.settings import settings
 from prompts import PROMPT_SET_VERSION
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,16 @@ def call_text_sync(
     return _as_text(raw)
 
 
+def _bind_structured(llm, schema: type):
+    """按配置绑定 with_structured_output；失败时回退不带 method 的默认实现。"""
+    method = settings.STRUCTURED_OUTPUT_METHOD
+    try:
+        return llm.with_structured_output(schema, method=method)
+    except Exception as exc:
+        logger.warning("with_structured_output(method=%s) 失败，回退默认: %s", method, exc)
+        return llm.with_structured_output(schema)
+
+
 async def call_structured[T: BaseModel](
     prompt: PromptInput,
     schema: type[T],
@@ -96,7 +107,7 @@ async def call_structured[T: BaseModel](
     """调用 LLM 并解析为结构化结果。超时、异常或结构不符均返回 None。"""
     llm = get_llm(streaming=False, temperature=temperature)
     try:
-        structured = llm.with_structured_output(schema)
+        structured = _bind_structured(llm, schema)
         result = await asyncio.wait_for(
             structured.ainvoke(prompt, config=_trace_config(stage)), timeout=timeout
         )
@@ -116,7 +127,7 @@ def call_structured_sync[T: BaseModel](
     """``call_structured`` 的同步版本，**仅供同步上下文使用**。"""
     llm = get_llm(streaming=False, temperature=temperature)
     try:
-        structured = llm.with_structured_output(schema)
+        structured = _bind_structured(llm, schema)
         result = structured.invoke(prompt, config=_trace_config(stage))
     except Exception as exc:
         _log_failure(stage, exc)
