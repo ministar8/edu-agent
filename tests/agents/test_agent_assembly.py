@@ -70,3 +70,10 @@ def test_teaching_graph_has_load_memory():
     nodes = set(graph.get_graph().nodes.keys())
     assert "load_memory" in nodes
     assert "supervisor" in nodes
+
+
+def test_registry_uses_teaching_graph_entry():
+    from agents.agents import get_agent
+    from agents.teaching_graph import edu_supervisor
+
+    assert get_agent("edu-assistant") is edu_supervisor
