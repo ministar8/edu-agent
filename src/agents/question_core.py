@@ -6,19 +6,17 @@
 
 from typing import Any
 
-from langchain.agents import create_agent
-
+from agents.factory import build_agent
 from agents.temperature import TEMPERATURE_QUESTION
 from agents.tools import asearch_question_templates
-from core import get_model, settings
 from prompts import QUESTION_GEN_PROMPT, QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
 from schema.questions import GeneratedQuestionSet
 
-question_gen_agent: Any = create_agent(
-    model=get_model(settings.DEFAULT_MODEL, temperature=TEMPERATURE_QUESTION),
-    tools=[asearch_question_templates],
+question_gen_agent: Any = build_agent(
     name="question_gen_agent",
+    tools=[asearch_question_templates],
     system_prompt=QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
+    temperature=TEMPERATURE_QUESTION,
     response_format=GeneratedQuestionSet,
 )
 
