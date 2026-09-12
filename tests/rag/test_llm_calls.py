@@ -31,6 +31,7 @@ class _FakeLLM:
         self._structured = structured
         self._delay = delay
         self.configs: list[dict | None] = []
+        self.last_structured_method: str | None = None
 
     def _result(self):
         return self._structured if self._structured is not None else _Msg(self._content)
@@ -46,7 +47,8 @@ class _FakeLLM:
             await asyncio.sleep(self._delay)
         return self.invoke(_prompt, config)
 
-    def with_structured_output(self, _schema):
+    def with_structured_output(self, _schema, method=None):
+        self.last_structured_method = method
         return self
 
 
@@ -125,6 +127,29 @@ class TestCallStructured:
             await llm_calls.call_structured("p", _Schema, temperature=0.0, timeout=0.02, stage="t")
             is None
         )
+
+    @pytest.mark.asyncio
+    async def test_passes_configured_method(self, install_llm):
+        from core import settings as settings_singleton
+
+        fake = install_llm(_FakeLLM(structured=_Schema(value="x")))
+        await llm_calls.call_structured("p", _Schema, temperature=0.0, timeout=1, stage="t")
+        assert fake.last_structured_method == settings_singleton.STRUCTURED_OUTPUT_METHOD
+
+    @pytest.mark.asyncio
+    async def test_method_fallback_on_bind_error(self, install_llm):
+        class _StrictFake(_FakeLLM):
+            def with_structured_output(self, _schema, method=None):
+                if method is not None:
+                    raise ValueError("method unsupported")
+                return super().with_structured_output(_schema, method=None)
+
+        fake = install_llm(_StrictFake(structured=_Schema(value="ok")))
+        result = await llm_calls.call_structured(
+            "p", _Schema, temperature=0.0, timeout=1, stage="t"
+        )
+        assert result is not None
+        assert fake.last_structured_method is None
 
 
 class TestCallStructuredSync:
