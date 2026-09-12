@@ -158,6 +158,15 @@ class Settings(BaseSettings):
     SQLITE_DB_PATH: str = "checkpoints.db"
     SQLITE_STORE_PATH: str = "store.db"
 
+    # ── 长期记忆写入 / weak_topics 派生 ────────────────
+    MEMORY_WRITE_TIMEOUT: float = 1.5
+    MEMORY_WEAK_SCORE: float = 60.0
+    MEMORY_GOOD_SCORE: float = 85.0
+    MEMORY_WEAK_WINDOW_DAYS: int = 30
+    MEMORY_WEAK_MIN_HITS: int = 2
+    MEMORY_WEAK_CLEAR_MIN_GOOD_HITS: int = 2
+    MEMORY_EPISODE_SCAN_LIMIT: int = 50
+
     # ── Auth（JWT）────────────────────────────────
     JWT_SECRET: SecretStr | None = None
     AUTH_COOKIE_SECURE: bool = False
