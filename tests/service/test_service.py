@@ -122,7 +122,9 @@ def test_register_concurrent_duplicate_returns_400_not_500(monkeypatch):
         )
 
     assert r.status_code == 400
-    assert r.json()["detail"] == "用户名已存在"
+    detail = r.json()["detail"]
+    assert detail["code"] == "username_taken"
+    assert detail["message"] == "用户名已存在"
 
 
 class TestCheckThreadOwner:
@@ -155,7 +157,9 @@ class TestAgentIdRoutes:
             headers=auth_user.headers,
         )
         assert r.status_code == 404
-        assert "Unknown agent" in r.json()["detail"]
+        detail = r.json()["detail"]
+        assert detail["code"] == "unknown_agent"
+        assert "Unknown agent" in detail["message"]
 
     def test_unknown_agent_stream_returns_404(self, test_client, auth_user):
         r = test_client.post(

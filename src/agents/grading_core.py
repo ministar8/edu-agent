@@ -3,6 +3,7 @@
 service 层只做 HTTP 映射，不再直接依赖 `rag.llm_calls` / `GRADE_PROMPT`。
 """
 
+from agents.temperature import TEMPERATURE_GRADING
 from core import settings
 from prompts import GRADE_PROMPT
 from rag.llm_calls import call_structured
@@ -21,7 +22,7 @@ async def agrade_answer(stem: str, user_answer: str, standard_answer: str = "") 
     result = await call_structured(
         messages,
         GradingResult,
-        temperature=settings.TEMP_PRECISE,
+        temperature=TEMPERATURE_GRADING,
         timeout=settings.LLM_TIMEOUT,
         stage="grading",
     )

@@ -10,13 +10,21 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import jwt
-from fastapi import APIRouter, Cookie, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, Header, Response, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.settings import settings
 from db import User, get_db
 from schema import LoginRequest, RegisterRequest, TokenResponse, UserResponse
+from service.errors import (
+    CODE_AUTH_CONFIG,
+    CODE_USERNAME_TAKEN,
+    bad_request,
+    forbidden,
+    http_error,
+    unauthorized,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +139,8 @@ def _issue_access_token(user: User) -> str:
             cast(int, user.id), cast(str, user.username), cast(str, user.role)
         )
     except AuthServiceConfigError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=exc.detail
+        raise http_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR, CODE_AUTH_CONFIG, exc.detail
         ) from exc
 
 
@@ -150,20 +158,20 @@ def get_current_user(
     if scheme.lower() != "bearer" or not token:
         token = access_token or ""
     if not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效 Token")
+        raise unauthorized("无效 Token")
     try:
         payload = decode_access_token(token)
     except AuthTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.detail) from exc
+        raise unauthorized(exc.detail) from exc
     try:
         user_id = int(cast(str, payload.get("sub")))
     except (TypeError, ValueError):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效 Token") from None
+        raise unauthorized("无效 Token") from None
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
+        raise unauthorized("用户不存在")
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已禁用")
+        raise forbidden("账号已禁用")
     return user
 
 
@@ -182,7 +190,7 @@ def register(req: RegisterRequest, response: Response, db: Session = Depends(get
     """用户注册（同步 def，DB 调用走线程池）。"""
     existing = db.query(User).filter(User.username == req.username).first()
     if existing:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户名已存在")
+        raise bad_request(CODE_USERNAME_TAKEN, "用户名已存在")
 
     # 公开注册一律为学生；teacher/admin 只能由既有管理员授予，避免自助提权
     user = User(
@@ -197,9 +205,7 @@ def register(req: RegisterRequest, response: Response, db: Session = Depends(get
     except IntegrityError:
         # 并发注册同名用户时靠唯一索引兜底，返回 400 而非 500
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="用户名已存在"
-        ) from None
+        raise bad_request(CODE_USERNAME_TAKEN, "用户名已存在") from None
     db.refresh(user)
 
     token = _issue_access_token(user)
@@ -213,13 +219,13 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
     """用户登录（同步 def，PBKDF2 与 DB 调用走线程池）。"""
     user = db.query(User).filter(User.username == req.username).first()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+        raise unauthorized("用户名或密码错误")
 
     verified, needs_migration = verify_password(req.password, cast(str, user.hashed_password))
     if not verified:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+        raise unauthorized("用户名或密码错误")
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="账号已禁用")
+        raise forbidden("账号已禁用")
 
     if needs_migration:
         user.hashed_password = hash_password(req.password)

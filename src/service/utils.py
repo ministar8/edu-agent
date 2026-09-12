@@ -1,7 +1,6 @@
 from collections.abc import Mapping
 from typing import Any, cast
 
-from fastapi import HTTPException
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -14,14 +13,15 @@ from langchain_core.messages import (
 
 from core import settings
 from schema import ChatMessage
+from service.errors import CODE_MODEL_UNAVAILABLE, bad_request
 
 
 def ensure_model_available(model: Any) -> None:
     """模型不在白名单时抛 400。"""
     if model not in settings.AVAILABLE_MODELS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Model '{model}' is not available. Allowed: {sorted(settings.AVAILABLE_MODELS)}",
+        raise bad_request(
+            CODE_MODEL_UNAVAILABLE,
+            f"Model '{model}' is not available. Allowed: {sorted(settings.AVAILABLE_MODELS)}",
         )
 
 

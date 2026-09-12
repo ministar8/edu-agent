@@ -11,7 +11,7 @@ def initialize_database() -> AbstractAsyncContextManager[AsyncSqliteSaver]:
 
 
 def initialize_store():
-    """初始化长期记忆 store（SQLite 场景用 InMemoryStore）。"""
+    """初始化长期记忆 store（SQLite 文件持久化）。"""
     return get_sqlite_store()
 
 

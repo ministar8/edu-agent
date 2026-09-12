@@ -14,6 +14,15 @@ async function loadUser() {
 }
 loadUser();
 
+/** 从 API 错误响应提取可展示文案（兼容 detail 字符串或 {code,message}）。 */
+async function readApiErrorMessage(res) {
+  const data = await res.json().catch(() => ({}));
+  const detail = data && data.detail;
+  if (detail && typeof detail === "object" && detail.message) return detail.message;
+  if (typeof detail === "string" && detail) return detail;
+  return `请求失败 (${res.status})`;
+}
+
 let threadId = localStorage.getItem("threadId") || crypto.randomUUID();
 localStorage.setItem("threadId", threadId);
 
@@ -129,7 +138,7 @@ document.getElementById("gen-form").onsubmit = async (e) => {
       body: JSON.stringify({ topic, count: 1, difficulty }),
     });
     if (!res.ok) {
-      container.innerHTML = `<p class="error">生成失败 (${res.status})</p>`;
+      container.innerHTML = `<p class="error">${await readApiErrorMessage(res)}</p>`;
       return;
     }
     renderQuestions(container, await res.json());
