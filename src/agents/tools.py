@@ -165,15 +165,19 @@ async def agenerate_practice_questions(
     except Exception as e:
         return f"{_ERR_GENERATE}：{e}"
     uid = user_id_from_config(config)
+    batch_id = ""
     if uid:
-        await record_question(
+        _, batch_id = await record_question(
             user_id=uid,
             topic=topic,
             thread_id=thread_id_from_config(config),
             agent_path="chat_question",
             count=count,
         )
-    return format_questions_for_chat(result)
+    body = format_questions_for_chat(result)
+    if batch_id:
+        body += f"\n\n（练习批次 batch_id: `{batch_id}`，批改时可带上以便关联）"
+    return body
 
 
 @tool("grade_student_answer")
@@ -190,7 +194,12 @@ async def agrade_student_answer(
     返回已排版的评分/反馈文本，不要自行编造分数。
     """
     from agents.grading_core import agrade_answer, format_grading_for_chat
-    from memory.remember import record_grade, thread_id_from_config, user_id_from_config
+    from memory.remember import (
+        batch_id_from_config,
+        record_grade,
+        thread_id_from_config,
+        user_id_from_config,
+    )
 
     std = standard_answer
     if not std.strip():
@@ -213,5 +222,6 @@ async def agrade_student_answer(
             stem=stem,
             thread_id=thread_id_from_config(config),
             agent_path="chat_grade",
+            batch_id=batch_id_from_config(config),
         )
     return format_grading_for_chat(result)

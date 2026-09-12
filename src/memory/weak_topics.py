@@ -14,6 +14,7 @@ from core.settings import settings
 from memory.episodes import arecent_episodes
 from memory.profile import aget_profile, aupsert_profile
 from memory.schemas import Episode
+from memory.topics import normalize_topic
 
 logger = logging.getLogger(__name__)
 
@@ -60,10 +61,10 @@ def compute_weak_topics(
         e for e in grade_episodes if e.score is not None and _in_window(e, now, window_days)
     ]
 
-    # 按 topic 聚合；topic 空则用 stem 摘录兜底
+    # 按规范化 topic 聚合；topic 空则用 stem 摘录兜底
     stats: dict[str, dict[str, int]] = {}
     for e in windowed:
-        topic = (e.topic or e.stem_excerpt or "").strip()
+        topic = normalize_topic(e.topic or e.stem_excerpt)
         if not topic:
             continue
         bucket = stats.setdefault(topic, {"weak": 0, "good": 0})

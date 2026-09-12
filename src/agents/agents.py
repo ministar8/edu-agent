@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from langgraph.graph.state import CompiledStateGraph
 
-from agents.supervisor import edu_supervisor
+from agents.teaching_graph import build_teaching_graph
 from schema import AgentInfo
 
 DEFAULT_AGENT = "edu-assistant"
@@ -15,6 +15,9 @@ class Agent:
     description: str
     graph_like: CompiledStateGraph
 
+
+# 外层图：load_memory（工作记忆进 State）→ supervisor 分派
+edu_supervisor = build_teaching_graph()
 
 agents: dict[str, Agent] = {
     DEFAULT_AGENT: Agent(
