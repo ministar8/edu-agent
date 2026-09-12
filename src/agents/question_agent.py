@@ -5,17 +5,14 @@
 
 from typing import Any
 
-from langchain.agents import create_agent
-
+from agents.factory import build_agent
 from agents.temperature import TEMPERATURE_QUESTION
 from agents.tools import agenerate_practice_questions
-from core import get_model, settings
 from prompts import QUESTION_AGENT_SYSTEM_PROMPT
 
-# supervisor 子 agent：出题一律走 generate_practice_questions（内部共用结构化真源）。
-question_agent: Any = create_agent(
-    model=get_model(settings.DEFAULT_MODEL, temperature=TEMPERATURE_QUESTION),
-    tools=[agenerate_practice_questions],
+question_agent: Any = build_agent(
     name="question_agent",
+    tools=[agenerate_practice_questions],
     system_prompt=QUESTION_AGENT_SYSTEM_PROMPT,
+    temperature=TEMPERATURE_QUESTION,
 )

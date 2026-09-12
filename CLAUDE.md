@@ -25,7 +25,7 @@
 
 | 路径 | 职责 |
 |---|---|
-| `src/agents/` | 多 Agent：`supervisor.py` + 专业 agent + `tools.py` + 出题真源 `question_core.py` + 批改真源 `grading_core.py`（专用 API 共用） |
+| `src/agents/` | `supervisor.py` + 专业 agent（`factory.build_agent`）+ `tools.py` + 出题/批改真源 `*_core.py` + `temperature.py` |
 | `src/rag/` | 检索流水线：`retriever.py`（门面）、`postprocess.py`（RRF）、`fusion.py`（证据融合）、`reranker.py`、`hyde.py`、`semantic_cache.py`、`ingest.py` |
 | `src/core/` | `settings.py`（配置单例）、`llm.py`（`get_model` / `get_llm` 工厂） |
 | `src/service/` | FastAPI：`service.py`（路由 + SSE）、`auth.py`（JWT）、`threads.py`（会话列表）、`utils.py` |
