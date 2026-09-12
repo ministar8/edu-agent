@@ -98,28 +98,44 @@ async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, 
     ).as_tool_payload()
 
 
-@tool("knowledge_search")
-async def aknowledge_search(query: str) -> dict[str, Any]:
-    """知识库综合检索（多路召回+BM25+Reranker）。返回含 context 与 docs 的结构化结果。"""
-    return await _retrieve_payload(query)
+# 检索工具共用契约说明（拼进各工具 docstring，供模型理解返回值）
+_EVIDENCE_PAYLOAD_NOTE = (
+    "\n返回 JSON：优先读 `context` 作答；`docs` 含来源/chunk/分数供引用；"
+    "`status=empty` 表示知识库无相关内容，`status=error` 表示检索失败"
+    " —— 两者都不得编造内容。"
+)
 
 
-@tool("text_search")
-async def atext_search(query: str) -> dict[str, Any]:
-    """纯教材文本检索（更快的浅层检索）。返回含 context 与 docs 的结构化结果。"""
-    return await _retrieve_payload(query, depth=TEXT_ONLY_DEPTH)
+def _make_search_tool(name: str, doc: str, *, depth: Any = None):
+    """生成检索类 @tool（同一 _retrieve_payload 封装）。"""
+    full_doc = doc + _EVIDENCE_PAYLOAD_NOTE
+
+    async def _search(query: str) -> dict[str, Any]:
+        return await _retrieve_payload(query, depth=depth)
+
+    # 先写 __doc__ 再包 @tool，否则 description 在装饰时已被捕获
+    _search.__doc__ = full_doc
+    _search.__name__ = f"a{name}"
+    return tool(name)(_search)
 
 
-@tool("search_standard_answer")
-async def asearch_standard_answer(query: str) -> dict[str, Any]:
-    """检索教材知识库中的标准答案与评分依据。批改学生答案时使用。"""
-    return await _retrieve_payload(query)
-
-
-@tool("search_question_templates")
-async def asearch_question_templates(query: str) -> dict[str, Any]:
-    """检索题库与教材中与知识点相关的题目模板、例题与知识依据。出题时使用。"""
-    return await _retrieve_payload(query)
+aknowledge_search = _make_search_tool(
+    "knowledge_search",
+    "知识库综合检索（多路召回+BM25+Reranker）。适合大多数概念讲解与原理理解问题。",
+)
+atext_search = _make_search_tool(
+    "text_search",
+    "纯教材文本检索（更快的浅层检索）。适合快速查询概念定义、原理说明。",
+    depth=TEXT_ONLY_DEPTH,
+)
+asearch_standard_answer = _make_search_tool(
+    "search_standard_answer",
+    "检索教材知识库中的标准答案与评分依据。批改学生答案时使用。",
+)
+asearch_question_templates = _make_search_tool(
+    "search_question_templates",
+    "检索题库与教材中与知识点相关的题目模板、例题与知识依据。出题时使用。",
+)
 
 
 @tool("generate_practice_questions")
@@ -145,6 +161,7 @@ async def agenerate_practice_questions(
 async def agrade_student_answer(stem: str, user_answer: str, standard_answer: str = "") -> str:
     """对单题学生作答打分（与专用批改 API 共用 grading_core）。
 
+    stem 必须是**题干本身**，不要包含标准答案或解析。
     standard_answer 可空：为空时会先用题干检索知识库作为评分依据。
     返回已排版的评分/反馈文本，不要自行编造分数。
     """
