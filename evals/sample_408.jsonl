@@ -1,6 +1,42 @@
-# 408 评测种子集（可继续扩充；reference 为空则 context_recall 不可算）
+# 408 评测集（jsonl）。reference 尽量覆盖要点，供 context_recall / faithfulness 使用。
+# metadata.subject: ds | co | os | network
 {"query": "什么是进程死锁？死锁的四个必要条件是什么？", "reference": "死锁是多个进程互相等待对方持有的资源而都无法继续执行的状态。四个必要条件：互斥、占有并等待、不可抢占、循环等待。", "metadata": {"subject": "os"}}
 {"query": "虚拟内存的作用是什么？", "reference": "虚拟内存让进程逻辑地址空间可以大于物理内存，通过分页/置换在磁盘与内存间换入换出，提高多道程序度并隔离进程地址空间。", "metadata": {"subject": "os"}}
 {"query": "页面置换算法中的 Belady 异常说明了什么？", "reference": "Belady 异常指某些算法（如 FIFO）在物理块增加时缺页次数反而上升，说明并非所有置换算法都满足堆栈性质。", "metadata": {"subject": "os"}}
-{"query": "TCP 三次握手的作用是什么？", "reference": "三次握手用于同步双方初始序号、确认收发能力并协商 MSS 等参数，避免历史连接造成的混乱。", "metadata": {"subject": "network"}}
+{"query": "进程和程序有什么区别？", "reference": "程序是静态的指令序列，进程是程序的一次执行过程，是动态的；同一程序可对应多个进程。", "metadata": {"subject": "os"}}
+{"query": "什么是临界区？为什么需要互斥？", "reference": "临界区是访问共享资源的代码段；若多个进程同时进入会导致结果不可再现，因此需要互斥保证同一时刻只有一个进程进入。", "metadata": {"subject": "os"}}
+{"query": "进程同步有哪些常见机制？", "reference": "常见机制包括信号量与 PV 操作、管程、条件变量、消息传递等，用于协调并发进程的执行顺序与共享资源访问。", "metadata": {"subject": "os"}}
+{"query": "什么是段页式存储管理？", "reference": "段页式将地址空间先分段再分页，逻辑上按段管理、物理上按页分配，兼具段的共享保护与页的离散分配优点，但需多次访存。", "metadata": {"subject": "os"}}
+{"query": "文件系统中 inode 的作用是什么？", "reference": "inode（索引节点）保存文件元数据与数据块地址等信息，目录项将文件名映射到 inode，从而实现文件名与存储位置的分离。", "metadata": {"subject": "os"}}
+{"query": "什么是死锁的预防与避免？", "reference": "预防是破坏死锁四个必要条件之一；避免是在资源分配时用银行家算法等判断安全状态，仅在安全时分配。", "metadata": {"subject": "os"}}
+{"query": "分页和分段有什么区别？", "reference": "分页按固定大小物理划分、对用户透明；分段按逻辑模块划分、对用户可见。页是物理单位，段是逻辑单位。", "metadata": {"subject": "os"}}
 {"query": "什么是二叉搜索树？", "reference": "二叉搜索树是每个节点左子树键值均小于该节点、右子树键值均大于该节点的二叉树，支持有序查找与插入删除。", "metadata": {"subject": "ds"}}
+{"query": "栈和队列的主要区别是什么？", "reference": "栈是后进先出（LIFO），队列是先进先出（FIFO）；栈只能在栈顶操作，队列在队尾入队、队头出队。", "metadata": {"subject": "ds"}}
+{"query": "什么是哈希冲突？如何解决？", "reference": "哈希冲突指不同关键字映射到同一地址。解决方法包括开放定址法、链地址法（拉链法）、再哈希等。", "metadata": {"subject": "ds"}}
+{"query": "快速排序的基本思想是什么？", "reference": "选基准将序列划分为小于和大于基准的两部分，递归排序子序列；平均时间复杂度 O(n log n)，最坏 O(n²)。", "metadata": {"subject": "ds"}}
+{"query": "什么是平衡二叉树（AVL）？", "reference": "AVL 树是任意节点左右子树高度差不超过 1 的二叉搜索树，通过旋转在插入删除后保持平衡，保证查找为 O(log n)。", "metadata": {"subject": "ds"}}
+{"query": "图的深度优先遍历和广度优先遍历有什么不同？", "reference": "DFS 沿一条路径尽可能深再回溯，适合连通性与拓扑；BFS 按层扩展，适合最短路径（无权图）。", "metadata": {"subject": "ds"}}
+{"query": "顺序表和链表各有什么优缺点？", "reference": "顺序表随机访问 O(1)、插入删除中间元素 O(n)；链表插入删除 O(1)（已知位置）、随机访问 O(n)，额外指针空间。", "metadata": {"subject": "ds"}}
+{"query": "什么是堆？堆排序的原理是什么？", "reference": "堆是完全二叉树，满足父节点键值大于（或小于）子节点；堆排序反复取出堆顶并调整，得到有序序列。", "metadata": {"subject": "ds"}}
+{"query": "B 树和 B+ 树有什么区别？", "reference": "B+ 树非叶节点只存关键字作索引，数据都在叶节点且叶节点有序链接，更适合磁盘范围查询与数据库索引。", "metadata": {"subject": "ds"}}
+{"query": "线性表的链式存储结构有哪些形式？", "reference": "包括单链表、双链表、循环链表等，通过指针将结点链接，便于动态增删。", "metadata": {"subject": "ds"}}
+{"query": "TCP 三次握手的作用是什么？", "reference": "三次握手用于同步双方初始序号、确认收发能力并协商 MSS 等参数，避免历史连接造成的混乱。", "metadata": {"subject": "network"}}
+{"query": "TCP 和 UDP 的主要区别是什么？", "reference": "TCP 面向连接、可靠、有序、有流量与拥塞控制；UDP 无连接、不保证可靠，开销小、实时性好。", "metadata": {"subject": "network"}}
+{"query": "什么是拥塞控制？TCP 拥塞控制有哪些阶段？", "reference": "拥塞控制防止过多数据注入网络导致性能下降；TCP 常见阶段为慢开始、拥塞避免、快重传、快恢复。", "metadata": {"subject": "network"}}
+{"query": "IP 地址与 MAC 地址有什么区别？", "reference": "IP 地址是网络层逻辑地址，用于路由；MAC 地址是数据链路层物理地址，用于同一链路内交付。", "metadata": {"subject": "network"}}
+{"query": "什么是子网划分？", "reference": "子网划分通过借用主机位作子网号，将一个网络分成多个逻辑子网，便于管理与减少广播域。", "metadata": {"subject": "network"}}
+{"query": "HTTP 和 HTTPS 有什么区别？", "reference": "HTTPS 在 HTTP 之下加入 TLS/SSL，提供加密、完整性校验与身份认证；HTTP 明文传输。", "metadata": {"subject": "network"}}
+{"query": "什么是 ARP 协议？", "reference": "ARP 将同一局域网内的 IP 地址解析为 MAC 地址，主机通过 ARP 请求/应答获得下一跳的硬件地址。", "metadata": {"subject": "network"}}
+{"query": "路由选择协议 RIP 和 OSPF 有什么不同？", "reference": "RIP 基于距离向量、以跳数为度量、收敛较慢；OSPF 基于链路状态、使用 Dijkstra，收敛更快、适合较大网络。", "metadata": {"subject": "network"}}
+{"query": "传输层端口号的作用是什么？", "reference": "端口号区分同一主机上不同应用进程，实现进程到进程的复用与分用。", "metadata": {"subject": "network"}}
+{"query": "什么是滑动窗口协议？", "reference": "滑动窗口允许发送方在未收到确认前连续发送多个分组，窗口大小决定在途数据量，提高信道利用率并配合流量控制。", "metadata": {"subject": "network"}}
+{"query": "Cache 的作用是什么？", "reference": "Cache 位于 CPU 与主存之间，存放近期使用的程序与数据，缓解 CPU 与主存速度不匹配。", "metadata": {"subject": "co"}}
+{"query": "什么是存储器层次结构？", "reference": "典型层次为寄存器-Cache-主存-辅存；Cache-主存解决速度问题，主存-辅存解决容量问题。", "metadata": {"subject": "co"}}
+{"query": "MAR 和 MDR 分别是什么？", "reference": "MAR 是主存地址寄存器，保存访问地址；MDR 是主存数据寄存器，保存读出或待写入的数据。二者逻辑上属存储器但集成在 CPU。", "metadata": {"subject": "co"}}
+{"query": "什么是流水线？流水线冒险有哪些？", "reference": "流水线将指令重叠执行提高吞吐；冒险包括结构冒险、数据冒险、控制冒险，可通过转发、暂停、分支预测等缓解。", "metadata": {"subject": "co"}}
+{"query": "指令周期包括哪些阶段？", "reference": "通常包括取指、间址（若有）、执行、中断等阶段，对应不同机器周期。", "metadata": {"subject": "co"}}
+{"query": "什么是总线？总线有哪些类型？", "reference": "总线是部件间共享的传输通道；按传输内容可分为数据总线、地址总线、控制总线。", "metadata": {"subject": "co"}}
+{"query": "浮点数加减运算的基本步骤是什么？", "reference": "对阶、尾数加减、规格化、舍入、溢出判断等步骤。", "metadata": {"subject": "co"}}
+{"query": "什么是中断？中断与异常有何区别？", "reference": "中断通常指外部设备引发的异步事件；异常是 CPU 执行指令过程中产生的同步事件（如缺页、除零）。", "metadata": {"subject": "co"}}
+{"query": "什么是直接映射 Cache？", "reference": "主存块只能映射到 Cache 中固定的一行，实现简单但冲突失效较多。", "metadata": {"subject": "co"}}
+{"query": "I/O 控制方式有哪些？", "reference": "常见有程序查询、中断、DMA、通道等，控制 CPU 与外设的数据交换并降低 CPU 干预。", "metadata": {"subject": "co"}}
