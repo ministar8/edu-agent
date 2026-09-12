@@ -13,7 +13,10 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langgraph.store.base import BaseStore
 
+from core import settings
 from memory.episodes import aappend_episode
+from memory.metering import meter_text
+from memory.privacy import redact_pii
 from memory.runtime import get_store
 from memory.safe import safe_remember
 from memory.schemas import AgentPath, Episode, excerpt
@@ -23,17 +26,45 @@ from memory.weak_topics import a_recompute_weak_topics
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_episode(payload: Episode) -> Episode:
+    """写入前脱敏自由文本字段；topic/知识点走规范化，一般不含 PII。"""
+    if not settings.MEMORY_PRIVACY_REDACT:
+        return payload
+    data = payload.model_dump()
+    hits = 0
+    for field in ("stem_excerpt", "error_analysis"):
+        if field not in data:
+            continue
+        text, n = redact_pii(str(data.get(field) or ""))
+        data[field] = text
+        hits += n
+    # meta 中的自由文本（若有）
+    meta = dict(data.get("meta") or {})
+    for k, v in list(meta.items()):
+        if isinstance(v, str):
+            nv, n = redact_pii(v)
+            meta[k] = nv
+            hits += n
+    data["meta"] = meta
+    if hits:
+        logger.info("记忆写入前脱敏 %s 处 PII（%s）", hits, payload.type)
+    return Episode.model_validate(data)
+
+
 async def _record_episode(payload: Episode, *, user_id: int | str, label: str) -> str | None:
     store: BaseStore | None = get_store()
     if store is None:
         logger.debug("Store 未初始化，跳过记忆写入")
         return None
 
+    cleaned = _sanitize_episode(payload)
+    meter_text(label, cleaned.stem_excerpt, cleaned.error_analysis, cleaned.topic)
+
     result: dict[str, str] = {}
 
     async def _write() -> None:
-        result["id"] = await aappend_episode(store, user_id, payload)
-        if payload.type == "grade":
+        result["id"] = await aappend_episode(store, user_id, cleaned)
+        if cleaned.type == "grade":
             await a_recompute_weak_topics(store, user_id)
 
     await safe_remember(_write, label=label)

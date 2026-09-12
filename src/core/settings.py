@@ -173,6 +173,7 @@ class Settings(BaseSettings):
     MEMORY_EPISODE_MAX_PER_USER: int = 200
     # Store 向量索引（复用 RAG TEI）；测试可关以免依赖 TEI
     MEMORY_STORE_VECTOR_ENABLED: bool = True
+    MEMORY_PRIVACY_REDACT: bool = True
 
     # ── Auth（JWT）────────────────────────────────
     JWT_SECRET: SecretStr | None = None

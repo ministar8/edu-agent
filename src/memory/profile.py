@@ -7,7 +7,9 @@ from typing import Any
 
 from langgraph.store.base import BaseStore
 
+from core import settings
 from memory.namespaces import PROFILE_DOC_KEY, student_profile_ns
+from memory.privacy import redact_pii
 from memory.schemas import SCHEMA_VERSION, StudentProfile
 
 logger = logging.getLogger(__name__)
@@ -53,6 +55,8 @@ async def aupsert_profile(
     fields 仅接受 StudentProfile 已有字段（非法键由 Pydantic 拒绝）。
     """
     current = await aget_profile(store, user_id)
+    if settings.MEMORY_PRIVACY_REDACT and "notes" in fields:
+        fields["notes"] = redact_pii(str(fields.get("notes") or ""))[0]
     updated = current.with_updates(**fields)
     await store.aput(student_profile_ns(user_id), PROFILE_DOC_KEY, updated.model_dump())
     return updated
