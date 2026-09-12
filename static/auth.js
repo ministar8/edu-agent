@@ -35,7 +35,9 @@ document.getElementById("auth-form").onsubmit = async (e) => {
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      err.textContent = data.detail || "请求失败";
+      const detail = data.detail;
+      err.textContent =
+        (detail && typeof detail === "object" && detail.message) || detail || "请求失败";
       return;
     }
     const data = await res.json();

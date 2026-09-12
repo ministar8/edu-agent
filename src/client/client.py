@@ -95,13 +95,21 @@ class AgentClient:
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
             detail = ""
+            code = ""
             try:
                 body = response.json()
                 if isinstance(body, dict):
-                    detail = str(body.get("detail", ""))
+                    raw = body.get("detail", "")
+                    if isinstance(raw, dict):
+                        code = str(raw.get("code") or "")
+                        detail = str(raw.get("message") or raw)
+                    else:
+                        detail = str(raw)
             except Exception:
                 detail = response.text
             message = f"{context}: {response.status_code}"
+            if code:
+                message = f"{message} [{code}]"
             if detail:
                 message = f"{message} {detail}"
             raise AgentClientError(message) from e

@@ -135,7 +135,11 @@ class Settings(BaseSettings):
     EMBEDDING_TIMEOUT: int = 60
     RERANK_TIMEOUT: int = 30
 
-    # ── Agent Temperature 分级 ──────────────────────
+    # ── Agent / LLM Temperature 分级（语义槽见 agents/temperature.py）──
+    # TEMP_PRECISE   批改评分：可复现
+    # TEMP_CREATIVE  出题：多样性
+    # TEMP_DEFAULT   知识讲解 / supervisor / 检索链多数步骤
+    # TEMP_SYNTHESIS 综合摘要（预留，当前无调用方）
     TEMP_PRECISE: float = 0.0
     TEMP_CREATIVE: float = 0.3
     TEMP_DEFAULT: float = 0.3
@@ -149,9 +153,10 @@ class Settings(BaseSettings):
     # ── Knowledge ──────────────────────────────────
     KNOWLEDGE_DIR: str = str(PROJECT_ROOT / "knowledge")
 
-    # ── Database（checkpointer）────────────────────
+    # ── Database（checkpointer / store）────────────
     DATABASE_TYPE: DatabaseType = DatabaseType.SQLITE
     SQLITE_DB_PATH: str = "checkpoints.db"
+    SQLITE_STORE_PATH: str = "store.db"
 
     # ── Auth（JWT）────────────────────────────────
     JWT_SECRET: SecretStr | None = None

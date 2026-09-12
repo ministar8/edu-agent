@@ -50,6 +50,16 @@ from schema import (
 )
 from service.auth import get_current_user
 from service.auth import router as auth_router
+from service.errors import (
+    CODE_GENERATE_FAILED,
+    CODE_GRADE_FAILED,
+    CODE_INVALID_CONFIG,
+    CODE_THREAD_NOT_FOUND,
+    CODE_UNKNOWN_AGENT,
+    bad_request,
+    internal_error,
+    not_found,
+)
 from service.health import collect_health
 from service.threads import list_user_threads
 from service.utils import (
@@ -74,10 +84,7 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 def _resolve_agent(agent_id: str) -> Any:
     """按路径取 agent 图；未注册时返回 404，避免 KeyError 变成 500。"""
     if agent_id not in agent_registry:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Unknown agent: {agent_id}",
-        )
+        raise not_found(CODE_UNKNOWN_AGENT, f"Unknown agent: {agent_id}")
     return get_agent(agent_id)
 
 
@@ -143,7 +150,7 @@ def _check_thread_owner(metadata: Mapping[str, Any] | None, user_id: str, agent_
     if not metadata:
         return
     if metadata.get("user_id") != user_id or metadata.get("agent_id") != agent_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="对话不存在")
+        raise not_found(CODE_THREAD_NOT_FOUND, "对话不存在")
 
 
 async def _handle_input(
@@ -161,9 +168,8 @@ async def _handle_input(
     if user_input.agent_config:
         reserved_keys = {"thread_id", "user_id", "model"}
         if overlap := reserved_keys & user_input.agent_config.keys():
-            raise HTTPException(
-                status_code=422,
-                detail=f"agent_config contains reserved keys: {overlap}",
+            raise bad_request(
+                CODE_INVALID_CONFIG, f"agent_config contains reserved keys: {overlap}"
             )
         configurable.update(user_input.agent_config)
 
@@ -221,7 +227,7 @@ async def invoke(
         return output
     except Exception as e:
         logger.error("Invoke failed: %s", e)
-        raise HTTPException(status_code=500, detail="Unexpected error") from e
+        raise internal_error("Unexpected error") from e
 
 
 async def message_generator(
@@ -385,7 +391,7 @@ async def history(
         raise  # 归属校验的 404 不能被下面的兜底 except 吞成 500
     except Exception as e:
         logger.error("History failed: %s", e)
-        raise HTTPException(status_code=500, detail="Unexpected error") from e
+        raise internal_error("Unexpected error") from e
 
 
 @router.get("/{agent_id}/threads", operation_id="threads_with_agent_id")
@@ -409,7 +415,7 @@ async def threads(
         )
     except Exception as e:
         logger.error("Threads failed: %s", e)
-        raise HTTPException(status_code=500, detail="Unexpected error") from e
+        raise internal_error("Unexpected error") from e
     return UserThreads(threads=summaries)
 
 
@@ -430,7 +436,7 @@ async def generate_questions(
         )
     except Exception as e:
         logger.error("Question generation failed: %s", e)
-        raise HTTPException(status_code=500, detail="出题失败") from e
+        raise internal_error("出题失败", CODE_GENERATE_FAILED) from e
     return QuestionResponse(questions=result.questions, batch_id=str(uuid4()))
 
 
@@ -450,7 +456,7 @@ async def grade_question(
         )
     except Exception as e:
         logger.error("Grading failed: %s", e)
-        raise HTTPException(status_code=500, detail="批改失败") from e
+        raise internal_error("批改失败", CODE_GRADE_FAILED) from e
     return GradeResponse(
         score=float(result.score),
         feedback=result.feedback,
