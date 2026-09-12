@@ -13,9 +13,9 @@ from rag.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
-# 单批请求数量（本地 TEI / 远程 API 均适用）
+# 单批请求数量（本�?TEI / 远程 API 均适用�?
 BATCH_SIZE = 64  # bge-m3 on local TEI handles 64-128 easily; 64 = ~2.5x fewer round trips vs 25
-# 单条文本最大字符数（bge-m3 8192 tokens，中文约 1-2 token/字，保守取 3000）
+# 单条文本最大字符数（bge-m3 8192 tokens，中文约 1-2 token/字，保守�?3000�?
 MAX_TEXT_LENGTH = 3000
 _sparse_probe_cache: dict[str, object] | None = None
 
@@ -32,12 +32,12 @@ def _embedding_limits() -> httpx.Limits:
 
 
 def _embedding_api_key() -> str:
-    """取出 Embedding 密钥明文（未配置时返回空串）。"""
+    """取出 Embedding 密钥明文（未配置时返回空串）�?""
     return settings.EMBEDDING_API_KEY.get_secret_value() if settings.EMBEDDING_API_KEY else ""
 
 
 class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
-    """OpenAI 兼容 Embedding（支持 TEI / DashScope / 任何 OpenAI 格式 API，自动分批）"""
+    """OpenAI 兼容 Embedding（支�?TEI / DashScope / 任何 OpenAI 格式 API，自动分批）"""
 
     api_key: str = ""
     base_url: str = "http://localhost:11435"
@@ -58,7 +58,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         return any(math.isnan(v) for v in vec)
 
     def _embed_single(self, text: str) -> list[float]:
-        """单条文本 embedding（用于批量失败时的逐条回退）"""
+        """单条文本 embedding（用于批量失败时的逐条回退�?""
         s = str(text).strip() or " "
         resp = httpx.post(
             f"{self.base_url}/embeddings",
@@ -68,18 +68,18 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         )
         if resp.status_code != 200:
             logger.warning("Single embedding failed (%d), using zero vector", resp.status_code)
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
             logger.warning("NaN in single embedding, using zero vector for: %s", s[:80])
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         return vec
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """单批次调用 Embedding API（同步，OpenAI /v1/embeddings 格式）
+        """单批次调�?Embedding API（同步，OpenAI /v1/embeddings 格式�?
 
-        当批量请求失败或返回 NaN 时，自动逐条回退重试。
+        当批量请求失败或返回 NaN 时，自动逐条回退重试�?
         """
         # 截断超长文本 + 过滤空文本，防止 400 错误
         truncated = []
@@ -88,7 +88,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         for t in texts:
             s = str(t).strip()
             if not s:
-                s = " "  # 空文本用空格占位，避免 API 拒绝
+                s = " "  # 空文本用空格占位，避�?API 拒绝
             original_lengths.append(len(s))
             if len(s) > MAX_TEXT_LENGTH:
                 truncated_count += 1
@@ -125,7 +125,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 mt.set("embeddings_count", len(results))
                 return results
 
-            # 检查 NaN，逐条回退
+            # 检�?NaN，逐条回退
             nan_indices = [i for i, v in enumerate(results) if self._has_nan(v)]
             if nan_indices:
                 logger.warning(
@@ -141,7 +141,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
     async def _aembed_single(
         self, text: str, client: httpx.AsyncClient | None = None
     ) -> list[float]:
-        """单条文本 embedding（异步，用于批量失败时的逐条回退）"""
+        """单条文本 embedding（异步，用于批量失败时的逐条回退�?""
         if client is None:
             async with httpx.AsyncClient(
                 timeout=_embedding_timeout(), limits=_embedding_limits()
@@ -157,20 +157,20 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             logger.warning(
                 "Async single embedding failed (%d), using zero vector", resp.status_code
             )
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
             logger.warning("NaN in async single embedding, using zero vector for: %s", s[:80])
-            return [0.0] * 1024
+            return [0.0] * settings.EMBEDDING_DIM
         return vec
 
     async def _aembed_batch(
         self, texts: list[str], client: httpx.AsyncClient | None = None
     ) -> list[list[float]]:
-        """单批次调用 Embedding API（异步，OpenAI /v1/embeddings 格式）
+        """单批次调�?Embedding API（异步，OpenAI /v1/embeddings 格式�?
 
-        当批量请求失败或返回 NaN 时，自动逐条回退重试。
+        当批量请求失败或返回 NaN 时，自动逐条回退重试�?
         """
         if client is None:
             async with httpx.AsyncClient(
@@ -221,7 +221,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 mt.set("embeddings_count", len(results))
                 return results
 
-            # 检查 NaN，逐条回退
+            # 检�?NaN，逐条回退
             nan_indices = [i for i, v in enumerate(results) if self._has_nan(v)]
             if nan_indices:
                 logger.warning(
@@ -235,7 +235,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             return results
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """分批 Embedding，每批 BATCH_SIZE 条（同步，并发请求）"""
+        """分批 Embedding，每�?BATCH_SIZE 条（同步，并发请求）"""
         if not texts:
             return []
 
@@ -258,7 +258,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                         results[idx] = future.result()
                     except Exception as e:
                         logger.warning("Batch %d failed: %s", idx, e)
-                        results[idx] = [[0.0] * 1024] * len(batches[idx])
+                        results[idx] = [[0.0] * settings.EMBEDDING_DIM] * len(batches[idx])
             all_embeddings = []
             for i in range(len(batches)):
                 all_embeddings.extend(results.get(i, []))
@@ -278,7 +278,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         return all_embeddings
 
     async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-        """分批 Embedding，每批 BATCH_SIZE 条（异步，并发请求）"""
+        """分批 Embedding，每�?BATCH_SIZE 条（异步，并发请求）"""
         if not texts:
             return []
 
@@ -299,7 +299,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 for i, result in enumerate(batch_results):
                     if isinstance(result, Exception):
                         logger.warning("Async batch %d failed: %s", i, result)
-                        all_embeddings.extend([[0.0] * 1024] * len(batches[i]))
+                        all_embeddings.extend([[0.0] * settings.EMBEDDING_DIM] * len(batches[i]))
                     else:
                         all_embeddings.extend(result)
 
@@ -327,7 +327,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
 
 
 def get_embeddings() -> Embeddings:
-    """返回 Embedding 模型（通过 OpenAI 兼容接口，支持本地 TEI / 远程 API）"""
+    """返回 Embedding 模型（通过 OpenAI 兼容接口，支持本�?TEI / 远程 API�?""
     return OpenAICompatibleEmbeddings(
         api_key=_embedding_api_key(),
         base_url=settings.EMBEDDING_API_BASE,

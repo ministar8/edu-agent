@@ -34,7 +34,11 @@ def build_agent(
     model_ref: str | None = None,
     response_format: Any | None = None,
 ) -> Any:
-    """创建 LangChain agent 图，并登记 AgentAssembly。"""
+    """创建 LangChain agent 图，并登记 AgentAssembly。
+
+    默认挂 RuntimeModelMiddleware：API 层写入的 configurable.model 在调用时生效。
+    """
+    from agents.runtime_model import runtime_model_middleware
     from core import get_model, settings
 
     resolved_model = model_ref if model_ref is not None else settings.DEFAULT_MODEL
@@ -43,6 +47,7 @@ def build_agent(
         "tools": tools,
         "name": name,
         "system_prompt": system_prompt,
+        "middleware": [runtime_model_middleware],
     }
     if response_format is not None:
         kwargs["response_format"] = response_format
