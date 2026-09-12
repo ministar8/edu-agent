@@ -65,3 +65,7 @@ def build_teaching_graph():
     builder.add_edge("load_memory", "supervisor")
     builder.add_edge("supervisor", END)
     return builder.compile()
+
+
+# 对外唯一图：与 HTTP 注册表、LangGraph Studio 共用（含 load_memory）
+edu_supervisor = build_teaching_graph()
