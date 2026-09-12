@@ -168,6 +168,9 @@ class Settings(BaseSettings):
     MEMORY_EPISODE_SCAN_LIMIT: int = 50
     # 短期：送入 LLM 的非 system 消息条数上限；0 = 不裁剪
     MEMORY_HISTORY_MAX_MESSAGES: int = 20
+    # 长期 episodes 保留：TTL 天数 / 每用户上限；0 = 关闭该项
+    MEMORY_EPISODE_TTL_DAYS: int = 90
+    MEMORY_EPISODE_MAX_PER_USER: int = 200
 
     # ── Auth（JWT）────────────────────────────────
     JWT_SECRET: SecretStr | None = None
