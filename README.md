@@ -27,7 +27,7 @@ RAG 检索管线: 查询归一 → 分类 → 多路召回(语义 + BM25 + 元�
 | 前端 | 纯静态 HTML + CSS + JavaScript（无框架无构建） |
 | 后端 | FastAPI + Uvicorn + Pydantic v2 |
 | Agent | LangChain 1.x `create_agent` + LangGraph `create_supervisor` + 运行时模型覆盖中间件 |
-| RAG | ChromaDB + bge-m3(TEI) + BM25 + RRF + bge-reranker-v2-m3(TEI) + HyDE + 语义缓存 |
+| RAG | ChromaDB + bge-m3(TEI) + BM25 + RRF + bge-reranker-base(TEI) + HyDE + 语义缓存 |
 | 记忆 | 短期 checkpointer + 消息窗口；长期 Store（画像 / episodes / weak_topics / 向量检索） |
 | 评测 | RAGAS Layer-1（faithfulness / context_precision / context_recall / answer_relevancy） |
 | LLM | DashScope / DeepSeek（OpenAI 兼容接口） |
@@ -85,10 +85,10 @@ docker run -d --name tei-embedding --gpus all -p 11435:80 \
   ghcr.io/huggingface/text-embeddings-inference:latest \
   --model-id BAAI/bge-m3 --dtype float16 --pooling mean
 
-# Reranker (bge-reranker-v2-m3)
+# Reranker (bge-reranker-base)
 docker run -d --name tei-reranker --gpus all -p 8080:80 \
   ghcr.io/huggingface/text-embeddings-inference:latest \
-  --model-id BAAI/bge-reranker-v2-m3 --dtype float16 --pooling cls
+  --model-id BAAI/bge-reranker-base --dtype float16 --pooling cls
 ```
 
 Windows 也可用 `scripts/tei_deploy.ps1`。
