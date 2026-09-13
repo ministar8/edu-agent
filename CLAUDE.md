@@ -62,7 +62,7 @@ docker compose up --build                # 容器化启动
 - **配置一律走 `core.settings.settings` 单例**，不要散落读 `os.environ`。新增配置项加到 `Settings` 并同步 `.env.example`。
 - **LLM 只通过工厂获取**：agent 层用 `get_model(model_ref, temperature)`（网关+模型+温度缓存），
   RAG 层用 `get_llm(streaming, temperature)`（按 `settings.LLM_MODEL` 取）。
-- **模型标识 = `<gateway>:<model_id>`**，如 `dashscope:qwen3.7-max`、`deepseek:deepseek-v4-flash`。
+- **模型标识 = `<gateway>:<model_id>`**，如 `dashscope:qwen3.8-max`、`deepseek:deepseek-v4-flash`。
   **网关**（走哪家：决定 base_url + api_key）与**模型 ID**（哪个模型）是两个概念，
   同一模型 ID 可显式选择走不同网关（如 `dashscope:deepseek-v4-flash`），**不按模型名猜**。
   配了哪个网关的 key 就启用哪个网关；模型清单与各网关提供的模型见 `schema/models.py`

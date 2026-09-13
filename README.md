@@ -125,7 +125,7 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 | POST | `/api/questions/grade` | 单题批改（题干 + 学生作答 + 可选标准答案） |
 | GET | `/health` | 健康检查（外部依赖状态） |
 
-请求体可选 `model`：形如 `dashscope:qwen3.7-max` / `deepseek:deepseek-v4-flash`，经运行时中间件生效。
+请求体可选 `model`：形如 `dashscope:qwen3.8-max` / `deepseek:deepseek-v4-flash`，经运行时中间件生效。
 
 ### Python Client
 

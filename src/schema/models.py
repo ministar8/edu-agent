@@ -7,9 +7,9 @@
 
 对外标识统一写成 ``<gateway>:<model_id>``：:
 
-    dashscope:qwen3.7-max          # 通义千问，走阿里云百炼
-    deepseek:deepseek-v4-flash     # DeepSeek 官方
-    dashscope:deepseek-v4-flash    # 同一个 DeepSeek 模型，改走阿里云百炼
+    dashscope:qwen3.8-max           # 通义千问，走阿里云百炼
+    deepseek:deepseek-v4-flash      # DeepSeek 官方
+    dashscope:deepseek-v4-flash     # 同一个 DeepSeek 模型，改走阿里云百炼
 
 两家网关都是 OpenAI 兼容协议（所以可以共用同一个 ChatOpenAI 客户端），但
 **base_url / api_key / 私有参数各不相同**。同一个模型 ID 可以出现在多个网关下，
@@ -33,17 +33,22 @@ class Gateway(StrEnum):
 GATEWAY_MODELS: dict[Gateway, frozenset[str]] = {
     # 阿里云百炼：自研 Qwen + 代理的 DeepSeek 模型
     Gateway.DASHSCOPE: frozenset(
-        {"qwen3.7-max", "qwen3.6-27b", "deepseek-v4-flash", "deepseek-v4-pro"}
+        {
+            "qwen3.8-max",
+            "qwen3.8-flash",
+            "qwen3.8-27b",
+            "deepseek-v4-flash",
+        }
     ),
     # DeepSeek 官方：只有自家模型
-    Gateway.DEEPSEEK: frozenset({"deepseek-v4-flash", "deepseek-v4-pro"}),
+    Gateway.DEEPSEEK: frozenset({"deepseek-v4-flash"}),
     # 测试用假模型
     Gateway.FAKE: frozenset({"fake"}),
 }
 
 # 每个网关的默认模型（多个网关同时启用时，按 Gateway 定义顺序取第一个可用的）
 GATEWAY_DEFAULT_MODEL: dict[Gateway, str] = {
-    Gateway.DASHSCOPE: "qwen3.7-max",
+    Gateway.DASHSCOPE: "qwen3.8-max",
     Gateway.DEEPSEEK: "deepseek-v4-flash",
     Gateway.FAKE: "fake",
 }
