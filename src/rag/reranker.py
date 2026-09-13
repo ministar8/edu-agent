@@ -1,6 +1,6 @@
-"""Reranker 重排序模块
+﻿"""Reranker 重排序模块
 
-使用本地 TEI bge-reranker-base 对向量检索结果进行精排。
+使用本地 TEI bge-reranker-v2-m3 对向量检索结果进行精排。
 通过 RERANK_ENABLED 开关控制。
 """
 
@@ -137,7 +137,7 @@ def rerank(
         if 0 <= idx < len(documents):
             doc = documents[idx]
             doc.metadata["rerank_score"] = round(float(score), 4)
-            doc.metadata["rerank_method"] = "bge-reranker-base"
+            doc.metadata["rerank_method"] = "bge-reranker-v2-m3"
             result.append(doc)
 
     # 补充未排序的文档
@@ -146,7 +146,7 @@ def rerank(
         for i, doc in enumerate(documents):
             if i not in ranked_indices and len(result) < top_k:
                 doc.metadata["rerank_score"] = 0.0
-                doc.metadata["rerank_method"] = "bge-reranker-base-fallback"
+                doc.metadata["rerank_method"] = "bge-reranker-v2-m3-fallback"
                 result.append(doc)
 
     elapsed_ms = (time.perf_counter() - start) * 1000

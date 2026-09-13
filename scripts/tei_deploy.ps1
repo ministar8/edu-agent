@@ -1,4 +1,4 @@
-# TEI 部署脚本 - bge-m3 embedding + bge-reranker-base reranker
+﻿# TEI 部署脚本 - bge-m3 embedding + bge-reranker-v2-m3 reranker
 # 需要先启动 Docker Desktop
 
 # ── 1. Embedding 服务 (bge-m3, port 11435) ──
@@ -17,14 +17,14 @@ docker run -d `
   --max-batch-tokens 16384 `
   --max-client-batch-size 64
 
-# ── 2. Reranker 服务 (bge-reranker-base, port 8080) ──
+# ── 2. Reranker 服务 (bge-reranker-v2-m3, port 8080) ──
 docker run -d `
   --name tei-reranker `
   --gpus all `
   -p 8080:80 `
   -v tei-reranker-cache:/data `
   ghcr.io/huggingface/text-embeddings-inference:latest `
-  --model-id BAAI/bge-reranker-base `
+  --model-id BAAI/bge-reranker-v2-m3 `
   --dtype float16 `
   --pooling cls `
   --max-batch-tokens 8192
