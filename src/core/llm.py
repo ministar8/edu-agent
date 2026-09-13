@@ -90,8 +90,10 @@ def _build_client(
     api_base = settings.api_base_for_model(model_ref)
 
     extra_body: dict = {}
-    is_deepseek = _is_deepseek(model_id, api_base)
-    is_dashscope = "dashscope" in (api_base or "").lower()
+    # 以网关为准判断厂商；URL 字符串可能不含 "dashscope"（例如 MaaS 自定义域名）
+    gateway = parse_model_ref(model_ref)[0]
+    is_deepseek = gateway is Gateway.DEEPSEEK
+    is_dashscope = gateway is Gateway.DASHSCOPE
     is_qwen3_max = _is_qwen3_max(model_id)
 
     # DeepSeek / Qwen3.x：默认禁用思考模式（reasoning token 暴增输出费用）

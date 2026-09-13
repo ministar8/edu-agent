@@ -12,7 +12,7 @@ from pydantic import SecretStr
 from core.llm import get_model, reset_llm_cache
 from core.settings import Gateway, settings
 
-DASHSCOPE_QWEN = "dashscope:qwen3.7-max"
+DASHSCOPE_QWEN = "dashscope:qwen3.8-max"
 DEEPSEEK_OFFICIAL = "deepseek:deepseek-v4-flash"
 DASHSCOPE_DEEPSEEK = "dashscope:deepseek-v4-flash"
 

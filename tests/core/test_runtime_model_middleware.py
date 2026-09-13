@@ -54,11 +54,11 @@ def test_wrap_with_config_model_overrides(monkeypatch):
 
     monkeypatch.setattr(
         "agents.runtime_model.get_config",
-        lambda: {"configurable": {"model": "dashscope:qwen3.6-27b"}},
+        lambda: {"configurable": {"model": "dashscope:qwen3.8-27b"}},
     )
     monkeypatch.setattr(
         "agents.runtime_model.get_model",
-        lambda ref, temperature=None: selected if ref == "dashscope:qwen3.6-27b" else None,
+        lambda ref, temperature=None: selected if ref == "dashscope:qwen3.8-27b" else None,
     )
 
     result = mw.wrap_model_call(request, handler)

@@ -33,7 +33,7 @@ class UserInput(BaseModel):
         title="Model",
         description="使用的 LLM 标识（<gateway>:<model_id>），缺省用服务默认模型。",
         default=None,
-        examples=["dashscope:qwen3.7-max"],
+        examples=["dashscope:qwen3.8-max"],
     )
     thread_id: str | None = Field(
         description="多轮对话的 thread ID。",

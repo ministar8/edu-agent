@@ -3,7 +3,7 @@ import pytest
 from core.llm import get_llm, get_model, reset_llm_cache
 from core.settings import settings
 
-DASHSCOPE_REF = "dashscope:qwen3.7-max"
+DASHSCOPE_REF = "dashscope:qwen3.8-max"
 FAKE_REF = "fake:fake"
 
 

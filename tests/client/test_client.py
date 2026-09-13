@@ -107,9 +107,9 @@ class TestInfoAndAgent:
     def test_retrieve_info_uses_api_prefix(self):
         body = {
             "agents": [{"key": "edu-assistant", "description": "d"}],
-            "models": ["dashscope:qwen3.7-max"],
+            "models": ["dashscope:qwen3.8-max"],
             "default_agent": "edu-assistant",
-            "default_model": "dashscope:qwen3.7-max",
+            "default_model": "dashscope:qwen3.8-max",
         }
         mock = Response(200, json=body, request=Request("GET", "http://test/api/info"))
         with patch("httpx.get", return_value=mock) as get:
@@ -137,7 +137,7 @@ class TestInvoke:
             {"type": "ai", "content": "ok"},
         )
         with patch("httpx.post", return_value=mock) as post:
-            msg = agent_client.invoke("hi", thread_id="t1", model="dashscope:qwen3.7-max")
+            msg = agent_client.invoke("hi", thread_id="t1", model="dashscope:qwen3.8-max")
         assert isinstance(msg, ChatMessage)
         assert msg.content == "ok"
         url = post.call_args.args[0]

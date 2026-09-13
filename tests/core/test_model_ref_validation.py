@@ -11,7 +11,7 @@ def _base_env(**overrides) -> dict:
         "DASHSCOPE_API_KEY": SecretStr("sk-dash"),
         "DEEPSEEK_API_KEY": None,
         "USE_FAKE_MODEL": False,
-        "LLM_MODEL": "dashscope:qwen3.6-27b",
+        "LLM_MODEL": "dashscope:qwen3.8-27b",
         "DEFAULT_MODEL": "",
     }
     env.update(overrides)
@@ -20,7 +20,7 @@ def _base_env(**overrides) -> dict:
 
 def test_valid_llm_model_constructs():
     cfg = Settings(**_base_env())
-    assert cfg.LLM_MODEL == "dashscope:qwen3.6-27b"
+    assert cfg.LLM_MODEL == "dashscope:qwen3.8-27b"
     assert cfg.DEFAULT_MODEL
 
 
@@ -36,7 +36,7 @@ def test_llm_model_unknown_model_id():
 
 def test_llm_model_bad_format():
     with pytest.raises(ValueError, match="LLM_MODEL"):
-        Settings(**_base_env(LLM_MODEL="qwen3.6-27b"))
+        Settings(**_base_env(LLM_MODEL="qwen3.8-27b"))
 
 
 def test_explicit_default_model_validated():

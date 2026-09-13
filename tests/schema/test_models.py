@@ -18,7 +18,7 @@ from schema.models import (
 
 class TestParseModelRef:
     def test_parses_gateway_and_model_id(self):
-        assert parse_model_ref("dashscope:qwen3.7-max") == (Gateway.DASHSCOPE, "qwen3.7-max")
+        assert parse_model_ref("dashscope:qwen3.8-max") == (Gateway.DASHSCOPE, "qwen3.8-max")
 
     def test_same_model_id_can_choose_either_gateway(self):
         """同一 DeepSeek 模型，既可走官方也可走阿里云 —— 这正是分离网关的意义。"""
@@ -36,7 +36,7 @@ class TestParseModelRef:
         assert gateway is Gateway.DASHSCOPE
         assert model_id == "vendor:model"
 
-    @pytest.mark.parametrize("bad", ["", "qwen3.7-max", "dashscope:", ":qwen3.7-max"])
+    @pytest.mark.parametrize("bad", ["", "qwen3.8-max", "dashscope:", ":qwen3.8-max"])
     def test_rejects_malformed_ref(self, bad):
         with pytest.raises(ValueError):
             parse_model_ref(bad)
@@ -57,6 +57,7 @@ class TestGatewayModels:
         """阿里云百炼代理 DeepSeek 模型，所以同一 ID 会出现在两个网关下。"""
         assert "deepseek-v4-flash" in GATEWAY_MODELS[Gateway.DASHSCOPE]
         assert "deepseek-v4-flash" in GATEWAY_MODELS[Gateway.DEEPSEEK]
+        assert {"qwen3.8-max", "qwen3.8-flash", "qwen3.8-27b"} <= GATEWAY_MODELS[Gateway.DASHSCOPE]
 
     def test_deepseek_gateway_only_serves_own_models(self):
         assert all(model.startswith("deepseek") for model in GATEWAY_MODELS[Gateway.DEEPSEEK])
