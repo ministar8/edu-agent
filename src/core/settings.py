@@ -1,4 +1,4 @@
-import os
+﻿import os
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "BAAI/bge-m3"
     EMBEDDING_DIM: int = 1024
 
-    # ── Reranker（本地 TEI bge-reranker-base）──────
+    # ── Reranker（本地 TEI bge-reranker-v2-m3）──────
     RERANK_ENABLED: bool = True
     RERANK_MODE: str = "local"
     RERANK_LOCAL_URL: Annotated[str, BeforeValidator(check_str_is_http)] = "http://localhost:8080"
