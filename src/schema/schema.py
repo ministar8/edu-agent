@@ -72,6 +72,12 @@ class ChatMessage(BaseModel):
         examples=["human", "ai", "tool", "custom"],
     )
     content: str = Field(description="消息内容。", examples=["Hello, world!"])
+    name: str | None = Field(
+        description="消息发送者名称。AI 消息用于标识产出该答案的专家"
+        "（如 knowledge_agent），便于前端区分「知识讲解 / 出题 / 批改」。",
+        default=None,
+        examples=["knowledge_agent"],
+    )
     tool_calls: list[ToolCall] = Field(description="消息中的工具调用。", default=[])
     tool_call_id: str | None = Field(description="此消息响应的工具调用 ID。", default=None)
     run_id: str | None = Field(description="消息的 run ID。", default=None)

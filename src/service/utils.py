@@ -39,17 +39,24 @@ def convert_message_content_to_string(content: str | list[str | dict]) -> str:
 
 
 def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
-    """把 LangChain 消息转换为 ChatMessage。"""
+    """把 LangChain 消息转换为 ChatMessage。
+
+    需要透传 ``name``：AI 消息的 name 标识产出该答案的专家，前端据此区分
+    「知识讲解 / 出题 / 批改」；丢掉它会让专家身份在对外契约里消失。
+    """
+    name = getattr(message, "name", None)
     match message:
         case HumanMessage():
             return ChatMessage(
                 type="human",
                 content=convert_message_content_to_string(message.content),
+                name=name,
             )
         case AIMessage():
             ai_message = ChatMessage(
                 type="ai",
                 content=convert_message_content_to_string(message.content),
+                name=name,
             )
             if message.tool_calls:
                 ai_message.tool_calls = message.tool_calls
@@ -60,6 +67,7 @@ def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
             return ChatMessage(
                 type="tool",
                 content=convert_message_content_to_string(message.content),
+                name=name,
                 tool_call_id=message.tool_call_id,
             )
         case LangchainChatMessage():
