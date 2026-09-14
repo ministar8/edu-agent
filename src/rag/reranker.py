@@ -1,4 +1,4 @@
-﻿"""Reranker 重排序模块
+"""Reranker 重排序模块
 
 使用本地 TEI bge-reranker-v2-m3 对向量检索结果进行精排。
 通过 RERANK_ENABLED 开关控制。

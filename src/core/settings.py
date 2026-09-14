@@ -1,4 +1,4 @@
-﻿import os
+import os
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, Any, Literal

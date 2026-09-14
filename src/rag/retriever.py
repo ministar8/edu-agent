@@ -368,7 +368,6 @@ def _resolve_retrieval_policy(
     return effective_threshold, coarse_k
 
 
-
 # BM25 路由 k 倍率：知识库扩充后 BM25 命中量已增加，降低倍率避免噪声淹没语义信号
 _BM25_K_MULTIPLIER = 1.2
 _COMPACT_SUBQUERY_ROUTES = {"keyword_bm25", "concept_meta", "structured_meta", "section_meta"}
