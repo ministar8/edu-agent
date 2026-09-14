@@ -13,8 +13,10 @@ workflow = create_supervisor(
     [knowledge_agent, question_agent, grading_agent],
     model=get_model(settings.DEFAULT_MODEL, temperature=TEMPERATURE_SUPERVISOR),
     prompt=SUPERVISOR_PROMPT,
-    add_handoff_back_messages=True,
-    output_mode="full_history",
+    # 只保留子 agent 最后一条回答，避免 full_history 把中间检索/重复内容透传给前端
+    output_mode="last_message",
+    # 子 agent 完成后不再回插 "Transferring back to supervisor" 这类控制消息
+    add_handoff_back_messages=False,
 )
 
 # 内层 supervisor（仅分派）。对外图见 teaching_graph.edu_supervisor（含 load_memory）

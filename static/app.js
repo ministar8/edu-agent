@@ -38,6 +38,150 @@ document.getElementById("logout").onclick = async () => {
 const messagesEl = document.getElementById("messages");
 let sending = false;
 
+// ── 极简 Markdown 渲染（无外部依赖，先转义再渲染，天然防 XSS） ──
+function escapeHtml(s) {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// 行内元素：行内代码 → 加粗 → 链接（顺序重要，代码优先避免内部被继续解析）
+function renderInline(s) {
+  return s
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+
+function splitTableRow(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((s) => s.trim());
+}
+
+// 判断一行是否为块级元素起点（用于段落的行合并终止条件）
+function isBlockStart(line) {
+  return (
+    /^\s*```/.test(line) ||
+    /^\s*#{1,6}\s+/.test(line) ||
+    /^\s*>\s?/.test(line) ||
+    /^\s*[-*]\s+/.test(line) ||
+    /^\s*\d+[.)]\s+/.test(line) ||
+    /^\s*\|.*\|\s*$/.test(line)
+  );
+}
+
+function renderMarkdown(text) {
+  const lines = String(text || "").split("\n");
+  const out = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // 代码块
+    if (/^\s*```/.test(line)) {
+      const code = [];
+      i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) {
+        code.push(lines[i]);
+        i++;
+      }
+      i++; // 跳过结束围栏
+      out.push(`<pre><code>${escapeHtml(code.join("\n"))}</code></pre>`);
+      continue;
+    }
+
+    // 标题
+    const heading = line.match(/^\s*(#{1,6})\s+(.*)$/);
+    if (heading) {
+      const level = heading[1].length;
+      out.push(`<h${level}>${renderInline(escapeHtml(heading[2]))}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    // 引用
+    if (/^\s*>\s?/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*>\s?/, ""));
+        i++;
+      }
+      out.push(`<blockquote>${renderInline(escapeHtml(items.join(" ")))}</blockquote>`);
+      continue;
+    }
+
+    // 表格（当前行含 | 且下一行是分隔行）
+    if (
+      /^\s*\|.*\|\s*$/.test(line) &&
+      i + 1 < lines.length &&
+      /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) &&
+      lines[i + 1].includes("-")
+    ) {
+      const headers = splitTableRow(line);
+      i += 2; // 跳过分隔行
+      const rows = [];
+      while (i < lines.length && lines[i].includes("|")) {
+        rows.push(splitTableRow(lines[i]));
+        i++;
+      }
+      const thead = `<tr>${headers.map((c) => `<th>${renderInline(escapeHtml(c))}</th>`).join("")}</tr>`;
+      const tbody = rows
+        .map((r) => `<tr>${r.map((c) => `<td>${renderInline(escapeHtml(c))}</td>`).join("")}</tr>`)
+        .join("");
+      out.push(`<table><thead>${thead}</thead><tbody>${tbody}</tbody></table>`);
+      continue;
+    }
+
+    // 无序列表
+    if (/^\s*[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*[-*]\s+/, ""));
+        i++;
+      }
+      out.push(`<ul>${items.map((it) => `<li>${renderInline(escapeHtml(it))}</li>`).join("")}</ul>`);
+      continue;
+    }
+
+    // 有序列表
+    if (/^\s*\d+[.)]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) {
+        items.push(lines[i].replace(/^\s*\d+[.)]\s+/, ""));
+        i++;
+      }
+      out.push(`<ol>${items.map((it) => `<li>${renderInline(escapeHtml(it))}</li>`).join("")}</ol>`);
+      continue;
+    }
+
+    // 空行
+    if (line.trim() === "") {
+      i++;
+      continue;
+    }
+
+    // 普通段落：合并连续非空、非块级起始的行
+    const para = [];
+    while (i < lines.length && lines[i].trim() !== "" && !isBlockStart(lines[i])) {
+      para.push(lines[i].trim());
+      i++;
+    }
+    if (para.length) {
+      out.push(`<p>${renderInline(escapeHtml(para.join(" ")))}</p>`);
+    }
+  }
+
+  return out.join("");
+}
+
 function addMessage(type, content) {
   const hint = messagesEl.querySelector(".empty-hint");
   if (hint) hint.remove();
@@ -55,6 +199,11 @@ async function sendMessage(message) {
   document.getElementById("send-btn").disabled = true;
   addMessage("user", message);
   const aiDiv = addMessage("ai", "");
+
+  // expertRaw：专家整条回答（message 事件）；tokenRaw：supervisor 回复（token 流）。
+  // 有专家回答时优先展示专家，supervisor 的收尾转述不再叠加，避免重复。
+  let expertRaw = "";
+  let tokenRaw = "";
 
   try {
     const res = await apiPost(API.stream, { message, thread_id: threadId });
@@ -78,21 +227,25 @@ async function sendMessage(message) {
         let evt;
         try { evt = JSON.parse(data); } catch { continue; }
         if (evt.type === "token") {
-          aiDiv.textContent += evt.content;
+          tokenRaw += evt.content;
         } else if (evt.type === "message" && evt.content) {
           const m = evt.content;
-          if (m.type === "ai" && m.content && aiDiv.textContent === "") {
-            aiDiv.textContent = m.content;
+          if (m.type === "ai" && m.content) {
+            expertRaw = m.content;
           }
         } else if (evt.type === "error") {
-          aiDiv.textContent += `\n[错误] ${evt.content}`;
+          tokenRaw += `\n[错误] ${evt.content}`;
         }
+        aiDiv.textContent = expertRaw || tokenRaw;
         messagesEl.scrollTop = messagesEl.scrollHeight;
       }
     }
   } catch (e) {
     aiDiv.textContent = `网络错误：${e.message}`;
   } finally {
+    if (expertRaw || tokenRaw) {
+      aiDiv.innerHTML = renderMarkdown(expertRaw || tokenRaw);
+    }
     sending = false;
     document.getElementById("send-btn").disabled = false;
   }

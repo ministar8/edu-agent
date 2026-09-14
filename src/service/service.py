@@ -80,6 +80,12 @@ logger = logging.getLogger(__name__)
 # 过滤 LangChain beta 特性告警，避免日志噪音
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 
+# langgraph-supervisor 回传控制消息（英文），不应作为回答透传给用户
+_HANDOFF_BACK_PREFIXES = (
+    "Transferring back to ",
+    "Successfully transferred back to ",
+)
+
 
 def custom_generate_unique_id(route: APIRoute) -> str:
     """用函数名作为 OpenAPI operationId。"""
@@ -318,6 +324,8 @@ async def message_generator(
                     yield f"data: {json.dumps({'type': 'error', 'content': 'Unexpected error'})}\n\n"
                     continue
                 if chat_message.type == "human" and chat_message.content == user_input.message:
+                    continue
+                if chat_message.content.startswith(_HANDOFF_BACK_PREFIXES):
                     continue
                 yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
 
