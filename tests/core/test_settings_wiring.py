@@ -18,16 +18,26 @@
 
 - 第一层 `TestNoDeadSettings`：全量扫描 settings 字段，任何一个在 `src/` 内
   （含 settings 自身）完全没有读取点即为死配置。
-- 第二层 `TestCriticalSettingsReachRuntimeObjects`：对声明了安全语义的配置，
-  实测它是否真的进入运行时对象（不是「代码里有引用」就算数）。
+- 第二层 `TestCriticalSettingsReachRuntimeObjects`：对声明了安全/行为语义的配置，
+  实测它是否真的进入运行时对象（不是「代码里有引用」就算数）。采用**注册表**
+  组织：每条检查是一个 `WiringProbe`，新增检查只需加一条记录。
 - 第三层 `TestGuardSettingsAreNotSilentlyReverted`：把关键安全项的**有效取值**
   也钉死，防止被改回「看起来一样但不生效」的状态。
+
+**如何新增一条第二层检查**：在 `_WIRING_PROBES` 里追加一个 `WiringProbe`，
+其中 `read_runtime` 必须真的从一个运行时对象里把**当前生效的值**读出来
+（构造客户端、捕获调用实参、读 config 字段等），而不是再次引用 settings。
+新增后请务必按 skill `regression-test-validity-check` 做反向验证。
 """
 
 from __future__ import annotations
 
 import re
+import uuid
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -121,39 +131,152 @@ class TestNoDeadSettings:
         assert SETTINGS_FILE.exists()
 
 
+# ── 第二层探针 ────────────────────────────────────────────────
+#
+# 每个探针返回「当前实际生效的值」。约定：
+#   - 不联网、不依赖外部服务（用测试环境的假 key 构造客户端即可）；
+#   - 不返回 None（None 视为探针失效，会被上面的测试判为失败）；
+#   - 探针内部临时替换的东西必须用 try/finally 还原。
+
+
+async def _probe_recursion_limit() -> Any:
+    """读 `RunnableConfig.recursion_limit` —— 真正决定图执行上界的字段。
+
+    本项目踩过的坑：字段可以存在、甚至被别处引用，但只有写进传给 `ainvoke`
+    的 config 才生效；否则 LangGraph 会用默认值 10007。
+    """
+    from schema import UserInput
+    from service.service import _handle_input
+
+    class _State:
+        values: dict = {}
+        metadata = None
+        tasks: list = []
+
+    class _Agent:
+        async def aget_state(self, config=None):  # noqa: ARG002
+            return _State()
+
+    kwargs, _ = await _handle_input(UserInput(message="你好"), _Agent(), "edu-assistant", "user-1")
+    return kwargs["config"].get("recursion_limit")
+
+
+async def _probe_llm_timeout() -> Any:
+    """读构造出的 ChatOpenAI 的 `request_timeout`。
+
+    超时保护必须落在真实客户端上；只在调用处写 `timeout=settings.LLM_TIMEOUT`
+    而客户端不接收，等于没有超时。
+    """
+    from core.llm import _build_client
+
+    client = _build_client("dashscope:qwen3.8-max", "qwen3.8-max", 0.3, streaming=False)
+    return client.request_timeout
+
+
+async def _probe_history_trim() -> Any:
+    """捕获 `run_supervisor` 传给 `trim_conversation` 的 `max_messages` 实参。
+
+    这是「短期限流」真正生效的位置：值必须从 settings 流到调用点，否则长 thread
+    会把完整历史塞进模型上下文。用桩替换 inner_supervisor，避免真实调用模型。
+    """
+    from langchain_core.messages import HumanMessage
+
+    import agents.teaching_graph as teaching_graph
+
+    captured: dict = {}
+    original_trim = teaching_graph.trim_conversation
+    original_supervisor = teaching_graph.inner_supervisor
+
+    def spy_trim(messages, *, max_messages):  # noqa: ANN001
+        captured["max_messages"] = max_messages
+        return original_trim(messages, max_messages=max_messages)
+
+    class _StubSupervisor:
+        async def ainvoke(self, payload, config=None):  # noqa: ANN001, ARG002
+            return {"messages": payload.get("messages") or []}
+
+    teaching_graph.trim_conversation = spy_trim
+    teaching_graph.inner_supervisor = _StubSupervisor()
+    try:
+        await teaching_graph.run_supervisor({"messages": [HumanMessage(content="你好")]})
+    finally:
+        teaching_graph.trim_conversation = original_trim
+        teaching_graph.inner_supervisor = original_supervisor
+
+    return captured.get("max_messages")
+
+
+@dataclass(frozen=True)
+class WiringProbe:
+    """一条「配置 → 运行时对象」接线检查。"""
+
+    setting: str
+    describe: str
+    read_runtime: Callable[[], Awaitable[Any]]
+
+
+_WIRING_PROBES: tuple[WiringProbe, ...] = (
+    WiringProbe(
+        setting="AGENT_RECURSION_LIMIT",
+        describe="图执行上界，需写进传给 ainvoke 的 RunnableConfig.recursion_limit",
+        read_runtime=_probe_recursion_limit,
+    ),
+    WiringProbe(
+        setting="LLM_TIMEOUT",
+        describe="单次 LLM 调用超时，需落在 ChatOpenAI 的 request_timeout 上",
+        read_runtime=_probe_llm_timeout,
+    ),
+    WiringProbe(
+        setting="MEMORY_HISTORY_MAX_MESSAGES",
+        describe="送入模型的历史消息条数上限，需传到 trim_conversation 的 max_messages",
+        read_runtime=_probe_history_trim,
+    ),
+)
+
+
 class TestCriticalSettingsReachRuntimeObjects:
-    """第二层：关键配置必须真的进入运行时对象，而非只是「代码里提到了」。"""
+    """第二层：关键配置必须真的进入运行时对象，而非只是「代码里提到了」。
+
+    每条检查由 `WiringProbe.read_runtime` 从**运行时对象**读出当前生效值
+    （构造出来的客户端字段、调用点实际收到的实参、传给 `ainvoke` 的 config 等），
+    再与 `settings` 里的声明值比对。这样即使代码里写了 `settings.XXX`，
+    只要它没流到真正生效的地方，测试就会红。
+    """
 
     @pytest.mark.asyncio
-    async def test_recursion_limit_reaches_runnable_config(self):
-        """安全上界必须写进 `RunnableConfig.recursion_limit`。
-
-        这是本项目踩过的坑：字段可以存在、甚至被别处引用，但真正决定图执行上界的
-        是传给 `ainvoke` 的 config。不写进去，LangGraph 会用默认值 10007。
-        """
+    @pytest.mark.parametrize("probe", _WIRING_PROBES, ids=lambda p: p.setting)
+    async def test_setting_reaches_runtime_object(self, probe: WiringProbe):
         from core import settings
-        from schema import UserInput
-        from service.service import _handle_input
 
-        class _State:
-            values: dict = {}
-            metadata = None
-            tasks: list = []
+        expected = getattr(settings, probe.setting)
+        actual = await probe.read_runtime()
 
-        class _Agent:
-            async def aget_state(self, config=None):  # noqa: ARG002
-                return _State()
-
-        kwargs, _ = await _handle_input(
-            UserInput(message="你好"), _Agent(), "edu-assistant", "user-1"
+        assert actual is not None, (
+            f"{probe.setting} 的探针没有读到任何运行时值（返回 None）——"
+            f"探针本身可能已失效，请检查 {probe.describe}"
+        )
+        assert actual == expected, (
+            f"{probe.setting} 未接线：声明值={expected!r}，但运行时实际生效值={actual!r}。\n"
+            f"该接线点的作用：{probe.describe}\n"
+            "请检查读取点是否仍把 settings 值传到了真正生效的位置。"
         )
 
-        config = kwargs["config"]
-        assert config.get("recursion_limit") == settings.AGENT_RECURSION_LIMIT, (
-            f"config.recursion_limit={config.get('recursion_limit')!r} "
-            f"与 settings.AGENT_RECURSION_LIMIT={settings.AGENT_RECURSION_LIMIT!r} 不一致；"
-            "上界未接线，异常循环将跑到 LangGraph 默认值。"
-        )
+    def test_registry_is_not_empty_and_covers_real_fields(self):
+        """元测试：清单不能为空，且每条都必须指向真实存在的 settings 字段。"""
+        from core import settings
+
+        assert _WIRING_PROBES, "接线清单为空 —— 第二层等于没有检查"
+        for probe in _WIRING_PROBES:
+            assert hasattr(settings, probe.setting), (
+                f"清单里的 {probe.setting} 已不存在于 settings，请移除该条"
+            )
+            assert probe.describe.strip(), f"{probe.setting} 缺作用说明"
+
+    def test_no_duplicate_probes(self):
+        """元测试：同一配置不必重复登记，重复通常意味着有人加了冗余检查。"""
+        names = [p.setting for p in _WIRING_PROBES]
+        duplicates = {n for n in names if names.count(n) > 1}
+        assert not duplicates, f"接线清单存在重复项：{sorted(duplicates)}"
 
 
 class TestGuardSettingsAreNotSilentlyReverted:
@@ -187,3 +310,49 @@ class TestGuardSettingsAreNotSilentlyReverted:
 
         monkeypatch.setenv("AGENT_RECURSION_LIMIT", "123")
         assert Settings().AGENT_RECURSION_LIMIT == 123
+
+
+class TestFeatureFlagsActuallyGate:
+    """特性开关必须真的改变行为，而不只是「读了一下标志」。
+
+    这是「配置存在但不生效」的另一种形态：开关被读到了，但分支里没有真正跳过
+    对应的工作。典型症状是关掉开关后系统照旧联网 / 照旧耗时，而代码看着没问题。
+
+    与第二层注册表的区别：注册表断言的是「值透传到运行时对象」，形态是
+    `实际值 == 声明值`；这里断言的是「行为门控」，形态是「关闭后不应发生某事」。
+    断言形状不同，故单独成类，不进 `_WIRING_PROBES`。
+    """
+
+    def test_rerank_disabled_skips_network_call(self, monkeypatch):
+        """`RERANK_ENABLED=False` 时 `rerank` 必须直接截断返回，不构造 HTTP 客户端。
+
+        **探针设计上的坑（实测踩过）**：不能靠「在假客户端里抛异常」来检测 ——
+        `rerank` 末尾有一个兜底的 `except Exception`，会把异常吞掉并降级返回
+        `documents[:top_k]`，于是「守卫被删掉」与「守卫正常工作」表现完全一样，
+        测试会永远绿。故改为**记录客户端是否被构造**这一副作用。
+
+        另需用唯一 query 规避重排缓存，否则缓存命中同样会掩盖守卫缺失。
+        """
+        from langchain_core.documents import Document
+
+        from core import settings
+        from rag import reranker
+
+        monkeypatch.setattr(settings, "RERANK_ENABLED", False)
+
+        constructed: list[int] = []
+
+        class _RecordingClient:
+            def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
+                constructed.append(1)
+                raise RuntimeError("测试探针：不应构造 HTTP 客户端")
+
+        monkeypatch.setattr(reranker.httpx, "Client", _RecordingClient)
+
+        documents = [Document(page_content=f"doc-{i}") for i in range(10)]
+        result = reranker.rerank(f"查询-{uuid.uuid4().hex}", documents, top_k=3)
+
+        assert not constructed, "RERANK_ENABLED=False 时不应构造 HTTP 客户端 —— 特性开关未生效"
+        assert [d.page_content for d in result] == ["doc-0", "doc-1", "doc-2"], (
+            "关闭重排后应原序截断返回前 top_k 条"
+        )
