@@ -7,6 +7,7 @@ import sys
 import uvicorn
 
 from core import settings
+from core.settings import PROJECT_ROOT
 
 
 def main() -> None:
@@ -19,6 +20,8 @@ def main() -> None:
         host=settings.HOST,
         port=settings.PORT,
         reload=settings.is_dev(),
+        # dev 热重载只监听源码目录：运行时写 chroma_db / *.db 等数据文件不应触发重启
+        reload_dirs=[str(PROJECT_ROOT / "src")],
         timeout_graceful_shutdown=settings.GRACEFUL_SHUTDOWN_TIMEOUT,
     )
 

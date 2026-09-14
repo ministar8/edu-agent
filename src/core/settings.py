@@ -26,10 +26,6 @@ def _resolve_project_path(value: str) -> str:
     return str(PROJECT_ROOT / path)
 
 
-class DatabaseType(StrEnum):
-    SQLITE = "sqlite"
-
-
 class LogLevel(StrEnum):
     """日志级别（对齐参考项目）。"""
 
@@ -107,7 +103,6 @@ class Settings(BaseSettings):
 
     # ── Reranker（本地 TEI bge-reranker-v2-m3）──────
     RERANK_ENABLED: bool = True
-    RERANK_MODE: str = "local"
     RERANK_LOCAL_URL: Annotated[str, BeforeValidator(check_str_is_http)] = "http://localhost:8080"
     RERANK_MIN_SCORE: float = 0.3
     RERANK_ABSOLUTE_MIN_SCORE: float = 0.15
@@ -124,8 +119,6 @@ class Settings(BaseSettings):
 
     # ── Token Budget ────────────────────────────────
     CONTEXT_TOKEN_BUDGET: int = 6000
-    CONTEXT_TOKEN_BUDGET_SHALLOW: int = 3000
-    CONTEXT_TOKEN_BUDGET_DEEP: int = 8000
     MAX_STUDENT_PROFILE_TOKENS: int = 800
 
     # ── 超时（seconds）─────────────────────────────
@@ -156,7 +149,6 @@ class Settings(BaseSettings):
     KNOWLEDGE_DIR: str = str(PROJECT_ROOT / "knowledge")
 
     # ── Database（checkpointer / store）────────────
-    DATABASE_TYPE: DatabaseType = DatabaseType.SQLITE
     SQLITE_DB_PATH: str = "checkpoints.db"
     SQLITE_STORE_PATH: str = "store.db"
 
@@ -303,3 +295,5 @@ class Settings(BaseSettings):
 settings = Settings()
 settings.CHROMA_PERSIST_DIR = _resolve_project_path(settings.CHROMA_PERSIST_DIR)
 settings.KNOWLEDGE_DIR = _resolve_project_path(settings.KNOWLEDGE_DIR)
+settings.SQLITE_DB_PATH = _resolve_project_path(settings.SQLITE_DB_PATH)
+settings.SQLITE_STORE_PATH = _resolve_project_path(settings.SQLITE_STORE_PATH)

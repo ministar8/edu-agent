@@ -1,6 +1,6 @@
 import os
 
-from core.settings import DatabaseType, Settings, settings
+from core.settings import Settings, settings
 
 
 def test_default_model_set():
@@ -15,10 +15,6 @@ def test_available_models_nonempty():
 
 def test_default_model_in_available():
     assert settings.DEFAULT_MODEL in settings.AVAILABLE_MODELS
-
-
-def test_database_type_default_sqlite():
-    assert settings.DATABASE_TYPE == DatabaseType.SQLITE
 
 
 def test_base_url():

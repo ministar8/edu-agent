@@ -321,9 +321,10 @@ class SemanticCache:
             match_id = results["ids"][0][0]
             match_meta = (results["metadatas"] or [[]])[0]
             match_meta = match_meta[0] if match_meta else {}
-            # Verify collection context matches (avoid cross-collection hits)
+            # Verify collection + filter context matches (avoid cross-collection / cross-filter hits)
             match_collection = match_meta.get("collection_name", "")
-            if collection_name and match_collection and collection_name != match_collection:
+            match_filter = match_meta.get("filter_sig", "")
+            if collection_name != match_collection or filter_sig != match_filter:
                 self._misses += 1
                 return None, similarity
             with self._lock:
@@ -415,7 +416,12 @@ class SemanticCache:
                     ids=[key],
                     embeddings=[query_embedding],
                     metadatas=[
-                        {"query": query, "stored_at": wall_now, "collection_name": collection_name}
+                        {
+                            "query": query,
+                            "stored_at": wall_now,
+                            "collection_name": collection_name,
+                            "filter_sig": filter_sig,
+                        }
                     ],
                 )
 
@@ -578,6 +584,27 @@ class SemanticCache:
             return
         oldest_key = min(self._meta, key=lambda k: self._meta[k]["timestamp"])
         self._evict(oldest_key)
+
+    def clear(self) -> None:
+        """清空语义缓存（知识库全量重建时调用）。
+
+        删除底层集合并重置引用，让下次访问时重新初始化；同时清内存索引与 JSONL。
+        """
+        with self._lock:
+            self._meta.clear()
+            self._jsonl_offsets.clear()
+            self._collection = None
+            try:
+                from rag.vectorstore import get_vector_store_manager
+
+                get_vector_store_manager().delete_collection(_COLLECTION_NAME)
+            except Exception as e:
+                logger.debug("Failed to delete semantic_cache collection: %s", e)
+            try:
+                if self._jsonl_path.exists():
+                    self._jsonl_path.unlink()
+            except Exception:
+                pass
 
     def compact_jsonl(self) -> int:
         """Compact JSONL file by removing TTL-expired entries.

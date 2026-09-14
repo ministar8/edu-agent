@@ -152,13 +152,22 @@ async def info() -> ServiceMetadata:
     )
 
 
-def _check_thread_owner(metadata: Mapping[str, Any] | None, user_id: str, agent_id: str) -> None:
+def _check_thread_owner(
+    metadata: Mapping[str, Any] | None,
+    user_id: str,
+    agent_id: str,
+    *,
+    has_history: bool = False,
+) -> None:
     """校验 thread 归属，不匹配时按「不存在」处理，避免泄漏他人会话是否存在。
 
     thread_id 由客户端提供，等同于 bearer capability：若不校验，拿到别人的 thread_id
-    即可读取并续写其会话。新建 thread 尚无 checkpoint（metadata 为空）时放行。
+    即可读取并续写其会话。新建 thread 尚无 checkpoint（metadata 为空且无历史）时放行；
+    但若 thread 已有历史却缺 metadata，说明归属信息缺失，同样拒绝。
     """
     if not metadata:
+        if has_history:
+            raise not_found(CODE_THREAD_NOT_FOUND, "对话不存在")
         return
     if metadata.get("user_id") != user_id or metadata.get("agent_id") != agent_id:
         raise not_found(CODE_THREAD_NOT_FOUND, "对话不存在")
@@ -196,7 +205,8 @@ async def _handle_input(
 
     state = await agent.aget_state(config=config)
     # 先校验归属再决定是否恢复/续写，防止他人 thread 被读取或追加
-    _check_thread_owner(state.metadata, user_id, agent_id)
+    has_history = bool(state.values and state.values.get("messages"))
+    _check_thread_owner(state.metadata, user_id, agent_id, has_history=has_history)
     interrupted_tasks = [
         task for task in state.tasks if hasattr(task, "interrupts") and task.interrupts
     ]
@@ -392,7 +402,12 @@ async def history(
         checkpointer = getattr(agent, "checkpointer", None)
         tup = await checkpointer.aget_tuple(config) if checkpointer else None
         # thread_id 来自客户端，必须校验归属后才能返回内容
-        _check_thread_owner(tup.metadata if tup else None, str(current_user.id), agent_id)
+        _check_thread_owner(
+            tup.metadata if tup else None,
+            str(current_user.id),
+            agent_id,
+            has_history=tup is not None,
+        )
 
         messages: list[BaseMessage] = []
         if tup is not None and "__previous__" in (tup.checkpoint.get("channel_values") or {}):

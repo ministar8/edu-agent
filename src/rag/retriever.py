@@ -120,12 +120,6 @@ _query_cache: BoundedCache[str, list[tuple[Document, float]]] = BoundedCache(
     max_size=_MAX_CACHE_SIZE, ttl=_CACHE_TTL, name="retriever_query"
 )
 
-# 集合文档数缓存（5 分钟 TTL，避免重复 collection.count() 调用）
-_COLLECTION_COUNT_TTL = 300  # seconds
-_collection_count_cache: BoundedCache[str, int] = BoundedCache(
-    max_size=64, ttl=_COLLECTION_COUNT_TTL, name="retriever_collection_count"
-)
-
 
 def _copy_results(results: list[tuple[Document, float]]) -> list[tuple[Document, float]]:
     """缓存命中时返回浅拷贝：新 list + 每篇 Document 复制一份 metadata。
@@ -374,54 +368,19 @@ def _resolve_retrieval_policy(
     return effective_threshold, coarse_k
 
 
-def _get_collection_count(collection_name: str) -> int:
-    """获取集合文档数，带 5 分钟 TTL 缓存"""
-
-    def _count() -> int:
-        try:
-            from rag.vectorstore import get_vector_store_manager
-
-            coll = get_vector_store_manager().client.get_collection(collection_name)
-            return coll.count()
-        except Exception:
-            return 500  # 默认值
-
-    # 带 IO（collection.count()），用 get_or_compute：允许竞态重复计数，但不持锁等待
-    return _collection_count_cache.get_or_compute(collection_name, _count)
-
-
-def _adaptive_k(k: int, collection_count: int, use_rerank: bool) -> int:
-    """按集合大小自适应调整 k
-
-    小集合（<200条）：k 上限为集合大小的 30%，避免全量扫描
-    大集合（>800条）：k 可以放大到 k*factor
-    """
-    if collection_count <= 0:
-        return k
-    # 小集合保护：最多搜集合的 30%
-    max_k_for_size = max(k, int(collection_count * 0.30))
-    if use_rerank:
-        expanded = min(k * _RERANK_EXPAND_FACTOR, 50)
-    else:
-        expanded = min(k * 2, 20)
-    return min(expanded, max_k_for_size)
-
 
 # BM25 路由 k 倍率：知识库扩充后 BM25 命中量已增加，降低倍率避免噪声淹没语义信号
 _BM25_K_MULTIPLIER = 1.2
 _COMPACT_SUBQUERY_ROUTES = {"keyword_bm25", "concept_meta", "structured_meta", "section_meta"}
 
 
-def _route_adaptive_k(k: int, collection_count: int, use_rerank: bool, route_name: str = "") -> int:
-    """按路由类型和集合大小自适应调整 k
+def _route_adaptive_k(k: int, use_rerank: bool, route_name: str = "") -> int:
+    """按路由类型调整 k
 
-    BM25 路由 k × 1.5（关键词命中覆盖面窄，需要更多候选），
+    BM25 路由按倍率放大候选（关键词命中覆盖面窄，需要更多候选），
     semantic/metadata 路由保持基础 k（语义检索精度高，小 k 足够）。
     """
-    if collection_count <= 0:
-        base_k = k
-    else:
-        base_k = min(k, max(k, int(collection_count * 0.30)))
+    base_k = k
     if route_name == "keyword_bm25":
         base_k = int(base_k * _BM25_K_MULTIPLIER)
     elif route_name == "expanded":
@@ -475,9 +434,7 @@ def _multi_route_search(
 
     def _search_one(spec):
         target_collection, route_name, route_query, route_filter = spec
-        route_k = _route_adaptive_k(
-            k, _get_collection_count(target_collection), use_rerank, route_name
-        )
+        route_k = _route_adaptive_k(k, use_rerank, route_name)
         result = _raw_search(
             route_query, target_collection, route_k, filter=route_filter, route_name=route_name
         )
@@ -585,9 +542,7 @@ async def _amulti_route_search(
         route_id = f"{target_collection}:{route_name}"
 
         def _run():
-            route_k = _route_adaptive_k(
-                k, _get_collection_count(target_collection), use_rerank, route_name
-            )
+            route_k = _route_adaptive_k(k, use_rerank, route_name)
             result = _raw_search(
                 route_query,
                 target_collection,
@@ -602,16 +557,7 @@ async def _amulti_route_search(
                 try:
                     from rag.vectorstore import get_vector_store_manager
 
-                    collection_count = await _safe_to_thread(
-                        f"{route_id}:count",
-                        _get_collection_count,
-                        target_collection,
-                        timeout=min(_route_timeout_seconds(route_name), 1.0),
-                        default=500,
-                    )
-                    route_k = _route_adaptive_k(
-                        k, int(collection_count or 500), use_rerank, route_name
-                    )
+                    route_k = _route_adaptive_k(k, use_rerank, route_name)
                     result = await get_vector_store_manager().asimilarity_search_with_score(
                         target_collection,
                         route_query,

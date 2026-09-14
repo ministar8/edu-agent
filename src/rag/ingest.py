@@ -122,6 +122,13 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
     if categories is None:
         categories = DEFAULT_CATEGORIES
 
+    if rebuild:
+        # 全量重建时清空语义缓存，避免旧知识残留导致跨版本缓存命中
+        from rag.semantic_cache import get_semantic_cache
+
+        get_semantic_cache().clear()
+        logger.info("  已清空语义缓存")
+
     logger.info("=" * 60)
     logger.info("  智能教学系统 - 全量索引构建")
     logger.info("  模式: %s", "全量重建" if rebuild else "增量入库")

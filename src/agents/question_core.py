@@ -36,10 +36,16 @@ _DIFFICULTY_LABEL = {
 async def agenerate_question_set(
     topic: str, count: int = 1, difficulty: str = "mixed"
 ) -> GeneratedQuestionSet:
-    """生成结构化练习题；失败抛 RuntimeError（由调用方决定 HTTP/对话语义）。"""
+    """生成结构化练习题；失败抛 RuntimeError（由调用方决定 HTTP/对话语义）。
+
+    structured output 偶发失败（模型输出不满足 schema）时重试一次，再失败才抛错。
+    """
     messages = QUESTION_GEN_PROMPT.format_messages(count=count, topic=topic, difficulty=difficulty)
     state = await question_gen_agent.ainvoke({"messages": messages})
     result: GeneratedQuestionSet | None = state.get("structured_response")
+    if result is None:
+        state = await question_gen_agent.ainvoke({"messages": messages})
+        result = state.get("structured_response")
     if result is None:
         raise RuntimeError("出题失败：未返回结构化结果")
     return result

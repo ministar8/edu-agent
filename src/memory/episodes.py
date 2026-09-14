@@ -7,6 +7,7 @@ import uuid
 
 from langgraph.store.base import BaseStore
 
+from core.settings import settings
 from memory.namespaces import episode_key, student_episodes_ns
 from memory.schemas import Episode
 
@@ -52,10 +53,15 @@ async def arecent_episodes(
     """最近的情节记忆（按 at 降序，最多 limit 条）。
 
     未配置向量索引时 store.search 按插入序返回；这里再按时间排序兜底。
+    检索上限取「每用户 episodes 上限」而非 limit —— 否则 asearch(limit=limit) 只返回
+    前 limit 条（插入序而非时间序），排序兜底拿到的是「最早 limit 条里最新的」，而不是
+    全局最新的 limit 条。
     """
     if limit <= 0:
         return []
-    items = await store.asearch(student_episodes_ns(user_id), limit=limit)
+    items = await store.asearch(
+        student_episodes_ns(user_id), limit=settings.MEMORY_EPISODE_MAX_PER_USER
+    )
     episodes: list[Episode] = []
     for item in items:
         ep = coerce_episode(item.value)

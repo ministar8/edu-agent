@@ -68,13 +68,11 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             timeout=_embedding_timeout(),
         )
         if resp.status_code != 200:
-            logger.warning("Single embedding failed (%d), using zero vector", resp.status_code)
-            return [0.0] * settings.EMBEDDING_DIM
+            raise RuntimeError(f"单条 embedding 失败：HTTP {resp.status_code}")
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
-            logger.warning("NaN in single embedding, using zero vector for: %s", s[:80])
-            return [0.0] * settings.EMBEDDING_DIM
+            raise RuntimeError(f"单条 embedding 返回 NaN：{s[:80]}")
         return vec
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -155,15 +153,11 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             json={"model": self.model, "input": [s[:MAX_TEXT_LENGTH]]},
         )
         if resp.status_code != 200:
-            logger.warning(
-                "Async single embedding failed (%d), using zero vector", resp.status_code
-            )
-            return [0.0] * settings.EMBEDDING_DIM
+            raise RuntimeError(f"异步单条 embedding 失败：HTTP {resp.status_code}")
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
-            logger.warning("NaN in async single embedding, using zero vector for: %s", s[:80])
-            return [0.0] * settings.EMBEDDING_DIM
+            raise RuntimeError(f"异步单条 embedding 返回 NaN：{s[:80]}")
         return vec
 
     async def _aembed_batch(
@@ -255,11 +249,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 }
                 for future in as_completed(futures):
                     idx = futures[future]
-                    try:
-                        results[idx] = future.result()
-                    except Exception as e:
-                        logger.warning("Batch %d failed: %s", idx, e)
-                        results[idx] = [[0.0] * settings.EMBEDDING_DIM] * len(batches[idx])
+                    results[idx] = future.result()
             all_embeddings = []
             for i in range(len(batches)):
                 all_embeddings.extend(results.get(i, []))
@@ -295,14 +285,10 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 import asyncio
 
                 tasks = [self._aembed_batch(batch, client=client) for batch in batches]
-                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+                batch_results = await asyncio.gather(*tasks)
                 all_embeddings = []
-                for i, result in enumerate(batch_results):
-                    if isinstance(result, Exception):
-                        logger.warning("Async batch %d failed: %s", i, result)
-                        all_embeddings.extend([[0.0] * settings.EMBEDDING_DIM] * len(batches[i]))
-                    else:
-                        all_embeddings.extend(result)
+                for result in batch_results:
+                    all_embeddings.extend(result)
 
         metrics.emit(
             event="embed_documents",
