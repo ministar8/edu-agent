@@ -257,6 +257,28 @@ async def invoke(
         raise internal_error("Unexpected error") from e
 
 
+def _is_user_visible_message(message: Any) -> bool:
+    """SSE message 流只放行用户可见的对话内容。
+
+    updates 流（含 subgraphs）会把同一最终消息从内层节点（model/agent）与外层包装
+    节点各报一次，并夹带路由/工具中间消息：
+
+    - SystemMessage：工作记忆卡，只进模型上下文
+    - ToolMessage：工具结果与 handoff 控制消息，不是对话气泡
+    - 带 tool_calls 或空内容的 AIMessage：分派决策与中间步骤，不是最终回答
+    - 同 ID 消息只发一次（配合 message_generator 里的 seen_ids 去重）
+    """
+    if isinstance(message, SystemMessage | ToolMessage):
+        return False
+    if isinstance(message, AIMessage):
+        content = message.content
+        if not content or (isinstance(content, str) and not content.strip()):
+            return False
+        if message.tool_calls:
+            return False
+    return True
+
+
 async def message_generator(
     user_input: StreamInput, agent: Any, kwargs: dict[str, Any], run_id: str
 ) -> AsyncGenerator[str, None]:
@@ -265,6 +287,8 @@ async def message_generator(
     agent / kwargs / run_id 由路由预先解析后传入 —— 这样鉴权失败、model 不可用等错误
     能在流开始前以正常的 HTTP 状态码返回，而不是变成流中途断开。
     """
+    # 同一条消息会经内层与外层节点重复上报，按消息 ID 全局去重
+    seen_ids: set[str] = set()
     try:
         async for stream_event in agent.astream(  # type: ignore[no-matching-overload]
             **kwargs, stream_mode=["updates", "messages", "custom"], subgraphs=True
@@ -283,17 +307,8 @@ async def message_generator(
                         for interrupt in updates:
                             new_messages.append(AIMessage(content=interrupt.value))
                         continue
-                    updates = updates or {}
-                    update_messages = updates.get("messages", [])
-                    if "supervisor" in node or "sub-agent" in node:
-                        if update_messages and isinstance(update_messages[-1], ToolMessage):
-                            if "sub-agent" in node and len(update_messages) > 1:
-                                update_messages = update_messages[-2:]
-                            else:
-                                update_messages = [update_messages[-1]]
-                        else:
-                            update_messages = []
-                    new_messages.extend(update_messages)
+                    # 内层/外层节点统一收集，交给 _is_user_visible_message + ID 去重筛选
+                    new_messages.extend((updates or {}).get("messages", []))
             elif stream_mode == "custom":
                 # CustomData.dispatch 写出的 LangChain ChatMessage(role=custom)
                 new_messages = [event]
@@ -313,9 +328,13 @@ async def message_generator(
                 processed_messages.append(_create_ai_message(current_message))
 
             for message in processed_messages:
-                # 工作记忆 SystemMessage 只进模型上下文，不进 SSE
-                if isinstance(message, SystemMessage):
+                if not _is_user_visible_message(message):
                     continue
+                msg_id = getattr(message, "id", None)
+                if msg_id and msg_id in seen_ids:
+                    continue
+                if msg_id:
+                    seen_ids.add(msg_id)
                 try:
                     chat_message = langchain_to_chat_message(message)
                     chat_message.run_id = run_id
@@ -423,7 +442,12 @@ async def history(
         if not messages:
             state_snapshot = await agent.aget_state(config=config)
             messages = state_snapshot.values["messages"]
-        return ChatHistory(messages=[langchain_to_chat_message(m) for m in messages])
+        # 工作记忆卡（SystemMessage）是内部上下文，且 langchain_to_chat_message 不支持它
+        return ChatHistory(
+            messages=[
+                langchain_to_chat_message(m) for m in messages if not isinstance(m, SystemMessage)
+            ]
+        )
     except HTTPException:
         raise  # 归属校验的 404 不能被下面的兜底 except 吞成 500
     except Exception as e:
