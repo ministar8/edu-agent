@@ -144,7 +144,8 @@ class Settings(BaseSettings):
     # 同时仍比默认值早约 125 倍终止异常循环。
     AGENT_RECURSION_LIMIT: int = 80
 
-    # ── Agent / LLM Temperature 分级（语义槽见 agents/temperature.py）──    # TEMP_PRECISE   批改评分：可复现
+    # ── Agent / LLM Temperature 分级（语义槽见 agents/temperature.py）──
+    # TEMP_PRECISE   批改评分：可复现
     # TEMP_CREATIVE  出题：多样性
     # TEMP_DEFAULT   知识讲解 / supervisor / 检索链多数步骤
     TEMP_PRECISE: float = 0.0
