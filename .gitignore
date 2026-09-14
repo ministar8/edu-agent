@@ -77,3 +77,9 @@ Desktop.ini
 # 只忽略 worktrees（每次会话的临时检出，内含整份仓库副本）；
 # .claude/ 下的 hooks / settings / skills 属于可版本化的项目配置，保留可提交。
 .claude/worktrees/
+
+# ── 本地 Agent 工具运行时数据 ───────────────────────────
+# .mimosa/    ：代码审查 hook 的台账/基线快照（含整份文件副本，体积大）
+# .workbuddy-ai/：本地会话记忆目录，属个人环境状态，不应入库
+.mimosa/
+.workbuddy-ai/
