@@ -132,8 +132,19 @@ class Settings(BaseSettings):
     EMBEDDING_TIMEOUT: int = 60
     RERANK_TIMEOUT: int = 30
 
-    # ── Agent / LLM Temperature 分级（语义槽见 agents/temperature.py）──
-    # TEMP_PRECISE   批改评分：可复现
+    # ── 图执行上界 ──────────────────────────────────
+    # supervisor 图层若因模型异常（反复分派同一专家）进入循环，需要一道显式护栏。
+    # 不设置时 LangGraph 用的是 DEFAULT_RECURSION_LIMIT = 10007 —— 每次都至少一次
+    # supervisor + 一次专家 LLM 调用，1 万步意味着上万次调用、还可能触发模型费用事故，
+    # 表现为「请求长时间不返回」而非快速失败。
+    #
+    # 取值依据（合成场景实测，专家每轮工具调用约耗 2-3 step，且子图与外层共享预算）：
+    #   专家 ≤20 轮工具调用 → 60 步够用；≥30 轮 → 会被截断。
+    # 真实 408 辅导场景专家通常 1-3 次工具调用（最多 5-8 次），80 步留了 4 倍以上余量，
+    # 同时仍比默认值早约 125 倍终止异常循环。
+    AGENT_RECURSION_LIMIT: int = 80
+
+    # ── Agent / LLM Temperature 分级（语义槽见 agents/temperature.py）──    # TEMP_PRECISE   批改评分：可复现
     # TEMP_CREATIVE  出题：多样性
     # TEMP_DEFAULT   知识讲解 / supervisor / 检索链多数步骤
     TEMP_PRECISE: float = 0.0

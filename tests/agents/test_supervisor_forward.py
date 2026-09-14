@@ -177,6 +177,66 @@ def test_hook_ignores_supervisor_own_tool_calls():
     assert hook({"messages": [HumanMessage(content="问题"), routing]}) == {}  # type: ignore[arg-type]
 
 
+# ── 1b'. 库回传控制消息不得被误判为「专家未闭环」────────────────
+#
+# 回归保护：langgraph_supervisor 在 add_handoff_back_messages=True 时会给专家输出
+# 追加一对控制消息 —— AIMessage(transfer_back_to_supervisor, tool_calls=[...]) 与其
+# 配套 ToolMessage，且两条都带 response_metadata["__is_handoff_back"]=True。
+# 旧版 _inspect_tail 只跨过 ToolMessage，回溯后会撞上这条带 tool_calls 的 AI 消息，
+# 误判成「专家未闭环」→ fail-fast 误伤正常终答（实测必现）。
+
+
+def _handoff_back_pair(name: str = "knowledge_agent"):
+    """复刻库的 create_handoff_back_messages 产出（含标记位）。"""
+    return (
+        AIMessage(
+            content="Transferring back to supervisor",
+            tool_calls=[_transfer_call("transfer_back_to_supervisor", "back-1")],
+            name=name,
+            response_metadata={"__is_handoff_back": True},
+        ),
+        ToolMessage(
+            content="Successfully transferred back to supervisor",
+            name="transfer_back_to_supervisor",
+            tool_call_id="back-1",
+            response_metadata={"__is_handoff_back": True},
+        ),
+    )
+
+
+def test_hook_ignores_handoff_back_control_pair():
+    """专家终答 + 库回传控制消息对 → 仍应识别为终答并短路，而非 fail-fast。"""
+    hook = make_forward_after_agent({"knowledge_agent"})
+    back_ai, back_tool = _handoff_back_pair()
+    final = AIMessage(content="牛顿第一定律……", name="knowledge_agent")
+
+    messages = [HumanMessage(content="讲讲"), final, back_ai, back_tool]
+    result = hook({"messages": messages})  # type: ignore[arg-type]
+    assert isinstance(result, Command)
+    assert result.goto == END
+
+
+def test_hook_ignores_handoff_back_even_without_prior_final():
+    """尾部只有回传控制消息对（专家终答已被切片切掉）→ 不误判未闭环。"""
+    hook = make_forward_after_agent({"knowledge_agent"})
+    back_ai, back_tool = _handoff_back_pair()
+    assert hook({"messages": [HumanMessage(content="讲讲"), back_ai, back_tool]}) == {}  # type: ignore[arg-type]
+
+
+def test_unclosed_still_detected_when_handoff_back_precedes():
+    """回传控制消息在前、专家真正的未闭环输出在后 → 仍须 fail-fast。"""
+    hook = make_forward_after_agent({"knowledge_agent"})
+    back_ai, back_tool = _handoff_back_pair()
+    messages = [
+        HumanMessage(content="讲讲"),
+        back_ai,
+        back_tool,
+        _unclosed_ai("knowledge_agent"),
+    ]
+    with pytest.raises(UnclosedSpecialistOutput):
+        hook({"messages": messages})  # type: ignore[arg-type]
+
+
 # ── 1c. 装配期一致性校验（P1）──────────────────────────────────
 
 
@@ -366,3 +426,41 @@ def test_production_supervisor_wires_forward_hook(monkeypatch):
         # spy 由 monkeypatch 负责撤销，这里只把模块重载回干净状态；
         # reload 后 module 的属性会指向新对象，故需再 reload 一次。
         importlib.reload(supervisor_module)
+
+
+def test_handoff_back_messages_enabled_does_not_break_short_circuit():
+    """回归保护：开启 add_handoff_back_messages 时，专家终答仍能正确短路。
+
+    库会为专家输出追加一对带 ``__is_handoff_back`` 标记的控制消息；若 hook 的
+    尾部判定不跳过它，就会把带 tool_calls 的回传 AI 消息误认成「专家未闭环」，
+    于是正常终答被 fail-fast 误伤（此缺陷曾在多步工具调用场景下必现）。
+    """
+    expert_calls: list = []
+    expert = _make_expert("expert_a", "【专家答案】进程是资源分配的基本单位。", expert_calls)
+    supervisor_model = ScriptedModel(
+        responses=[
+            AIMessage(content="", tool_calls=[_transfer_call("transfer_to_expert_a", "call-1")])
+        ]
+    )
+    graph = create_supervisor(
+        [expert],
+        model=supervisor_model,
+        prompt="路由到专家",
+        output_mode="last_message",
+        add_handoff_messages=False,
+        # 故意打开：这正是触发误判的配置
+        add_handoff_back_messages=True,
+        pre_model_hook=make_forward_after_agent({"expert_a"}),
+    ).compile()
+
+    result = graph.invoke({"messages": [HumanMessage(content="什么是进程？")]})
+
+    messages = result["messages"]
+    # 末条控制消息之后，专家终答必须已被识别并短路（无 fail-fast）
+    assert any(
+        isinstance(m, AIMessage)
+        and m.name == "expert_a"
+        and m.content == "【专家答案】进程是资源分配的基本单位。"
+        for m in messages
+    )
+    assert len(expert_calls) == 1

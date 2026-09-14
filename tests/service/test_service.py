@@ -294,3 +294,43 @@ class TestInvokeFinalMessageSelection:
         )
         assert r.status_code == 200, r.text
         assert r.json()["type"] == "ai"
+
+
+class TestRecursionLimitGuard:
+    """图执行必须有显式上界：LangGraph 默认 recursion_limit=10007。
+
+    不设置时，supervisor 若因模型异常陷入反复分派，会一直跑到上万步才终止
+    （每一步至少一次 LLM 调用），表现为「请求长时间不返回 + 狂烧 token」。
+    这里锁住「显式设置且值合理」这条契约。
+    """
+
+    def test_configured_limit_is_sane(self):
+        from core import settings
+
+        limit = settings.AGENT_RECURSION_LIMIT
+        assert limit > 0
+        # 需容纳「多轮工具调用 + 一次分派」的正常步数，又不至于放任长循环
+        assert 20 <= limit <= 200, f"AGENT_RECURSION_LIMIT={limit} 不在合理区间"
+
+    @pytest.mark.asyncio
+    async def test_handle_input_attaches_recursion_limit(self):
+        """_handle_input 产出的 config 必须带 recursion_limit。"""
+        from schema import UserInput
+        from service.service import _handle_input
+
+        class _State:
+            values: dict = {}
+            metadata = None
+            tasks: list = []
+
+        class _Agent:
+            async def aget_state(self, config=None):  # noqa: ARG002
+                return _State()
+
+        kwargs, _run_id = await _handle_input(
+            UserInput(message="你好"), _Agent(), "edu-assistant", "user-1"
+        )
+
+        from core import settings
+
+        assert kwargs["config"]["recursion_limit"] == settings.AGENT_RECURSION_LIMIT

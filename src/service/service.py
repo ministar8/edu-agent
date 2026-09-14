@@ -205,6 +205,7 @@ async def _handle_input(
 
     config = RunnableConfig(
         configurable=configurable,
+        recursion_limit=settings.AGENT_RECURSION_LIMIT,
         metadata={
             "user_id": user_id,
             "agent_id": agent_id,
