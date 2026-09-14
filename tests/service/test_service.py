@@ -1,8 +1,10 @@
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from service.service import _check_thread_owner, app
 
@@ -217,3 +219,78 @@ class TestAgentIdRoutes:
         # 默认路径仍保留
         assert "/api/invoke" in ops
         assert "/api/stream" in ops
+
+
+class TestInvokeFinalMessageSelection:
+    """P2-b：/invoke 应返回最后一条「用户可见」消息，而非盲取 messages[-1]。
+
+    专家可能以空 content 或带 tool_calls 的中间步骤收尾；直接取末条会给前端
+    一个空气泡。这里与 SSE 侧共用 _is_user_visible_message 判定口径。
+    """
+
+    def _invoke(self, test_client, auth_user, mock_agent, messages):
+        mock_agent.ainvoke = AsyncMock(return_value=[("values", {"messages": messages})])
+        return test_client.post(
+            "/api/invoke",
+            json={"message": "什么是快表？"},
+            headers=auth_user.headers,
+        )
+
+    def test_blank_trailing_ai_falls_back_to_prior_visible(
+        self, test_client, auth_user, mock_agent
+    ):
+        """末条是空 content AI → 回溯到上一条有内容的专家回答。"""
+        r = self._invoke(
+            test_client,
+            auth_user,
+            mock_agent,
+            [
+                HumanMessage(content="什么是快表？"),
+                AIMessage(content="快表（TLB）是页表的高速缓存。", name="knowledge_agent"),
+                AIMessage(content="", name="knowledge_agent"),
+            ],
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["content"].strip() == "快表（TLB）是页表的高速缓存。"
+        assert body["name"] == "knowledge_agent"
+
+    def test_normal_trailing_ai_is_untouched(self, test_client, auth_user, mock_agent):
+        """反例守卫：末条本身可见时，不得改动选取结果。"""
+        r = self._invoke(
+            test_client,
+            auth_user,
+            mock_agent,
+            [
+                HumanMessage(content="什么是快表？"),
+                AIMessage(content="快表是 TLB。", name="knowledge_agent"),
+            ],
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["content"] == "快表是 TLB。"
+
+    def test_tool_message_tail_is_skipped(self, test_client, auth_user, mock_agent):
+        """末条是 ToolMessage（工具结果不是对话气泡）→ 回溯到专家回答。"""
+        r = self._invoke(
+            test_client,
+            auth_user,
+            mock_agent,
+            [
+                HumanMessage(content="什么是快表？"),
+                AIMessage(content="快表是 TLB。", name="knowledge_agent"),
+                ToolMessage(content="检索结果：...", tool_call_id="c1"),
+            ],
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["content"] == "快表是 TLB。"
+
+    def test_all_invisible_falls_back_to_last(self, test_client, auth_user, mock_agent):
+        """全部不可见时仍返回一条消息（不抛错、不返回 None）。"""
+        r = self._invoke(
+            test_client,
+            auth_user,
+            mock_agent,
+            [AIMessage(content="", name="knowledge_agent")],
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["type"] == "ai"

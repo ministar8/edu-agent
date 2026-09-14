@@ -80,7 +80,11 @@ logger = logging.getLogger(__name__)
 # 过滤 LangChain beta 特性告警，避免日志噪音
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 
-# langgraph-supervisor 回传控制消息（英文），不应作为回答透传给用户
+# 防御性兜底：langgraph-supervisor 的回传控制消息（英文），不应透传给用户。
+#
+# 当前 supervisor 装配为 add_handoff_back_messages=False，库不会产生此类消息，
+# 因此这段过滤**没有活路径**。保留是为了在配置被改回 / 库版本变更时仍能挡住 ——
+# 属于「有备无患」而非「正在生效」的防护，勿据此认为系统依赖它。
 _HANDOFF_BACK_PREFIXES = (
     "Transferring back to ",
     "Successfully transferred back to ",
@@ -247,7 +251,7 @@ async def invoke(
                 AIMessage(content=response["__interrupt__"][0].value)
             )
         elif response_type == "values":
-            output = langchain_to_chat_message(response["messages"][-1])
+            output = langchain_to_chat_message(_last_user_visible_message(response["messages"]))
         else:
             raise ValueError(f"Unexpected response type: {response_type}")
         output.run_id = run_id
@@ -255,6 +259,21 @@ async def invoke(
     except Exception as e:
         logger.error("Invoke failed: %s", e)
         raise internal_error("Unexpected error") from e
+
+
+def _last_user_visible_message(messages: list[BaseMessage]) -> BaseMessage:
+    """从消息尾部回溯，取最后一条用户可见的消息。
+
+    ``values`` 流的末条消息未必是给用户看的最终回答：专家可能以空 content（或带
+    tool_calls 的中间步骤）收尾，直接取 ``messages[-1]`` 会返回空气泡。这里复用 SSE
+    侧的可见性判定（``_is_user_visible_message``），与流式路径保持同一口径。
+
+    全部不可见时回退到原始末条，保证返回值类型仍是 BaseMessage、不会返回 None。
+    """
+    for message in reversed(messages):
+        if _is_user_visible_message(message):
+            return message
+    return messages[-1]
 
 
 def _is_user_visible_message(message: Any) -> bool:
