@@ -14,7 +14,8 @@ from rag.metrics import metrics
 logger = logging.getLogger(__name__)
 
 # 单批请求数量（本地 TEI / 远程 API 均适用）
-BATCH_SIZE = 64  # bge-m3 on local TEI handles 64-128 easily; 64 = ~2.5x fewer round trips vs 25
+# 64 在部分 TEI 部署上会触发 413 Payload Too Large，降到 16 提高兼容性
+BATCH_SIZE = 16
 # 单条文本最大字符数（bge-m3 8192 tokens，中文约 1-2 token/字，保守取 3000）
 MAX_TEXT_LENGTH = 3000
 _sparse_probe_cache: dict[str, object] | None = None
