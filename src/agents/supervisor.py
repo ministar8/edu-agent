@@ -10,6 +10,19 @@
 放行给 supervisor LLM：末条带 tool_calls 的 AI 留在 state 里，下一次模型调用会被
 ``_validate_chat_history`` 判定为「tool_call 没有对应 ToolMessage」而直接失败，
 或陷入反复分派同一专家的递归。两种表现都指向不了真正的病因，故 fail fast。
+
+**循环终止条件**（四条出口，均已实测）：
+
+1. 寒暄直答 —— supervisor 输出无 tool_calls 的 AIMessage，react 子图自然结束；
+2. 专家终答 —— ``forward_after_agent`` 以 ``Command(PARENT, goto=END)`` 短路，
+   不再进入 supervisor LLM（这是常态路径，专家答案即终答）；
+3. 专家未闭环 —— 抛 ``UnclosedSpecialistOutput``（见上）；
+4. 兜底上限 —— ``settings.AGENT_RECURSION_LIMIT``，由 service 层写入
+   ``RunnableConfig.recursion_limit``。**不设它会落到 LangGraph 默认的 10007**，
+   异常循环要跑上万步才终止（每步至少一次 LLM 调用），故必须显式收紧。
+
+注意专家子图与外层图**共享** recursion 预算：专家内部若陷入工具循环，同样会被
+这条上限截断（实测确认）。因此它是一个全局护栏，而非只管 supervisor 往返。
 """
 
 from dataclasses import dataclass
@@ -41,20 +54,40 @@ class _TailInspection:
     unclosed_name: str | None  # 专家未闭环的 name；None 表示无此情况
 
 
+_HANDOFF_BACK_FLAG = "__is_handoff_back"
+"""``langgraph_supervisor`` 给回传控制消息打的 response_metadata 标记。
+
+值为 ``True`` 的消息是库自己生成的「交还控制权」消息对
+（``AIMessage(transfer_back_to_supervisor, tool_calls=[...])`` + 配套 ``ToolMessage``），
+不是专家的业务输出。``_inspect_tail`` 必须跳过它们，否则会把这条带 tool_calls 的
+AI 消息误认成「专家未闭环」而 fail-fast 误伤正常终答。"""
+
+
+def _is_handoff_back(message) -> bool:
+    """判断是否为库生成的「交还控制权」控制消息。"""
+    metadata = getattr(message, "response_metadata", None) or {}
+    return bool(metadata.get(_HANDOFF_BACK_FLAG))
+
+
 def _inspect_tail(messages: list, names: frozenset[str]) -> _TailInspection:
     """判断消息尾部是「专家终答」还是「专家未闭环输出」。
 
-    从尾部回溯，跨过连续的 ToolMessage 找到最后一条非工具消息：
+    从尾部回溯，跨过连续的 ToolMessage 与库回传控制消息，找到最后一条实质消息：
 
     - 是某专家的 AIMessage 且无 tool_calls → 终答；
     - 是某专家的 AIMessage 且有 tool_calls → 未闭环（请求了工具但没拿到全部结果）；
     - 其他（Human / 非专家 AI / supervisor 自己的消息）→ 两种都不是。
 
-    只跨过一步 ToolMessage 段，不扫描整段历史，避免误伤正常的多轮记录。
+    只跨过尾部的一段连续消息，不扫描整段历史，避免误伤正常的多轮记录。
     """
     i = len(messages) - 1
-    while i >= 0 and isinstance(messages[i], ToolMessage):
-        i -= 1
+    while i >= 0:
+        message = messages[i]
+        # ToolMessage 与回传控制消息都不是专家的实质输出，继续向前找
+        if isinstance(message, ToolMessage) or _is_handoff_back(message):
+            i -= 1
+            continue
+        break
     if i < 0:
         return _TailInspection(False, None)
 
