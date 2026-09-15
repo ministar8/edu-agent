@@ -131,7 +131,7 @@ class TestDiffTraces:
         actual["stages_called"] = ["a"]
         problems = diff_traces(self._base(), actual)
         assert len(problems) == 1
-        assert "阶段序列不同" in problems[0]
+        assert "阶段集合不同" in problems[0]
 
     def test_call_count_change_reported(self):
         actual = self._base()
@@ -268,7 +268,19 @@ class TestCompareTracesTiered:
         result = compare_traces(expected, actual)
         assert not result.ok
         assert len(result.failures) == 1
-        assert "阶段序列不同" in result.failures[0]
+        assert "阶段集合不同" in result.failures[0]
+
+    def test_concurrent_interleaving_is_not_a_difference(self):
+        """阶段调用次序不稳定（并发所致），按序列比对会稳定误报。
+
+        实测：同一份代码两次运行，`recall_multi_route` 与 `dedup_section` 的交错顺序
+        就不同。故只断言"调用了哪些阶段、各几次"。
+        """
+        expected = self._trace()
+        actual = self._trace()
+        actual["stages_called"] = list(reversed(expected["stages_called"]))
+        result = compare_traces(expected, actual)
+        assert result.ok, result.failures
 
     def test_strict_diff_traces_still_rejects_recall_drift(self):
         """diff_traces 保持严格语义，供"本就该逐位一致"的场景使用。"""

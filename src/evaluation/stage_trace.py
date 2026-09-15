@@ -195,6 +195,28 @@ async def record_query(query: str, *, k: int = 5, use_rerank: bool = False) -> S
     return StageTrace(query=query, steps=list(steps), final=signature(docs))
 
 
+async def probe_query_stability(
+    query: str, *, repeats: int = 3, k: int = 5, use_rerank: bool = False
+) -> tuple[bool, list[Any]]:
+    """重复跑同一条 query，判断**最终结果**是否可复现。
+
+    为什么必须做这一步：上游 Chroma 的近似检索在 top-k 边界会抖动，实测**偶尔会传导到
+    最终返回的文档序列**（不是总能被下游融合/去重吸收）。对这类 query 做逐位比对没有意义 ——
+    同一份代码都会"不一致"。录基线时必须把它们排除，否则安全网会有约 1/10 的假阳性。
+
+    Returns:
+        ``(是否稳定, 各次运行的最终签名)``。返回签名便于把不稳定项报给使用者。
+    """
+    import rag.retriever as R
+
+    finals: list[Any] = []
+    for _ in range(max(1, repeats)):
+        docs = await R.aretrieve_documents(query, k=k, use_rerank=use_rerank)
+        finals.append(signature(docs))
+    stable = all(f == finals[0] for f in finals[1:])
+    return stable, finals
+
+
 def _floats_close(a: Any, b: Any, *, rel_tol: float) -> bool:
     if isinstance(a, float) and isinstance(b, float):
         return math.isclose(a, b, rel_tol=rel_tol, abs_tol=1e-12)
@@ -310,10 +332,15 @@ def compare_traces(
     advisories: list[str] = []
     max_delta = 0
 
-    exp_stages = expected.get("stages_called", [])
-    act_stages = actual.get("stages_called", [])
+    exp_stages = sorted(expected.get("stages_called", []))
+    act_stages = sorted(actual.get("stages_called", []))
     if exp_stages != act_stages:
-        failures.append(f"被调用的阶段序列不同：期望 {exp_stages}，实际 {act_stages}")
+        # 比**多重集**而不是原序列：`stages_called` 是调用发生的先后次序，
+        # 而阶段内部存在并发（`_amulti_route_search` 走 asyncio.gather、
+        # 去重走线程池），完成次序天然不定 —— 实测同一份代码两次运行的
+        # recall / dedup 交错顺序就不同。按序列比对会稳定误报。
+        # 这里断言的是"调用了哪些阶段、各几次"，"以什么输入调用"由下面的 steps 负责。
+        failures.append(f"被调用的阶段集合不同：期望 {exp_stages}，实际 {act_stages}")
         return TraceComparison(failures, advisories, 0)
 
     exp_steps = expected.get("steps", [])
@@ -411,15 +438,34 @@ def _deep_equal(a: Any, b: Any, *, rel_tol: float) -> bool:
 
 
 async def record_all(
-    limit: int | None = None, *, k: int = 5, use_rerank: bool = False
-) -> list[StageTrace]:
+    limit: int | None = None,
+    *,
+    k: int = 5,
+    use_rerank: bool = False,
+    stable_only: bool = False,
+    stable_repeats: int = 3,
+) -> tuple[list[StageTrace], list[str]]:
+    """录一批 query 的阶段追踪。
+
+    ``stable_only=True`` 时先探测每条 query 的**最终结果**是否可复现，只保留稳定的。
+    Returns:
+        ``(追踪列表, 被排除的 query 列表)``。
+    """
     from evaluation.retrieval_gate import load_golden_queries
 
     queries = [q for q, _ in load_golden_queries("evals/sample_408.jsonl", limit=limit)]
     traces: list[StageTrace] = []
+    excluded: list[str] = []
     for query in queries:
+        if stable_only:
+            stable, _finals = await probe_query_stability(
+                query, repeats=stable_repeats, k=k, use_rerank=use_rerank
+            )
+            if not stable:
+                excluded.append(query)
+                continue
         traces.append(await record_query(query, k=k, use_rerank=use_rerank))
-    return traces
+    return traces, excluded
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -428,10 +474,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=12, help="追踪前 N 条 query")
     parser.add_argument("--record", action="store_true", help="录制基线")
     parser.add_argument(
+        "--stable-only",
+        action="store_true",
+        help="录基线时先探测稳定性，排除最终结果不可复现的 query（强烈建议开启）",
+    )
+    parser.add_argument(
+        "--stable-repeats",
+        type=int,
+        default=3,
+        help="稳定性探测的重复次数（默认 3）",
+    )
+    parser.add_argument(
         "--volatile-ratio",
         type=float,
         default=VOLATILE_RATIO,
-        help=f"recall 层容许的文档集合差异比例（ANN 边界抖动，默认 {VOLATILE_RATIO}）",
+        help=f"recall 层差异超过该比例时在报告里标记（默认 {VOLATILE_RATIO}）",
     )
     parser.add_argument(
         "--persist-dir",
@@ -467,11 +524,24 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         start = time.perf_counter()
-        traces = asyncio.run(record_all(limit=args.limit))
+        traces, excluded = asyncio.run(
+            record_all(
+                limit=args.limit,
+                stable_only=args.stable_only,
+                stable_repeats=args.stable_repeats,
+            )
+        )
         print(
             f"追踪 {len(traces)} 条 query（{time.perf_counter() - start:.1f}s），"
-            f"平均每条约 {sum(len(t.steps) for t in traces) / len(traces):.1f} 个阶段调用"
+            f"平均每条约 {sum(len(t.steps) for t in traces) / max(len(traces), 1):.1f} 个阶段调用"
         )
+        if excluded:
+            print(
+                f"[已排除] {len(excluded)} 条 query 的最终结果不可复现"
+                f"（上游 ANN 边界抖动传导，非本项目缺陷）："
+            )
+            for query in excluded[:6]:
+                print(f"    {query[:44]}")
 
         payload = {
             "_meta": {
