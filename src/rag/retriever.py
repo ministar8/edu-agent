@@ -270,11 +270,16 @@ def _raw_search(
     else:
         from rag.vectorstore import get_vector_store_manager
 
-        store = get_vector_store_manager().get_store(collection_name)
-        search_kwargs = {"k": k}
-        if filter:
-            search_kwargs["filter"] = filter
-        results = store.similarity_search_with_score(query, **search_kwargs)
+        # 走 manager 的检索方法而**不是**直接调 store —— 前者持有 `_rw_lock` 读锁。
+        # 直接调 store 会绕过读锁，与 `add_documents` 的写锁形不成互斥：
+        # Chroma 的 Rust 后端在 add 返回后可能仍在落盘 HNSW 段，
+        # 此时并发的查询会打开一个半成品段，抛
+        # `Error creating hnsw segment reader: Nothing found on disk`。
+        # 症状是间歇性的（取决于查询是否与写入重叠）、命中的集合随机、
+        # 且**就绪探测能过而首个真实查询失败**（探测走的是加锁路径）。
+        results = get_vector_store_manager().similarity_search_with_score(
+            collection_name, query, k=k, filter=filter
+        )
 
     # 注入集合来源，供 RRF 合并区分跨集合的同名文档
     for doc, _score in results:

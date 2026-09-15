@@ -391,3 +391,81 @@ class TestVectorStoreRoundTrip:
 
         assert count_before == 1
         assert reopened._collection.count() == count_before
+
+
+class TestRetrievalPathTakesReadLock:
+    """检索路径必须走 manager 的**加锁**读方法。
+
+    **这是 HNSW「段文件不落盘」的根因所在**：`_rw_lock` 只在
+    `VectorStoreManager.similarity_search_with_score` 里加了读锁，
+    而 `_raw_search` 原先直接调 `store.similarity_search_with_score` —— 绕过读锁，
+    与 `add_documents` 的写锁形不成互斥。Chroma 的 Rust 后端在 add 返回后
+    可能仍在落盘 HNSW 段，并发查询就会打开半成品段并抛
+    `Error creating hnsw segment reader: Nothing found on disk`。
+
+    症状很有迷惑性：**就绪探测能过、首个真实查询却失败**（探测走的是加锁路径），
+    命中的集合随机，且 delete+重建能修好。
+    """
+
+    def test_raw_search_goes_through_locked_manager_method(self, monkeypatch):
+        from rag import retriever as R
+        from rag import vectorstore as vs
+
+        called = {}
+
+        class FakeManager:
+            def similarity_search_with_score(self, collection_name, query, k, filter=None):
+                called.update(collection_name=collection_name, query=query, k=k, filter=filter)
+                return [(Document(page_content="命中", metadata={}), 0.9)]
+
+            def get_store(self, name):
+                raise AssertionError("不得直接取 store 绕过读锁")
+
+        monkeypatch.setattr(vs, "get_vector_store_manager", lambda: FakeManager())
+        R._query_cache.clear()
+
+        out = R._raw_search("什么是进程？", "operating_system", 5)
+
+        assert called["collection_name"] == "operating_system"
+        assert called["k"] == 5
+        assert len(out) == 1
+
+    def test_filter_is_forwarded_to_locked_method(self, monkeypatch):
+        from rag import retriever as R
+        from rag import vectorstore as vs
+
+        called = {}
+
+        class FakeManager:
+            def similarity_search_with_score(self, collection_name, query, k, filter=None):
+                called["filter"] = filter
+                return []
+
+            def get_store(self, name):
+                raise AssertionError("不得直接取 store")
+
+        monkeypatch.setattr(vs, "get_vector_store_manager", lambda: FakeManager())
+        R._query_cache.clear()
+
+        R._raw_search("q", "coll", 3, filter={"category": "x"})
+
+        assert called["filter"] == {"category": "x"}
+
+    def test_collection_marker_still_injected(self, monkeypatch):
+        """改走加锁方法后，`_collection` 注入不能丢 —— RRF 靠它区分跨集合同名文档。"""
+        from rag import retriever as R
+        from rag import vectorstore as vs
+
+        class FakeManager:
+            def similarity_search_with_score(self, collection_name, query, k, filter=None):
+                return [(Document(page_content="x", metadata={}), 0.5)]
+
+            def get_store(self, name):
+                raise AssertionError("不得直接取 store")
+
+        monkeypatch.setattr(vs, "get_vector_store_manager", lambda: FakeManager())
+        R._query_cache.clear()
+
+        out = R._raw_search("q", "my_coll", 3)
+
+        assert out[0][0].metadata["_collection"] == "my_coll"
