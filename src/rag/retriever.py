@@ -27,6 +27,7 @@ import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 from langchain_core.documents import Document
 
@@ -725,6 +726,106 @@ def retrieve_documents(
     )
 
 
+# ── aretrieve_documents 的阶段函数 ────────────────────────────
+#
+# 这组函数把原本 428 行的单体编排按**已有的阶段边界**拆开。每个函数都有明确的
+# 输入输出，因此可以单独测试 —— 这正是此前覆盖率上不去的结构性原因
+# （见 ENGINEERING.md §1 P0：单体函数让纯函数有"结构性上限"）。
+#
+# 拆分原则：**只搬代码，不改行为**。原实现里的测量点仍由调用方负责，
+# `stage_ms` 的所有权留在编排层，保证计时口径与拆分前逐字一致。
+
+
+@dataclass(frozen=True)
+class _RetrievalPlan:
+    """阶段 2 的产物：一次检索实际采用的策略与阈值。
+
+    把 `depth` / `k` / `use_rerank` 也放进返回值，是因为阶段 2 会**就地调整**它们
+    （`depth=None` 时由分类推导；策略要求时覆盖 `k`、关掉重排）。
+    原实现靠闭包变量隐式传递，拆开后显式化，避免调用方漏用调整后的值。
+    """
+
+    depth: RetrievalDepth
+    k: int
+    use_rerank: bool
+    effective_threshold: float
+    coarse_k: int
+    retrieval_layer: str
+    route_type: str
+
+
+async def _stage_classify_query(
+    query: str, cat: QueryCategory | None
+) -> tuple[list[str], QueryCategory]:
+    """阶段 1：归一化 → 词项抽取 → 分类。
+
+    归一化文本只用于抽词项，不向下游传递（下游要的是词项本身，不是归一化串）。
+    分类优先复用调用方传入的 `cat`，避免重复走一次规则/LLM 分类。
+    """
+    normalized = normalize_query_text(query)
+    terms = extract_query_terms(normalized)
+    resolved = cat or await aclassify_query(query, terms)
+    return terms, resolved
+
+
+def _stage_resolve_plan(
+    query: str,
+    cat: QueryCategory,
+    k: int,
+    score_threshold: float,
+    use_rerank: bool,
+    depth: RetrievalDepth | None,
+) -> _RetrievalPlan:
+    """阶段 2：解析检索策略，并据此调整 k / use_rerank / 阈值。
+
+    `depth` 为 None 时由分类推导；显式传入时反向取出对应策略。
+    注意 `k` 与 `use_rerank` 会被调整，调整后的值在返回值里。
+    """
+    if depth is None:
+        strategy = resolve_retrieval_strategy(cat)
+        depth = strategy.depth
+    else:
+        strategy = strategy_from_depth(depth)
+
+    if k == 5 and depth.k != 5:
+        k = depth.k
+    if depth.skip_rerank and use_rerank:
+        use_rerank = False
+
+    effective_threshold, coarse_k = _resolve_retrieval_policy(
+        query, k, score_threshold, use_rerank, cat=cat
+    )
+    return _RetrievalPlan(
+        depth=depth,
+        k=k,
+        use_rerank=use_rerank,
+        effective_threshold=effective_threshold,
+        coarse_k=coarse_k,
+        retrieval_layer=strategy.layer,
+        route_type=strategy.route_type,
+    )
+
+
+async def _stage_decompose_query(
+    query: str,
+    cat: QueryCategory,
+    depth: RetrievalDepth,
+    precomputed_sub_queries: list[str] | None,
+) -> tuple[list[str], bool]:
+    """阶段 3：查询分解。
+
+    返回 ``(子查询列表, 是否真的分解成多条)``。
+    三条分支的优先级不能换：**预计算 > 策略要求跳过 > 真去分解**。
+    """
+    if precomputed_sub_queries is not None:
+        sub_queries = precomputed_sub_queries
+    elif depth.skip_decompose:
+        sub_queries = [query]
+    else:
+        sub_queries = await decompose(query, cat=cat)
+    return sub_queries, len(sub_queries) > 1
+
+
 async def aretrieve_documents(
     query: str,
     collection_name: str = "",
@@ -756,35 +857,22 @@ async def aretrieve_documents(
     route_type = ""
     try:
         _stage_start = time.perf_counter()
-        _normalized = normalize_query_text(query)
-        _terms = extract_query_terms(_normalized)
-        _cat = cat or await aclassify_query(query, _terms)
+        _terms, _cat = await _stage_classify_query(query, cat)
         stage_ms["classification_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
-        if depth is None:
-            strategy = resolve_retrieval_strategy(_cat)
-            depth = strategy.depth
-        else:
-            strategy = strategy_from_depth(depth)
-        retrieval_layer = strategy.layer
-        route_type = strategy.route_type
-        if k == 5 and depth.k != 5:
-            k = depth.k
-        if depth.skip_rerank and use_rerank:
-            use_rerank = False
-
-        effective_threshold, coarse_k = _resolve_retrieval_policy(
-            query, k, score_threshold, use_rerank, cat=_cat
-        )
+        _plan = _stage_resolve_plan(query, _cat, k, score_threshold, use_rerank, depth)
+        depth = _plan.depth
+        k = _plan.k
+        use_rerank = _plan.use_rerank
+        effective_threshold = _plan.effective_threshold
+        coarse_k = _plan.coarse_k
+        retrieval_layer = _plan.retrieval_layer
+        route_type = _plan.route_type
 
         _stage_start = time.perf_counter()
-        if precomputed_sub_queries is not None:
-            sub_queries = precomputed_sub_queries
-        elif depth.skip_decompose:
-            sub_queries = [query]
-        else:
-            sub_queries = await decompose(query, cat=_cat)
-        decomposed = len(sub_queries) > 1
+        sub_queries, decomposed = await _stage_decompose_query(
+            query, _cat, depth, precomputed_sub_queries
+        )
         stage_ms["decompose_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
         _stage_start = time.perf_counter()
