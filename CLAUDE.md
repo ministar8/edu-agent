@@ -79,5 +79,35 @@ docker compose up --build                # 容器化启动
 
 - 检索依赖两个本地 TEI 服务：Embedding（`localhost:11435`）与 Reranker（`localhost:8080`），
   用 `scripts/tei_deploy.ps1` 或 README 中的 docker 命令启动，否则检索类请求会失败。
+- **单测不需要 TEI**：`pyproject.toml` 的 `[tool.pytest_env]` 已设 `USE_FAKE_EMBEDDING=true`，
+  `get_embeddings()` 会返回本地确定性哈希实现（`rag.embeddings.HashingEmbeddings`），
+  使 `vectorstore` / `semantic_cache` / `recall` 可在无外部服务下被集成测试覆盖。
+  该实现**只保留词汇重叠信号、没有语义泛化能力，严禁用于生产**。
+  写这类测试时注意：`semantic_cache._DATA_DIR` / `_JSONL_FILE` 是**模块级常量（import 期固化）**，
+  必须用 `monkeypatch` 重定向到 `tmp_path`，否则会写坏真实的 `chroma_db/semantic_cache/`。
 - Windows 下 `run_service.py` 会把事件循环切到 `WindowsSelectorEventLoopPolicy`（异步 DB 驱动不兼容 Proactor）。
 - `src/rag/` 与 `src/tools/` 的类型注解尚不严格，`pyproject.toml` 中对这两个目录放宽了 pyrefly 检查（技术债）。
+- **`splitter.py` 的 Q&A 原子机制在真实语料上未激活**（已知缺陷，勿误判为"已实现"）：
+  `_ANSWER_RE` 只识别 `答案：/解答：/正确答案：`，而 408 真题用的是「选项行尾 `✅` + `**解析**：`」，
+  因此 `content_type` 永远不会成为 `merged_qa`，`qa.question/answer/answer_key` 字段恒为空，
+  `recall.py` 的 `merged_qa_meta` 路由恒返回空。改动 `splitter` 前先看 `ENGINEERING.md`
+  的 §1「Q&A 原子机制在真实语料上从未激活」一节。
+- **`tests/rag/test_splitter.py::TestKnownDefects` 是"变更哨兵"类**：里面断言的是**当前缺陷行为**
+  而非期望行为。修好对应缺陷后这些用例会变红 —— 这是设计如此，请把断言改成期望值并移出该类，
+  **不要**为了让它变绿而回退修复。
+- **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑
+  `uv run python -m evaluation.retrieval_gate`（CI 里有独立 job `retrieval-quality-gate`）。
+  它用确定性哈希 embedding + 临时索引跑 40 条黄金集 query，与 `evals/retrieval_baseline.json`
+  对比，任一指标退化即失败。**它衡量的是检索管线是否退化，不是语义质量**（语义质量用
+  `evals/cli.py` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，
+  但**必须在 PR 里说明为什么这个变化是可接受的**。
+- **门禁里的索引就绪屏障**：ChromaDB `add_documents` 之后立即查询会**间歇性**抛
+  `Error creating hnsw segment reader: Nothing found on disk` —— 每次命中的集合不同，
+  命中后该集合整轮不可查询（检索结果全错但不报错），会被误报成"检索退化"。
+  在临时索引上跑检索前，务必先调 `evaluation.retrieval_gate.wait_for_index_ready()`
+  （`repair=True` 会对不可查询的集合只重建它自己后重试）。
+- **这个故障进程内无法恢复**（实测结论，别再试了）：丢弃 `_stores` 缓存句柄无效、
+  重开 `chromadb.PersistentClient` 无效，**只有 `delete_collection` + 重新入库有效**。
+  `VectorStoreManager.wait_until_ready` 因此是**检测器而非修复器** ——
+  它把静默错误变成入库期显式失败，并在错误信息里给出补救命令。
+  生产路径不要自动重建（删集合 = 真实数据丢失），必须人工确认。

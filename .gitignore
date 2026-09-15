@@ -72,6 +72,10 @@ Desktop.ini
 # 是正式模块，必须入库 —— 曾用 `_*.py` 全局匹配导致 clone/CI 缺文件。
 /_*.py
 !__init__.py
+# 根目录下的临时目录：主要是 `pytest --basetemp=./_xxx` 的产物。
+# 不忽略的话，一次本地跑测就会在 git status 里留下上千个 untracked 条目。
+# 注意 CI 里的门禁用 tempfile.mkdtemp()（系统临时目录），不会产生这里的目录。
+/_*/
 
 # ── Claude Code 会话状态 ────────────────────────────────
 # 只忽略 worktrees（每次会话的临时检出，内含整份仓库副本）；
