@@ -51,6 +51,29 @@ jobs:
         # docs/ 目前在 .gitignore 中（clone 后不存在），故暂不纳入扫描
         run: uv run pymarkdown scan README.md
 
+  retrieval-quality-gate:
+    # 检索质量回归门禁：固定黄金集 + 固定指标，退化即失败。
+    # 刻意不依赖 TEI / Chroma 外部服务（用确定性哈希 embedding + 临时索引），
+    # 因此它衡量的是**检索管线**（路由/融合/阈值/去重）是否退化，不是语义质量。
+    # 语义质量由 evals 的 RAGAS 离线评测负责。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen
+      - name: Run retrieval quality gate
+        env:
+          PYTHONPATH: src
+        run: uv run python -m evaluation.retrieval_gate
+
   test-docker:
     runs-on: ubuntu-latest
     steps:
