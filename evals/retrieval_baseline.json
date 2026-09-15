@@ -6,7 +6,7 @@
     "k": 5,
     "golden_path": "evals/sample_408.jsonl",
     "indexed_chunks": 2205,
-    "recorded_at": "2026-09-15"
+    "recorded_at": "2026-09-16"
   },
   "metrics": {
     "n_queries": 40,

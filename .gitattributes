@@ -1,0 +1,53 @@
+# ── 行尾与文本/二进制判定 ──────────────────────────────────────
+#
+# 为什么要有这个文件（而不是靠 `core.autocrlf`）：
+#   `core.autocrlf` 是**每个开发者本地的设置**，新人 clone 后不会自动继承。
+#   于是同一份仓库在不同机器上表现不同 —— 有人拿到 CRLF、有人拿到 LF、
+#   有人 `autocrlf=input` 又是第三种行为。把规则写进仓库才能消除这种差异。
+#
+# 现状（实测）：仓库里的 blob 已经是统一 LF（223/225），所以本文件**不会**
+# 引发大规模重写；它的作用是**把既有事实显式化**，并挡住未来的偏差。
+
+# 默认：git 自动判定文本文件；检出时按平台转换，入库时统一为 LF
+* text=auto
+
+# ── 明确声明为文本 ────────────────────────────────────────────
+# 其中 *.md 尤其重要：实测 `knowledge/computer_organization/04_指令系统.md`
+# 曾因**末尾有 72 个 NUL 字节**被 git 判成二进制（`i/-text`），
+# 导致 diff 变成 "Binary files differ"、合并行为退化。
+# 该文件已清理；这里显式声明可以避免同类情况再次发生。
+*.py       text
+*.md       text
+*.json     text
+*.jsonl    text
+*.yml      text
+*.yaml     text
+*.toml     text
+*.cfg      text
+*.ini      text
+*.txt      text
+*.html     text
+*.css      text
+*.js       text
+*.sh       text
+Dockerfile text
+
+# ── 明确声明为二进制：禁止任何行尾转换 ──────────────────────────
+# 这些文件一旦被 git 做行尾转换就会**损坏**（Chroma 段文件、sqlite、图片、字体）。
+# 目前它们都在 .gitignore 里，但显式声明可以防住"以后不小心加进来"的情况。
+*.bin     binary
+*.sqlite3 binary
+*.db      binary
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.pdf     binary
+*.zip     binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+
+# ── 让 diff 更有用 ────────────────────────────────────────────
+*.md diff=markdown
