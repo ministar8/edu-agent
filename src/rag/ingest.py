@@ -34,6 +34,29 @@ DEFAULT_CATEGORIES = [
 ]
 
 
+def evaluate_warmup(result: dict, min_success_rate: float) -> tuple[bool, str]:
+    """判断预热结果是否可接受。**纯函数**，便于单测。
+
+    Returns:
+        ``(是否可接受, 人类可读说明)``。
+
+    为什么需要一个判定函数而不是直接打印：预热全落空几乎总是意味着索引未就绪或检索链
+    故障，但旧代码只打印一行 INFO，问题会无声无息地滑过去。这里给出明确的判定与文案，
+    让失败既进日志（ERROR 级）也进指标。
+    """
+    total = int(result.get("total", 0) or 0)
+    succeeded = int(result.get("succeeded", 0) or 0)
+    if total <= 0:
+        return False, "预热查询集为空，无法判定（检查 _WARMUP_QUERIES）"
+    rate = succeeded / total
+    if rate < min_success_rate:
+        return False, (
+            f"预热成功率 {rate:.1%} 低于阈值 {min_success_rate:.0%}"
+            f"（{succeeded}/{total}）—— 索引可能未就绪或检索链故障"
+        )
+    return True, f"预热成功率 {rate:.1%}（{succeeded}/{total}）"
+
+
 def ingest_category(category: str, rebuild: bool = False) -> dict:
     """处理单个分类目录。"""
     dir_path = os.path.join(settings.KNOWLEDGE_DIR, category)
@@ -101,6 +124,29 @@ def ingest_category(category: str, rebuild: bool = False) -> dict:
             total_errors += 1
             logger.info("  [ERR] %s: ERROR - %s", filename, e)
 
+    # ── 就绪屏障：等 HNSW 落盘 ──
+    # 调用方（ingest_all）紧接着会预热查询缓存；不等就可能预热全落空，
+    # 而预热只打印不报错 —— 表现为"上线后第一批查询特别慢"且无从定位。
+    # 详见 VectorStoreManager.wait_until_ready 的 docstring。
+    ready_retries = 0
+    not_ready = False
+    if total_chunks:
+        try:
+            ready_retries = vector_store_manager.wait_until_ready(
+                category,
+                retries=settings.INGEST_READY_RETRIES,
+                delay=settings.INGEST_READY_DELAY,
+            )
+            if ready_retries:
+                logger.warning(
+                    "  [WARN] 集合 '%s' 重试 %d 次后才可查询（Chroma 落盘竞态）",
+                    category,
+                    ready_retries,
+                )
+        except RuntimeError as e:
+            not_ready = True
+            logger.error("  [ERR] 集合 '%s' 索引不可查询，后续检索将失败: %s", category, e)
+
     logger.info(
         "  小计(%s): %d 文件, %d chunks, %d 错误, %.1fs",
         category,
@@ -114,6 +160,8 @@ def ingest_category(category: str, rebuild: bool = False) -> dict:
         "files": total_files,
         "chunks": total_chunks,
         "errors": total_errors,
+        "ready_retries": ready_retries,
+        "not_ready": not_ready,
     }
 
 
@@ -139,6 +187,7 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
     total_files = 0
     total_chunks = 0
     total_errors = 0
+    not_ready_categories: list[str] = []
 
     for category in categories:
         logger.info("\n[DIR] 处理分类: %s", category)
@@ -149,6 +198,8 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
         total_files += result["files"]
         total_chunks += result["chunks"]
         total_errors += result["errors"]
+        if result.get("not_ready"):
+            not_ready_categories.append(category)
 
     logger.info("\n" + "=" * 60)
     logger.info("  构建完成!")
@@ -168,12 +219,36 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
     from rag.retriever import warmup_query_cache
 
     warmup_result = warmup_query_cache(quiet=True)
-    logger.info(
-        "  %d/%d 条预热成功, 耗时 %.0f ms",
-        warmup_result["succeeded"],
-        warmup_result["total"],
-        warmup_result["elapsed_ms"],
+    warmup_ok, warmup_verdict = evaluate_warmup(warmup_result, settings.WARMUP_MIN_SUCCESS_RATE)
+    warmup_total = int(warmup_result.get("total", 0) or 0)
+    metrics.emit(
+        event="ingest_warmup_summary",
+        stage="ingest",
+        status="ok" if warmup_ok else "error",
+        duration_ms=warmup_result.get("elapsed_ms"),
+        values={
+            "total": warmup_total,
+            "succeeded": int(warmup_result.get("succeeded", 0) or 0),
+            "failed": int(warmup_result.get("failed", 0) or 0),
+            "success_rate": round(int(warmup_result.get("succeeded", 0) or 0) / warmup_total, 6)
+            if warmup_total
+            else 0.0,
+            "min_success_rate": settings.WARMUP_MIN_SUCCESS_RATE,
+            "not_ready_categories": not_ready_categories,
+        },
     )
+    if warmup_ok:
+        logger.info("  %s, 耗时 %.0f ms", warmup_verdict, warmup_result.get("elapsed_ms", 0))
+    else:
+        # ERROR 级 + 指标，避免"预热全落空"被当成正常日志滑过去
+        logger.error("  [ERR] %s", warmup_verdict)
+
+    if not_ready_categories:
+        logger.error(
+            "  [ERR] 以下集合索引不可查询，相关学科检索会返回错误结果: %s。"
+            "重试/重开客户端均无效，请重建：python -m rag.ingest --category <集合名> --rebuild",
+            not_ready_categories,
+        )
 
 
 def main():

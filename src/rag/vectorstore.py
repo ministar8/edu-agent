@@ -36,6 +36,9 @@ _LEGACY_HNSW_KEYS = {
     "hnsw:ef_search": "hnsw:search_ef",
 }
 
+# 就绪探针查询：只要求"能查通"，不关心命中什么，故用一个与语料无关的短词
+_READINESS_PROBE_QUERY = "索引就绪探针"
+
 
 def _content_hash(content: str) -> str:
     """生成内容的 SHA256 哈希，用于去重"""
@@ -487,6 +490,76 @@ class VectorStoreManager:
             }
         except Exception:
             return {"name": collection_name, "count": 0, "client_mode": self.client_mode}
+
+    def wait_until_ready(
+        self,
+        collection_name: str,
+        *,
+        retries: int = 8,
+        delay: float = 0.5,
+    ) -> int:
+        """等待集合的 HNSW 索引可查询，返回成功前经历的失败次数。
+
+        **这是"检测器"，不是"修复器"** —— 请先读完这段再改参数。
+
+        现象：``add_documents`` 返回后查询该集合会抛::
+
+            Error executing plan: Internal error: Error creating hnsw segment reader:
+            Nothing found on disk
+
+        **间歇性**：同一份代码连续运行，每次命中的集合不同（实测在
+        ``computer_organization`` / ``operating_system`` 之间随机），
+        命中后该集合**整轮不可查询**（检索结果全错，但不报错）。
+
+        **实测过的三种恢复手段**（针对已损坏的集合）：
+
+        ======================================  ======
+        丢弃 ``_stores`` 缓存句柄后重试            无效
+        重开 ``chromadb.PersistentClient``        无效
+        ``delete_collection`` 后重新入库            **有效**
+        ======================================  ======
+
+        也就是说：集合的向量确实写进去了（``count()`` 正确、HNSW 元数据 ``status=ok``），
+        但 HNSW 段文件从未落盘；进程内没有任何办法把它"等"出来。
+        **只有重建索引能修。**
+
+        因此本方法的价值是：把"静默返回错误检索结果"变成"入库期显式失败"，
+        并在错误信息里直接给出补救命令。重试只覆盖"真的只是慢"那一小部分情况。
+
+        Args:
+            collection_name: 集合名。
+            retries: 最大尝试次数（含首次）。
+            delay: 两次尝试之间的等待秒数。
+
+        Returns:
+            成功前经历的失败次数（0 表示首次即通过）。
+
+        Raises:
+            RuntimeError: 重试耗尽后仍不可查询。信息里含底层原因与补救命令。
+        """
+        last_error = ""
+        for attempt in range(retries):
+            try:
+                self.similarity_search_with_score(collection_name, _READINESS_PROBE_QUERY, k=1)
+            except Exception as e:  # noqa: BLE001 — 需要兜住 Chroma 各类底层异常
+                last_error = f"{type(e).__name__}: {e}"
+                # 丢弃缓存句柄：对"慢"的情况有帮助；对"段文件未落盘"无效（实测）
+                self._stores.pop(collection_name, None)
+                if attempt < retries - 1:
+                    time.sleep(delay)
+                continue
+
+            if attempt:
+                logger.info(
+                    "Collection '%s' became queryable after %d retries", collection_name, attempt
+                )
+            return attempt
+
+        raise RuntimeError(
+            f"集合 '{collection_name}' 在 {retries} 次重试后索引仍不可查询：{last_error}。"
+            f"该集合的 HNSW 段文件未落盘，进程内无法恢复；"
+            f"请重建：ingest_category({collection_name!r}, rebuild=True)"
+        )
 
 
 _vector_store_manager: VectorStoreManager | None = None

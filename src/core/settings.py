@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     DASHSCOPE_API_KEY: SecretStr | None = None
     DEEPSEEK_API_KEY: SecretStr | None = None
     USE_FAKE_MODEL: bool = False
+    # 测试用：以确定性哈希向量替代 TEI embedding，使检索链无需外部服务即可运行。
+    # 与 USE_FAKE_MODEL 同一模式（见 core.llm.FakeToolModel）。
+    USE_FAKE_EMBEDDING: bool = False
 
     # ── 网关端点 ──────────────────────────────
     DASHSCOPE_API_BASE: Annotated[str, BeforeValidator(check_str_is_http)] = (
@@ -156,6 +159,13 @@ class Settings(BaseSettings):
     CHROMA_PERSIST_DIR: str = str(PROJECT_ROOT / "chroma_db")
     CHROMA_HOST: str = "127.0.0.1"
     CHROMA_PORT: int = 8100
+    # 入库后等 HNSW 落盘的就绪屏障参数。Chroma 的 PersistentClient 在 add_documents
+    # 返回后段文件可能尚未落盘，此时查询会抛 "Nothing found on disk"（间歇性）。
+    INGEST_READY_RETRIES: int = 8
+    INGEST_READY_DELAY: float = 0.5
+    # 预热成功率低于此值即视为异常并告警。预热全落空通常意味着索引未就绪或检索链故障，
+    # 但旧代码只打印一行 INFO，导致问题无声无息。
+    WARMUP_MIN_SUCCESS_RATE: float = 0.8
 
     # ── Knowledge ──────────────────────────────────
     KNOWLEDGE_DIR: str = str(PROJECT_ROOT / "knowledge")
