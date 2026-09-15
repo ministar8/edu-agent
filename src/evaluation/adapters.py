@@ -74,7 +74,11 @@ def build_judge_llm():
     existing = dict(getattr(llm, "model_kwargs", None) or {})
     existing["response_format"] = {"type": "json_object"}
     try:
-        llm.model_kwargs = existing
+        # 用 setattr 而不是 `llm.model_kwargs = ...`：get_llm 现在可能返回 FakeToolModel
+        # （USE_FAKE_MODEL=true 时，见 core.llm），它没有 model_kwargs 属性 ——
+        # 直接赋值在类型上不成立（pyrefly 会报 missing-attribute）。
+        # 运行时两者等价，setattr 对任意对象都成立。
+        setattr(llm, "model_kwargs", existing)
     except Exception:
         logger.debug("无法设置 response_format，跳过", exc_info=True)
     return LangchainLLMWrapper(langchain_llm=llm)
