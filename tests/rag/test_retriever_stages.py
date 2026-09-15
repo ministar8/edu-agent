@@ -479,6 +479,130 @@ class TestStageRecallAndMerge:
             )
 
 
+class TestStageRerank:
+    """阶段 7：重排（可选）+ 重排后阈值过滤。
+
+    **这段在端到端链路上跑不到**：门禁与阶段追踪都用 `use_rerank=False`
+    （需要本地 TEI reranker 才能开），所以它只能靠单元测试覆盖 ——
+    这也正是拆分的价值：拆之前这段分支没有任何测试能碰到。
+
+    要钉住的契约：
+    1. 分解路径候选池是单路的**两倍**（top_k=k*2），未启用重排时同样按两倍截断；
+    2. `use_rerank=True` 但候选为空时**既不重排也不截断**；
+    3. 重排耗时只在真的执行重排时产生，否则为 0。
+    """
+
+    @staticmethod
+    def _docs(n=3):
+        return [Document(page_content=str(i), metadata={}) for i in range(n)]
+
+    def _patch(self, monkeypatch, *, rerank_out=None):
+        calls = {"rerank": None, "log": [], "threshold": []}
+
+        async def fake_thread(name, fn, *args, timeout=None, default=None, **kwargs):
+            calls["rerank"] = {
+                "name": name,
+                "args": args,
+                "timeout": timeout,
+                "default": default,
+                **kwargs,
+            }
+            return rerank_out if rerank_out is not None else args[1]
+
+        def fake_threshold(docs, min_keep=0):
+            calls["threshold"].append(min_keep)
+            return docs
+
+        monkeypatch.setattr(R, "_safe_to_thread", fake_thread)
+        monkeypatch.setattr(R, "_apply_rerank_threshold", fake_threshold)
+        monkeypatch.setattr(
+            R, "_log_final_retrieval_summary", lambda label, q, d: calls["log"].append(label)
+        )
+        return calls
+
+    @pytest.mark.asyncio
+    async def test_no_rerank_truncates_to_k(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        docs = self._docs(10)
+
+        out, used, ms = await R._stage_rerank(docs, "q", 3, False, decomposed=False)
+
+        assert out == docs[:3]
+        assert used is False
+        assert ms == 0.0, "没重排就不该有耗时"
+        assert calls["rerank"] is None
+
+    @pytest.mark.asyncio
+    async def test_no_rerank_decomposed_truncates_to_double_k(self, monkeypatch):
+        """分解路径候选池是两倍 —— 截断口径必须跟着走。"""
+        self._patch(monkeypatch)
+        docs = self._docs(10)
+
+        out, _used, _ms = await R._stage_rerank(docs, "q", 3, False, decomposed=True)
+
+        assert out == docs[:6]
+
+    @pytest.mark.asyncio
+    async def test_rerank_uses_k_for_single_path(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        docs = self._docs(5)
+
+        out, used, ms = await R._stage_rerank(docs, "q", 3, True, decomposed=False)
+
+        assert calls["rerank"]["top_k"] == 3
+        assert calls["rerank"]["name"] == "async_rerank"
+        assert used is True
+        assert ms >= 0.0
+        assert calls["log"] == ["async-post-rerank"]
+        assert calls["threshold"] == [2], "重排后兜底保留 top-2"
+        assert out == docs
+
+    @pytest.mark.asyncio
+    async def test_rerank_uses_double_k_for_decomposed(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+
+        _out, _used, _ms = await R._stage_rerank(self._docs(5), "q", 3, True, decomposed=True)
+
+        assert calls["rerank"]["top_k"] == 6, "分解路径候选池应为 k*2"
+        assert calls["rerank"]["name"] == "async_rerank_decomposed"
+        assert calls["log"] == ["async-post-rerank-decomposed"]
+
+    @pytest.mark.asyncio
+    async def test_empty_candidates_skip_rerank_without_truncating(self, monkeypatch):
+        """没有候选时既不重排也不截断 —— 截断空列表没有意义，但会掩盖"空"这个事实。"""
+        calls = self._patch(monkeypatch)
+
+        out, used, ms = await R._stage_rerank([], "q", 3, True, decomposed=False)
+
+        assert out == []
+        assert used is False
+        assert ms == 0.0
+        assert calls["rerank"] is None, "空候选不应调用重排"
+
+    @pytest.mark.asyncio
+    async def test_rerank_fallback_default_is_k_on_both_paths(self, monkeypatch):
+        """兜底截断两条分支都用 k（不是 k*2）—— 保持原实现，即使口径不一致。
+
+        这是拆分段时发现的既有不对称：分解路径重排失败时兜底只保留 k 条候选，
+        比正常路径少一半。**本次只搬代码不改行为**，已记入 backlog。
+        """
+        calls = self._patch(monkeypatch)
+        docs = self._docs(10)
+
+        await R._stage_rerank(docs, "q", 3, True, decomposed=True)
+
+        assert calls["rerank"]["default"] == docs[:3], "兜底是 filtered[:k]，不是 filtered[:k*2]"
+
+    @pytest.mark.asyncio
+    async def test_rerank_timeout_comes_from_settings(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        monkeypatch.setattr(R.settings, "RERANK_TIMEOUT", 17)
+
+        await R._stage_rerank(self._docs(3), "q", 3, True, decomposed=False)
+
+        assert calls["rerank"]["timeout"] == 17.0
+
+
 class TestPlanIsImmutable:
     def test_plan_rejects_mutation(self):
         """计划对象是 frozen —— 防止下游"顺手改一下"，那会让阶段边界失去意义。"""

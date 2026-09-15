@@ -971,6 +971,52 @@ async def _stage_recall_and_merge(req: _RecallRequest) -> list[tuple[Document, f
     return merged
 
 
+async def _stage_rerank(
+    filtered: list[Document],
+    query: str,
+    k: int,
+    use_rerank: bool,
+    decomposed: bool,
+) -> tuple[list[Document], bool, float]:
+    """阶段 7：重排（可选）+ 重排后的双重阈值过滤。
+
+    分解路径的候选池是单路的两倍（``top_k=k*2``）：子查询合并后候选更多，
+    仍按 k 截断会把原查询的证据挤掉。未启用重排时同样按这个倍数截断
+    （``filtered[:k]`` vs ``filtered[:k*2]``），保持两条路径口径一致。
+
+    Returns:
+        ``(重排后的文档, 是否真的执行了重排, 重排耗时毫秒)``。
+        耗时由调用方写进 ``stage_ms`` —— 指标的所有权留在编排层。
+    """
+    if not (use_rerank and filtered):
+        # 未启用重排：仍要截断。注意这里**不**记录耗时（原本就没有计时窗口）
+        if not use_rerank:
+            return filtered[: k * 2 if decomposed else k], False, 0.0
+        return filtered, False, 0.0
+
+    top_k = k * 2 if decomposed else k
+    log_label = "async-post-rerank-decomposed" if decomposed else "async-post-rerank"
+    started = time.perf_counter()
+    reranked = await _safe_to_thread(
+        f"async_rerank{'_decomposed' if decomposed else ''}",
+        rerank,
+        query,
+        filtered,
+        timeout=float(getattr(settings, "RERANK_TIMEOUT", 30) or 30),
+        # 兜底截断用的是 k 而不是 top_k —— 两条分支原本都是 filtered[:k]。
+        # 这里保持原样（只搬代码不改行为），但它与 top_k 的口径不一致，
+        # 分解路径重排失败时兜底会比预期少一半候选。已记入 backlog。
+        default=filtered[:k],
+        top_k=top_k,
+    )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+
+    # 双重阈值过滤，兜底保留 top-2
+    out = _apply_rerank_threshold(reranked, min_keep=2)
+    _log_final_retrieval_summary(log_label, query, out)
+    return out, True, elapsed_ms
+
+
 async def aretrieve_documents(
     query: str,
     collection_name: str = "",
@@ -1043,45 +1089,9 @@ async def aretrieve_documents(
             results, query, _cat, effective_threshold
         )
 
-        _rerank_ms = 0.0
-        if not decomposed:
-            if use_rerank and filtered:
-                _stage_start = time.perf_counter()
-                reranked = await _safe_to_thread(
-                    "async_rerank",
-                    rerank,
-                    query,
-                    filtered,
-                    timeout=float(getattr(settings, "RERANK_TIMEOUT", 30) or 30),
-                    default=filtered[:k],
-                    top_k=k,
-                )
-                _rerank_ms += (time.perf_counter() - _stage_start) * 1000
-                rerank_used = True
-                # 双重阈值过滤（异步），兜底保留 top-2
-                filtered = _apply_rerank_threshold(reranked, min_keep=2)
-                _log_final_retrieval_summary("async-post-rerank", query, filtered)
-            elif not use_rerank:
-                filtered = filtered[:k]
-        else:
-            if use_rerank and filtered:
-                _stage_start = time.perf_counter()
-                reranked = await _safe_to_thread(
-                    "async_rerank_decomposed",
-                    rerank,
-                    query,
-                    filtered,
-                    timeout=float(getattr(settings, "RERANK_TIMEOUT", 30) or 30),
-                    default=filtered[:k],
-                    top_k=k * 2,
-                )
-                _rerank_ms += (time.perf_counter() - _stage_start) * 1000
-                rerank_used = True
-                # 双重阈值过滤（异步分解查询），兜底保留 top-2
-                filtered = _apply_rerank_threshold(reranked, min_keep=2)
-                _log_final_retrieval_summary("async-post-rerank-decomposed", query, filtered)
-            elif not use_rerank:
-                filtered = filtered[: k * 2]
+        filtered, rerank_used, _rerank_ms = await _stage_rerank(
+            filtered, query, k, use_rerank, decomposed
+        )
         stage_ms["rerank_ms"] = round(_rerank_ms, 3)
         post_rerank_count = len(filtered)
 
