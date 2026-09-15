@@ -150,8 +150,10 @@ class SemanticCache:
                     try:
                         if self._jsonl_path.exists():
                             self._jsonl_path.unlink()
-                    except Exception:
-                        pass
+                    except Exception as unlink_err:
+                        # 删除失败会留下孤儿 JSONL —— 下次启动会加载到本该被清掉的条目。
+                        # 同段里"删集合失败"是有 warning 的，这里不该静默。
+                        logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
                     self._meta.clear()
                     self._jsonl_offsets.clear()
                     continue  # 立即重试创建新集合
@@ -211,8 +213,10 @@ class SemanticCache:
                     try:
                         if self._jsonl_path.exists():
                             self._jsonl_path.unlink()
-                    except Exception:
-                        pass
+                    except Exception as unlink_err:
+                        # 删除失败会留下孤儿 JSONL —— 下次启动会加载到本该被清掉的条目。
+                        # 同段里"删集合失败"是有 warning 的，这里不该静默。
+                        logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
                     self._meta.clear()
                     self._jsonl_offsets.clear()
                     continue
@@ -520,8 +524,8 @@ class SemanticCache:
                         entry = json.loads(line)
                         if entry.get("key") == key and "evidence" in entry:
                             return _deserialize_evidence(entry["evidence"])
-            except Exception:
-                pass  # Fall through to linear scan
+            except Exception:  # noqa: S110 — 有意忽略：读偏移索引失败即退回线性扫描
+                pass
 
         # Slow path: linear scan (and rebuild offset index)
         if not self._jsonl_path.exists():
@@ -603,8 +607,9 @@ class SemanticCache:
             try:
                 if self._jsonl_path.exists():
                     self._jsonl_path.unlink()
-            except Exception:
-                pass
+            except Exception as unlink_err:
+                # 同上：孤儿 JSONL 会被下次启动加载回来
+                logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
 
     def compact_jsonl(self) -> int:
         """Compact JSONL file by removing TTL-expired entries.

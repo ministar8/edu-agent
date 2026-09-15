@@ -55,7 +55,11 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["I", "U"]
+extend-select = ["I", "U", "S110"]
+# S110 = try/except/pass。**只标"宽泛捕获 + 静默"**（`except Exception: pass`），
+# 不标 `except json.JSONDecodeError: pass` 这类具体异常的降级路径 ——
+# 前者会让故障无声消失，后者是有意设计的 fallback 链。
+# 确属有意忽略的，用 `# noqa: S110 — <理由>` 显式标注。
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

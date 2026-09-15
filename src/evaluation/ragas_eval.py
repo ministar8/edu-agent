@@ -96,16 +96,19 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
         if hasattr(m, "llm"):
             try:
                 m.llm = judge
-            except Exception:
-                pass
+            except Exception as e:
+                # 注入失败 = 该指标会退回 RAGAS 默认 LLM，评测口径**悄悄变了**。
+                # 这类"没报错但结果不可比"的情况最难排查，必须留痕。
+                logger.warning("无法为指标 %s 注入 judge LLM：%s", getattr(m, "name", "?"), e)
 
     if any(getattr(m, "name", "") == "answer_relevancy" for m in metrics):
         emb = build_embeddings_for_relevancy()
         if emb is not None:
             try:
                 answer_relevancy.embeddings = emb
-            except Exception:
-                pass
+            except Exception as e:
+                # 同上：注入失败会让 answer_relevancy 用默认 embedding，与其它指标口径不一致
+                logger.warning("无法为 answer_relevancy 注入 embedding：%s", e)
 
     _patch_ragas_json_fallback()
     records = [s.to_ragas_dict() for s in samples]
