@@ -427,7 +427,8 @@ class TestRetrievalPathTakesReadLock:
         out = R._raw_search("什么是进程？", "operating_system", 5)
 
         assert called["collection_name"] == "operating_system"
-        assert called["k"] == 5
+        # k 会被过采样放大（见 TestSemanticOversampling）—— 这里只确认调用确实发生
+        assert called["k"] >= 5
         assert len(out) == 1
 
     def test_filter_is_forwarded_to_locked_method(self, monkeypatch):
@@ -469,3 +470,95 @@ class TestRetrievalPathTakesReadLock:
         out = R._raw_search("q", "my_coll", 3)
 
         assert out[0][0].metadata["_collection"] == "my_coll"
+
+
+class TestSemanticOversampling:
+    """语义检索的过采样 + 确定性截断。
+
+    **背景（backlog #29）**：Chroma 是近似索引，top-k 边界会抖 ——
+    实测偶尔少返回一个本该进 top-k 的候选，且会传导到最终结果。
+
+    **本组测试只断言"可验证的那一半"**：给定同一批候选，
+    输出顺序**不再依赖 Chroma 的返回次序**（用 (分数, 内容键) 做全序）。
+    "抖动整体消失"是**未经验证**的 —— 现象太罕见，做不出可靠的 A/B，
+    不能声称已修复。这一区分必须留在测试里，否则下一个人会以为 #29 已闭环。
+    """
+
+    def _patch_manager(self, monkeypatch, pairs):
+        from rag import retriever as R
+        from rag import vectorstore as vs
+
+        seen = {}
+
+        class FakeManager:
+            def similarity_search_with_score(self, collection_name, query, k, filter=None):
+                seen["k"] = k
+                return list(pairs)
+
+            def get_store(self, name):
+                raise AssertionError("不得直接取 store 绕过读锁")
+
+        monkeypatch.setattr(vs, "get_vector_store_manager", lambda: FakeManager())
+        R._query_cache.clear()
+        return seen
+
+    @staticmethod
+    def _doc(name):
+        return Document(page_content=name, metadata={"content_hash": name})
+
+    def test_requests_oversampled_candidate_count(self, monkeypatch):
+        from rag import retriever as R
+
+        seen = self._patch_manager(monkeypatch, [(self._doc("a"), 0.9)])
+        R._raw_search("q", "coll", 5)
+        assert seen["k"] == 5 * R._SEMANTIC_OVERSAMPLE, "必须多取候选，否则截断没有意义"
+
+    def test_truncates_back_to_k(self, monkeypatch):
+        from rag import retriever as R
+
+        pairs = [(self._doc(chr(ord("a") + i)), 1.0 - i * 0.01) for i in range(10)]
+        self._patch_manager(monkeypatch, pairs)
+        out = R._raw_search("q", "coll", 3)
+        assert len(out) == 3
+
+    def test_output_order_is_independent_of_input_order(self, monkeypatch):
+        """**这是本次改动的核心保证**：输出顺序只由 (分数, 内容键) 决定。
+
+        同一批候选，无论 Chroma 以什么次序返回，最终顺序都必须一致 ——
+        原先直接透传 Chroma 的返回次序，而那个次序本身不确定。
+        """
+        from rag import retriever as R
+
+        base = [
+            (self._doc("alpha"), 0.90),
+            (self._doc("bravo"), 0.80),
+            (self._doc("charlie"), 0.70),
+            (self._doc("delta"), 0.60),
+        ]
+
+        outputs = []
+        for ordering in (base, list(reversed(base)), [base[2], base[0], base[3], base[1]]):
+            self._patch_manager(monkeypatch, ordering)
+            out = R._raw_search("q", "coll", 4)
+            outputs.append([d.page_content for d, _s in out])
+
+        assert outputs[0] == outputs[1] == outputs[2]
+        assert outputs[0] == ["alpha", "bravo", "charlie", "delta"], "应按分数降序"
+
+    def test_ties_are_broken_by_content_key(self, monkeypatch):
+        """分数相同时靠内容键定序 —— 否则并列项的次序仍然不确定。"""
+        from rag import retriever as R
+
+        pairs = [(self._doc("zzz"), 0.5), (self._doc("aaa"), 0.5)]
+        self._patch_manager(monkeypatch, pairs)
+        out = R._raw_search("q", "coll", 2)
+        assert [d.page_content for d, _s in out] == ["aaa", "zzz"]
+
+    def test_higher_score_wins_even_if_returned_last(self, monkeypatch):
+        """分数更高的候选即使排在返回列表末尾，也必须被截断保留。"""
+        from rag import retriever as R
+
+        pairs = [(self._doc("low"), 0.1), (self._doc("high"), 0.9)]
+        self._patch_manager(monkeypatch, pairs)
+        out = R._raw_search("q", "coll", 1)
+        assert out[0][0].page_content == "high"

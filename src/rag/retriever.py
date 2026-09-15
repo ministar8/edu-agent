@@ -121,6 +121,16 @@ _query_cache: BoundedCache[str, list[tuple[Document, float]]] = BoundedCache(
     max_size=_MAX_CACHE_SIZE, ttl=_CACHE_TTL, name="retriever_query"
 )
 
+# 语义检索的过采样倍数。
+#
+# Chroma 是**近似**索引，top-k 边界会抖：实测同一查询、同一索引，
+# 偶尔少返回一个本该进 top-k 的候选（约 10 次 1 次），而且会**传导到最终结果** ——
+# 表现为"同一个问题返回不同证据"。
+#
+# 多取几倍候选、再按 (分数, 内容键) 确定性排序取前 k，让边界抖动不再影响最终集合，
+# 顺带把被漏掉的候选捞回来。HNSW 检索是 ~O(log n)，多取 3 倍的代价可忽略。
+_SEMANTIC_OVERSAMPLE = 3
+
 
 def _copy_results(results: list[tuple[Document, float]]) -> list[tuple[Document, float]]:
     """缓存命中时返回浅拷贝：新 list + 每篇 Document 复制一份 metadata。
@@ -277,9 +287,17 @@ def _raw_search(
         # `Error creating hnsw segment reader: Nothing found on disk`。
         # 症状是间歇性的（取决于查询是否与写入重叠）、命中的集合随机、
         # 且**就绪探测能过而首个真实查询失败**（探测走的是加锁路径）。
-        results = get_vector_store_manager().similarity_search_with_score(
-            collection_name, query, k=k, filter=filter
+        #
+        # **过采样 + 确定性截断**：Chroma 是近似索引，top-k 边界会抖 ——
+        # 实测同一查询偶尔少返回一个本该进 top-k 的候选（约 10 次 1 次），
+        # 且会传导到最终结果，表现为"同一个问题返回不同证据"。
+        # 多取 `_SEMANTIC_OVERSAMPLE` 倍候选、再按 (分数, 内容键) 确定性排序取前 k，
+        # 让边界抖动不再影响最终集合 —— 顺带把被漏掉的候选捞回来（提升召回）。
+        # 次级键用内容键而非原始顺序：后者依赖 Chroma 的返回次序，本身就不确定。
+        oversampled = get_vector_store_manager().similarity_search_with_score(
+            collection_name, query, k=k * _SEMANTIC_OVERSAMPLE, filter=filter
         )
+        results = sorted(oversampled, key=lambda pair: (-pair[1], _content_key(pair[0])))[:k]
 
     # 注入集合来源，供 RRF 合并区分跨集合的同名文档
     for doc, _score in results:
