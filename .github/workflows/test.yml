@@ -72,6 +72,11 @@ jobs:
       - name: Run retrieval quality gate
         env:
           PYTHONPATH: src
+          # 必须显式开启：CI 里没有 .env，settings 会因"未配置任何 LLM 网关"直接抛错；
+          # 且检索链的 decompose / HyDE 会调 LLM，无凭据时会抛 Missing credentials
+          # （实测 40 条 query 里 6 条崩溃）。configure_for_gate 也会再设一次，
+          # 这里是防止 settings 构造阶段就先失败。
+          USE_FAKE_MODEL: "true"
         run: uv run python -m evaluation.retrieval_gate
 
   test-docker:

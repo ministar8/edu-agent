@@ -229,8 +229,15 @@ def configure_for_gate(persist_dir: str) -> None:
 
     ``CHROMA_PORT = 1`` 是为了让 ``VectorStoreManager`` 走 PersistentClient 分支
     （端口 1 不可能有真实服务），从而把索引落到临时目录而不是真实的 ``chroma_db/``。
+
+    **LLM 也必须显式拉回假网关**（不只是设 ``USE_FAKE_MODEL``）：检索链的
+    decompose / HyDE 会调 LLM，若这里漏掉，本地（.env 配了真实 key）会真的打线上模型
+    —— 温度 0.3，基线不可复现且产生费用；CI（无 key）则抛
+    ``openai.OpenAIError: Missing credentials``，实测让 40 条 query 里 6 条崩溃。
+    settings 侧已有"USE_FAKE_MODEL 拉回假网关"的逻辑，这里再显式设一次是**故意的重复**：
+    门禁的正确性不该依赖 settings 的默认推导，显式声明才能保证任何环境下行为一致。
     """
-    from core.settings import settings
+    from core.settings import GATEWAY_DEFAULT_MODEL, Gateway, make_model_ref, settings
     from rag import semantic_cache as sc
     from rag import vectorstore as vs
 
@@ -239,6 +246,11 @@ def configure_for_gate(persist_dir: str) -> None:
     settings.CHROMA_PERSIST_DIR = persist_dir
     settings.SEMANTIC_CACHE_ENABLED = False
     settings.RERANK_ENABLED = False
+
+    settings.USE_FAKE_MODEL = True
+    fake_ref = make_model_ref(Gateway.FAKE, GATEWAY_DEFAULT_MODEL[Gateway.FAKE])
+    settings.DEFAULT_MODEL = fake_ref
+    settings.LLM_MODEL = fake_ref
 
     # 模块级单例在 import 期已按旧 settings 构造，必须重置
     vs._vector_store_manager = None
@@ -327,21 +339,41 @@ def build_index(categories: list[str] | None = None) -> dict[str, int]:
 async def run_gate(
     golden_path: str | Path = DEFAULT_GOLDEN_PATH,
     limit: int | None = None,
-) -> tuple[RetrievalMetrics, list[QueryOutcome]]:
-    """在黄金集上跑完整检索链，返回指标与逐条结果。"""
+) -> tuple[RetrievalMetrics, list[QueryOutcome], list[tuple[str, str]]]:
+    """在黄金集上跑完整检索链。
+
+    Returns:
+        ``(指标, 逐条结果, 抛异常的 query 列表)``。
+
+    单条 query 抛异常**不再中断整轮** —— 之前一个异常会让门禁直接崩掉、什么指标都拿不到，
+    值班的人只能看到 traceback。现在它被记成一条"空结果 + 错误原因"，门禁照样给出完整
+    指标，并在最后单独列出错误、由调用方判为失败。
+
+    这条路径是真实存在的：CI 无 LLM 凭据时 40 条里有 6 条会抛
+    ``openai.OpenAIError: Missing credentials``（见 core.llm.get_llm 的说明）。
+    """
     from rag.retriever import aretrieve_evidence_with_retry
 
     queries = load_golden_queries(golden_path, limit=limit)
     outcomes: list[QueryOutcome] = []
+    errors: list[tuple[str, str]] = []
 
     for query, expected in queries:
-        fused, _verdict = await aretrieve_evidence_with_retry(
-            query=query,
-            k=GATE_K,
-            use_rerank=GATE_USE_RERANK,
-            max_retries=0,
-            use_llm_verify=False,
-        )
+        try:
+            fused, _verdict = await aretrieve_evidence_with_retry(
+                query=query,
+                k=GATE_K,
+                use_rerank=GATE_USE_RERANK,
+                max_retries=0,
+                use_llm_verify=False,
+            )
+        except Exception as exc:  # noqa: BLE001 — 门禁要把"任何异常"都算作失败证据
+            errors.append((query, f"{type(exc).__name__}: {exc}"))
+            outcomes.append(
+                QueryOutcome(query=query, expected_category=expected, hit_categories=[])
+            )
+            continue
+
         categories = [str(ev.metadata.get("category", "")) for ev in fused.text_evidences]
         outcomes.append(
             QueryOutcome(
@@ -351,7 +383,7 @@ async def run_gate(
             )
         )
 
-    return compute_metrics(outcomes), outcomes
+    return compute_metrics(outcomes), outcomes, errors
 
 
 def _build_report(
@@ -434,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[提示] 以下集合需要重试才可查询（Chroma 落盘竞态）：{slow}")
 
         start = time.perf_counter()
-        metrics, outcomes = asyncio.run(run_gate(args.golden, limit=args.limit))
+        metrics, outcomes, errors = asyncio.run(run_gate(args.golden, limit=args.limit))
         query_seconds = time.perf_counter() - start
 
         baseline: dict[str, Any] | None = None
@@ -444,6 +476,13 @@ def main(argv: list[str] | None = None) -> int:
 
         print(_build_report(metrics, outcomes, baseline))
         print(f"索引 {index_seconds:.1f}s / 检索 {query_seconds:.1f}s")
+
+        if errors:
+            print(f"\n[严重] {len(errors)} 条 query 抛异常（已按空结果计入指标）：")
+            for query, reason in errors[:10]:
+                print(f"  - {query[:38]:<38} {reason[:70]}")
+            if len(errors) > 10:
+                print(f"  … 另有 {len(errors) - 10} 条")
 
         payload = {
             "_meta": {
@@ -459,12 +498,25 @@ def main(argv: list[str] | None = None) -> int:
         }
 
         if args.update_baseline:
+            if errors:
+                # 带着异常录基线等于把故障固化成"标准"，必须先修
+                print(
+                    f"\n[拒绝] 有 {len(errors)} 条 query 抛异常，不录基线 —— "
+                    "请先修掉异常，否则基线会把故障当成基准。"
+                )
+                return 2
             baseline_path.parent.mkdir(parents=True, exist_ok=True)
             baseline_path.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
             )
             print(f"基线已更新: {baseline_path}")
             return 0
+
+        if errors:
+            # 异常优先于指标退化上报：指标"看起来还行"是因为异常被记成了空结果，
+            # 只报退化会把真正的原因盖掉。
+            print("门禁未通过：存在抛异常的 query（见上），请先修异常。")
+            return 1
 
         if baseline is None:
             print(f"[提示] 基线不存在（{baseline_path}），跳过对比。用 --update-baseline 生成。")

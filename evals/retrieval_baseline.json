@@ -13,8 +13,8 @@
     "category_hit_at_1": 0.9,
     "category_hit_at_k": 1.0,
     "category_mrr": 0.9458,
-    "category_precision": 0.9014,
+    "category_precision": 0.9005,
     "empty_result_rate": 0.0,
-    "mean_evidence_count": 5.325
+    "mean_evidence_count": 5.275
   }
 }

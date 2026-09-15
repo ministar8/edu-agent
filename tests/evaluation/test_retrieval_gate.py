@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -373,9 +374,97 @@ class TestGateEndToEnd:
             assert sum(counts.values()) > 0, "索引为空 —— knowledge/ 缺失或解析全失败"
             wait_for_index_ready(sorted(counts))
 
-            metrics, _outcomes = asyncio.run(run_gate())
+            metrics, _outcomes, errors = asyncio.run(run_gate())
+            assert errors == [], f"有 query 抛异常：{errors}"
             baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))["metrics"]
             regressions = compare_to_baseline(metrics.as_dict(), baseline)
             assert regressions == [], f"检索质量退化：{regressions}"
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+class TestRunGateErrorHandling:
+    """单条 query 抛异常不能中断整轮 —— 否则门禁只给 traceback，拿不到任何指标。
+
+    这条路径是真实存在的：CI 无 LLM 凭据时 40 条里有 6 条抛
+    `openai.OpenAIError: Missing credentials`（见 core.llm.get_llm 的说明）。
+    """
+
+    def _patch_retriever(self, monkeypatch, behaviour):
+        from rag import retriever
+
+        async def fake(query, **kwargs):
+            return behaviour(query)
+
+        monkeypatch.setattr(retriever, "aretrieve_evidence_with_retry", fake)
+
+    def test_exception_is_recorded_and_loop_continues(self, monkeypatch, tmp_path):
+        from evaluation import retrieval_gate as gate
+
+        golden = tmp_path / "g.jsonl"
+        golden.write_text(
+            "\n".join(
+                json.dumps({"query": f"q{i}", "metadata": {"subject": "os"}}) for i in range(4)
+            ),
+            encoding="utf-8",
+        )
+
+        class _Ev:
+            metadata = {"category": "operating_system"}
+
+        class _Fused:
+            text_evidences = [_Ev()]
+
+        def behaviour(query):
+            if query == "q1":
+                raise RuntimeError("Missing credentials")
+            return _Fused(), None
+
+        self._patch_retriever(monkeypatch, behaviour)
+        metrics, outcomes, errors = asyncio.run(gate.run_gate(golden))
+
+        assert len(outcomes) == 4, "抛异常也要占一条 outcome，否则分母会变小"
+        assert metrics.n_queries == 4
+        assert len(errors) == 1
+        assert errors[0][0] == "q1"
+        assert "Missing credentials" in errors[0][1]
+        # 抛异常的 q1 记为"空结果"，不能算命中
+        assert metrics.category_hit_at_k == 0.75
+        assert metrics.empty_result_rate == 0.25
+
+    def test_all_queries_failing_is_visible_not_silent(self, monkeypatch, tmp_path):
+        from evaluation import retrieval_gate as gate
+
+        golden = tmp_path / "g.jsonl"
+        golden.write_text(
+            json.dumps({"query": "q", "metadata": {"subject": "os"}}) + "\n", encoding="utf-8"
+        )
+
+        def behaviour(query):
+            raise RuntimeError("boom")
+
+        self._patch_retriever(monkeypatch, behaviour)
+        metrics, _outcomes, errors = asyncio.run(gate.run_gate(golden))
+
+        assert len(errors) == 1
+        # 全部失败时精确率必须是 0，而不是"无命中所以无定义"被算成完美
+        assert metrics.category_precision == 0.0
+        assert metrics.empty_result_rate == 1.0
+
+    def test_clean_run_reports_no_errors(self, monkeypatch, tmp_path):
+        from evaluation import retrieval_gate as gate
+
+        golden = tmp_path / "g.jsonl"
+        golden.write_text(
+            json.dumps({"query": "q", "metadata": {"subject": "os"}}) + "\n", encoding="utf-8"
+        )
+
+        class _Ev:
+            metadata = {"category": "operating_system"}
+
+        class _Fused:
+            text_evidences = [_Ev()]
+
+        self._patch_retriever(monkeypatch, lambda q: (_Fused(), None))
+        _metrics, _outcomes, errors = asyncio.run(gate.run_gate(golden))
+        assert errors == []

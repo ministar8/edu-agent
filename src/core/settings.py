@@ -228,12 +228,27 @@ class Settings(BaseSettings):
                 "（注意旧字段 LLM_API_KEY 已废弃），或设置 USE_FAKE_MODEL=true 用于测试。"
             )
 
+        # ── USE_FAKE_MODEL：必须赢过 .env 里的真实引用，且必须在**任何校验之前**覆盖 ──
+        # 顺序是关键：下面的 _validate_model_ref 会拒绝"网关未启用"的引用，而 .env 里
+        # 常常显式配了 DEFAULT_MODEL / LLM_MODEL 指向真实网关。若把覆盖放到校验之后，
+        # 无 key 环境（CI）会在覆盖生效之前就先抛错 —— 实测确实如此。
+        #
+        # 两个引用都要拉回假网关：
+        #   * DEFAULT_MODEL 供 agent 层 get_model() 使用
+        #   * LLM_MODEL     供 RAG 检索链 get_llm() 使用，且其**默认值本身就是真实模型**
+        #     （deepseek:deepseek-v4-flash）
+        # 此前只在 DEFAULT_MODEL 为空时填假值，于是 .env 一旦显式配了这两个字段，
+        # USE_FAKE_MODEL=true 就形同虚设：
+        #   本地（有 key）→ 测试真的调用线上模型（检索链温度 0.3，基线不可复现且产生费用）
+        #   CI（无 key）  → openai.OpenAIError: Missing credentials
+        # 实测后者让 40 条检索门禁 query 里的 6 条直接崩溃。
+        if self.USE_FAKE_MODEL:
+            fake_ref = make_model_ref(Gateway.FAKE, GATEWAY_DEFAULT_MODEL[Gateway.FAKE])
+            self.DEFAULT_MODEL = fake_ref
+            self.LLM_MODEL = fake_ref
+
         if self.DEFAULT_MODEL:
             self._validate_model_ref(self.DEFAULT_MODEL, field="DEFAULT_MODEL", active=active)
-
-        # USE_FAKE_MODEL 必须赢过真实 key，保证测试环境不被真实模型污染
-        if self.USE_FAKE_MODEL and not self.DEFAULT_MODEL:
-            self.DEFAULT_MODEL = make_model_ref(Gateway.FAKE, GATEWAY_DEFAULT_MODEL[Gateway.FAKE])
 
         for gateway in active:
             self.AVAILABLE_MODELS |= model_refs_for(gateway)

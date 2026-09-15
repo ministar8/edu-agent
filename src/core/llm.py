@@ -150,9 +150,27 @@ def get_model(
     return _cached_client(model_ref, temp, streaming=True)
 
 
-def get_llm(streaming: bool = False, temperature: float = 0.3) -> ChatOpenAI:
+def get_llm(streaming: bool = False, temperature: float = 0.3) -> ChatOpenAI | FakeToolModel:
     """基于 ``settings.LLM_MODEL`` 获取 LLM 实例（RAG 检索链使用）。
 
     默认非流式 —— 与全部 RAG 调用点一致；需要流式时显式传 ``streaming=True``。
+
+    ``LLM_MODEL`` 指向 fake 网关时返回 ``FakeToolModel``（与 ``get_model`` 同款处理）。
+
+    **为什么必须补这个分支**：本函数此前直接走 ``_cached_client``，**没有 fake 分支**，
+    而 ``get_model``（agent 层）有。后果是 ``USE_FAKE_MODEL=true`` 只让 agent 层变假，
+    RAG 检索链仍去构造真实客户端：
+
+    - 本地 ``.env`` 配了真实 key 时 → **真的调用线上模型**。检索链的 decompose / HyDE
+      用温度 0.3，于是"评测"结果每次不同且产生费用 —— 基线失去可复现性。
+    - CI 无 key 时 → ``openai.OpenAIError: Missing credentials`` 直接抛出，
+      实测 40 条门禁 query 里有 6 条因此崩溃（异常一路穿透到
+      ``aretrieve_evidence_with_retry`` 之外）。
+
+    ``FakeToolModel`` 无法满足 structured output，因此 ``call_structured_*`` 会返回 None、
+    检索链回落到规则路径 —— 这正是无外部依赖评测想要的行为。
     """
+    # 与 get_model 同理：FakeToolModel 有状态（responses 队列会被消费），不进缓存
+    if parse_model_ref(settings.LLM_MODEL)[0] is Gateway.FAKE:
+        return FakeToolModel(responses=["This is a test response from the fake model."])
     return _cached_client(settings.LLM_MODEL, temperature, streaming=streaming)
