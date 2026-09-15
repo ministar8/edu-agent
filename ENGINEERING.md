@@ -1118,7 +1118,7 @@ coverage:
 | 12 | 收敛 `rag/**` 类型豁免 | P1 | 先开 `unbound-name`/`missing-import` | 🟡 真实错误已修（`supervisor.py`），豁免仍待收敛 |
 | 13 | 支持 5 级标题（`##### 1)内容`） | P2 | 真实库 80 处五级标题进入 section 层级 | ⬜ |
 | 14 | 检索阈值集中到 settings + 路由名单单一真源 | P2 | 阈值可经 `.env` 覆盖；名单从 `recall.py` 导出 | ⬜ |
-| 15 | 补 `rag/ingest.py` 测试（唯一剩余 0% 模块） | P2 | 覆盖率 ≥50% | ⬜ |
+| 15 | 补 `rag/ingest.py` 测试（唯一剩余 0% 模块） | P2 | 覆盖率 ≥50% | ✅ 实测 **0→84%**（`tests/rag/test_ingest_readiness.py`，28 用例，反向验证 14/14） |
 | 16 | codecov patch coverage 改为阻塞 | P2 | 新代码 patch coverage ≥80% 才可合入 | ⬜ |
 | 17 | 分模块覆盖率门槛 | P2 | CI 按 `rag/agents/service` 分别校验 | ⬜ |
 | 18 | 加 `.gitattributes` 统一行尾 | P2 | 消除 CRLF/LF 混用（**须独立提交**，勿混功能改动） | ⬜ |
