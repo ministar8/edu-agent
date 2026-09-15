@@ -105,7 +105,12 @@ def merge_route_results(
             doc.metadata[f"recall_{rn}_score"] = round(float(rs), 6)
         ranked.append((doc, rrf_score))
 
-    ranked.sort(key=lambda item: item[1], reverse=True)
+    # 排序必须**完全确定**：RRF 分数并列时若沿用插入顺序，而插入顺序又来自
+    # ThreadPoolExecutor.as_completed 的完成次序，同一 query 每次运行都会得到
+    # 不同的证据排列（实测 category_hit@1 在 0.900~0.925 间抖动）。
+    # 这既让检索结果不可复现，也让质量门禁的噪声高于它能识别的退化幅度。
+    # 用 _dedup_key 作次级键：merged 就是以它为键，故唯一且确定。
+    ranked.sort(key=lambda item: (-item[1], _dedup_key(item[0])))
     logger.debug(
         "RRF k=%d routes=%d raw=%d merged=%d top=%.4f multi=%d",
         k,
@@ -175,7 +180,8 @@ def weighted_rrf_merge(
         doc.metadata["_decompose_labels"] = ", ".join(sorted(labels))
         ranked.append((doc, rrf_score))
 
-    ranked.sort(key=lambda item: item[1], reverse=True)
+    # 同 merge_route_results：并列分数必须用确定性的次级键，否则结果不可复现
+    ranked.sort(key=lambda item: (-item[1], _dedup_key(item[0])))
     logger.debug(
         "Weighted RRF k=%d raw=%d merged=%d top=%.4f",
         k,

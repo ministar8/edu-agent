@@ -160,3 +160,77 @@ class TestDedupSameSection:
 
     def test_empty(self):
         assert dedup_same_section([]) == []
+
+
+class TestRrfTieBreakIsDeterministic:
+    """RRF 并列分数的排序必须与「输入路由的顺序」无关。
+
+    背景（本轮实测）：``ranked.sort(key=score, reverse=True)`` 是**稳定排序**，
+    只按分数做键时并列项会沿用插入顺序；而插入顺序来自 ``ThreadPoolExecutor
+    .as_completed()`` 的完成次序 —— 同一 query 每次运行得到不同排列。
+    实测 ``category_hit@1`` 在 0.900~0.925 之间抖动，噪声高于质量门禁能识别的退化幅度。
+
+    修法：用 ``_dedup_key`` 作次级键（``merged`` 就是以它为键，故唯一且确定）。
+
+    这两条测试的构造要点：**必须真的制造出分数并列**，否则测不到并列分支。
+    做法是让两个文档各出现在一条权重相同、排名相同（都是 rank 1）的路由上。
+    """
+
+    def test_merge_route_results_order_is_independent_of_input_order(self):
+        doc_a = _doc("甲" * 50, collection="os")
+        doc_b = _doc("乙" * 50, collection="ds")
+        forward = [("os:semantic", [(doc_a, 1.0)]), ("ds:semantic", [(doc_b, 1.0)])]
+        backward = list(reversed(forward))
+
+        out_forward = merge_route_results(forward)
+        out_backward = merge_route_results(backward)
+
+        # 前提：确实并列，否则这条测试没在测并列场景
+        assert out_forward[0][1] == out_forward[1][1]
+        assert [d.metadata["_collection"] for d, _ in out_forward] == [
+            d.metadata["_collection"] for d, _ in out_backward
+        ]
+
+    def test_merge_route_results_tie_order_is_by_dedup_key(self):
+        # 用 3 个集合名可排序的文档，使"按 _dedup_key 升序"有唯一的期望顺序。
+        # 只用 2 个文档时，任何确定性次级键都可能碰巧给出同样的顺序 —— 测不出约定。
+        names = ["aaa", "mmm", "zzz"]
+        docs = [_doc(c * 50, collection=c) for c in names]
+        routes = [(f"{c}:semantic", [(d, 1.0)]) for c, d in zip(names, docs, strict=True)]
+
+        out = merge_route_results(routes)
+
+        assert len(out) == 3
+        assert len({s for _, s in out}) == 1, "三者分数应完全并列，否则测不到并列分支"
+        assert [d.metadata["_collection"] for d, _ in out] == names
+
+    def test_weighted_rrf_merge_order_is_independent_of_input_order(self):
+        doc_a = _doc("甲" * 50, collection="os")
+        doc_b = _doc("乙" * 50, collection="ds")
+        weights = {"left": 1.0, "right": 1.0}
+        forward = [("left", [(doc_a, 1.0)]), ("right", [(doc_b, 1.0)])]
+        backward = list(reversed(forward))
+
+        out_forward = weighted_rrf_merge(forward, weights=weights)
+        out_backward = weighted_rrf_merge(backward, weights=weights)
+
+        assert out_forward[0][1] == out_forward[1][1]  # 确实并列
+        assert [d.metadata["_collection"] for d, _ in out_forward] == [
+            d.metadata["_collection"] for d, _ in out_backward
+        ]
+
+    def test_score_order_is_still_primary(self):
+        """次级键只用于并列，不能破坏「分数高的在前」。
+
+        构造要点：两条文档必须在**同一路由内处于不同 rank**，分数才会不同。
+        若让它们各占一条同权重路由且都是 rank 1，两者分数并列，
+        断言 ``scores == sorted(scores, reverse=True)`` 会恒真 —— 测不出主键方向。
+        """
+        doc_a = _doc("甲" * 50, collection="os")
+        doc_b = _doc("乙" * 50, collection="ds")
+        out = merge_route_results([("os:semantic", [(doc_a, 1.0), (doc_b, 1.0)])])
+
+        scores = [s for _, s in out]
+        assert len(scores) == 2
+        assert scores[0] > scores[1], "rank 1 的 RRF 分数必须高于 rank 2"
+        assert scores == sorted(scores, reverse=True)
