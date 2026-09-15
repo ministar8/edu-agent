@@ -221,7 +221,7 @@ class TestRouteAdaptiveK:
         assert _route_adaptive_k(1, True, "keyword_bm25") == 1
 
     def test_meta_routes_recognised_by_suffix(self):
-        for route in ("concept_meta", "code_meta", "merged_qa_meta", "section_meta"):
+        for route in ("concept_meta", "code_meta", "formula_meta", "section_meta"):
             assert _route_adaptive_k(20, True, route) == 10
 
     @pytest.mark.parametrize(
@@ -440,3 +440,39 @@ class TestSafeToThread:
             raise RuntimeError("x")
 
         assert await _safe_to_thread("boom", _boom, timeout=1.0) is None
+
+
+class TestMergedQaRouteRemoved:
+    """`merged_qa_meta` 死路由已删除（backlog #8），本组防止它被无声加回来。
+
+    背景：该路由按 `content_type=merged_qa` 过滤，但**实测该 content_type 恒不存在** ——
+    splitter 的 Q&A 检测链断在三处（见 ENGINEERING.md「Q&A 链路实测结论」），
+    于是这条路由**永远返回空**，而它带的权重 2.0 从未被真实数据校准过。
+    """
+
+    def test_no_route_registered(self):
+        from rag import recall
+
+        source = recall.__file__
+        text = open(source, encoding="utf-8").read()
+        # 允许出现在解释性注释里，但不得出现在可执行代码中
+        code_lines = [ln for ln in text.splitlines() if not ln.strip().startswith("#")]
+        assert not any("merged_qa_meta" in ln for ln in code_lines), (
+            "merged_qa_meta 路由又被加回来了 —— 若确实要引入，"
+            "请先修好生产端并重新校准权重（不要直接抄回未验证的 2.0）"
+        )
+
+    def test_no_rrf_weight_registered(self):
+        from rag.recall import _ROUTE_WEIGHTS
+
+        assert not any(route == "merged_qa_meta" for route, _cat in _ROUTE_WEIGHTS), (
+            "merged_qa_meta 的 RRF 权重又被加回来了"
+        )
+
+    def test_route_weights_still_cover_the_live_routes(self):
+        """删掉死路由后，真正在用的高权重路由必须还在。"""
+        from rag.recall import _ROUTE_WEIGHTS
+
+        routes = {route for route, _cat in _ROUTE_WEIGHTS}
+        for expected in ("code_meta", "exercise_meta", "answer_meta", "comparison_meta"):
+            assert expected in routes, f"误删了在用的路由: {expected}"

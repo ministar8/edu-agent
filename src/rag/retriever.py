@@ -347,7 +347,6 @@ def _resolve_retrieval_policy(
         "section_meta",
         "formula_meta",
         "table_meta",
-        "merged_qa_meta",
     )
     _max_w = max(get_route_weight(r, cat) for r in _active_routes)
     effective_threshold *= _max_w / _BASELINE_WEIGHT

@@ -213,24 +213,14 @@ def build_metadata_routes(
             ("table_meta", focus_query, combine_filters(base_filter, {"content_type": "table"}))
         )
 
-    # 习题/答案/常考题查询补充 merged_qa 路由（真题 Q&A 合并块）
-    if cat.is_exercise or cat.is_answer:
-        metadata_routes.append(
-            (
-                "merged_qa_meta",
-                normalized,
-                combine_filters(base_filter, {"content_type": "merged_qa"}),
-            )
-        )
-    # 对比查询也可能涉及 merged_qa（如"TCP和UDP有什么区别"在常考题型中）
-    if cat.is_comparison:
-        metadata_routes.append(
-            (
-                "merged_qa_meta",
-                normalized,
-                combine_filters(base_filter, {"content_type": "merged_qa"}),
-            )
-        )
+    # 注：这里曾有 `merged_qa_meta` 路由（对 exercise / answer / comparison 查询按
+    # `content_type=merged_qa` 过滤）。**实测该 content_type 恒不存在** ——
+    # splitter 的 Q&A 检测链断在三处（见 ENGINEERING.md「Q&A 链路实测结论」），
+    # 于是这条路由**永远返回空**，而它带的权重 2.0 从未被真实数据校准过。
+    # 已按 backlog #8 删除。
+    #
+    # 若将来要重新引入：**先修好生产端并让真题真的产出 merged_qa chunk，
+    # 再用门禁重新校准权重** —— 不要直接抄回一个没测过的 2.0。
 
     # 去重：同 query + 同 filter 只保留一条
     deduped: list[tuple[str, str, dict | None]] = []
@@ -280,9 +270,6 @@ _ROUTE_WEIGHTS: dict[tuple[str, str], float] = {
     ("formula_meta", "structured"): 1.8,
     ("table_meta", "concept"): 1.5,
     ("table_meta", "structured"): 1.5,
-    ("merged_qa_meta", "exercise"): 2.0,
-    ("merged_qa_meta", "answer"): 2.0,
-    ("merged_qa_meta", "comparison"): 1.5,  # 对比类常考题
 }
 
 # 查询类型优先级：精确匹配 > default 回退
