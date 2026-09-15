@@ -1173,7 +1173,7 @@ coverage:
 | 18 | 加 `.gitattributes` 统一行尾 | P2 | 消除 CRLF/LF 混用（**须独立提交**，勿混功能改动） | ⬜ |
 | 19 | 前端冒烟测试 | P3 | Playwright 跑通"登录→提问→回答" | ⬜ |
 | 20 | 缓存指标接入可观测端点 | P3 | `/health` 或 `/metrics` 暴露缓存命中率 | ⬜ |
-| 21 | **入库后就绪屏障**（Chroma HNSW 落盘竞态） | P2 | `ingest` 后查询不再间歇失败；参考实现见 `retrieval_gate.wait_for_index_ready` | 🟡 检测+重建已落地；**上游根因未定位** |
+| 21 | **入库后就绪屏障**（Chroma HNSW 落盘竞态） | P2 | `ingest` 后查询不再间歇失败 | ✅ **根因已定位并修复**：`_rw_lock` 读锁只接了一半 —— `_raw_search` 绕过读锁直连 store，与写锁不互斥。已改走加锁方法（反向验证 3/3）。就绪屏障作为第二道防线保留 |
 | 22 | `warmup_query_cache` 失败率接入日志/告警 | P2 | 预热成功率低于阈值时告警，而非只打印 | ✅ 已落地（ERROR + `ingest_warmup_summary` 指标 + 阈值走 settings） |
 | 23 | 检索结果不可复现（RRF 并列排序依赖线程完成顺序） | P1 | 同一 query 多次运行结果逐位一致 | ✅ 已落地（确定性次级键，反向验证 4/4） |
 | 24 | `_split_oversized` 单句超限无兜底 | P3 | 任意输入下每段 ≤ limit | ✅ 已落地（反向验证 3/3；真实语料不触发） |
