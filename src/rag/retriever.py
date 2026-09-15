@@ -1017,6 +1017,342 @@ async def _stage_rerank(
     return out, True, elapsed_ms
 
 
+def _content_key(doc: Document) -> str:
+    """HyDE 追加时的去重键：优先内容哈希，缺失时退回「来源 + 正文前 80 字」。
+
+    原实现在同一段里内联了两次这个表达式，抽出来避免两处走样。
+    """
+    return str(
+        doc.metadata.get("content_hash")
+        or f"{doc.metadata.get('source', '') or doc.metadata.get('source_file', '')}:"
+        f"{doc.page_content[:80]}"
+    )
+
+
+@dataclass(frozen=True)
+class _HydeOutcome:
+    """HyDE 阶段的产出。
+
+    `rerank_used` 也在返回值里：HyDE 召回后若走了重排，会把整条链路的
+    "用过重排"标记翻成 True —— 这是原实现的行为。拆开后显式返回，
+    避免调用方漏掉这次翻转（漏了会让指标里的 rerank_used 少记）。
+    """
+
+    docs: list[Document]
+    triggered: bool
+    added_count: int
+    error: str
+    rerank_used: bool
+    elapsed_ms: float
+
+
+async def _stage_hyde(
+    filtered: list[Document],
+    *,
+    query: str,
+    collection_name: str,
+    coarse_k: int,
+    filter: dict | None,
+    cat: QueryCategory,
+    use_rerank: bool,
+    depth: RetrievalDepth,
+    k: int,
+    effective_threshold: float,
+    rerank_used: bool,
+) -> _HydeOutcome:
+    """阶段 8：HyDE 兜底召回。
+
+    只在"结果偏少或最高重排分偏低"时触发（`should_trigger_hyde`）。
+    触发后用 LLM 生成假设性答案再召回一次，把**新**文档追加到现有结果之后。
+
+    三处刻意的设计：
+
+    - 阈值放宽到 ``effective_threshold * 0.8``：HyDE 是兜底手段，
+      用同一把尺子会把它的召回几乎全部滤掉；
+    - 追加时按内容键去重，已存在的文档不重复计入；
+    - 整段包在 try 里，**任何异常只记 `hyde_error` 不抛出** ——
+      兜底机制失败不该影响已经拿到的正常结果。
+
+    Returns:
+        `_HydeOutcome`。未触发时 `elapsed_ms` 为 0（原实现不记录这段耗时）。
+    """
+    top_rerank_score_for_hyde = 0.0
+    rerank_scores_for_hyde = [
+        float(doc.metadata.get("rerank_score") or 0.0)
+        for doc in filtered
+        if doc.metadata.get("rerank_score") is not None
+    ]
+    if rerank_scores_for_hyde:
+        top_rerank_score_for_hyde = max(rerank_scores_for_hyde)
+
+    if depth.skip_hyde or not should_trigger_hyde(
+        query, len(filtered), top_rerank_score_for_hyde, cat
+    ):
+        return _HydeOutcome(filtered, False, 0, "", rerank_used, 0.0)
+
+    triggered = False
+    added_count = 0
+    error = ""
+    started = time.perf_counter()
+    hyde_query = await _safe_to_thread(
+        "async_hyde_generate",
+        generate_hyde_query,
+        query,
+        timeout=min(float(getattr(settings, "LLM_TIMEOUT", 60) or 60), 10.0),
+        default="",
+    )
+    if hyde_query and hyde_query != query:
+        triggered = True
+        try:
+            hyde_terms = extract_query_terms(normalize_query_text(hyde_query))
+            hyde_results = await _amulti_route_search(
+                hyde_query,
+                collection_name,
+                coarse_k,
+                filter=filter,
+                cat=cat,
+                use_rerank=use_rerank,
+                terms=hyde_terms,
+                depth=depth,
+            )
+            hyde_results = await _safe_to_thread(
+                "async_hyde_dedup",
+                dedup_same_section,
+                hyde_results,
+                timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 3.0),
+                default=hyde_results,
+                max_per_section=2,
+            )
+            hyde_docs = [doc for doc, score in hyde_results if score >= effective_threshold * 0.8]
+            if use_rerank and hyde_docs:
+                hyde_docs = await _safe_to_thread(
+                    "async_hyde_rerank",
+                    rerank,
+                    query,
+                    hyde_docs,
+                    timeout=float(getattr(settings, "RERANK_TIMEOUT", 30) or 30),
+                    default=hyde_docs[:k],
+                    top_k=k,
+                )
+                rerank_used = True
+            for doc in hyde_docs:
+                doc.metadata["_hyde_fallback"] = True
+                doc.metadata["_hyde_query"] = hyde_query[:120]
+
+            existing_keys = {_content_key(doc) for doc in filtered}
+            merged_hyde_docs = []
+            for doc in hyde_docs:
+                key = _content_key(doc)
+                if key not in existing_keys:
+                    merged_hyde_docs.append(doc)
+                    existing_keys.add(key)
+            if merged_hyde_docs:
+                filtered = (filtered + merged_hyde_docs)[: max(k, len(filtered))]
+                added_count = len(merged_hyde_docs)
+                _log_final_retrieval_summary("async-post-hyde", query, filtered)
+        except Exception as e:
+            error = e.__class__.__name__
+            logger.warning("Async HyDE fallback retrieval failed: %s", e)
+
+    return _HydeOutcome(
+        filtered,
+        triggered,
+        added_count,
+        error,
+        rerank_used,
+        round((time.perf_counter() - started) * 1000, 3),
+    )
+
+
+@dataclass(frozen=True)
+class _WindowOutcome:
+    docs: list[Document]
+    elapsed_ms: float
+
+
+async def _stage_expand_windows(
+    filtered: list[Document],
+    *,
+    query: str,
+    collection_name: str,
+    cat: QueryCategory,
+    depth: RetrievalDepth,
+) -> _WindowOutcome:
+    """阶段 9：句子窗口展开 + 噪声软降级。
+
+    窗口大小按检索深度自适应：shallow=0（不展开）、standard=1、deep=2。
+
+    两种展开方式：
+
+    - 指定了单一集合 → 整个列表直接交给 `sentence_window_expand`；
+    - 未指定集合（跨集合召回）→ 先按 `_collection` 分组**逐集合**展开。
+      窗口要在各自集合内取相邻 chunk，跨集合混在一起会取到别的集合的邻居。
+
+    展开后再做一次负采样软降级（`downgrade_window_noise`）：被窗口带进来的
+    噪声 chunk 不该与直接命中的证据同等对待。
+    """
+    if not filtered:
+        return _WindowOutcome(filtered, 0.0)
+
+    def _adaptive_window_size() -> int:
+        if depth and depth.depth == "shallow":
+            return 0
+        return 1 if (depth and depth.depth == "standard") else 2
+
+    def _expand_windows():
+        if collection_name:
+            return sentence_window_expand(
+                filtered, collection_name, window_size=_adaptive_window_size()
+            )
+        grouped_docs: dict[str, list[Document]] = {}
+        for doc in filtered:
+            doc_collection = str(doc.metadata.get("_collection") or "")
+            if doc_collection:
+                grouped_docs.setdefault(doc_collection, []).append(doc)
+        if not grouped_docs:
+            return filtered
+        expanded_docs: list[Document] = []
+        for doc_collection, docs_in_collection in grouped_docs.items():
+            expanded_docs.extend(
+                sentence_window_expand(
+                    docs_in_collection, doc_collection, window_size=_adaptive_window_size()
+                )
+            )
+        return expanded_docs
+
+    started = time.perf_counter()
+    expanded = await _safe_to_thread(
+        "async_window_expand",
+        _expand_windows,
+        timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 5.0),
+        default=filtered,
+    )
+    # Negative Sampling: 对 window 展开的噪声 chunk 软降级
+    expanded = downgrade_window_noise(
+        expanded, query, is_comparison=bool(cat and cat.is_comparison)
+    )
+    _log_final_retrieval_summary("async-post-window", query, expanded)
+    return _WindowOutcome(expanded, round((time.perf_counter() - started) * 1000, 3))
+
+
+@dataclass(frozen=True)
+class _RetrievalCounters:
+    """一次检索各阶段的计数，供收尾写指标。"""
+
+    raw_results: int
+    after_dedup: int
+    after_threshold: int
+    after_rerank: int
+    after_window: int
+    window_added: int
+
+
+@dataclass(frozen=True)
+class _RetrievalContext:
+    """收尾阶段需要的检索上下文（调用方请求 + 实际采用的策略）。
+
+    参数很多，但都是"这一次检索的事实"—— 打包成一个不可变对象，
+    避免 19 个关键字参数在调用处错位。
+    """
+
+    query: str
+    collection_name: str
+    k: int
+    coarse_k: int
+    effective_threshold: float
+    depth: RetrievalDepth | None
+    retrieval_layer: str
+    route_type: str
+    cat: QueryCategory
+    decomposed: bool
+    sub_queries: list[str]
+    use_rerank: bool
+    rerank_used: bool
+    hyde_triggered: bool
+    hyde_added_count: int
+    hyde_error: str
+    counters: _RetrievalCounters
+
+
+def _finalize_retrieval(
+    filtered: list[Document],
+    *,
+    ctx: _RetrievalContext,
+    started_at: float,
+    stage_ms: dict[str, float],
+) -> list[Document]:
+    """阶段 10：给证据打溯源标记，并写出检索摘要指标。
+
+    溯源标记（`_retrieval_depth` / `_retrieval_layer` / `_route_type` /
+    `_effective_k` / `_coarse_k`）会随证据一起流向生成阶段，
+    用于回答"这条证据是怎么来的"。
+
+    指标里刻意同时保留**各阶段计数**（before_threshold / after_dedup /
+    after_threshold / after_rerank / after_window）—— 只看最终条数无法判断
+    是召回不足还是被某一层过滤掉了。
+    """
+    for doc in filtered:
+        doc.metadata["_retrieval_depth"] = ctx.depth.depth if ctx.depth else ""
+        doc.metadata["_retrieval_layer"] = ctx.retrieval_layer
+        doc.metadata["_route_type"] = ctx.route_type
+        doc.metadata["_effective_k"] = ctx.k
+        doc.metadata["_coarse_k"] = ctx.coarse_k
+
+    window_expanded_count = sum(1 for doc in filtered if doc.metadata.get("_window_expanded"))
+    context_chars = sum(len(doc.page_content or "") for doc in filtered)
+    role_counts = {
+        "detail": sum(1 for doc in filtered if doc.metadata.get("section.chunk_role") == "detail"),
+    }
+    rerank_scores = [
+        float(doc.metadata.get("rerank_score") or 0.0)
+        for doc in filtered
+        if doc.metadata.get("rerank_score") is not None
+    ]
+    top_rerank_score = rerank_scores[0] if rerank_scores else 0.0
+    avg_rerank_score = round(sum(rerank_scores) / len(rerank_scores), 6) if rerank_scores else 0.0
+
+    metrics.emit_retrieve_summary(
+        query=ctx.query,
+        collection=ctx.collection_name,
+        duration_ms=round((time.perf_counter() - started_at) * 1000, 3),
+        values={
+            "k": ctx.k,
+            "coarse_k": ctx.coarse_k,
+            "threshold": ctx.effective_threshold,
+            "retrieval_depth": ctx.depth.depth if ctx.depth else "",
+            "retrieval_layer": ctx.retrieval_layer,
+            "route_type": ctx.route_type,
+            "classifier_source": getattr(ctx.cat, "source", ""),
+            "decomposed": ctx.decomposed,
+            "sub_query_count": len(ctx.sub_queries),
+            "use_rerank": ctx.use_rerank,
+            "rerank_used": ctx.rerank_used,
+            "hyde_triggered": ctx.hyde_triggered,
+            "hyde_added_count": ctx.hyde_added_count,
+            "hyde_error": ctx.hyde_error,
+            "skip_bm25": ctx.depth.skip_bm25 if ctx.depth else False,
+            "skip_metadata_routes": ctx.depth.skip_metadata_routes if ctx.depth else False,
+            "skip_kg": ctx.depth.skip_kg if ctx.depth else False,
+            "before_threshold": ctx.counters.raw_results,
+            "after_section_dedup": ctx.counters.after_dedup,
+            "after_threshold": ctx.counters.after_threshold,
+            "after_rerank": ctx.counters.after_rerank,
+            "after_window": ctx.counters.after_window,
+            "window_added": ctx.counters.window_added,
+            "window_expanded_count": window_expanded_count,
+            "hit": bool(filtered),
+            "context_chars": context_chars,
+            "top_rerank_score": top_rerank_score,
+            "avg_rerank_score": avg_rerank_score,
+            "detail_hits": role_counts["detail"],
+            **_cache_stats_fields(),
+            "async_routes": True,
+            **stage_ms,
+        },
+    )
+    return filtered
+
+
 async def aretrieve_documents(
     query: str,
     collection_name: str = "",
@@ -1095,206 +1431,66 @@ async def aretrieve_documents(
         stage_ms["rerank_ms"] = round(_rerank_ms, 3)
         post_rerank_count = len(filtered)
 
-        top_rerank_score_for_hyde = 0.0
-        rerank_scores_for_hyde = [
-            float(doc.metadata.get("rerank_score") or 0.0)
-            for doc in filtered
-            if doc.metadata.get("rerank_score") is not None
-        ]
-        if rerank_scores_for_hyde:
-            top_rerank_score_for_hyde = max(rerank_scores_for_hyde)
-
-        if not depth.skip_hyde and should_trigger_hyde(
-            query, len(filtered), top_rerank_score_for_hyde, _cat
-        ):
-            _stage_start = time.perf_counter()
-            hyde_query = await _safe_to_thread(
-                "async_hyde_generate",
-                generate_hyde_query,
-                query,
-                timeout=min(float(getattr(settings, "LLM_TIMEOUT", 60) or 60), 10.0),
-                default="",
-            )
-            if hyde_query and hyde_query != query:
-                hyde_triggered = True
-                try:
-                    hyde_terms = extract_query_terms(normalize_query_text(hyde_query))
-                    hyde_results = await _amulti_route_search(
-                        hyde_query,
-                        collection_name,
-                        coarse_k,
-                        filter=filter,
-                        cat=_cat,
-                        use_rerank=use_rerank,
-                        terms=hyde_terms,
-                        depth=depth,
-                    )
-                    hyde_results = await _safe_to_thread(
-                        "async_hyde_dedup",
-                        dedup_same_section,
-                        hyde_results,
-                        timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 3.0),
-                        default=hyde_results,
-                        max_per_section=2,
-                    )
-                    hyde_docs = [
-                        doc for doc, score in hyde_results if score >= effective_threshold * 0.8
-                    ]
-                    if use_rerank and hyde_docs:
-                        hyde_docs = await _safe_to_thread(
-                            "async_hyde_rerank",
-                            rerank,
-                            query,
-                            hyde_docs,
-                            timeout=float(getattr(settings, "RERANK_TIMEOUT", 30) or 30),
-                            default=hyde_docs[:k],
-                            top_k=k,
-                        )
-                        rerank_used = True
-                    for doc in hyde_docs:
-                        doc.metadata["_hyde_fallback"] = True
-                        doc.metadata["_hyde_query"] = hyde_query[:120]
-                    existing_keys = {
-                        str(
-                            doc.metadata.get("content_hash")
-                            or f"{doc.metadata.get('source', '') or doc.metadata.get('source_file', '')}:{doc.page_content[:80]}"
-                        )
-                        for doc in filtered
-                    }
-                    merged_hyde_docs = []
-                    for doc in hyde_docs:
-                        key = str(
-                            doc.metadata.get("content_hash")
-                            or f"{doc.metadata.get('source', '') or doc.metadata.get('source_file', '')}:{doc.page_content[:80]}"
-                        )
-                        if key not in existing_keys:
-                            merged_hyde_docs.append(doc)
-                            existing_keys.add(key)
-                    if merged_hyde_docs:
-                        filtered = (filtered + merged_hyde_docs)[: max(k, len(filtered))]
-                        hyde_added_count = len(merged_hyde_docs)
-                        _log_final_retrieval_summary("async-post-hyde", query, filtered)
-                except Exception as e:
-                    hyde_error = e.__class__.__name__
-                    logger.warning("Async HyDE fallback retrieval failed: %s", e)
-            stage_ms["hyde_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
-        else:
-            stage_ms["hyde_ms"] = 0.0
+        _hyde = await _stage_hyde(
+            filtered,
+            query=query,
+            collection_name=collection_name,
+            coarse_k=coarse_k,
+            filter=filter,
+            cat=_cat,
+            use_rerank=use_rerank,
+            depth=depth,
+            k=k,
+            effective_threshold=effective_threshold,
+            rerank_used=rerank_used,
+        )
+        filtered = _hyde.docs
+        hyde_triggered = _hyde.triggered
+        hyde_added_count = _hyde.added_count
+        hyde_error = _hyde.error
+        rerank_used = _hyde.rerank_used
+        stage_ms["hyde_ms"] = _hyde.elapsed_ms
 
         before_window = len(filtered)
-        if filtered:
-            _stage_start = time.perf_counter()
-
-            def _expand_windows():
-                if collection_name:
-                    adaptive_wsize = (
-                        0
-                        if (depth and depth.depth == "shallow")
-                        else (1 if depth and depth.depth == "standard" else 2)
-                    )
-                    return sentence_window_expand(
-                        filtered, collection_name, window_size=adaptive_wsize
-                    )
-                grouped_docs: dict[str, list[Document]] = {}
-                for doc in filtered:
-                    doc_collection = str(doc.metadata.get("_collection") or "")
-                    if doc_collection:
-                        grouped_docs.setdefault(doc_collection, []).append(doc)
-                if not grouped_docs:
-                    return filtered
-                expanded_docs: list[Document] = []
-                for doc_collection, docs_in_collection in grouped_docs.items():
-                    adaptive_wsize = (
-                        0
-                        if (depth and depth.depth == "shallow")
-                        else (1 if depth and depth.depth == "standard" else 2)
-                    )
-                    expanded_docs.extend(
-                        sentence_window_expand(
-                            docs_in_collection, doc_collection, window_size=adaptive_wsize
-                        )
-                    )
-                return expanded_docs
-
-            filtered = await _safe_to_thread(
-                "async_window_expand",
-                _expand_windows,
-                timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 5.0),
-                default=filtered,
-            )
-            # Negative Sampling: 对 window 展开的噪声 chunk 软降级
-            _is_cmp = bool(_cat and _cat.is_comparison)
-            filtered = downgrade_window_noise(filtered, query, is_comparison=_is_cmp)
-            _log_final_retrieval_summary("async-post-window", query, filtered)
-            stage_ms["window_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
-        else:
-            stage_ms["window_ms"] = 0.0
+        _window = await _stage_expand_windows(
+            filtered, query=query, collection_name=collection_name, cat=_cat, depth=depth
+        )
+        filtered = _window.docs
+        stage_ms["window_ms"] = _window.elapsed_ms
         post_window_count = len(filtered)
         window_added_count = post_window_count - before_window
 
-        for doc in filtered:
-            doc.metadata["_retrieval_depth"] = depth.depth
-            doc.metadata["_retrieval_layer"] = retrieval_layer
-            doc.metadata["_route_type"] = route_type
-            doc.metadata["_effective_k"] = k
-            doc.metadata["_coarse_k"] = coarse_k
-
-        window_expanded_count = sum(1 for doc in filtered if doc.metadata.get("_window_expanded"))
-        context_chars = sum(len(doc.page_content or "") for doc in filtered)
-        role_counts = {
-            "detail": sum(
-                1 for doc in filtered if doc.metadata.get("section.chunk_role") == "detail"
+        return _finalize_retrieval(
+            filtered,
+            ctx=_RetrievalContext(
+                query=query,
+                collection_name=collection_name,
+                k=k,
+                coarse_k=coarse_k,
+                effective_threshold=effective_threshold,
+                depth=depth,
+                retrieval_layer=retrieval_layer,
+                route_type=route_type,
+                cat=_cat,
+                decomposed=decomposed,
+                sub_queries=sub_queries,
+                use_rerank=use_rerank,
+                rerank_used=rerank_used,
+                hyde_triggered=hyde_triggered,
+                hyde_added_count=hyde_added_count,
+                hyde_error=hyde_error,
+                counters=_RetrievalCounters(
+                    raw_results=raw_results_count,
+                    after_dedup=post_dedup_count,
+                    after_threshold=post_threshold_count,
+                    after_rerank=post_rerank_count,
+                    after_window=post_window_count,
+                    window_added=window_added_count,
+                ),
             ),
-        }
-        rerank_scores = [
-            float(doc.metadata.get("rerank_score") or 0.0)
-            for doc in filtered
-            if doc.metadata.get("rerank_score") is not None
-        ]
-        top_rerank_score = rerank_scores[0] if rerank_scores else 0.0
-        avg_rerank_score = (
-            round(sum(rerank_scores) / len(rerank_scores), 6) if rerank_scores else 0.0
+            started_at=start,
+            stage_ms=stage_ms,
         )
-        metrics.emit_retrieve_summary(
-            query=query,
-            collection=collection_name,
-            duration_ms=round((time.perf_counter() - start) * 1000, 3),
-            values={
-                "k": k,
-                "coarse_k": coarse_k,
-                "threshold": effective_threshold,
-                "retrieval_depth": depth.depth if depth else "",
-                "retrieval_layer": retrieval_layer,
-                "route_type": route_type,
-                "classifier_source": getattr(_cat, "source", ""),
-                "decomposed": decomposed,
-                "sub_query_count": len(sub_queries),
-                "use_rerank": use_rerank,
-                "rerank_used": rerank_used,
-                "hyde_triggered": hyde_triggered,
-                "hyde_added_count": hyde_added_count,
-                "hyde_error": hyde_error,
-                "skip_bm25": depth.skip_bm25 if depth else False,
-                "skip_metadata_routes": depth.skip_metadata_routes if depth else False,
-                "skip_kg": depth.skip_kg if depth else False,
-                "before_threshold": raw_results_count,
-                "after_section_dedup": post_dedup_count,
-                "after_threshold": post_threshold_count,
-                "after_rerank": post_rerank_count,
-                "after_window": post_window_count,
-                "window_added": window_added_count,
-                "window_expanded_count": window_expanded_count,
-                "hit": bool(filtered),
-                "context_chars": context_chars,
-                "top_rerank_score": top_rerank_score,
-                "avg_rerank_score": avg_rerank_score,
-                "detail_hits": role_counts["detail"],
-                **_cache_stats_fields(),
-                "async_routes": True,
-                **stage_ms,
-            },
-        )
-        return filtered
     except Exception as e:
         metrics.emit_retrieve_summary(
             query=query,

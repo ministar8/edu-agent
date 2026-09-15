@@ -603,6 +603,453 @@ class TestStageRerank:
         assert calls["rerank"]["timeout"] == 17.0
 
 
+class TestContentKey:
+    """HyDE 追加时的去重键。
+
+    原实现在同一段里内联了两次这个表达式，抽出来是为了避免两处走样 ——
+    一旦两处不一致，去重就会失效（同一文档被追加两次）。
+    """
+
+    def test_prefers_content_hash(self):
+        doc = Document(page_content="正文", metadata={"content_hash": "H1", "source": "s.md"})
+        assert R._content_key(doc) == "H1"
+
+    def test_falls_back_to_source_plus_prefix(self):
+        doc = Document(page_content="正文内容", metadata={"source": "s.md"})
+        assert R._content_key(doc) == "s.md:正文内容"
+
+    def test_falls_back_to_source_file_when_source_absent(self):
+        doc = Document(page_content="正文内容", metadata={"source_file": "f.md"})
+        assert R._content_key(doc) == "f.md:正文内容"
+
+    def test_only_first_80_chars_participate(self):
+        head = "甲" * 80
+        a = Document(page_content=head + "A", metadata={"source": "s"})
+        b = Document(page_content=head + "B", metadata={"source": "s"})
+        assert R._content_key(a) == R._content_key(b), "第 80 字之后不参与去重键"
+
+    def test_empty_metadata_still_produces_a_key(self):
+        doc = Document(page_content="x", metadata={})
+        assert R._content_key(doc) == ":x"
+
+
+class TestStageHyde:
+    """阶段 8：HyDE 兜底召回。
+
+    三处容易写错且**不会报错**的地方：
+    1. 阈值放宽到 `*0.8`（用同一把尺子会把 HyDE 召回几乎全滤掉）；
+    2. 追加时按内容键去重，已存在的文档不重复计入 `added_count`；
+    3. 兜底机制失败**只记 hyde_error 不抛出**（不该影响已拿到的正常结果）。
+    """
+
+    @staticmethod
+    def _cat(**flags):
+        base = {"is_comparison": False}
+        base.update(flags)
+        return SimpleNamespace(**base)
+
+    @staticmethod
+    def _depth(**flags):
+        base = {
+            "skip_hyde": False,
+            "skip_bm25": False,
+            "skip_metadata_routes": False,
+            "skip_kg": False,
+            "depth": "standard",
+        }
+        base.update(flags)
+        return SimpleNamespace(**base)
+
+    def _patch(
+        self, monkeypatch, *, should=True, hyde_query="假设答案", hyde_results=None, rerank_out=None
+    ):
+        calls = {"search": [], "rerank": None}
+
+        monkeypatch.setattr(R, "should_trigger_hyde", lambda *a: should)
+        monkeypatch.setattr(R, "generate_hyde_query", lambda q: hyde_query)
+
+        async def fake_search(query, collection_name, k, **kwargs):
+            calls["search"].append({"query": query, **kwargs})
+            return list(hyde_results or [])
+
+        async def fake_thread(name, fn, *args, timeout=None, default=None, **kwargs):
+            if name == "async_hyde_rerank":
+                calls["rerank"] = {"args": args, "default": default, **kwargs}
+                return rerank_out if rerank_out is not None else args[1]
+            if name == "async_hyde_generate":
+                return fn(*args) if args else hyde_query
+            return default if default is not None else (args[1] if len(args) > 1 else [])
+
+        monkeypatch.setattr(R, "_amulti_route_search", fake_search)
+        monkeypatch.setattr(R, "_safe_to_thread", fake_thread)
+        monkeypatch.setattr(R, "_log_final_retrieval_summary", lambda *a: None)
+        return calls
+
+    def _call(self, filtered, **overrides):
+        kwargs = {
+            "query": "q",
+            "collection_name": "coll",
+            "coarse_k": 10,
+            "filter": None,
+            "cat": self._cat(),
+            "use_rerank": False,
+            "depth": self._depth(),
+            "k": 3,
+            "effective_threshold": 0.5,
+            "rerank_used": False,
+        }
+        kwargs.update(overrides)
+        return R._stage_hyde(filtered, **kwargs)
+
+    @pytest.mark.asyncio
+    async def test_not_triggered_returns_input_untouched(self, monkeypatch):
+        self._patch(monkeypatch, should=False)
+        docs = [Document(page_content="a", metadata={})]
+
+        out = await self._call(docs)
+
+        assert out.docs is docs
+        assert out.triggered is False
+        assert out.elapsed_ms == 0.0
+        assert out.error == ""
+
+    @pytest.mark.asyncio
+    async def test_skip_hyde_depth_never_calls_llm(self, monkeypatch):
+        calls = self._patch(monkeypatch, should=True)
+        await self._call([], depth=self._depth(skip_hyde=True))
+        assert calls["search"] == []
+
+    @pytest.mark.asyncio
+    async def test_empty_hyde_query_does_not_trigger(self, monkeypatch):
+        self._patch(monkeypatch, should=True, hyde_query="")
+        out = await self._call([Document(page_content="a", metadata={})])
+        assert out.triggered is False
+
+    @pytest.mark.asyncio
+    async def test_identical_hyde_query_does_not_trigger(self, monkeypatch):
+        """LLM 原样返回查询串时不算触发 —— 否则等于把同一查询再召回一次。"""
+        self._patch(monkeypatch, should=True, hyde_query="q")
+        out = await self._call([Document(page_content="a", metadata={})])
+        assert out.triggered is False
+
+    @pytest.mark.asyncio
+    async def test_relaxed_threshold_is_used(self, monkeypatch):
+        """阈值必须放宽到 0.8 倍，否则 HyDE 召回会被自己的阈值全滤掉。"""
+        docs = [
+            (Document(page_content="保留", metadata={}), 0.45),
+            (Document(page_content="滤掉", metadata={}), 0.35),
+        ]
+        self._patch(monkeypatch, should=True, hyde_results=docs)
+
+        out = await self._call([Document(page_content="原", metadata={})], effective_threshold=0.5)
+
+        added = [d.page_content for d in out.docs if d.metadata.get("_hyde_fallback")]
+        assert added == ["保留"], "0.45 >= 0.5*0.8=0.4 应保留；0.35 < 0.4 应滤掉"
+
+    @pytest.mark.asyncio
+    async def test_existing_docs_are_not_duplicated(self, monkeypatch):
+        existing = Document(page_content="已有", metadata={"content_hash": "H1"})
+        dup = Document(page_content="已有", metadata={"content_hash": "H1"})
+        self._patch(monkeypatch, should=True, hyde_results=[(dup, 0.9)])
+
+        out = await self._call([existing])
+
+        assert out.added_count == 0, "同一文档不应被追加第二次"
+        assert len(out.docs) == 1
+
+    @pytest.mark.asyncio
+    async def test_new_docs_are_appended_and_counted(self, monkeypatch):
+        new_doc = Document(page_content="新证据", metadata={"content_hash": "H2"})
+        self._patch(monkeypatch, should=True, hyde_results=[(new_doc, 0.9)])
+
+        out = await self._call([Document(page_content="原", metadata={"content_hash": "H1"})])
+
+        assert out.added_count == 1
+        assert len(out.docs) == 2
+        assert new_doc.metadata["_hyde_fallback"] is True
+        assert "_hyde_query" in new_doc.metadata
+
+    @pytest.mark.asyncio
+    async def test_failure_records_error_without_raising(self, monkeypatch):
+        """兜底失败不能影响已经拿到的正常结果。"""
+        docs = [Document(page_content="正常结果", metadata={})]
+        self._patch(monkeypatch, should=True)
+
+        async def boom(*a, **k):
+            raise RuntimeError("hyde exploded")
+
+        monkeypatch.setattr(R, "_amulti_route_search", boom)
+
+        out = await self._call(docs)
+
+        assert out.docs == docs, "异常时原结果必须原样保留"
+        assert out.error == "RuntimeError"
+        assert out.triggered is True, "已开始尝试，触发标记应为 True"
+
+    @pytest.mark.asyncio
+    async def test_rerank_inside_hyde_flips_rerank_used(self, monkeypatch):
+        """HyDE 内走了重排，整条链路的 rerank_used 要跟着翻 —— 漏了会让指标少记。"""
+        new_doc = Document(page_content="新", metadata={"content_hash": "H2"})
+        calls = self._patch(
+            monkeypatch, should=True, hyde_results=[(new_doc, 0.9)], rerank_out=[new_doc]
+        )
+
+        out = await self._call([], use_rerank=True, rerank_used=False)
+
+        assert calls["rerank"] is not None
+        assert calls["rerank"]["top_k"] == 3
+        assert out.rerank_used is True
+
+    @pytest.mark.asyncio
+    async def test_rerank_not_called_when_disabled(self, monkeypatch):
+        new_doc = Document(page_content="新", metadata={"content_hash": "H2"})
+        calls = self._patch(monkeypatch, should=True, hyde_results=[(new_doc, 0.9)])
+
+        out = await self._call([], use_rerank=False)
+
+        assert calls["rerank"] is None
+        assert out.rerank_used is False
+
+
+class TestStageExpandWindows:
+    """阶段 9：句子窗口展开 + 噪声软降级。
+
+    最容易写错的是**跨集合分组**：未指定集合时要按 `_collection` 逐集合展开，
+    因为窗口要在各自集合内取相邻 chunk —— 混在一起会取到别的集合的邻居。
+    """
+
+    @staticmethod
+    def _cat():
+        return SimpleNamespace(is_comparison=False)
+
+    @staticmethod
+    def _depth(label="standard"):
+        return SimpleNamespace(depth=label)
+
+    def _patch(self, monkeypatch, expand_out=None):
+        calls = {"groups": [], "window_sizes": []}
+
+        def fake_expand(docs, collection, window_size=0):
+            calls["groups"].append(collection)
+            calls["window_sizes"].append(window_size)
+            return expand_out if expand_out is not None else list(docs)
+
+        async def fake_thread(name, fn, *args, timeout=None, default=None, **kwargs):
+            return fn()
+
+        monkeypatch.setattr(R, "sentence_window_expand", fake_expand)
+        monkeypatch.setattr(R, "_safe_to_thread", fake_thread)
+        monkeypatch.setattr(R, "downgrade_window_noise", lambda docs, q, is_comparison=False: docs)
+        monkeypatch.setattr(R, "_log_final_retrieval_summary", lambda *a: None)
+        return calls
+
+    @pytest.mark.asyncio
+    async def test_empty_input_short_circuits(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        out = await R._stage_expand_windows(
+            [], query="q", collection_name="c", cat=self._cat(), depth=self._depth()
+        )
+        assert out.docs == []
+        assert out.elapsed_ms == 0.0
+        assert calls["groups"] == []
+
+    @pytest.mark.asyncio
+    async def test_single_collection_expands_once(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        docs = [Document(page_content="a", metadata={})]
+
+        await R._stage_expand_windows(
+            docs, query="q", collection_name="coll", cat=self._cat(), depth=self._depth()
+        )
+
+        assert calls["groups"] == ["coll"]
+
+    @pytest.mark.asyncio
+    async def test_multi_collection_expands_per_collection(self, monkeypatch):
+        """未指定集合时按 `_collection` 分组逐集合展开 —— 不能混在一起。"""
+        calls = self._patch(monkeypatch)
+        docs = [
+            Document(page_content="a", metadata={"_collection": "c1"}),
+            Document(page_content="b", metadata={"_collection": "c2"}),
+            Document(page_content="c", metadata={"_collection": "c1"}),
+        ]
+
+        await R._stage_expand_windows(
+            docs, query="q", collection_name="", cat=self._cat(), depth=self._depth()
+        )
+
+        assert sorted(calls["groups"]) == ["c1", "c2"], "每个集合各展开一次"
+
+    @pytest.mark.asyncio
+    async def test_docs_without_collection_are_returned_as_is(self, monkeypatch):
+        calls = self._patch(monkeypatch)
+        docs = [Document(page_content="a", metadata={})]
+
+        out = await R._stage_expand_windows(
+            docs, query="q", collection_name="", cat=self._cat(), depth=self._depth()
+        )
+
+        assert out.docs == docs
+        assert calls["groups"] == [], "没有 _collection 时不做展开，原样返回"
+
+    @pytest.mark.asyncio
+    async def test_window_size_follows_depth(self, monkeypatch):
+        """shallow=0（不展开）、standard=1、deep=2。"""
+        calls = self._patch(monkeypatch)
+        docs = [Document(page_content="a", metadata={})]
+
+        for label, expected in (("shallow", 0), ("standard", 1), ("deep", 2)):
+            calls["window_sizes"].clear()
+            await R._stage_expand_windows(
+                docs, query="q", collection_name="coll", cat=self._cat(), depth=self._depth(label)
+            )
+            assert calls["window_sizes"] == [expected], f"{label} 的窗口应为 {expected}"
+
+    @pytest.mark.asyncio
+    async def test_noise_downgrade_is_applied(self, monkeypatch):
+        seen = {}
+        self._patch(monkeypatch)
+        monkeypatch.setattr(
+            R,
+            "downgrade_window_noise",
+            lambda docs, q, is_comparison=False: seen.update(cmp=is_comparison) or docs,
+        )
+        await R._stage_expand_windows(
+            [Document(page_content="a", metadata={})],
+            query="q",
+            collection_name="coll",
+            cat=SimpleNamespace(is_comparison=True),
+            depth=self._depth(),
+        )
+        assert seen["cmp"] is True, "对比类查询要传给降级逻辑"
+
+
+class TestFinalizeRetrieval:
+    """阶段 10：溯源标记 + 指标写入。
+
+    标记会随证据流向生成阶段，用于回答"这条证据是怎么来的" ——
+    写错不会报错，只会让下游拿不到溯源信息。
+    """
+
+    def _ctx(self, **overrides):
+        base = {
+            "query": "q",
+            "collection_name": "coll",
+            "k": 5,
+            "coarse_k": 10,
+            "effective_threshold": 0.5,
+            # 指标里会读 depth 的这几个开关，桩必须给全 —— 缺字段会直接 AttributeError
+            "depth": SimpleNamespace(
+                depth="standard",
+                skip_bm25=False,
+                skip_metadata_routes=False,
+                skip_kg=False,
+            ),
+            "retrieval_layer": "L",
+            "route_type": "R",
+            "cat": SimpleNamespace(source="rule"),
+            "decomposed": False,
+            "sub_queries": ["q"],
+            "use_rerank": True,
+            "rerank_used": True,
+            "hyde_triggered": False,
+            "hyde_added_count": 0,
+            "hyde_error": "",
+            "counters": R._RetrievalCounters(
+                raw_results=40,
+                after_dedup=30,
+                after_threshold=20,
+                after_rerank=10,
+                after_window=12,
+                window_added=2,
+            ),
+        }
+        base.update(overrides)
+        return R._RetrievalContext(**base)
+
+    def _patch(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(
+            R.metrics,
+            "emit_retrieve_summary",
+            lambda query, collection, duration_ms, values: seen.update(
+                query=query, collection=collection, values=values
+            ),
+        )
+        return seen
+
+    def test_stamps_provenance_metadata(self, monkeypatch):
+        self._patch(monkeypatch)
+        docs = [Document(page_content="a", metadata={})]
+
+        R._finalize_retrieval(docs, ctx=self._ctx(), started_at=0.0, stage_ms={})
+
+        meta = docs[0].metadata
+        assert meta["_retrieval_depth"] == "standard"
+        assert meta["_retrieval_layer"] == "L"
+        assert meta["_route_type"] == "R"
+        assert meta["_effective_k"] == 5
+        assert meta["_coarse_k"] == 10
+
+    def test_returns_the_same_docs(self, monkeypatch):
+        self._patch(monkeypatch)
+        docs = [Document(page_content="a", metadata={})]
+        assert R._finalize_retrieval(docs, ctx=self._ctx(), started_at=0.0, stage_ms={}) is docs
+
+    def test_stage_counters_reach_the_metric(self, monkeypatch):
+        """各阶段计数必须都写进指标 —— 只看最终条数无法判断是哪一层滤掉的。"""
+        seen = self._patch(monkeypatch)
+        R._finalize_retrieval([], ctx=self._ctx(), started_at=0.0, stage_ms={})
+
+        values = seen["values"]
+        assert values["before_threshold"] == 40
+        assert values["after_section_dedup"] == 30
+        assert values["after_threshold"] == 20
+        assert values["after_rerank"] == 10
+        assert values["after_window"] == 12
+        assert values["window_added"] == 2
+
+    def test_stage_ms_is_merged_into_values(self, monkeypatch):
+        seen = self._patch(monkeypatch)
+        R._finalize_retrieval(
+            [], ctx=self._ctx(), started_at=0.0, stage_ms={"classification_ms": 1.5, "hyde_ms": 0.0}
+        )
+        assert seen["values"]["classification_ms"] == 1.5
+        assert seen["values"]["hyde_ms"] == 0.0
+
+    def test_derived_counts_computed_from_final_docs(self, monkeypatch):
+        seen = self._patch(monkeypatch)
+        docs = [
+            Document(page_content="abc", metadata={"_window_expanded": True, "rerank_score": 0.9}),
+            Document(page_content="de", metadata={"section.chunk_role": "detail"}),
+        ]
+        R._finalize_retrieval(docs, ctx=self._ctx(), started_at=0.0, stage_ms={})
+
+        values = seen["values"]
+        assert values["window_expanded_count"] == 1
+        assert values["context_chars"] == 5
+        assert values["detail_hits"] == 1
+        assert values["top_rerank_score"] == 0.9
+        assert values["hit"] is True
+
+    def test_empty_result_reports_miss(self, monkeypatch):
+        seen = self._patch(monkeypatch)
+        R._finalize_retrieval([], ctx=self._ctx(), started_at=0.0, stage_ms={})
+        values = seen["values"]
+        assert values["hit"] is False
+        assert values["context_chars"] == 0
+        assert values["top_rerank_score"] == 0.0
+        assert values["avg_rerank_score"] == 0.0
+
+    def test_depth_none_is_tolerated(self, monkeypatch):
+        """`depth` 理论上不会为 None，但指标里对它有 `if depth else` 兜底，别让它崩。"""
+        seen = self._patch(monkeypatch)
+        R._finalize_retrieval([], ctx=self._ctx(depth=None), started_at=0.0, stage_ms={})
+        values = seen["values"]
+        assert values["retrieval_depth"] == ""
+        assert values["skip_bm25"] is False
+
+
 class TestPlanIsImmutable:
     def test_plan_rejects_mutation(self):
         """计划对象是 frozen —— 防止下游"顺手改一下"，那会让阶段边界失去意义。"""
