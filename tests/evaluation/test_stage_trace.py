@@ -21,6 +21,7 @@ from evaluation.stage_trace import (
     StageStep,
     StageTrace,
     _deep_equal,
+    compare_traces,
     diff_traces,
     signature,
     trace_stages,
@@ -170,6 +171,136 @@ class TestDiffTraces:
         expected["final"] = [{"src": "a.md", "score": 0.5}]
         actual["final"] = [{"src": "a.md", "score": 0.6}]
         assert diff_traces(expected, actual) != []
+
+
+class TestCompareTracesTiered:
+    """分级比对：recall 层容许 ANN 边界抖动，其余严格。
+
+    为什么需要分级：recall 走 Chroma 的**近似**索引，top-k 边界本就会抖。
+    若一律严格，重构时会把上游噪声误判成"重构引入了退化"，最后只能人肉判断 ——
+    那等于没有安全网。但**最终返回必须严格**，否则安全网就没意义了。
+    """
+
+    def _trace(self, *, recall_hashes=("a", "b"), final_hashes=("a",), tail_out="same") -> dict:
+        # 下游阶段的入参必须**真的**是 recall 的输出 —— "受上游抖动影响"是按
+        # 入参里是否含 recall 输出的文档哈希判定的，用占位字符串测不到那条路径。
+        recall_out = [{"hash": h} for h in recall_hashes]
+        return {
+            "query": "q",
+            "stages_called": ["recall_multi_route", "dedup_section"],
+            "steps": [
+                {"stage": "recall_multi_route", "in": "query", "out": recall_out},
+                {"stage": "dedup_section", "in": recall_out, "out": tail_out},
+            ],
+            "final": [{"hash": h} for h in final_hashes],
+        }
+
+    def test_identical_is_ok_without_advisories(self):
+        result = compare_traces(self._trace(), self._trace())
+        assert result.ok
+        assert result.advisories == []
+        assert result.max_volatile_delta == 0
+
+    def test_recall_drift_within_bound_is_advisory_not_failure(self):
+        expected = self._trace(recall_hashes=("a", "b"))
+        actual = self._trace(recall_hashes=("a", "c"))
+        result = compare_traces(expected, actual)
+        assert result.ok, result.failures
+        assert result.max_volatile_delta == 2  # b 与 c 各差一个
+        assert any("ANN 边界抖动" in a for a in result.advisories)
+
+    def test_downstream_of_drift_is_advisory_not_failure(self):
+        """上游抖了，下游差异无法归因 —— 报出来但不判失败。"""
+        expected = self._trace(recall_hashes=("a", "b"), tail_out="x")
+        actual = self._trace(recall_hashes=("a", "c"), tail_out="y")
+        result = compare_traces(expected, actual)
+        assert result.ok, result.failures
+        assert any("无法判定" in a for a in result.advisories)
+
+    def test_recall_drift_beyond_ratio_is_flagged_but_not_fatal(self):
+        """recall 输出只报警不判失败 —— 它是上游近似索引的产物。
+
+        实测漂移在 2~6 之间波动，任何固定阈值都会被周期性越过；设硬阈值必然误报。
+        真正的保证来自入参断言与最终返回断言（都是严格的）。
+        """
+        expected = self._trace(recall_hashes=("a", "b", "c", "d"))
+        actual = self._trace(recall_hashes=("a", "w", "x", "y"))
+        result = compare_traces(expected, actual, volatile_ratio=0.01)
+        assert result.ok, result.failures
+        assert any("超出常规范围" in a for a in result.advisories)
+
+    def test_recall_input_change_is_fatal(self):
+        """recall 的**入参**变了（路由/查询构造变了）必须判失败。"""
+        expected = self._trace()
+        actual = self._trace()
+        actual["steps"][0]["in"] = "different-query"
+        result = compare_traces(expected, actual)
+        assert not result.ok
+        assert any("入参" in f for f in result.failures)
+
+    def test_final_must_match_even_when_only_recall_drifted(self):
+        """最终返回是"不改行为"的最终契约，不能因为上游抖动就放过。"""
+        expected = self._trace(recall_hashes=("a", "b"), final_hashes=("a",))
+        actual = self._trace(recall_hashes=("a", "c"), final_hashes=("z",))
+        result = compare_traces(expected, actual)
+        assert not result.ok
+        assert any("最终返回" in f for f in result.failures)
+
+    def test_non_volatile_output_change_is_failure(self):
+        expected = self._trace(tail_out="x")
+        actual = self._trace(tail_out="y")
+        result = compare_traces(expected, actual)
+        assert not result.ok
+        assert any("dedup_section" in f for f in result.failures)
+
+    def test_input_change_is_failure(self):
+        expected = self._trace()
+        actual = self._trace()
+        actual["steps"][1]["in"] = "changed"
+        result = compare_traces(expected, actual)
+        assert not result.ok
+        assert any("入参" in f for f in result.failures)
+
+    def test_stage_sequence_change_short_circuits(self):
+        expected = self._trace()
+        actual = self._trace()
+        actual["stages_called"] = ["recall_multi_route"]
+        result = compare_traces(expected, actual)
+        assert not result.ok
+        assert len(result.failures) == 1
+        assert "阶段序列不同" in result.failures[0]
+
+    def test_strict_diff_traces_still_rejects_recall_drift(self):
+        """diff_traces 保持严格语义，供"本就该逐位一致"的场景使用。"""
+        expected = self._trace(recall_hashes=("a", "b"))
+        actual = self._trace(recall_hashes=("a", "c"))
+        assert compare_traces(expected, actual).ok, "分级模式应通过"
+        assert diff_traces(expected, actual) != [], "严格模式应报差异"
+
+    def test_non_recall_stage_difference_is_fatal_even_when_recall_drifted(self):
+        """recall 抖动**不能**成为"其他阶段也变了"的免罪牌。
+
+        这是最关键的一条：如果实现退化成"只要 recall 抖了，下游一律放过"，
+        真实退化就会被当成噪声掩盖 —— 那安全网等于没有。
+        所以要构造一个**不吃 recall 输出**的阶段，让它在上游抖动的同时也发生变化。
+        """
+        expected = self._trace(recall_hashes=("a", "b"))
+        actual = self._trace(recall_hashes=("a", "c"))
+        for trace, out in ((expected, "p1"), (actual, "p2")):
+            trace["stages_called"].append("resolve_policy")
+            trace["steps"].append({"stage": "resolve_policy", "in": "query", "out": out})
+
+        result = compare_traces(expected, actual)
+
+        assert not result.ok, "不吃 recall 输出的阶段变了，必须判失败"
+        assert any("resolve_policy" in f for f in result.failures)
+
+    def test_summary_reports_advisory_count(self):
+        expected = self._trace(recall_hashes=("a", "b"))
+        actual = self._trace(recall_hashes=("a", "c"))
+        text = compare_traces(expected, actual).summary()
+        assert "通过" in text
+        assert "无法判定" in text
 
 
 class TestDeepEqual:

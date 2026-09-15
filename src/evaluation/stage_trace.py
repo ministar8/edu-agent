@@ -25,8 +25,18 @@
 
 用法::
 
-    python -m evaluation.stage_trace --record   # 录基线到 evals/stage_baseline.json
-    python -m evaluation.stage_trace            # 与基线比对
+    # 录基线与比对**必须用同一个 --persist-dir**
+    python -m evaluation.stage_trace --record     --limit 12 --persist-dir /tmp/idx
+    python -m evaluation.stage_trace              --limit 12 --persist-dir /tmp/idx
+
+**必须固定索引目录（实测结论）**：默认模式下每次运行都会新建临时索引，
+此时约 10 次里有 1 次会因上游 ANN 边界抖动而超出分级断言（recall 层已只报警，
+超出的通常是它下游的阶段）。固定同一个 `--persist-dir` 后，实测 10/10 全部通过。
+因此本工具**不适合直接作为 CI 门禁**（那会引入低频假失败），
+而是重构期间的**本地诊断与验证工具**：录一次基线，改代码，再比对。
+
+也正因为如此，**基线文件不进仓库** —— 它是某一次特定索引构建的产物，
+放进去只会变成一份会过期的、偶尔变红的负债。
 """
 
 from __future__ import annotations
@@ -191,36 +201,196 @@ def _floats_close(a: Any, b: Any, *, rel_tol: float) -> bool:
     return False
 
 
+# recall 层的输出依赖 Chroma 的**近似**向量检索，可能在 top-k 边界抖动
+# （实测：首次访问少返回一个本该进 top-k 的候选；详见 ENGINEERING.md §1 P1）。
+# 这些阶段的**输出**容许有界差异；它们下游的阶段因为吃到了不同输入，
+# 其差异归为"无法判定"而不是失败。
+VOLATILE_OUTPUT_STAGES = frozenset({"recall_multi_route", "recall_multi_route_async"})
+
+
+@dataclass
+class TraceComparison:
+    """分级比对结果。
+
+    - ``failures``：**必须修**的差异 —— 我们自己的编排 / 融合 / 展开逻辑变了
+    - ``advisories``：因上游 ANN 抖动而**无法判定**的差异 —— 不计失败，但要报出来，
+      否则"通过"会掩盖掉"其实有一大段没验证到"
+    - ``max_volatile_delta``：recall 层实际观察到的最大文档集合差异
+    """
+
+    failures: list[str]
+    advisories: list[str]
+    max_volatile_delta: int
+
+    @property
+    def ok(self) -> bool:
+        return not self.failures
+
+    def summary(self) -> str:
+        if self.failures:
+            return f"不通过：{len(self.failures)} 处严格差异，{len(self.advisories)} 处无法判定"
+        if self.advisories:
+            return (
+                f"通过：0 处严格差异；{len(self.advisories)} 处因上游 ANN 抖动无法判定"
+                f"（最大文档差异 {self.max_volatile_delta}）"
+            )
+        return "通过：所有阶段入参与返回值逐条一致。"
+
+
+def _doc_hashes(value: Any) -> set[str]:
+    """从签名里收集所有文档内容哈希，用于度量集合差异幅度。"""
+    found: set[str] = set()
+    stack: list[Any] = [value]
+    while stack:
+        cur = stack.pop()
+        if isinstance(cur, dict):
+            digest = cur.get("hash")
+            if isinstance(digest, str):
+                found.add(digest)
+            stack.extend(cur.values())
+        elif isinstance(cur, (list, tuple)):
+            stack.extend(cur)
+    return found
+
+
+# recall 层容许的差异比例。用**比例**而不是绝对条数：recall 的候选数随 k 与路由数变化，
+# 固定条数在候选少时过严、在候选多时形同虚设（实测漂移 4 条，绝对阈值 2 会误报）。
+#
+# 为什么可以给得比较宽（30%）：这个阈值**只影响"差异归因"**，不影响安全网的强度。
+# 重构真正要守住的是另外四条严格断言 —— 阶段调用序列、各阶段入参、融合及之后各阶段、
+# 以及最终返回。recall 的**输出**本来就是上游近似索引的产物，对它苛求逐位一致
+# 只会把上游噪声误判成重构退化。若 recall 真出了退化（比如传错 k），
+# 入参断言与最终返回断言都会抓到。
+VOLATILE_RATIO = 0.3
+VOLATILE_FLOOR = 2
+
+
+def _volatile_delta(exp_out: Any, act_out: Any, ratio: float) -> tuple[int, int]:
+    """返回 ``(实际对称差异文档数, 允许上限)``。ratio<=0 表示严格模式（容许 0）。"""
+    exp_h, act_h = _doc_hashes(exp_out), _doc_hashes(act_out)
+    delta = len(exp_h ^ act_h)
+    if ratio <= 0:
+        return delta, 0
+    allowed = max(VOLATILE_FLOOR, round(ratio * max(len(exp_h), len(act_h), 1)))
+    return delta, allowed
+
+
+def compare_traces(
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    *,
+    rel_tol: float = 1e-9,
+    volatile_stages: frozenset[str] = VOLATILE_OUTPUT_STAGES,
+    volatile_ratio: float = VOLATILE_RATIO,
+) -> TraceComparison:
+    """**分级**比对两份 trace。
+
+    为什么不能一律严格：recall 层走的是 Chroma 的**近似**索引，top-k 边界本来就可能抖动。
+    若把它也当严格失败，重构时会把上游噪声误判成"重构引入了退化"，
+    最后只能靠人肉判断 —— 那等于没有安全网。
+
+    分级规则：
+
+    ========================================  ==========================================
+    比较对象                                   判定
+    ========================================  ==========================================
+    阶段调用**序列**                             严格（编排被改动最直接的证据）
+    各阶段**入参**                               严格，除非它吃到了抖动的 recall 输出
+    recall 层**输出**                            容许 ``volatile_ratio`` 比例的差异
+    recall 之后的阶段                            若其入参含抖动的 recall 输出 → 无法判定
+    最终返回                                    严格（"不改行为"的最终契约）
+    ========================================  ==========================================
+
+    **"吃到抖动输出"的判定与顺序无关**：不能用"遍历到抖动之后就算污染"这种线性推断 ——
+    比对前 steps 会按 (阶段名, 入参) 排序，`dedup_section` 会排在
+    `recall_multi_route_async` **之前**，于是下游的差异会被当成严格失败。
+    改为按**内容**判定：某阶段的入参里出现了 recall 输出中的文档哈希，就算受影响。
+    """
+    failures: list[str] = []
+    advisories: list[str] = []
+    max_delta = 0
+
+    exp_stages = expected.get("stages_called", [])
+    act_stages = actual.get("stages_called", [])
+    if exp_stages != act_stages:
+        failures.append(f"被调用的阶段序列不同：期望 {exp_stages}，实际 {act_stages}")
+        return TraceComparison(failures, advisories, 0)
+
+    exp_steps = expected.get("steps", [])
+    act_steps = actual.get("steps", [])
+    if len(exp_steps) != len(act_steps):
+        failures.append(f"阶段调用次数不同：期望 {len(exp_steps)} 次，实际 {len(act_steps)} 次")
+        return TraceComparison(failures, advisories, 0)
+
+    # ── 第一遍：recall 层是否抖动，以及它输出了哪些文档 ──
+    volatile_hashes: set[str] = set()
+    volatile_drifted = False
+    for exp, act in zip(exp_steps, act_steps, strict=True):
+        if exp.get("stage") not in volatile_stages:
+            continue
+        volatile_hashes |= _doc_hashes(exp.get("out")) | _doc_hashes(act.get("out"))
+        if not _deep_equal(exp.get("out"), act.get("out"), rel_tol=rel_tol):
+            volatile_drifted = True
+
+    def _fed_by_recall(step: dict[str, Any]) -> bool:
+        """该阶段的入参是否包含 recall 输出里的文档。"""
+        return bool(_doc_hashes(step.get("in")) & volatile_hashes)
+
+    # ── 第二遍：逐条判定 ──
+    for idx, (exp, act) in enumerate(zip(exp_steps, act_steps, strict=True)):
+        stage = exp.get("stage", "?")
+        fed = _fed_by_recall(exp) or _fed_by_recall(act)
+
+        in_same = exp.get("in") == act.get("in")
+        out_same = _deep_equal(exp.get("out"), act.get("out"), rel_tol=rel_tol)
+        if in_same and out_same:
+            continue
+
+        if stage in volatile_stages:
+            if not out_same:
+                delta, allowed = _volatile_delta(exp.get("out"), act.get("out"), volatile_ratio)
+                max_delta = max(max_delta, delta)
+                # **只报警，不判失败**：recall 的输出来自上游近似索引，对它设硬阈值
+                # 必然会周期性误报（实测漂移在 2~6 之间波动，任何固定阈值都会被越过）。
+                # 而 recall 的退化仍能被抓到 —— 入参断言（k / 路由 / 查询串）与最终返回断言
+                # 都是严格的。安全网的强度不来自这里。
+                flag = "超出常规范围" if delta > allowed else "常规范围内"
+                advisories.append(
+                    f"[{idx}] 阶段 {stage} 输出差 {delta} 个文档"
+                    f"（上游 ANN 边界抖动，{flag} ≤{allowed}）"
+                )
+            if not in_same:
+                # recall 的入参变了 = 路由 / 查询构造变了，这是严格失败
+                failures.append(f"[{idx}] 阶段 {stage} 的**入参**变了")
+            continue
+
+        if fed and volatile_drifted:
+            advisories.append(f"[{idx}] 阶段 {stage} 的入参含抖动的 recall 输出，其差异无法判定")
+            continue
+
+        if not in_same:
+            failures.append(f"[{idx}] 阶段 {stage} 的**入参**变了")
+        if not out_same:
+            failures.append(f"[{idx}] 阶段 {stage} 的**返回值**变了")
+
+    if not _deep_equal(expected.get("final"), actual.get("final"), rel_tol=rel_tol):
+        failures.append("最终返回的文档序列变了")
+
+    return TraceComparison(failures, advisories, max_delta)
+
+
 def diff_traces(
     expected: dict[str, Any], actual: dict[str, Any], *, rel_tol: float = 1e-9
 ) -> list[str]:
-    """逐阶段比对两份 trace，返回人类可读的差异列表；空列表表示一致。
+    """**严格**比对（所有阶段逐位一致），返回失败列表；空列表表示一致。
 
     差异信息刻意带上**阶段名与下标**，这样拆分重构出错时能直接定位到哪一步，
     而不是只知道"最终结果不一样"。
+
+    需要容忍 ANN 边界抖动时用 ``compare_traces``；这里保留严格语义是为了
+    让"确实应该逐位一致"的场景（单元测试、非召回阶段）有一个不含糊的断言。
     """
-    problems: list[str] = []
-
-    exp_stages, act_stages = expected.get("stages_called", []), actual.get("stages_called", [])
-    if exp_stages != act_stages:
-        problems.append(f"被调用的阶段序列不同：期望 {exp_stages}，实际 {act_stages}")
-        return problems
-
-    exp_steps, act_steps = expected.get("steps", []), actual.get("steps", [])
-    if len(exp_steps) != len(act_steps):
-        problems.append(f"阶段调用次数不同：期望 {len(exp_steps)} 次，实际 {len(act_steps)} 次")
-
-    for idx, (exp, act) in enumerate(zip(exp_steps, act_steps, strict=False)):
-        stage = exp.get("stage", "?")
-        if exp.get("in") != act.get("in"):
-            problems.append(f"[{idx}] 阶段 {stage} 的**入参**变了")
-        if not _deep_equal(exp.get("out"), act.get("out"), rel_tol=rel_tol):
-            problems.append(f"[{idx}] 阶段 {stage} 的**返回值**变了")
-
-    if not _deep_equal(expected.get("final"), actual.get("final"), rel_tol=rel_tol):
-        problems.append("最终返回的文档序列变了")
-
-    return problems
+    return compare_traces(expected, actual, rel_tol=rel_tol, volatile_stages=frozenset()).failures
 
 
 def _deep_equal(a: Any, b: Any, *, rel_tol: float) -> bool:
@@ -257,6 +427,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--baseline", default=DEFAULT_BASELINE_PATH)
     parser.add_argument("--limit", type=int, default=12, help="追踪前 N 条 query")
     parser.add_argument("--record", action="store_true", help="录制基线")
+    parser.add_argument(
+        "--volatile-ratio",
+        type=float,
+        default=VOLATILE_RATIO,
+        help=f"recall 层容许的文档集合差异比例（ANN 边界抖动，默认 {VOLATILE_RATIO}）",
+    )
     parser.add_argument(
         "--persist-dir",
         default=None,
@@ -327,18 +503,36 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[错误] 条数不一致：基线 {len(saved)} vs 当前 {len(payload['traces'])}")
             return 2
 
-        total_problems = 0
+        total_failures = 0
+        total_advisories = 0
+        max_delta = 0
         for exp, act in zip(saved, payload["traces"], strict=True):
-            problems = diff_traces(exp, act)
-            if problems:
-                total_problems += len(problems)
-                print(f"\n[差异] {exp['query'][:44]}")
-                for p in problems[:6]:
-                    print(f"    {p}")
+            result = compare_traces(exp, act, volatile_ratio=args.volatile_ratio)
+            max_delta = max(max_delta, result.max_volatile_delta)
+            if result.failures:
+                total_failures += len(result.failures)
+                print(f"\n[失败] {exp['query'][:44]}")
+                for item in result.failures[:6]:
+                    print(f"    {item}")
+            if result.advisories:
+                total_advisories += len(result.advisories)
+                print(f"\n[无法判定] {exp['query'][:44]}")
+                for item in result.advisories[:4]:
+                    print(f"    {item}")
 
-        if total_problems:
-            print(f"\n阶段级比对未通过：共 {total_problems} 处差异")
+        if total_failures:
+            print(f"\n阶段级比对未通过：{total_failures} 处严格差异")
+            if total_advisories:
+                print(f"（另有 {total_advisories} 处因上游 ANN 抖动无法判定）")
             return 1
+
+        if total_advisories:
+            print(
+                f"\n阶段级比对通过：0 处严格差异；"
+                f"{total_advisories} 处因上游 ANN 抖动无法判定（最大文档差异 {max_delta}）"
+            )
+            return 0
+
         print("\n阶段级比对通过：所有阶段入参与返回值逐条一致。")
         return 0
     finally:
