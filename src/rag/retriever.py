@@ -860,6 +860,117 @@ async def _stage_dedup_and_threshold(
     return filtered, len(deduped), len(filtered)
 
 
+@dataclass(frozen=True)
+class _RecallRequest:
+    """阶段 4 的全部输入。
+
+    参数有 11 个，且明显分成两类（检索配置 / 查询状态）—— 直接铺成位置参数
+    在调用处极易错位，故打包成一个不可变请求对象，顺带把契约写清楚。
+    """
+
+    query: str
+    collection_name: str
+    coarse_k: int
+    filter: dict | None
+    cat: QueryCategory
+    terms: list[str]
+    use_rerank: bool
+    depth: RetrievalDepth
+    sub_queries: list[str]
+    decomposed: bool
+    effective_threshold: float
+
+
+async def _stage_recall_and_merge(req: _RecallRequest) -> list[tuple[Document, float]]:
+    """阶段 4：多路召回 + 跨分支融合。
+
+    两条路径：
+
+    - **单路**：直接做一次多路召回（`_amulti_route_search`）。
+    - **分解**：原查询与各子查询**并发**召回，每路先各自去重（每章节保留 2 条）
+      并过阈值，再按 ``original=1.5 / sub=1.0`` 加权做 RRF 融合。
+      对比类查询只允许子查询走精简路由集（`_COMPACT_SUBQUERY_ROUTES`），
+      避免子查询把召回面摊得过宽。
+
+    分支异常**只记 warning 不中断**：少一路召回远好过整条检索失败。
+
+    Returns:
+        召回结果（已融合，**尚未**做全局去重与阈值过滤）。
+    """
+    if not req.decomposed:
+        return await _amulti_route_search(
+            req.query,
+            req.collection_name,
+            req.coarse_k,
+            filter=req.filter,
+            cat=req.cat,
+            use_rerank=req.use_rerank,
+            terms=req.terms,
+            depth=req.depth,
+        )
+
+    async def _branch_search(
+        label: str,
+        branch_query: str,
+        branch_cat: QueryCategory | None,
+        branch_terms: list[str] | None,
+        route_allowlist: set[str] | None = None,
+    ):
+        branch_results = await _amulti_route_search(
+            branch_query,
+            req.collection_name,
+            req.coarse_k,
+            filter=req.filter,
+            cat=branch_cat,
+            use_rerank=req.use_rerank,
+            terms=branch_terms,
+            depth=req.depth,
+            route_allowlist=route_allowlist,
+        )
+        branch_results = await _safe_to_thread(
+            f"async_{label}_dedup",
+            dedup_same_section,
+            branch_results,
+            timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 3.0),
+            default=branch_results,
+            max_per_section=2,
+        )
+        return label, [
+            (doc, score) for doc, score in branch_results if score >= req.effective_threshold
+        ]
+
+    tasks = [_branch_search("original", req.query, req.cat, req.terms)]
+    route_allowlist = _COMPACT_SUBQUERY_ROUTES if req.cat.is_comparison else None
+    for sq in [sq for sq in req.sub_queries if sq != req.query]:
+        tasks.append(_branch_search("sub", sq, None, None, route_allowlist=route_allowlist))
+    gathered = await asyncio.gather(*tasks, return_exceptions=True)
+
+    all_route_results: list[tuple[str, list[tuple[Document, float]]]] = []
+    for item in gathered:
+        if isinstance(item, Exception):
+            logger.warning("Async sub-query branch failed: %s", item)
+            continue
+        all_route_results.append(item)
+
+    merged = await _safe_to_thread(
+        "async_weighted_rrf_merge",
+        weighted_rrf_merge,
+        all_route_results,
+        {"original": 1.5, "sub": 1.0},
+        timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 5.0),
+        default=[],
+        cat=req.cat,
+    )
+    merged = merged or []
+    logger.info(
+        "Async decomposed retrieval query=%s sub_queries=%d merged=%d",
+        req.query[:50],
+        len(req.sub_queries),
+        len(merged),
+    )
+    return merged
+
+
 async def aretrieve_documents(
     query: str,
     collection_name: str = "",
@@ -910,76 +1021,21 @@ async def aretrieve_documents(
         stage_ms["decompose_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
         _stage_start = time.perf_counter()
-        if decomposed:
-
-            async def _branch_search(
-                label: str,
-                branch_query: str,
-                branch_cat: QueryCategory | None,
-                branch_terms: list[str] | None,
-                route_allowlist: set[str] | None = None,
-            ):
-                branch_results = await _amulti_route_search(
-                    branch_query,
-                    collection_name,
-                    coarse_k,
-                    filter=filter,
-                    cat=branch_cat,
-                    use_rerank=use_rerank,
-                    terms=branch_terms,
-                    depth=depth,
-                    route_allowlist=route_allowlist,
-                )
-                branch_results = await _safe_to_thread(
-                    f"async_{label}_dedup",
-                    dedup_same_section,
-                    branch_results,
-                    timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 3.0),
-                    default=branch_results,
-                    max_per_section=2,
-                )
-                return label, [
-                    (doc, score) for doc, score in branch_results if score >= effective_threshold
-                ]
-
-            tasks = [_branch_search("original", query, _cat, _terms)]
-            route_allowlist = _COMPACT_SUBQUERY_ROUTES if _cat.is_comparison else None
-            for sq in [sq for sq in sub_queries if sq != query]:
-                tasks.append(_branch_search("sub", sq, None, None, route_allowlist=route_allowlist))
-            gathered = await asyncio.gather(*tasks, return_exceptions=True)
-            all_route_results: list[tuple[str, list[tuple[Document, float]]]] = []
-            for item in gathered:
-                if isinstance(item, Exception):
-                    logger.warning("Async sub-query branch failed: %s", item)
-                    continue
-                all_route_results.append(item)
-            results = await _safe_to_thread(
-                "async_weighted_rrf_merge",
-                weighted_rrf_merge,
-                all_route_results,
-                {"original": 1.5, "sub": 1.0},
-                timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 5.0),
-                default=[],
-                cat=_cat,
-            )
-            results = results or []
-            logger.info(
-                "Async decomposed retrieval query=%s sub_queries=%d merged=%d",
-                query[:50],
-                len(sub_queries),
-                len(results),
-            )
-        else:
-            results = await _amulti_route_search(
-                query,
-                collection_name,
-                coarse_k,
+        results = await _stage_recall_and_merge(
+            _RecallRequest(
+                query=query,
+                collection_name=collection_name,
+                coarse_k=coarse_k,
                 filter=filter,
                 cat=_cat,
-                use_rerank=use_rerank,
                 terms=_terms,
+                use_rerank=use_rerank,
                 depth=depth,
+                sub_queries=sub_queries,
+                decomposed=decomposed,
+                effective_threshold=effective_threshold,
             )
+        )
         stage_ms["route_merge_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
         raw_results_count = len(results)
