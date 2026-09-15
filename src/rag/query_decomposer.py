@@ -194,10 +194,14 @@ async def decompose(query: str, cat: QueryCategory | None = None) -> list[str]:
 
 
 def decompose_sync(query: str, cat: QueryCategory | None = None) -> list[str]:
-    """同步查询分解（LEGACY）。
+    """同步查询分解（LEGACY，**当前仓库内无调用方**）。
 
-    仅适用于**同步上下文**：目前唯一调用方是 ingest 后的缓存预热
-    （`warmup_query_cache` → 同步 `retrieve_documents`）。
+    历史：曾由同步版 ``retriever.retrieve_documents`` 调用。该函数已改为委托
+    ``aretrieve_documents``（消除 448 行双份流水线），因此本函数不再被引用。
+
+    保留原因：它是公开的同步桥接工具，直接删除属于对外 API 变更，交由仓库负责人决定
+    （见 ENGINEERING.md 附录 A）。若要清理，请连同 ``llm_calls.call_structured_sync``
+    一起评估。
 
     **不要在 `async def` 里直接调用** —— `llm.invoke()` 不会抛错，但会**阻塞事件循环
     整个 LLM 调用时长**（客户端超时 90 秒）。async 上下文请用 `await decompose()`。
