@@ -67,7 +67,9 @@ asyncio_default_fixture_loop_scope = "function"
 USE_FAKE_MODEL = "true"
 DASHSCOPE_API_KEY = "sk-fake-dashscope-key"
 JWT_SECRET = "test-secret-key"
-# 单测不依赖 TEI embedding
+# 单测不依赖 TEI embedding：默认走确定性哈希向量
+USE_FAKE_EMBEDDING = "true"
+# 长期记忆的 Store 向量索引同样不依赖 TEI
 MEMORY_STORE_VECTOR_ENABLED = "false"
 
 [tool.pymarkdown]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import math
 import time
@@ -313,8 +314,73 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         return result[0]
 
 
+class HashingEmbeddings(Embeddings):
+    """确定性哈希 Embedding：无需 TEI 即可跑通整条检索链（测试专用）。
+
+    **为什么需要它**：`vectorstore` / `semantic_cache` / `recall` 长期 0% 覆盖，
+    根因是它们都依赖本地 TEI 服务（localhost:11435），CI 里起不来。本实现把
+    embedding 变成纯本地计算，使这些模块第一次可被集成测试覆盖。
+
+    **实现**：字符 bigram 哈希到固定维度 + L2 归一化。保留**词汇重叠**信号
+    （共享 bigram 越多，余弦相似度越高），因此足以验证召回排序与缓存命中/未命中。
+
+    **能力边界（重要）**：它没有真正的语义泛化能力 —— 同义不同词不会相似
+    （"进程" 与 "process" 完全无关）。故**只用于测试，不得用于生产**。
+    与 `core.llm.FakeToolModel` 同一模式，由 `settings.USE_FAKE_EMBEDDING` 启用。
+
+    **确定性来自 hashlib 而非内置 `hash()`**：后者受 PYTHONHASHSEED 影响，
+    同一文本在不同进程会得到不同向量 —— 写进 Chroma 的向量与下次查出来的对不上，
+    表现为「刚写入就查不到」这种极难定位的假故障。
+    """
+
+    def __init__(self, dim: int = 1024) -> None:
+        self.dim = dim
+
+    @staticmethod
+    def _bucket(token: str, dim: int) -> int:
+        digest = hashlib.sha1(token.encode("utf-8")).digest()
+        return int.from_bytes(digest[:4], "big") % dim
+
+    def _vector(self, text: str) -> list[float]:
+        # 去掉全部空白后做 bigram，避免空白差异影响相似度
+        normalized = "".join(str(text).lower().split())
+        if not normalized:
+            # 空文本也必须给出**非零**向量：Chroma 的 cosine 距离对零向量无定义
+            vec = [0.0] * self.dim
+            vec[0] = 1.0
+            return vec
+
+        tokens = [normalized[i : i + 2] for i in range(len(normalized) - 1)]
+        tokens.append(normalized)  # 整串参与，保证极短查询也有区分度
+
+        vec = [0.0] * self.dim
+        for token in tokens:
+            vec[self._bucket(token, self.dim)] += 1.0
+
+        norm = math.sqrt(sum(v * v for v in vec))
+        return [v / norm for v in vec]
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [self._vector(t) for t in texts]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._vector(text)
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self.embed_documents(texts)
+
+    async def aembed_query(self, text: str) -> list[float]:
+        return self._vector(text)
+
+
 def get_embeddings() -> Embeddings:
-    """返回 Embedding 模型（通过 OpenAI 兼容接口，支持本地 TEI / 远程 API）"""
+    """返回 Embedding 模型（通过 OpenAI 兼容接口，支持本地 TEI / 远程 API）。
+
+    `settings.USE_FAKE_EMBEDDING=true` 时返回本地确定性哈希实现，
+    使检索链在无 TEI 环境下（CI / 单测）仍可运行。
+    """
+    if settings.USE_FAKE_EMBEDDING:
+        return HashingEmbeddings(dim=settings.EMBEDDING_DIM)
     return OpenAICompatibleEmbeddings(
         api_key=_embedding_api_key(),
         base_url=settings.EMBEDDING_API_BASE,

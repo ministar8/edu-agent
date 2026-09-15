@@ -25,6 +25,7 @@
 这条上限截断（实测确认）。因此它是一个全局护栏，而非只管 supervisor 往返。
 """
 
+from collections.abc import Collection
 from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -99,7 +100,7 @@ def _inspect_tail(messages: list, names: frozenset[str]) -> _TailInspection:
     return _TailInspection(True, None)
 
 
-def make_forward_after_agent(agent_names: set[str]):
+def make_forward_after_agent(agent_names: Collection[str]):
     """构造 pre_model_hook：专家已给出最终回答时，进入 supervisor LLM 前直接结束。
 
     langgraph-supervisor 中专家节点完成后固定回流 supervisor 节点；本 hook 检查
