@@ -826,6 +826,40 @@ async def _stage_decompose_query(
     return sub_queries, len(sub_queries) > 1
 
 
+async def _stage_dedup_and_threshold(
+    results: list[tuple[Document, float]],
+    query: str,
+    cat: QueryCategory,
+    effective_threshold: float,
+) -> tuple[list[Document], int, int]:
+    """阶段 5+6：同章节去重 → 分数阈值过滤。
+
+    去重的每章节保留数按查询类别浮动：练习/答案类放宽到 4（同一节里常有多道题），
+    对比/长查询 3，其余 2。
+
+    Returns:
+        ``(过阈值文档, 去重后条数, 过阈值条数)`` —— 两个条数供调用方写指标，
+        去重后的完整结果不向下游传递（下游只消费过阈值的文档）。
+    """
+    max_per_section = (
+        4
+        if (cat.is_exercise or cat.is_answer)
+        else (3 if (cat.is_comparison or cat.is_long) else 2)
+    )
+    deduped = await _safe_to_thread(
+        "async_section_dedup",
+        dedup_same_section,
+        results,
+        timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 3.0),
+        default=results,
+        max_per_section=max_per_section,
+    )
+
+    filtered = [doc for doc, score in deduped if score >= effective_threshold]
+    _log_final_retrieval_summary("async-post-threshold", query, filtered)
+    return filtered, len(deduped), len(filtered)
+
+
 async def aretrieve_documents(
     query: str,
     collection_name: str = "",
@@ -949,24 +983,9 @@ async def aretrieve_documents(
         stage_ms["route_merge_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
         raw_results_count = len(results)
-        _max_per = (
-            4
-            if (_cat.is_exercise or _cat.is_answer)
-            else (3 if (_cat.is_comparison or _cat.is_long) else 2)
+        filtered, post_dedup_count, post_threshold_count = await _stage_dedup_and_threshold(
+            results, query, _cat, effective_threshold
         )
-        results = await _safe_to_thread(
-            "async_section_dedup",
-            dedup_same_section,
-            results,
-            timeout=min(float(getattr(settings, "TOOL_CALL_TIMEOUT", 30) or 30), 3.0),
-            default=results,
-            max_per_section=_max_per,
-        )
-        post_dedup_count = len(results)
-
-        filtered = [doc for doc, score in results if score >= effective_threshold]
-        post_threshold_count = len(filtered)
-        _log_final_retrieval_summary("async-post-threshold", query, filtered)
 
         _rerank_ms = 0.0
         if not decomposed:

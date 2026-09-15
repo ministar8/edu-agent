@@ -18,6 +18,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from langchain_core.documents import Document
 
 from rag import retriever as R
 
@@ -230,6 +231,99 @@ class TestStageDecomposeQuery:
         subs, decomposed = await R._stage_decompose_query("q", "c", _depth(), [])
         assert subs == []
         assert decomposed is False
+
+
+class TestStageDedupAndThreshold:
+    """阶段 5+6：同章节去重 → 阈值过滤。
+
+    两条容易写错的契约：
+    1. 每章节保留数随**查询类别**浮动（练习/答案放宽到 4，对比/长查询 3，其余 2）——
+       类别判断写错不会报错，只会静默改变保留条数；
+    2. 两个计数（去重后 / 过阈值后）供指标使用，必须分别是**去重后**与**过滤后**的
+       长度，不能混用（曾经把过滤后的长度填进"去重后"字段，指标就再也对不上了）。
+    """
+
+    @staticmethod
+    def _cat(**flags):
+        base = {
+            "is_exercise": False,
+            "is_answer": False,
+            "is_comparison": False,
+            "is_long": False,
+        }
+        base.update(flags)
+        return SimpleNamespace(**base)
+
+    def _patch(self, monkeypatch, deduped):
+        seen = {}
+
+        async def fake_thread(name, fn, results, timeout=None, default=None, max_per_section=None):
+            seen["name"] = name
+            seen["max_per_section"] = max_per_section
+            seen["default_is_input"] = default is results
+            return deduped
+
+        monkeypatch.setattr(R, "_safe_to_thread", fake_thread)
+        monkeypatch.setattr(R, "_log_final_retrieval_summary", lambda *a, **k: None)
+        return seen
+
+    @pytest.mark.asyncio
+    async def test_max_per_section_follows_category(self, monkeypatch):
+        seen = self._patch(monkeypatch, [])
+        cases = [
+            (self._cat(is_exercise=True), 4),
+            (self._cat(is_answer=True), 4),
+            (self._cat(is_comparison=True), 3),
+            (self._cat(is_long=True), 3),
+            (self._cat(), 2),
+        ]
+        for cat, expected in cases:
+            await R._stage_dedup_and_threshold([], "q", cat, 0.0)
+            assert seen["max_per_section"] == expected, f"类别 {cat} 应保留 {expected} 条"
+
+    @pytest.mark.asyncio
+    async def test_threshold_filters_by_score(self, monkeypatch):
+        docs = [
+            (Document(page_content="低分", metadata={}), 0.01),
+            (Document(page_content="边界", metadata={}), 0.5),
+            (Document(page_content="高分", metadata={}), 0.9),
+        ]
+        self._patch(monkeypatch, docs)
+        filtered, deduped_count, passed_count = await R._stage_dedup_and_threshold(
+            docs, "q", self._cat(), 0.5
+        )
+        assert [d.page_content for d in filtered] == ["边界", "高分"], "阈值是 >=，边界值应保留"
+        assert deduped_count == 3, "去重后计数应是**去重结果**的长度"
+        assert passed_count == 2, "过阈值计数应是**过滤后**的长度"
+
+    @pytest.mark.asyncio
+    async def test_counts_are_not_swapped(self, monkeypatch):
+        """两个计数的语义不能互换 —— 混用会让指标永久对不上。"""
+        docs = [(Document(page_content=str(i), metadata={}), float(i)) for i in range(5)]
+        self._patch(monkeypatch, docs)
+        _filtered, deduped_count, passed_count = await R._stage_dedup_and_threshold(
+            docs, "q", self._cat(), 3.0
+        )
+        assert deduped_count == 5
+        assert passed_count == 2
+        assert deduped_count > passed_count, "本例去重后应多于过阈值后"
+
+    @pytest.mark.asyncio
+    async def test_dedup_failure_falls_back_to_input(self, monkeypatch):
+        """去重超时/异常时必须回退原结果，不能把证据清空。"""
+        seen = self._patch(monkeypatch, [])
+        docs = [(Document(page_content="x", metadata={}), 0.9)]
+        await R._stage_dedup_and_threshold(docs, "q", self._cat(), 0.0)
+        assert seen["default_is_input"] is True, "default 必须是入参本身，作为失败兜底"
+        assert seen["name"] == "async_section_dedup"
+
+    @pytest.mark.asyncio
+    async def test_empty_input_is_safe(self, monkeypatch):
+        self._patch(monkeypatch, [])
+        filtered, deduped_count, passed_count = await R._stage_dedup_and_threshold(
+            [], "q", self._cat(), 0.5
+        )
+        assert (filtered, deduped_count, passed_count) == ([], 0, 0)
 
 
 class TestPlanIsImmutable:
