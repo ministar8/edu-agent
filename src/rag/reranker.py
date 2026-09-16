@@ -149,6 +149,9 @@ def rerank(
                 doc.metadata["rerank_method"] = "bge-reranker-v2-m3-fallback"
                 result.append(doc)
 
+    # 补足后仍可能超过 top_k（TEI 不遵守 top_n 时）—— 截断以保证契约成立
+    result = result[:top_k]
+
     elapsed_ms = (time.perf_counter() - start) * 1000
     top_score = result[0].metadata.get("rerank_score", 0) if result else 0
     logger.debug(
@@ -161,6 +164,10 @@ def rerank(
         lightweight,
     )
 
-    _rerank_cache.set(cache_key, result)
+    # 存**副本**再返回：`result` 会原样交给调用方，而下游会往 metadata 里写东西
+    # （窗口展开、噪声降级等）。若把同一对象放进缓存，**第一个调用方的写入会污染
+    # 后续所有命中缓存的调用** —— 那样 `_copy_ranked` 只防住了一半（读时拷贝），
+    # 而污染是从写时进去的。
+    _rerank_cache.set(cache_key, _copy_ranked(result))
 
     return result
