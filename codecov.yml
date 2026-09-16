@@ -5,10 +5,16 @@ coverage:
       default:
         target: auto
         threshold: 2%
-    # 单次改动的增量覆盖率仅作参考，不阻塞 PR
+    # 增量覆盖率（patch）**阻塞** PR：新代码必须自带测试。
+    #
+    # 为什么必须阻塞（实测量化）：project 门禁是"总覆盖率降幅 >2% 才拦"。
+    # 按当时 8876 语句 / 57% 覆盖计算，**一次 PR 可以加约 340 条未测语句仍然通过** ——
+    # 也就是说**新代码可以完全没测试**，只要不把总数拉低 2%。
+    # 总覆盖率是存量指标，天然无法约束增量；这正是 patch 门禁存在的意义。
     patch:
       default:
-        informational: true
+        informational: false
+        target: 80%
   ignore:
     - "tests/"
     # 离线数据清洗工具，不参与运行时，不拉低覆盖率评价
