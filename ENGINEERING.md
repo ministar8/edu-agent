@@ -1346,7 +1346,7 @@ coverage:
 | 13 | 支持 5 级标题（`##### 1)内容`） | P2 | 真实库 80 处五级标题进入 section 层级 | 🟡 **已核实、已尝试、已回退**。问题真实（87 个 h5/h6 标题不可见），但放宽正则会让门禁 `category_precision` **稳定退化**（4 次连跑 0.8821，-1.8pp），再加短 section 承接更差（0.8664，-3.4pp）—— 故回退。详见「#13 实测结论」 |
 | 14 | 检索阈值集中到 settings + 路由名单单一真源 | P2 | 阈值可经 `.env` 覆盖；名单从 `recall.py` 导出 | ⬜ |
 | 15 | 补 `rag/ingest.py` 测试（唯一剩余 0% 模块） | P2 | 覆盖率 ≥50% | ✅ 实测 **0→84%**（`tests/rag/test_ingest_readiness.py`，28 用例，反向验证 14/14） |
-| 16 | codecov patch coverage 改为阻塞 | P2 | 新代码 patch coverage ≥80% 才可合入 | ⬜ **量化过必要性**：当前 project 门禁是「总覆盖率降幅 >2% 才拦」。按 8881 语句 / 54% 算，**一次 PR 可加约 340 条未测语句仍通过** —— 增量覆盖率不阻塞等于新代码可以完全没测试 |
+| 16 | codecov patch coverage 改为阻塞 | P2 | 新代码 patch coverage ≥80% 才可合入 | ✅ **已落地**：`patch.default` 改为 `informational: false` + `target: 80%`。**⚠️ 还需你在 GitHub branch protection 里把 `codecov/patch` 设为必需检查** —— 那是仓库设置，代码里改不到 |
 | 17 | 分模块覆盖率门槛 | P2 | CI 按 `rag/agents/service` 分别校验 | ⬜ |
 | 18 | 加 `.gitattributes` 统一行尾 | P2 | 消除 CRLF/LF 混用 | ✅ **已落地**（独立提交）。实测仓库 blob 本已统一 LF（223/225），混用只在工作区；顺带查出 1 个知识库文件因**末尾 72 个 NUL** 被 git 判成二进制，已清理（cleaner 本就会剥 NUL，索引未受污染） |
 | 19 | 前端冒烟测试 | P3 | Playwright 跑通"登录→提问→回答" | ⬜ |
