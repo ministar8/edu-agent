@@ -346,7 +346,15 @@ def sentence_window_expand(
             current_tokens = sum(_estimate_tokens(d.page_content) for d in result)
             for doc in parent_added:
                 if doc.metadata.get("_parent_expanded"):
-                    key = str(doc.metadata.get("section.chunk_id") or doc.page_content[:80])
+                    # 去重键必须**区分父文档与它的锚点**。
+                    # 父文档的 metadata 是从锚点复制来的，因此它带着**锚点的
+                    # `section.chunk_id`**。若直接用 chunk_id 做键，父文档必然与锚点撞键
+                    # 而被永远挡掉 —— 实测确认这就是原本的行为：**只要锚点有 chunk_id
+                    # （生产环境的正常情况），父窗口兜底就从未真正生效过**，
+                    # 只有锚点恰好没有 chunk_id 时才会被加进去。
+                    key = "parent:" + str(
+                        doc.metadata.get("_parent_anchor_chunk_id") or doc.page_content[:80]
+                    )
                     if key not in existing_keys:
                         doc_tokens = _estimate_tokens(doc.page_content)
                         if current_tokens + doc_tokens <= global_budget:
