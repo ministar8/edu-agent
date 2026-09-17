@@ -206,6 +206,31 @@ async def _probe_history_trim() -> Any:
     return captured.get("max_messages")
 
 
+async def _probe_retrieval_score_threshold() -> Any:
+    """读 `aretrieve_documents` 的**签名默认值** —— 调用方不传时真正生效的那个值。
+
+    只断言 `retriever.SCORE_THRESHOLD` 是不够的：那只是模块常量，
+    真正决定行为的是**函数签名里的默认值**。两者可以脱钩
+    （比如常量改了但签名写死了字面量），而脱钩后门禁指标才会变 ——
+    那时已经晚了。这里直接读签名，把「配置 → 实际生效值」锁死。
+    """
+    import inspect
+
+    from rag.retriever import aretrieve_documents
+
+    return inspect.signature(aretrieve_documents).parameters["score_threshold"].default
+
+
+async def _probe_rerank_expand_factor() -> Any:
+    """读 `retriever._RERANK_EXPAND_FACTOR` —— 重排候选池倍数的运行时取值。
+
+    该值决定 `coarse_k = min(k * factor, 50)`，直接关系到重排的召回与耗时。
+    """
+    from rag import retriever as R
+
+    return R._RERANK_EXPAND_FACTOR
+
+
 @dataclass(frozen=True)
 class WiringProbe:
     """一条「配置 → 运行时对象」接线检查。"""
@@ -216,6 +241,16 @@ class WiringProbe:
 
 
 _WIRING_PROBES: tuple[WiringProbe, ...] = (
+    WiringProbe(
+        setting="RETRIEVAL_SCORE_THRESHOLD",
+        describe="RRF 融合分数阈值，需成为检索入口的签名默认值（backlog #14）",
+        read_runtime=_probe_retrieval_score_threshold,
+    ),
+    WiringProbe(
+        setting="RERANK_EXPAND_FACTOR",
+        describe="重排候选池倍数，需被 retriever 真正读取（backlog #14）",
+        read_runtime=_probe_rerank_expand_factor,
+    ),
     WiringProbe(
         setting="AGENT_RECURSION_LIMIT",
         describe="图执行上界，需写进传给 ainvoke 的 RunnableConfig.recursion_limit",

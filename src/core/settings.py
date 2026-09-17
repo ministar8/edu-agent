@@ -116,6 +116,26 @@ class Settings(BaseSettings):
     HYDE_RERANK_SCORE_THRESHOLD: float = 0.25
     HYDE_MAX_CHARS: int = 500
 
+    # ── 检索阈值（可经 `.env` 覆盖）─────────────────
+    # 这几项此前硬编码在 `retriever.py` 里，注释写着「基于采样校准」。
+    # 硬编码的问题不是"不好看"，而是：**调参必须改代码** ——
+    # 于是调参变成"在代码里试数"，试完容易忘记清理，或试了没记下原因。
+    # 提到 settings 后调参只改 `.env`，代码保持干净。
+    #
+    # ⚠️ **改这些值会改变检索质量** —— 改完必须重跑检索质量门禁
+    #    （`python -m evaluation.retrieval_gate`）确认没有退化。
+    RETRIEVAL_SCORE_THRESHOLD: float = 0.06
+    """RRF 融合分数阈值。0.06 ≈「至少 1 路前 7」或「2 路前 15」，
+    过滤掉排名 #8+ 的单路噪声。注意这是 **RRF 融合分**，不是余弦距离。"""
+
+    RERANK_EXPAND_FACTOR: int = 5
+    """重排前的候选池倍数（`coarse_k = min(k * factor, 50)`）。
+    知识库扩充后需要更大候选池 —— 调大可提召回，代价是重排耗时。"""
+
+    RRF_BASELINE_WEIGHT: float = 1.5
+    """权重校准基准（semantic 的 default 权重）。
+    实际阈值 = 基础阈值 × `max_w / RRF_BASELINE_WEIGHT`。"""
+
     # ── Semantic Cache（ChromaDB-backed）──────────
     SEMANTIC_CACHE_ENABLED: bool = True
     SEMANTIC_CACHE_SIMILARITY_THRESHOLD: float = 0.88

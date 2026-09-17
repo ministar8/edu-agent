@@ -113,7 +113,9 @@ logger = logging.getLogger(__name__)
 # RRF(k=20): 排名1≈0.048, 排名5≈0.040（权重 1.0 时）
 # 权重 1.5 的路由第 10 名 = 1.5/(20+10) = 0.05 → 刚好过旧阈值
 # 0.06 ≈ "至少1路前7" 或 "2路前15"，过滤掉排名#8+的单路噪声
-SCORE_THRESHOLD = 0.06
+# 数值来自 `settings.RETRIEVAL_SCORE_THRESHOLD`（可经 .env 覆盖，backlog #14）。
+# 保留模块级别名是为了不动下面 4 处函数签名的默认值。
+SCORE_THRESHOLD = settings.RETRIEVAL_SCORE_THRESHOLD
 
 # 查询缓存（有界 + TTL，线程安全；命中计数由缓存自带）
 _MAX_CACHE_SIZE = 200
@@ -156,7 +158,7 @@ def _cache_stats_fields() -> dict[str, int | float]:
 
 # Reranker 扩展倍数：知识库扩充后需要更大候选池
 # k=5 时 coarse_k=25，k=8 时 coarse_k=40
-_RERANK_EXPAND_FACTOR = 5
+_RERANK_EXPAND_FACTOR = settings.RERANK_EXPAND_FACTOR
 
 
 # ── 诊断日志 ──────────────────────────────────────────
@@ -333,7 +335,7 @@ def _resolve_retrieval_policy(
     # 缩放后 threshold × (max_w / baseline_w) 让高权重路由的噪声也被过滤
     from rag.recall import get_route_weight
 
-    _BASELINE_WEIGHT = 1.5  # semantic default 权重作为基准
+    _BASELINE_WEIGHT = settings.RRF_BASELINE_WEIGHT  # semantic default 权重作为基准
     # 路由名单来自 `recall.ALL_ROUTES`（单一真源）——
     # 这里曾内联抄了一份 13 个路由名的元组，与 `recall.py` 的权重表各自维护。
     # 抄漏/抄多**都不会报错**，只会让 `_max_w` 静默偏掉、进而让阈值偏掉。
