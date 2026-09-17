@@ -1025,10 +1025,11 @@ async def _stage_rerank(
         query,
         filtered,
         timeout=float(getattr(settings, "RERANK_TIMEOUT", 30) or 30),
-        # 兜底截断用的是 k 而不是 top_k —— 两条分支原本都是 filtered[:k]。
-        # 这里保持原样（只搬代码不改行为），但它与 top_k 的口径不一致，
-        # 分解路径重排失败时兜底会比预期少一半候选。已记入 backlog。
-        default=filtered[:k],
+        # 兜底截断用 `top_k` 而不是 `k`，与候选池口径一致（backlog #33）。
+        # 原实现两条分支都写 `filtered[:k]`，但候选池是 `top_k = k*2 if decomposed else k`：
+        # 非分解路径 `top_k == k`，恰好等价；**分解路径重排失败时只兜住一半候选**。
+        # 重排失败本就是降级场景，此时再把候选砍半，等于在降级上再降一级。
+        default=filtered[:top_k],
         top_k=top_k,
     )
     elapsed_ms = (time.perf_counter() - started) * 1000

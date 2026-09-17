@@ -580,18 +580,54 @@ class TestStageRerank:
         assert calls["rerank"] is None, "空候选不应调用重排"
 
     @pytest.mark.asyncio
-    async def test_rerank_fallback_default_is_k_on_both_paths(self, monkeypatch):
-        """兜底截断两条分支都用 k（不是 k*2）—— 保持原实现，即使口径不一致。
+    async def test_rerank_fallback_matches_candidate_pool_when_decomposed(self, monkeypatch):
+        """**重排失败兜底必须与候选池口径一致**（backlog #33）。
 
-        这是拆分段时发现的既有不对称：分解路径重排失败时兜底只保留 k 条候选，
-        比正常路径少一半。**本次只搬代码不改行为**，已记入 backlog。
+        原实现两条分支都写 `filtered[:k]`，而候选池是 `top_k = k*2 if decomposed else k`：
+        非分解路径 `top_k == k` 恰好等价；**分解路径重排失败时只兜住一半候选**。
+        重排失败本就是降级场景，此时再把候选砍半，等于**在降级上再降一级**。
         """
         calls = self._patch(monkeypatch)
         docs = self._docs(10)
 
         await R._stage_rerank(docs, "q", 3, True, decomposed=True)
 
-        assert calls["rerank"]["default"] == docs[:3], "兜底是 filtered[:k]，不是 filtered[:k*2]"
+        assert calls["rerank"]["default"] == docs[:6], "兜底应为 filtered[:k*2]，与候选池一致"
+
+    @pytest.mark.asyncio
+    async def test_rerank_fallback_matches_candidate_pool_when_single(self, monkeypatch):
+        """非分解路径 `top_k == k`，兜底仍是 `filtered[:k]` —— 与原来一致，未被本次修复改变。"""
+        calls = self._patch(monkeypatch)
+        docs = self._docs(10)
+
+        await R._stage_rerank(docs, "q", 3, True, decomposed=False)
+
+        assert calls["rerank"]["default"] == docs[:3]
+
+    @pytest.mark.asyncio
+    async def test_rerank_fallback_agrees_with_no_rerank_truncation(self, monkeypatch):
+        """**两条路径的口径一致性**：重排失败时的兜底条数，
+        必须等于「未启用重排」时的截断条数 —— 两者都是"没有重排结果可用"的情形，
+        不应该给出不同数量的候选。
+        """
+        calls = self._patch(monkeypatch)
+        docs = self._docs(10)
+
+        for decomposed in (True, False):
+            calls = self._patch(monkeypatch)
+            no_rerank_out, _u, _m = await R._stage_rerank(
+                docs, "q", 3, False, decomposed=decomposed
+            )
+            fallback_len = len(calls["rerank"]["default"]) if calls["rerank"] else None
+
+            calls = self._patch(monkeypatch)
+            await R._stage_rerank(docs, "q", 3, True, decomposed=decomposed)
+            fallback_len = len(calls["rerank"]["default"])
+
+            assert fallback_len == len(no_rerank_out), (
+                f"decomposed={decomposed}: 重排失败兜底 {fallback_len} 条 "
+                f"vs 未启用重排 {len(no_rerank_out)} 条 —— 口径不一致"
+            )
 
     @pytest.mark.asyncio
     async def test_rerank_timeout_comes_from_settings(self, monkeypatch):
