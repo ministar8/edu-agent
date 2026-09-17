@@ -1344,7 +1344,7 @@ coverage:
 | 11 | 清理 `except: pass` | P1 | 静默吞异常归零 | ✅ **已落地**：ruff `S110` 只命中 6 处（该规则只标宽泛捕获，不标具体异常的降级链）；5 处补日志、1 处显式标注为有意忽略；**并把 `S110` 写进 ruff 配置**防复发。域异常层级仍待做 |
 | 12 | 收敛 `rag/**` 类型豁免 | P1 | 先开 `unbound-name`/`missing-import` | 🟡 真实错误已修（`supervisor.py`），豁免仍待收敛 |
 | 13 | 支持 5 级标题（`##### 1)内容`） | P2 | 真实库 80 处五级标题进入 section 层级 | 🟡 **已核实、已尝试、已回退**。问题真实（87 个 h5/h6 标题不可见），但放宽正则会让门禁 `category_precision` **稳定退化**（4 次连跑 0.8821，-1.8pp），再加短 section 承接更差（0.8664，-3.4pp）—— 故回退。详见「#13 实测结论」 |
-| 14 | 检索阈值集中到 settings + 路由名单单一真源 | P2 | 阈值可经 `.env` 覆盖；名单从 `recall.py` 导出 | ⬜ |
+| 14 | 检索阈值集中到 settings + 路由名单单一真源 | P2 | 阈值可经 `.env` 覆盖；名单从 `recall.py` 导出 | ✅ **已落地（两部分都完成）**。① 路由名单收敛为单一真源：`recall.ALL_ROUTES` 从权重表推导，`retriever` 改为引用（原先是内联抄的 13 个名字，抄漏/抄多都不报错、只会让阈值静默偏掉）；② 3 个阈值提到 settings（`RETRIEVAL_SCORE_THRESHOLD` / `RERANK_EXPAND_FACTOR` / `RRF_BASELINE_WEIGHT`），**实测 `.env` 覆盖生效**。新增 6 条守卫测试（含接线自检，读的是**函数签名默认值**而非模块常量） |
 | 15 | 补 `rag/ingest.py` 测试（唯一剩余 0% 模块） | P2 | 覆盖率 ≥50% | ✅ 实测 **0→84%**（`tests/rag/test_ingest_readiness.py`，28 用例，反向验证 14/14） |
 | 16 | codecov patch coverage 改为阻塞 | P2 | 新代码 patch coverage ≥80% 才可合入 | ✅ **已落地**：`patch.default` 改为 `informational: false` + `target: 80%`。**⚠️ 还需你在 GitHub branch protection 里把 `codecov/patch` 设为必需检查** —— 那是仓库设置，代码里改不到 |
 | 17 | 分模块覆盖率门槛 | P2 | CI 按 `rag/agents/service` 分别校验 | ✅ **已落地**：`scripts/check_coverage_by_module.py`（门槛 rag 60% / agents 90% / service 80%，留 ~3pp 余量防误报）+ CI 步骤。**给门禁本身写了 17 条测试** —— 门禁坏了会表现为「永远通过」，必须自己有测试 |
