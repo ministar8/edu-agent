@@ -1347,7 +1347,7 @@ coverage:
 | 14 | 检索阈值集中到 settings + 路由名单单一真源 | P2 | 阈值可经 `.env` 覆盖；名单从 `recall.py` 导出 | ⬜ |
 | 15 | 补 `rag/ingest.py` 测试（唯一剩余 0% 模块） | P2 | 覆盖率 ≥50% | ✅ 实测 **0→84%**（`tests/rag/test_ingest_readiness.py`，28 用例，反向验证 14/14） |
 | 16 | codecov patch coverage 改为阻塞 | P2 | 新代码 patch coverage ≥80% 才可合入 | ✅ **已落地**：`patch.default` 改为 `informational: false` + `target: 80%`。**⚠️ 还需你在 GitHub branch protection 里把 `codecov/patch` 设为必需检查** —— 那是仓库设置，代码里改不到 |
-| 17 | 分模块覆盖率门槛 | P2 | CI 按 `rag/agents/service` 分别校验 | ⬜ |
+| 17 | 分模块覆盖率门槛 | P2 | CI 按 `rag/agents/service` 分别校验 | ✅ **已落地**：`scripts/check_coverage_by_module.py`（门槛 rag 60% / agents 90% / service 80%，留 ~3pp 余量防误报）+ CI 步骤。**给门禁本身写了 17 条测试** —— 门禁坏了会表现为「永远通过」，必须自己有测试 |
 | 18 | 加 `.gitattributes` 统一行尾 | P2 | 消除 CRLF/LF 混用 | ✅ **已落地**（独立提交）。实测仓库 blob 本已统一 LF（223/225），混用只在工作区；顺带查出 1 个知识库文件因**末尾 72 个 NUL** 被 git 判成二进制，已清理（cleaner 本就会剥 NUL，索引未受污染） |
 | 19 | 前端冒烟测试 | P3 | Playwright 跑通"登录→提问→回答" | ⬜ |
 | 20 | 缓存指标接入可观测端点 | P3 | `/health` 或 `/metrics` 暴露缓存命中率 | ⬜ |
