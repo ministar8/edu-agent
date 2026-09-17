@@ -972,11 +972,20 @@ def _append_chunk_metadata(
     chunk.metadata["char_count"] = len(chunk.page_content)
 
 
-def split_documents(
-    documents: list[Document],
-    chunk_size: int = 400,
-    chunk_overlap: int = 100,
-) -> list[Document]:
+def split_documents(documents: list[Document]) -> list[Document]:
+    """把文档切成 chunk。
+
+    **为什么没有 `chunk_size` / `chunk_overlap` 参数**（backlog #9）：
+    这两个参数曾经存在于签名里，但**函数体内从未被引用** —— 调用方任何调参都**静默失效**，
+    实际尺寸完全由 `_ADAPTIVE_CHUNK_SIZE` / `_ADAPTIVE_CHUNK_OVERLAP` 按**内容类型**决定。
+    一个"看起来能调、实际调不动"的参数比没有参数更糟：它会让调用方以为已经生效。
+
+    尺寸设计是**刻意按类型自适应**的（正文 800 / 代码 400 / 表格与公式不拆），
+    单个全局尺寸无法同时满足这些约束，所以选择**删除参数**而不是"让它生效"。
+
+    若要调整切分尺寸，请改 `_ADAPTIVE_CHUNK_SIZE` / `_ADAPTIVE_CHUNK_OVERLAP`，
+    并**重跑检索质量门禁**确认没有退化。
+    """
     valid_chunks: list[Document] = []
 
     for doc in documents:

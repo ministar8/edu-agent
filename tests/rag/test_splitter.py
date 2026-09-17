@@ -13,6 +13,7 @@ from langchain_core.documents import Document
 
 import rag.splitter as splitter
 from rag.splitter import (
+    _ADAPTIVE_CHUNK_SIZE,
     MIN_CHUNK_LENGTH,
     _append_chunk_metadata,
     _build_heading_context,
@@ -1120,6 +1121,43 @@ class TestSplitDocuments:
 
 
 # ══════════════════════════════════════════════════════
+# 2.5 切分尺寸契约（backlog #9）
+# ══════════════════════════════════════════════════════
+
+
+class TestSplitSizeContract:
+    """`split_documents` **不接受** `chunk_size` / `chunk_overlap`（backlog #9）。
+
+    这两个参数曾经存在于签名里但**函数体内从未被引用** —— 调用方任何调参都静默失效。
+    尺寸完全由 `_ADAPTIVE_CHUNK_SIZE` / `_ADAPTIVE_CHUNK_OVERLAP` 按内容类型决定。
+    已删除参数，本类把"签名里不该再有它们"钉住。
+    """
+
+    def test_signature_has_no_size_parameters(self):
+        import inspect
+
+        params = list(inspect.signature(split_documents).parameters)
+        assert params == ["documents"], (
+            f"split_documents 的参数应为 ['documents']，实际 {params} —— "
+            "若重新引入尺寸参数，必须让它在函数体内真正生效，并同步更新契约测试"
+        )
+
+    def test_passing_size_parameters_raises(self):
+        """传旧参数必须**显式报错**，而不是被静默忽略。
+
+        这正是本次修复的核心：一个"看起来能调、实际调不动"的参数
+        比没有参数更糟 —— 它会让调用方以为已经生效。
+        """
+        text = "# 章\n\n" + "这是一个测试段落。" * 30
+        with pytest.raises(TypeError):
+            split_documents([_doc(text)], chunk_size=200, chunk_overlap=0)
+
+    def test_size_is_determined_by_content_type(self):
+        """尺寸随内容类型变化（正文 800 / 代码 400）—— 证明自适应确实在起作用。"""
+        assert _ADAPTIVE_CHUNK_SIZE["text"] != _ADAPTIVE_CHUNK_SIZE["code_mixed"]
+
+
+# ══════════════════════════════════════════════════════
 # 3. 已知缺陷（变更哨兵）
 # ══════════════════════════════════════════════════════
 
@@ -1130,13 +1168,6 @@ class TestKnownDefects:
     这些用例存在的意义：把缺陷钉住，使修复必然导致测试失败，
     从而强迫修复者同步更新契约。修好之后请把断言改成期望值并移出本类。
     """
-
-    def test_chunk_size_and_overlap_parameters_are_ignored(self):
-        """缺陷：split_documents 的 chunk_size / chunk_overlap 参数在函数体内从未被使用。"""
-        text = "# 章\n\n" + "这是一个测试段落。" * 30
-        small = split_documents([_doc(text)], chunk_size=200, chunk_overlap=0)
-        large = split_documents([_doc(text)], chunk_size=5000, chunk_overlap=0)
-        assert [c.page_content for c in small] == [c.page_content for c in large]
 
     def test_example_qa_merge_breaks_on_blank_line(self):
         """缺陷：答案前有空行（markdown 常态）时，Q&A 原子块被空行切断，答案脱离题干。"""
