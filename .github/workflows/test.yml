@@ -26,13 +26,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
       - name: Lint
-        run: uv run ruff check --output-format github src/ tests/
+        run: uv run ruff check --output-format github src/ tests/ scripts/
       - name: Format check
-        run: uv run ruff format --check src/ tests/
+        run: uv run ruff format --check src/ tests/ scripts/
       - name: Type check
         run: uv run pyrefly check
       - name: Test
-        run: uv run pytest --cov=src/ --cov-report=xml
+        run: uv run pytest --cov=src/ --cov-report=xml --cov-report=json
+      - name: Per-module coverage gate
+        run: uv run python scripts/check_coverage_by_module.py
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
         with:
