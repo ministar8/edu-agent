@@ -476,3 +476,47 @@ class TestMergedQaRouteRemoved:
         routes = {route for route, _cat in _ROUTE_WEIGHTS}
         for expected in ("code_meta", "exercise_meta", "answer_meta", "comparison_meta"):
             assert expected in routes, f"误删了在用的路由: {expected}"
+
+
+class TestRouteListSingleSource:
+    """路由名单必须是**单一真源**（backlog #14）。
+
+    `retriever` 的阈值权重校准需要遍历全部路由，而这份名单曾经**内联抄在
+    `retriever.py` 里**，与 `recall.py` 的权重表各自维护。
+    抄漏会让某个路由的权重不参与校准、抄多会引入不存在的路由名 ——
+    **两种错误都不会报错**，只会让 `_max_w` 静默偏掉、进而让阈值偏掉。
+
+    本组把"名单只有一处"钉住。
+    """
+
+    def test_all_routes_derived_from_weight_table(self):
+        from rag.recall import _ROUTE_WEIGHTS, ALL_ROUTES
+
+        expected = tuple(dict.fromkeys(route for route, _cat in _ROUTE_WEIGHTS))
+        assert ALL_ROUTES == expected, "ALL_ROUTES 必须从权重表推导，不能另抄一份"
+
+    def test_retriever_uses_shared_list(self):
+        """`retriever` 不得再内联一份路由名元组。"""
+        import inspect
+
+        from rag import retriever as R
+
+        source = inspect.getsource(R)
+        assert "ALL_ROUTES" in source, "retriever 应引用共享名单"
+        assert '"comparison_meta",\n        "structured_meta",' not in source, (
+            "retriever 里又出现了内联的路由名元组 —— 应改用 ALL_ROUTES"
+        )
+
+    def test_every_route_has_a_weight_entry(self):
+        """名单里的每个路由都必须能在权重表里查到 —— 否则 `max()` 会拿到 0。"""
+        from rag.recall import ALL_ROUTES, get_route_weight
+
+        for route in ALL_ROUTES:
+            assert get_route_weight(route, None) > 0, f"{route} 在权重表里查不到"
+
+    def test_base_routes_are_included(self):
+        """基础路由（非 metadata 过滤）也必须在名单里，否则权重校准会漏掉它们。"""
+        from rag.recall import ALL_ROUTES
+
+        for route in ("semantic", "keyword_bm25", "focus", "expanded"):
+            assert route in ALL_ROUTES

@@ -276,6 +276,26 @@ _ROUTE_WEIGHTS: dict[tuple[str, str], float] = {
 _CATEGORY_FLAGS = ("code", "exercise", "answer", "concept", "comparison", "structured")
 
 
+# 全部路由名（**单一真源**，backlog #14）。
+#
+# 从权重表的键推导，而不是在别处再抄一份名单 ——
+# 抄漏会导致某个路由的权重不参与阈值校准，抄多会引入不存在的路由名，
+# 两种错误都**不会报错**，只会让阈值静默偏掉。
+#
+# 需要遍历路由的地方（如 `retriever` 的阈值权重校准）都应从这里取。
+ALL_ROUTES: tuple[str, ...] = tuple(dict.fromkeys(route for route, _cat in _ROUTE_WEIGHTS))
+
+
+# 全部路由名（**单一真源**，backlog #14）。
+#
+# 从权重表的键推导，而不是在别处再抄一份名单 ——
+# 抄漏会导致某个路由的权重不参与阈值校准，抄多会引入不存在的路由名，
+# 两种错误都**不会报错**，只会让阈值静默偏掉。
+#
+# 需要遍历路由的地方（如 `retriever` 的阈值权重校准）都应从这里取。
+ALL_ROUTES: tuple[str, ...] = tuple(dict.fromkeys(route for route, _cat in _ROUTE_WEIGHTS))
+
+
 def get_route_weight(route_name: str, cat: QueryCategory | None = None) -> float:
     """根据路由名和查询分类获取 RRF 权重
 

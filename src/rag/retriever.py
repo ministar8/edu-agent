@@ -53,6 +53,7 @@ from rag.query_classifier import (
 from rag.query_decomposer import decompose
 from rag.rag_utils import extract_query_terms, normalize_query_text
 from rag.recall import (
+    ALL_ROUTES,
     build_metadata_routes,
     build_recall_queries,
     resolve_collection_routes,
@@ -333,21 +334,10 @@ def _resolve_retrieval_policy(
     from rag.recall import get_route_weight
 
     _BASELINE_WEIGHT = 1.5  # semantic default 权重作为基准
-    _active_routes = (
-        "semantic",
-        "keyword_bm25",
-        "focus",
-        "expanded",
-        "code_meta",
-        "exercise_meta",
-        "answer_meta",
-        "concept_meta",
-        "comparison_meta",
-        "structured_meta",
-        "section_meta",
-        "formula_meta",
-        "table_meta",
-    )
+    # 路由名单来自 `recall.ALL_ROUTES`（单一真源）——
+    # 这里曾内联抄了一份 13 个路由名的元组，与 `recall.py` 的权重表各自维护。
+    # 抄漏/抄多**都不会报错**，只会让 `_max_w` 静默偏掉、进而让阈值偏掉。
+    _active_routes = ALL_ROUTES
     _max_w = max(get_route_weight(r, cat) for r in _active_routes)
     effective_threshold *= _max_w / _BASELINE_WEIGHT
 
