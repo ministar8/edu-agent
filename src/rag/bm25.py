@@ -101,7 +101,18 @@ def bm25_search(
                 doc = Document(page_content=doc_text, metadata=doc_meta)
                 scored_docs[doc_id] = (doc, score)
 
-    results = sorted(scored_docs.values(), key=lambda x: x[1], reverse=True)[:k]
+    # 并列次级键：分数相同时按 `chunk_id`（缺失时退到内容哈希）排序。
+    # 原实现只按分数排，并列项的顺序取决于 `scored_docs` 的**插入顺序** ——
+    # 而插入顺序又取决于 Chroma `get()` 返回候选的先后。实测该顺序在当前
+    # 实现下是稳定的（5/5 一致），但**API 并未承诺这一点**，一旦变化，
+    # 并列项的名次就会无声改变（backlog #31）。
+    results = sorted(
+        scored_docs.values(),
+        key=lambda x: (
+            -x[1],
+            str(x[0].metadata.get("section.chunk_id") or x[0].page_content[:80]),
+        ),
+    )[:k]
 
     # 归一化到 [0, 1]
     if results:
