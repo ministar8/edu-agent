@@ -67,7 +67,7 @@ async def fill_sample(
 
 def build_judge_llm():
     """RAGAS judge：复用项目 LLM（ChatOpenAI → LangchainLLMWrapper）。"""
-    from ragas.llms import LangchainLLMWrapper
+    from ragas.llms import LangchainLLMWrapper  # type: ignore[import-not-found]
 
     llm = get_llm(streaming=False, temperature=0.0)
     # DashScope 等网关上强制 JSON，降低 judge 解析失败率

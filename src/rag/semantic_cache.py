@@ -106,6 +106,11 @@ class SemanticCache:
         if self._collection is not None:
             return
 
+        # 提前绑定：**错误处理路径也要能安全引用 `mgr`**。
+        # `get_vector_store_manager()` 本身就可能抛异常（那正是进入 except 的原因之一），
+        # 若此时在 except 里直接用 `mgr.client...`，会抛 UnboundLocalError
+        # **掩盖掉原始异常** —— 排查时只能看到 UnboundLocalError，看不到真正的原因（backlog #12）。
+        mgr = None
         for attempt in range(3):
             try:
                 from rag.vectorstore import get_vector_store_manager
@@ -139,13 +144,22 @@ class SemanticCache:
                     logger.warning(
                         "Semantic cache HNSW index corrupted, deleting and rebuilding: %s", e
                     )
-                    try:
-                        mgr.client.delete_collection(_COLLECTION_NAME)
-                        logger.info(
-                            "Deleted corrupted semantic_cache collection, will recreate on next attempt"
+                    if mgr is None:
+                        # manager 都拿不到，删集合无从谈起 —— 如实记录并继续，
+                        # 不要在这里再抛一个异常把原始原因盖掉
+                        logger.warning(
+                            "无法获取 vector store manager，跳过损坏集合删除"
+                            "（原始异常见上一条日志）"
                         )
-                    except Exception as del_err:
-                        logger.warning("Failed to delete corrupted semantic_cache: %s", del_err)
+                    else:
+                        try:
+                            mgr.client.delete_collection(_COLLECTION_NAME)
+                            logger.info(
+                                "Deleted corrupted semantic_cache collection, "
+                                "will recreate on next attempt"
+                            )
+                        except Exception as del_err:
+                            logger.warning("Failed to delete corrupted semantic_cache: %s", del_err)
                     # 清空 JSONL 避免孤儿数据
                     try:
                         if self._jsonl_path.exists():
@@ -175,6 +189,8 @@ class SemanticCache:
         if self._collection is not None:
             return
 
+        # 与同步版同理：提前绑定，保证 except 里引用 `mgr` 不会 UnboundLocalError
+        mgr = None
         for attempt in range(3):
             try:
                 from rag.vectorstore import get_vector_store_manager
@@ -203,13 +219,19 @@ class SemanticCache:
                         "Semantic cache HNSW index corrupted (async), deleting and rebuilding: %s",
                         e,
                     )
-                    try:
-                        await asyncio.to_thread(mgr.client.delete_collection, _COLLECTION_NAME)
-                        logger.info("Deleted corrupted semantic_cache collection (async)")
-                    except Exception as del_err:
+                    if mgr is None:
                         logger.warning(
-                            "Failed to delete corrupted semantic_cache (async): %s", del_err
+                            "无法获取 vector store manager，跳过损坏集合删除（async）"
+                            "（原始异常见上一条日志）"
                         )
+                    else:
+                        try:
+                            await asyncio.to_thread(mgr.client.delete_collection, _COLLECTION_NAME)
+                            logger.info("Deleted corrupted semantic_cache collection (async)")
+                        except Exception as del_err:
+                            logger.warning(
+                                "Failed to delete corrupted semantic_cache (async): %s", del_err
+                            )
                     try:
                         if self._jsonl_path.exists():
                             self._jsonl_path.unlink()

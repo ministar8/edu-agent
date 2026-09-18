@@ -49,7 +49,7 @@ def _detect_and_read(filepath: str) -> str:
             continue
     # 3. cchardet / chardet（作为兜底，不优先）
     try:
-        import cchardet as chardet_mod
+        import cchardet as chardet_mod  # type: ignore[import-not-found]
 
         result = chardet_mod.detect(raw)
         enc = result.get("encoding")

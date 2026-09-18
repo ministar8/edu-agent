@@ -923,7 +923,11 @@ def _semantic_segment(
         tokenizer = None
 
     if tokenizer:
-        for word in jieba.cut(text):
+        # 用 `tokenizer` 而不是 `jieba` —— 二者目前等价，但 `jieba` 只在 try 块内
+        # 绑定，出了 try 就依赖 `if tokenizer:` 这个间接守卫。直接引用未绑定的名字
+        # 是**脆弱**的：守卫一旦被重构掉（比如改成 `if True:`），这里就会
+        # NameError。用 `tokenizer` 让静态检查也能确认它是绑定的（backlog #12）。
+        for word in tokenizer.cut(text):
             if word.strip() and word not in _STOPWORDS:
                 idx = text.find(word, search_start)
                 if idx >= 0:

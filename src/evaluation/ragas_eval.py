@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 def _patch_ragas_json_fallback() -> None:
     """网关 JSON 缺字段时补默认，避免整批评测变 NaN（迁移自旧工程）。"""
     try:
-        from ragas.prompt.pydantic_prompt import PydanticPrompt
+        from ragas.prompt.pydantic_prompt import PydanticPrompt  # type: ignore[import-not-found]
     except Exception:
         return
 
@@ -70,9 +70,9 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
         return {"_meta": {"n": 0, "error": "no samples"}}
 
     try:
-        from datasets import Dataset
-        from ragas import evaluate
-        from ragas.metrics import (
+        from datasets import Dataset  # type: ignore[import-not-found]
+        from ragas import evaluate  # type: ignore[import-not-found]
+        from ragas.metrics import (  # type: ignore[import-not-found]
             answer_relevancy,
             context_precision,
             context_recall,

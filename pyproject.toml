@@ -95,11 +95,22 @@ preset = "default"
 bad-specialization = false
 
 # 迁移自旧 backend 的 RAG 检索链类型注解尚不严格，暂放宽（技术债，后续逐步收紧）
+#
+# **`unbound-name` 与 `missing-import` 已开启**（backlog #12）：
+# - `unbound-name` 查出 `semantic_cache.py` 两处「错误处理路径引用未绑定的 `mgr`」——
+#   `get_vector_store_manager()` 抛异常时，except 里的 `mgr.client...` 会抛
+#   UnboundLocalError **掩盖原始异常**。已修（提前绑定 + 显式处理拿不到的情况）。
+# - `missing-import` 此前**在 `src/evaluation/**` 一直是开着的**，报 5 个
+#   `ragas`/`datasets` 未找到 —— 它们是可选的 `eval` 依赖组，CI 不装。
+#   已在 6 处可选导入上显式标注 `# type: ignore[import-not-found]`，
+#   让检查得以开启：它能抓**模块名拼写错误**（只在运行时才炸的那类）。
 [[tool.pyrefly.sub-config]]
 matches = "src/rag/**"
-errors = { bad-argument-type = false, missing-attribute = false, not-iterable = false, bad-assignment = false, unbound-name = false, bad-return = false, not-callable = false, bad-unpacking = false, missing-import = false }
+errors = { bad-argument-type = false, missing-attribute = false, not-iterable = false, bad-assignment = false, bad-return = false, not-callable = false, bad-unpacking = false }
 
 # 迁移自旧 backend 的数据清洗工具同样类型注解不严格
+# （`unbound-name` 也已开启：查出 `imputer.py` 里 `tokenizer = jieba` 之后
+#   却用 `jieba.cut()` —— 运行时靠 `if tokenizer:` 间接守着，属脆弱写法，已改）
 [[tool.pyrefly.sub-config]]
 matches = "src/tools/**"
-errors = { bad-argument-type = false, missing-attribute = false, not-iterable = false, bad-assignment = false, unbound-name = false, bad-return = false, not-callable = false, bad-unpacking = false, unsupported-operation = false }
+errors = { bad-argument-type = false, missing-attribute = false, not-iterable = false, bad-assignment = false, bad-return = false, not-callable = false, bad-unpacking = false, unsupported-operation = false }
