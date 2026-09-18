@@ -1349,7 +1349,7 @@ coverage:
 | 16 | codecov patch coverage 改为阻塞 | P2 | 新代码 patch coverage ≥80% 才可合入 | ✅ **已落地**：`patch.default` 改为 `informational: false` + `target: 80%`。**⚠️ 还需你在 GitHub branch protection 里把 `codecov/patch` 设为必需检查** —— 那是仓库设置，代码里改不到 |
 | 17 | 分模块覆盖率门槛 | P2 | CI 按 `rag/agents/service` 分别校验 | ✅ **已落地**：`scripts/check_coverage_by_module.py`（门槛 rag 60% / agents 90% / service 80%，留 ~3pp 余量防误报）+ CI 步骤。**给门禁本身写了 17 条测试** —— 门禁坏了会表现为「永远通过」，必须自己有测试 |
 | 18 | 加 `.gitattributes` 统一行尾 | P2 | 消除 CRLF/LF 混用 | ✅ **已落地**（独立提交）。实测仓库 blob 本已统一 LF（223/225），混用只在工作区；顺带查出 1 个知识库文件因**末尾 72 个 NUL** 被 git 判成二进制，已清理（cleaner 本就会剥 NUL，索引未受污染） |
-| 19 | 前端冒烟测试 | P3 | Playwright 跑通"登录→提问→回答" | ⬜ |
+| 19 | 前端冒烟测试 | P3 | Playwright 跑通"登录→提问→回答" | ✅ **已落地**：`tests/test_frontend_smoke.py`，7 条用例（注册跳转+用户名渲染、**提问后页面出现非空回答**、用户消息渲染、关键控件存在、静态资源可取、登录页无 JS 报错）。**断言 DOM 内容而非"接口 200"**。子进程跑 uvicorn + `USE_FAKE_MODEL`，不联网。踩了 4 个坑（Windows 需 Proactor 事件循环 / uvicorn 不能跑非主线程 / 子进程 stderr 不能用 PIPE 会阻塞 / 就绪探针不能用 `/health` 因其探测外部依赖太慢），均已写进注释。CI 加浏览器缓存+安装步骤 |
 | 20 | 缓存指标接入可观测端点 | P3 | `/health` 或 `/metrics` 暴露缓存命中率 | ✅ **已落地**：新增 `GET /api/metrics`（JSON），聚合**检索结果缓存**与**语义缓存**两个缓存的 `hits`/`misses`/`hit_rate`。**选 `/metrics` 而非 `/health`** —— 后者被 Docker healthcheck 使用、要并发探测三个外部依赖必须快，且语义是「依赖健康」而缓存命中率是「运行统计」。**失败隔离**：单个缓存读取失败只标记该项 `{"error": ...}` 并记日志，不让整个端点 500。新增 22 条测试，反向验证 4 条变红 |
 | 21 | **入库后就绪屏障**（Chroma HNSW 落盘竞态） | P2 | `ingest` 后查询不再间歇失败 | ✅ **根因已定位并修复**：`_rw_lock` 读锁只接了一半 —— `_raw_search` 绕过读锁直连 store，与写锁不互斥。已改走加锁方法（反向验证 3/3）。就绪屏障作为第二道防线保留 |
 | 22 | `warmup_query_cache` 失败率接入日志/告警 | P2 | 预热成功率低于阈值时告警，而非只打印 | ✅ 已落地（ERROR + `ingest_warmup_summary` 指标 + 阈值走 settings） |
