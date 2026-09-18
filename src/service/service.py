@@ -66,6 +66,7 @@ from service.errors import (
     not_found,
 )
 from service.health import collect_health
+from service.metrics import collect_metrics
 from service.threads import list_user_threads
 from service.utils import (
     convert_message_content_to_string,
@@ -160,6 +161,23 @@ async def info() -> ServiceMetadata:
         default_agent=DEFAULT_AGENT,
         default_model=settings.DEFAULT_MODEL,
     )
+
+
+@router.get("/metrics")
+async def metrics() -> dict[str, Any]:
+    """运行时观测指标：缓存命中率等（JSON）。
+
+    **为什么不放 `/health`**：`/health` 被 Docker healthcheck 使用，
+    要并发探测 embedding / reranker / chromadb 三个外部依赖，**必须快**；
+    而缓存命中率是**运行统计**不是**依赖健康**，混进去会让 healthcheck
+    语义模糊、payload 变重，采集方也可能误判。
+
+    **为什么不是 Prometheus 文本格式**：本项目没有 Prometheus 采集端，
+    返回 JSON 便于运维与前端直接查看，也便于测试断言。
+    若将来接入 Prometheus，应另开**无前缀**的 `/metrics` 用文本格式，
+    避免与这个 JSON 端点冲突。
+    """
+    return collect_metrics()
 
 
 def _check_thread_owner(

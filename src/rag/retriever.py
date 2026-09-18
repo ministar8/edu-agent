@@ -146,14 +146,28 @@ def _copy_results(results: list[tuple[Document, float]]) -> list[tuple[Document,
     ]
 
 
-def _cache_stats_fields() -> dict[str, int | float]:
-    """查询缓存的命中统计（并发下近似，仅用于观测）。"""
+def cache_stats() -> dict[str, int | float]:
+    """查询缓存的命中统计（并发下近似，仅用于观测）。
+
+    键名与 `SemanticCache.stats()` 对齐（`hits` / `misses` / `hit_rate`），
+    这样 `/api/metrics` 能把多个缓存并排展示而不用做字段映射。
+    """
     stats = _query_cache.stats
     return {
-        "cache_hits": stats["hits"],
-        "cache_misses": stats["misses"],
-        "cache_hit_rate": stats["hit_rate"],
+        "hits": stats["hits"],
+        "misses": stats["misses"],
+        "hit_rate": stats["hit_rate"],
     }
+
+
+def _cache_stats_fields() -> dict[str, int | float]:
+    """指标日志用：给 `cache_stats()` 的键加 `cache_` 前缀。
+
+    **为什么保留这层**：`cache_hits` / `cache_misses` / `cache_hit_rate`
+    已经写进历史指标日志，改名会让新旧数据对不上（无声破坏已有看板）。
+    所以对外用对齐后的键名，日志沿用旧键名 —— 由这里保证两者同源。
+    """
+    return {f"cache_{k}": v for k, v in cache_stats().items()}
 
 
 # Reranker 扩展倍数：知识库扩充后需要更大候选池
