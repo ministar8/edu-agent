@@ -19,27 +19,6 @@ from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
-# ── 学科推断 ──────────────────────────────────────────────────
-
-_SOURCE_CATEGORY_MAP: dict[str, str] = {
-    "data_structure": "data_structure",
-    "computer_organization": "computer_organization",
-    "operating_system": "operating_system",
-    "computer_network": "computer_network",
-    "questions": "questions",
-    "learning_paths": "learning_paths",
-    "answers": "answers",
-}
-
-
-def _infer_category(source_file: str, fallback_category: str = "") -> str:
-    """从 source_file 路径推断学科分类。"""
-    parts = source_file.replace("\\", "/").split("/")
-    if len(parts) >= 2 and parts[0] in _SOURCE_CATEGORY_MAP:
-        return parts[0]
-    return fallback_category
-
-
 # ── heading_path 解析 ─────────────────────────────────────────
 
 

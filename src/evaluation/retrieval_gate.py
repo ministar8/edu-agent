@@ -91,10 +91,6 @@ class QueryOutcome:
     hit_categories: list[str] = field(default_factory=list)
 
     @property
-    def n_evidence(self) -> int:
-        return len(self.hit_categories)
-
-    @property
     def first_correct_rank(self) -> int | None:
         """首个命中目标学科的排名（1-based）；没有则 None。"""
         for index, cat in enumerate(self.hit_categories, 1):

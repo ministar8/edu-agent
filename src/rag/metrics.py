@@ -150,33 +150,6 @@ class MetricsWriter:
             values=values,
         )
 
-    def emit_chat_baseline(
-        self,
-        *,
-        endpoint: str,
-        query: str,
-        route_type: str,
-        agent_name: str = "",
-        duration_ms: float | None = None,
-        values: dict[str, Any] | None = None,
-        status: str = "ok",
-    ) -> None:
-        tags = {
-            "endpoint": endpoint,
-            "route_type": route_type,
-            "agent_name": agent_name,
-            "query_preview": query[:120],
-            "query_len": len(query),
-        }
-        self.emit(
-            event="chat_baseline",
-            stage="chat",
-            status=status,
-            duration_ms=duration_ms,
-            tags=tags,
-            values=values,
-        )
-
     def _sanitize(self, data: dict[str, Any]) -> dict[str, Any]:
         return {str(k): self._sanitize_value(v) for k, v in data.items()}
 
@@ -196,29 +169,3 @@ metrics = MetricsWriter()
 
 
 # ── 查询分解统计 ──────────────────────────────────────────
-
-_decompose_triggered = 0
-_decompose_success = 0
-_decompose_total_sub = 0
-
-
-def record_decompose(triggered: bool, sub_count: int = 0) -> None:
-    global _decompose_triggered, _decompose_success, _decompose_total_sub
-    if triggered:
-        _decompose_triggered += 1
-    if sub_count >= 2:
-        _decompose_success += 1
-        _decompose_total_sub += sub_count
-
-
-def get_decompose_stats() -> dict[str, int | float]:
-    return {
-        "decompose_triggered": _decompose_triggered,
-        "decompose_success": _decompose_success,
-        "decompose_success_rate": (
-            _decompose_success / _decompose_triggered if _decompose_triggered else 0
-        ),
-        "decompose_avg_sub_count": (
-            _decompose_total_sub / _decompose_success if _decompose_success else 0
-        ),
-    }

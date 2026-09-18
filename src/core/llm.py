@@ -32,10 +32,6 @@ class FakeToolModel(FakeListChatModel):
         return self
 
 
-def _is_deepseek(model: str, api_base: str) -> bool:
-    return "deepseek" in (api_base or "").lower() or "deepseek" in (model or "").lower()
-
-
 def _is_qwen3(model: str) -> bool:
     return "qwen3" in (model or "").lower()
 

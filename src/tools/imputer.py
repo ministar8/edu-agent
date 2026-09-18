@@ -867,12 +867,6 @@ def _tokenize_text(text: str) -> list[str]:
         return [c for c in text if c.strip() and c not in _STOPWORDS]
 
 
-def _window_word_bag(words: list[str], start: int, size: int) -> frozenset[str]:
-    """从词序列中提取一个窗口的词袋"""
-    window = words[start : start + size]
-    return frozenset(window)
-
-
 def _semantic_segment(
     text: str,
     min_chunk: int = 500,
