@@ -5,10 +5,14 @@
 
 设计要点：
   - async decompose()：LLM 调用天然 async
-  - sync decompose_sync()：**仅供同步上下文**（ingest 后的缓存预热）
   - 原始查询本身也作为一条子查询，decompose 返回单元素列表时等价于不分解
   - 缓存用 md5(query) 做键，减少 LLM 抖动和成本
   - JSON 解析前剥 markdown 代码块标记
+
+（曾有一个 `decompose_sync()` 同步桥接，供「ingest 后的缓存预热」使用。
+该说明已过期 —— 预热实际走 `retriever.warmup_query_cache`，从未调用过它。
+该函数已于 backlog #27 清理，连同只服务于它的 `_llm_decompose_fallback`
+与 `llm_calls.call_structured_sync`。）
 """
 
 from __future__ import annotations
@@ -21,11 +25,8 @@ from core.cache import BoundedCache
 from core.settings import settings
 from prompts import DECOMPOSE_PROMPT
 from rag.llm_calls import (
-    PromptInput,
     call_structured,
-    call_structured_sync,
     call_text,
-    call_text_sync,
 )
 from rag.parse_utils import parse_llm_json
 from rag.query_classifier import QueryCategory
@@ -141,11 +142,6 @@ def _rule_decompose(query: str, cat: QueryCategory) -> list[str]:
     return [query, *subs]
 
 
-def _llm_decompose_fallback(prompt: PromptInput) -> list[str]:
-    text = call_text_sync(prompt, temperature=settings.TEMP_DEFAULT, stage="decompose_fallback")
-    return _parse_sub_queries(text or "")
-
-
 # ── async 分解 ────────────────────────────────────────────
 
 
@@ -184,51 +180,6 @@ async def decompose(query: str, cat: QueryCategory | None = None) -> list[str]:
             stage="decompose_fallback",
         )
         sub_queries = _parse_sub_queries(text or "")
-
-    result = _postprocess_subs(query, sub_queries)
-    _set_cached(query, result)
-    return result
-
-
-# ── sync 桥接（LEGACY：供非 async 上下文使用，async 上下文请用 decompose()） ──
-
-
-def decompose_sync(query: str, cat: QueryCategory | None = None) -> list[str]:
-    """同步查询分解（LEGACY，**当前仓库内无调用方**）。
-
-    历史：曾由同步版 ``retriever.retrieve_documents`` 调用。该函数已改为委托
-    ``aretrieve_documents``（消除 448 行双份流水线），因此本函数不再被引用。
-
-    保留原因：它是公开的同步桥接工具，直接删除属于对外 API 变更，交由仓库负责人决定
-    （见 ENGINEERING.md 附录 A）。若要清理，请连同 ``llm_calls.call_structured_sync``
-    一起评估。
-
-    **不要在 `async def` 里直接调用** —— `llm.invoke()` 不会抛错，但会**阻塞事件循环
-    整个 LLM 调用时长**（客户端超时 90 秒）。async 上下文请用 `await decompose()`。
-    """
-    cached = _get_cached(query)
-    if cached is not None:
-        return cached
-
-    cat = _ensure_cat(query, cat)
-    if not should_decompose(query, cat):
-        return [query]
-    rule_subs = _rule_decompose(query, cat)
-    if rule_subs:
-        result = _postprocess_subs(query, rule_subs)
-        _set_cached(query, result)
-        return result
-
-    prompt = DECOMPOSE_PROMPT.format_messages(query=query, max_subs=_MAX_SUB_QUERIES)
-    structured = call_structured_sync(
-        prompt,
-        DecomposeResult,
-        temperature=settings.TEMP_DEFAULT,
-        stage="decompose_sync",
-    )
-    sub_queries = (
-        structured.sub_queries if structured is not None else _llm_decompose_fallback(prompt)
-    )
 
     result = _postprocess_subs(query, sub_queries)
     _set_cached(query, result)

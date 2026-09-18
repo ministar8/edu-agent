@@ -152,17 +152,6 @@ class TestCallStructured:
         assert fake.last_structured_method is None
 
 
-class TestCallStructuredSync:
-    def test_returns_schema_instance(self, install_llm):
-        expected = _Schema(value="v")
-        install_llm(_FakeLLM(structured=expected))
-        assert llm_calls.call_structured_sync("p", _Schema, temperature=0.0, stage="t") is expected
-
-    def test_exception_returns_none(self, install_llm):
-        install_llm(_FakeLLM(raises=RuntimeError("boom")))
-        assert llm_calls.call_structured_sync("p", _Schema, temperature=0.0, stage="t") is None
-
-
 class TestTracingMetadata:
     """提示词阶段与提示词集版本必须随每次调用上报，否则质量变化无法归因。"""
 
@@ -184,6 +173,6 @@ class TestTracingMetadata:
 
     def test_sync_call_carries_stage(self, install_llm):
         fake = install_llm(_FakeLLM(content="ok"))
-        llm_calls.call_text_sync("p", temperature=0.0, stage="decompose_sync")
+        llm_calls.call_text_sync("p", temperature=0.0, stage="decompose")
 
-        assert fake.configs[0]["metadata"]["prompt_stage"] == "decompose_sync"
+        assert fake.configs[0]["metadata"]["prompt_stage"] == "decompose"

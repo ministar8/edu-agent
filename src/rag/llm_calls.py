@@ -115,21 +115,3 @@ async def call_structured[T: BaseModel](
         _log_failure(stage, exc)
         return None
     return result if isinstance(result, schema) else None
-
-
-def call_structured_sync[T: BaseModel](
-    prompt: PromptInput,
-    schema: type[T],
-    *,
-    temperature: float,
-    stage: str,
-) -> T | None:
-    """``call_structured`` 的同步版本，**仅供同步上下文使用**。"""
-    llm = get_llm(streaming=False, temperature=temperature)
-    try:
-        structured = _bind_structured(llm, schema)
-        result = structured.invoke(prompt, config=_trace_config(stage))
-    except Exception as exc:
-        _log_failure(stage, exc)
-        return None
-    return result if isinstance(result, schema) else None
