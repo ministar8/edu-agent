@@ -87,3 +87,4 @@ Desktop.ini
 # .workbuddy-ai/：本地会话记忆目录，属个人环境状态，不应入库
 .mimosa/
 .workbuddy-ai/
+_e2e_artifacts/

@@ -31,6 +31,15 @@ jobs:
         run: uv run ruff format --check src/ tests/ scripts/
       - name: Type check
         run: uv run pyrefly check
+      # 前端冒烟测试（backlog #19）需要真实浏览器。
+      # 缓存二进制，否则每次 CI 都要重下 ~150MB（chromium + headless shell）。
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium chromium-headless-shell
       - name: Test
         run: uv run pytest --cov=src/ --cov-report=xml --cov-report=json
       - name: Per-module coverage gate

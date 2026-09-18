@@ -48,6 +48,7 @@ dev = [
     "pre-commit",
     "langgraph-cli[inmem]",
     "pymarkdownlnt",
+    "playwright>=1.55",
 ]
 
 [tool.ruff]
