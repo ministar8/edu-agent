@@ -4,7 +4,15 @@ repos:
     hooks:
       - id: check-yaml
       - id: end-of-file-fixer
+        # knowledge/ 是 RAG 语料（内容，不是代码），空白规范不适用它：
+        # 改这些文件会让磁盘内容与已入库的向量索引不同步，
+        # 而收益只是清掉几个行尾空格 —— 不划算，故排除。
+        exclude: ^knowledge/
       - id: trailing-whitespace
+        # 保留 Markdown 的「行尾两个空格 = 硬换行」语义，
+        # 否则正文里的强制换行会被静默吃掉（渲染结果变化）。
+        args: [--markdown-linebreak-ext=md]
+        exclude: ^knowledge/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.21
