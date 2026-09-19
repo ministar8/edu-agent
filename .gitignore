@@ -13,6 +13,10 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+# pytest --cov-report=xml / json 的产物（CI 也会生成）。.coverage 与 coverage/ 已在上方忽略，
+# 但这两个**文件**不在其中 —— 漏掉会让每次本地跑覆盖率都在 git status 里留下未跟踪项。
+coverage.json
+coverage.xml
 htmlcov/
 build/
 dist/
