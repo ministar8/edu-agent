@@ -30,13 +30,19 @@ FAKE_REF = make_model_ref(Gateway.FAKE, GATEWAY_DEFAULT_MODEL[Gateway.FAKE])
 
 
 def _cfg(**overrides) -> Settings:
+    """构造一个**完全由测试决定**的 Settings，不受本机 `.env` 影响。
+
+    `Settings.model_config` 里配了 `env_file=find_dotenv()`，所以裸调 `Settings(...)`
+    会**悄悄读走本机的 `.env`** —— 本地有 `.env` 的机器上测试通过，CI（无 `.env`）上却失败。
+    显式传 `_env_file=None` 关掉这条来源。
+    """
     base = {
         "USE_FAKE_MODEL": False,
         "DASHSCOPE_API_KEY": "sk-test",
         "DEEPSEEK_API_KEY": None,
     }
     base.update(overrides)
-    return Settings(**base)
+    return Settings(_env_file=None, **base)
 
 
 class TestGetLlmHonoursFakeGateway:
@@ -91,7 +97,20 @@ class TestUseFakeModelForcesBothRefs:
         assert cfg.DEFAULT_MODEL == "dashscope:qwen3.8-max"
 
     def test_disabled_still_fills_default_from_active_gateway(self):
-        cfg = _cfg(USE_FAKE_MODEL=False, DASHSCOPE_API_KEY="sk-test", DEFAULT_MODEL="")
+        """关掉 fake 时，空的 DEFAULT_MODEL 要按**已启用网关**推导出来。
+
+        **必须显式给 `LLM_MODEL`**：它的字段默认值是 `deepseek:deepseek-v4-flash`，
+        而这里只启用了 dashscope —— 不显式覆盖的话，settings 会在**校验阶段**直接抛
+        `ValidationError: LLM_MODEL 需要网关 deepseek，但该网关未启用`。
+        本机 `.env` 里恰好配了 `LLM_MODEL=dashscope:...` 会把这个坑盖住，
+        所以此测试过去**只在有 `.env` 的机器上通过**（CI 一直红）。
+        """
+        cfg = _cfg(
+            USE_FAKE_MODEL=False,
+            DASHSCOPE_API_KEY="sk-test",
+            LLM_MODEL="dashscope:qwen3.8-max",
+            DEFAULT_MODEL="",
+        )
         assert cfg.DEFAULT_MODEL.startswith("dashscope:")
 
     def test_fake_mode_needs_no_credentials(self):
