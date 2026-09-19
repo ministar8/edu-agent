@@ -575,6 +575,41 @@ function renderQuestions(container, data) {
   questions.forEach((q, i) => container.appendChild(buildQuestionCard(q, i)));
 }
 
+/** 评分可视化：大号数值 + 档位标签 + 进度条。分数越界时钳到 0–100。 */
+function buildScore(raw) {
+  const value = Math.max(0, Math.min(100, Number(raw) || 0));
+  const level = value >= 85 ? "high" : value >= 60 ? "mid" : "low";
+  const levelText = { high: "掌握良好", mid: "基本掌握", low: "需要加强" }[level];
+
+  const wrap = document.createElement("div");
+  wrap.className = "score-block";
+
+  const head = document.createElement("div");
+  head.className = "score-head";
+  const num = document.createElement("span");
+  num.className = "score-value";
+  num.textContent = String(Math.round(value));
+  const unit = document.createElement("span");
+  unit.className = "score-unit";
+  unit.textContent = "/ 100";
+  const tag = document.createElement("span");
+  tag.className = "score-level";
+  tag.dataset.level = level;
+  tag.textContent = levelText;
+  head.append(num, unit, tag);
+
+  const bar = document.createElement("div");
+  bar.className = "score-bar";
+  const fill = document.createElement("div");
+  fill.className = "score-fill";
+  fill.dataset.level = level;
+  fill.style.width = `${value}%`;
+  bar.appendChild(fill);
+
+  wrap.append(head, bar);
+  return wrap;
+}
+
 function buildQuestionCard(q, index) {
   const card = document.createElement("div");
   card.className = "question-card";
@@ -622,12 +657,10 @@ function buildQuestionCard(q, index) {
       }
       const g = await res.json();
       result.innerHTML = "";
-      const score = document.createElement("div");
-      score.className = "score";
-      score.textContent = `得分：${g.score}/100`;
+      result.appendChild(buildScore(g.score));
       const feedback = document.createElement("div");
       feedback.textContent = g.feedback;
-      result.append(score, feedback);
+      result.appendChild(feedback);
       if (g.error_analysis) {
         const err = document.createElement("div");
         err.className = "error-analysis";

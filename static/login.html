@@ -7,20 +7,61 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="auth-page">
-  <div class="auth-card">
-    <h1 class="brand">EduAgent</h1>
-    <p class="subtitle">408 考研智能辅导多 Agent 系统</p>
-    <div class="tabs">
-      <button class="tab active" data-mode="login">登录</button>
-      <button class="tab" data-mode="register">注册</button>
-    </div>
-    <form id="auth-form">
-      <input id="username" placeholder="用户名" required minlength="3" autocomplete="username">
-      <input id="password" type="password" placeholder="密码（至少 6 位）" required minlength="6" autocomplete="current-password">
-      <input id="display-name" placeholder="昵称（可选，注册用）" class="hidden">
-      <button type="submit" class="btn-primary" id="submit-btn">登录</button>
-    </form>
-    <p id="error" class="error"></p>
+  <div class="auth-shell">
+    <!-- 左栏：讲清这是什么产品。访客第一眼就能看懂，不用先注册 -->
+    <aside class="auth-intro">
+      <div class="intro-brand">
+        <div class="intro-mark">E</div>
+        <span>EduAgent</span>
+      </div>
+
+      <h1 class="intro-title">408 考研<br>智能教学辅导</h1>
+
+      <ul class="intro-features">
+        <li>知识问答 —— 按知识点讲解，带出处</li>
+        <li>智能出题 —— 按难度生成练习</li>
+        <li>答案批改 —— 打分并分析错因</li>
+      </ul>
+
+      <div class="intro-foot">多 Agent 架构 · RAG 检索增强</div>
+    </aside>
+
+    <!-- 右栏：表单 -->
+    <main class="auth-panel">
+      <h2 class="panel-title" id="auth-title">欢迎回来</h2>
+      <p class="panel-sub" id="auth-sub">登录后继续你的学习</p>
+
+      <div class="tabs">
+        <button class="tab active" data-mode="login">登录</button>
+        <button class="tab" data-mode="register">注册</button>
+      </div>
+
+      <form id="auth-form">
+        <label class="field">
+          <span class="field-label">用户名</span>
+          <input id="username" placeholder="请输入用户名" required minlength="3" autocomplete="username">
+        </label>
+
+        <label class="field">
+          <span class="field-label">密码</span>
+          <span class="field-input">
+            <input id="password" type="password" placeholder="至少 6 位" required minlength="6" autocomplete="current-password">
+            <button type="button" class="toggle-pw" id="toggle-pw">显示</button>
+          </span>
+        </label>
+
+        <label class="field hidden" id="display-name-field">
+          <span class="field-label">昵称（可选）</span>
+          <input id="display-name" placeholder="注册后展示的名字" autocomplete="nickname">
+        </label>
+
+        <button type="submit" class="btn-primary auth-submit" id="submit-btn">
+          <span id="submit-label">登录</span>
+        </button>
+      </form>
+
+      <p id="error" class="error"></p>
+    </main>
   </div>
   <script src="/api.js"></script>
   <script src="/auth.js"></script>
