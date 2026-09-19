@@ -20,13 +20,19 @@ def test_health():
         assert set(body["degraded"]) <= set(body["dependencies"])
 
 
-def test_info():
+def test_info_requires_auth():
+    """未认证不应暴露部署结构（agent 清单 / 模型清单 / 默认模型）。"""
     with TestClient(app) as client:
         r = client.get("/api/info")
-        assert r.status_code == 200
-        body = r.json()
-        assert body["default_agent"] == "edu-assistant"
-        assert len(body["models"]) > 0
+        assert r.status_code == 401
+
+
+def test_info(auth_user, test_client):
+    r = test_client.get("/api/info", headers=auth_user.headers)
+    assert r.status_code == 200
+    body = r.json()
+    assert body["default_agent"] == "edu-assistant"
+    assert len(body["models"]) > 0
 
 
 def test_static_index_served():

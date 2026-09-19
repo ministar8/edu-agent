@@ -112,11 +112,52 @@ class TestInfoAndAgent:
             "default_model": "dashscope:qwen3.8-max",
         }
         mock = Response(200, json=body, request=Request("GET", "http://test/api/info"))
+        # /info 需要认证，构造期拉取必须带 token
         with patch("httpx.get", return_value=mock) as get:
-            client = AgentClient(base_url="http://test", get_info=True)
+            client = AgentClient(base_url="http://test", get_info=True, token="tok")
         assert get.call_args.args[0] == "http://test/api/info"
+        assert get.call_args.kwargs["headers"]["Authorization"] == "Bearer tok"
         assert client.agent == "edu-assistant"
         assert isinstance(client.info, ServiceMetadata)
+
+    def test_info_not_fetched_without_token(self):
+        """`/info` 需要认证：构造期无凭证时**不应发请求**，留待登录后补。"""
+        mock = Response(200, json={}, request=Request("GET", "http://test/api/info"))
+        with patch("httpx.get", return_value=mock) as get:
+            client = AgentClient(base_url="http://test", get_info=True)
+        assert client.info is None
+        assert not get.called
+
+    def test_login_backfills_info(self):
+        """登录成功后自动补齐 `/info`。
+
+        这是 `/info` 加鉴权后仍能保持 `AgentClient(base_url=...)` → `login()`
+        老用法的关键：构造期拉不到，登录后补上。
+        """
+        info_body = {
+            "agents": [{"key": "edu-assistant", "description": "d"}],
+            "models": ["dashscope:qwen3.8-max"],
+            "default_agent": "edu-assistant",
+            "default_model": "dashscope:qwen3.8-max",
+        }
+        token_body = {
+            "access_token": "tok",
+            "token_type": "bearer",
+            "user": {"id": 1, "username": "u", "display_name": "", "role": "student"},
+        }
+        info_mock = Response(200, json=info_body, request=Request("GET", "http://test/api/info"))
+        with (
+            patch("httpx.get", return_value=info_mock) as get,
+            patch(
+                "httpx.post", return_value=_response(200, "http://test/api/auth/login", token_body)
+            ),
+        ):
+            client = AgentClient(base_url="http://test", get_info=True)
+            assert client.info is None
+            assert not get.called
+            client.login("u", "p")
+        assert isinstance(client.info, ServiceMetadata)
+        assert client.agent == "edu-assistant"
 
     def test_update_agent_unknown_raises(self, agent_client):
         agent_client.info = ServiceMetadata(

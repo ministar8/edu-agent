@@ -55,7 +55,10 @@ class AgentClient:
             base_url: Service origin (no trailing path). API lives under ``/api``.
             agent: Default agent key; filled from ``/info`` when omitted.
             timeout: Optional httpx timeout seconds.
-            get_info: Fetch ``/api/info`` on init (needs a reachable service).
+            get_info: Fetch ``/api/info`` on init **when a token is available**.
+                ``/info`` 需要认证，构造期没有凭证时不会拉取 ——
+                ``login()`` / ``register()`` 成功后会**自动补齐**，
+                所以 ``AgentClient(base_url=...)`` 的用法不变。
             token: JWT bearer token. Falls back to env ``AGENT_TOKEN``.
         """
         self.base_url = base_url.rstrip("/")
@@ -64,10 +67,22 @@ class AgentClient:
         self.info: ServiceMetadata | None = None
         self.user: UserResponse | None = None
         self.agent: str | None = None
-        if get_info:
+        self._get_info = get_info
+        # 构造期只在已有凭证时拉取；否则等登录后再补（见 _load_info_after_auth）
+        if get_info and self.token:
             self.retrieve_info()
         if agent:
             self.update_agent(agent)
+
+    def _load_info_after_auth(self) -> None:
+        """登录/注册成功后补齐 ``/info``。
+
+        ``/info`` 需要认证，构造期未提供 token 时拉不到。在这里补上，
+        使 `AgentClient(base_url=...)` → `login()` 的原有用法继续可用。
+        已拉取过就跳过（元数据与用户无关，内容不会变）。
+        """
+        if self._get_info and self.info is None:
+            self.retrieve_info()
 
     @property
     def api_root(self) -> str:
@@ -132,6 +147,7 @@ class AgentClient:
         data = TokenResponse.model_validate(response.json())
         self.token = data.access_token
         self.user = data.user
+        self._load_info_after_auth()
         return data
 
     def login(self, username: str, password: str) -> TokenResponse:
@@ -148,6 +164,7 @@ class AgentClient:
         data = TokenResponse.model_validate(response.json())
         self.token = data.access_token
         self.user = data.user
+        self._load_info_after_auth()
         return data
 
     def logout(self) -> None:

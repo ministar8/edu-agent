@@ -116,7 +116,7 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 |------|------|------|
 | POST | `/api/auth/register` `/login` `/logout` | 注册 / 登录（JWT）/ 退出 |
 | GET | `/api/auth/me` | 当前用户 |
-| GET | `/api/info` | 可用 agent 与模型 |
+| GET | `/api/info` | 可用 agent 与模型（**需登录**） |
 | POST | `/api/invoke` 或 `/api/{agent_id}/invoke` | 单次问答（非流式） |
 | POST | `/api/stream` 或 `/api/{agent_id}/stream` | 流式问答（SSE：token + message） |
 | POST | `/api/history` 或 `/api/{agent_id}/history` | 会话历史 |
@@ -132,8 +132,9 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 ```python
 from client import AgentClient
 
-ac = AgentClient(base_url="http://127.0.0.1:8000")  # 拉取 /api/info
+ac = AgentClient(base_url="http://127.0.0.1:8000")
 ac.login("alice", "secret12")  # 或 ac.set_token(jwt)
+# 登录成功后自动拉取 /api/info（该端点需认证），无需手动调用
 msg = ac.invoke("什么是虚拟内存？", thread_id="t1")
 for chunk in ac.stream("再举个例子", stream_tokens=True):
     ...
