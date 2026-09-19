@@ -62,6 +62,37 @@ jobs:
         # docs/ 目前在 .gitignore 中（clone 后不存在），故暂不纳入扫描
         run: uv run pymarkdown scan README.md
 
+  pre-commit:
+    # 空白 / YAML 卫生：check-yaml、end-of-file-fixer、trailing-whitespace。
+    # 这三项此前**没有任何 CI 覆盖** —— 本地也没装 git 钩子（没跑过 pre-commit install），
+    # 所以 .pre-commit-config.yaml 一直是摆设，仓库里长期存在行尾空格与缺失的文件尾换行。
+    #
+    # SKIP 跳过 ruff / ruff-format / pyrefly：它们已在 test-python 里单独跑，
+    # 且那边的 `--output-format github` 能产出 PR 内联注解，比 pre-commit 的输出更好用。
+    # 用 SKIP 而不是逐个指定钩子 id，是为了让**将来新增的钩子自动纳入 CI**。
+    #
+    # 注意 `knowledge/` 已在配置里排除：它是 RAG 语料（内容而非代码），
+    # 改它会让磁盘内容与已入库的向量索引不同步。
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v9.0.0
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --frozen
+      # 缓存钩子仓库，否则每次都要重新 clone pre-commit-hooks / ruff-pre-commit
+      - name: Cache pre-commit environments
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Run pre-commit hooks
+        env:
+          SKIP: ruff,ruff-format,pyrefly
+        run: uv run pre-commit run --all-files
+
   retrieval-quality-gate:
     # 检索质量回归门禁：固定黄金集 + 固定指标，退化即失败。
     # 刻意不依赖 TEI / Chroma 外部服务（用确定性哈希 embedding + 临时索引），
