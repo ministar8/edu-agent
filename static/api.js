@@ -8,6 +8,8 @@ const API = {
   register: "/api/auth/register",
   logout: "/api/auth/logout",
   stream: "/api/stream",
+  history: "/api/history",
+  threads: "/api/threads",
   questionsGenerate: "/api/questions/generate",
   questionsGrade: "/api/questions/grade",
 };

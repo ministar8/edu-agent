@@ -10,13 +10,22 @@
   <div class="app">
     <aside class="sidebar">
       <div class="logo">EduAgent</div>
+
+      <button class="new-thread" id="new-thread"><span class="plus">＋</span>新建会话</button>
+      <div class="thread-list" id="thread-list"></div>
+
+      <nav class="nav-group">
+        <button class="nav-item active" data-view="chat">智能问答</button>
+        <button class="nav-item" data-view="practice">练习与批改</button>
+      </nav>
+
       <div class="user-card">
-        <div class="name" id="user-name"></div>
-        <div class="role" id="user-role"></div>
+        <div class="user-avatar" id="user-avatar">·</div>
+        <div class="user-meta">
+          <div class="name" id="user-name"></div>
+          <div class="role" id="user-role"></div>
+        </div>
       </div>
-      <button class="nav-item active" data-view="chat">智能问答</button>
-      <button class="nav-item" data-view="practice">练习与批改</button>
-      <div class="spacer"></div>
       <button class="logout" id="logout">退出登录</button>
     </aside>
     <main class="main">

@@ -1,5 +1,21 @@
 // 凭证存放在 httpOnly cookie 中（JS 读不到，也不该读），改为向服务端确认会话。
 // 同源 fetch 默认携带 cookie，因此后续请求无需再手动附带 Authorization 头。
+
+const messagesEl = document.getElementById("messages");
+// 空态 HTML 快照：切换会话 / 新建会话时用它恢复
+const EMPTY_HINT_HTML = messagesEl.innerHTML;
+
+let USER_INITIAL = "我";
+let sending = false;
+
+/** 生成会话 ID。非安全上下文（如内网 http）没有 crypto.randomUUID，需兜底。 */
+function newId() {
+  if (window.crypto && typeof window.crypto.randomUUID === "function") {
+    return window.crypto.randomUUID();
+  }
+  return "t-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
+}
+
 async function loadUser() {
   const res = await apiGet(API.me);
   if (!res.ok) {
@@ -9,12 +25,14 @@ async function loadUser() {
   }
   const u = await res.json();
   localStorage.setItem("user", JSON.stringify(u)); // 仅用于首屏展示，不含凭证
-  document.getElementById("user-name").textContent = u.display_name || u.username || "";
+  const name = u.display_name || u.username || "";
+  document.getElementById("user-name").textContent = name;
   document.getElementById("user-role").textContent = u.role || "";
+  document.getElementById("user-avatar").textContent = name ? name.trim().charAt(0) : "·";
+  USER_INITIAL = name ? name.trim().charAt(0) : "我";
 }
-loadUser();
 
-let threadId = localStorage.getItem("threadId") || crypto.randomUUID();
+let threadId = localStorage.getItem("threadId") || newId();
 localStorage.setItem("threadId", threadId);
 
 // ── 视图切换 ──
@@ -33,10 +51,6 @@ document.getElementById("logout").onclick = async () => {
   localStorage.removeItem("user");
   location.href = "/login.html";
 };
-
-// ── 聊天（SSE 流式）──
-const messagesEl = document.getElementById("messages");
-let sending = false;
 
 // ── 极简 Markdown 渲染（无外部依赖，先转义再渲染，天然防 XSS） ──
 function escapeHtml(s) {
@@ -182,23 +196,261 @@ function renderMarkdown(text) {
   return out.join("");
 }
 
-function addMessage(type, content) {
+// ═══════════════════════════════════════════════════════════════
+// 消息渲染：头像 + 气泡 + 操作行
+// ═══════════════════════════════════════════════════════════════
+
+function scrollToBottom() {
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+/** 复制文本。优先用 Clipboard API，非安全上下文回退到临时 textarea。 */
+async function copyText(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* 落到下面的兜底方案 */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "absolute";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 操作行。
+ * question 有值时才提供「重新生成」—— 历史记录里的回答没有关联的提问。
+ */
+function buildActions(rawText, question) {
+  const bar = document.createElement("div");
+  bar.className = "msg-actions";
+
+  const copy = document.createElement("button");
+  copy.type = "button";
+  copy.textContent = "复制";
+  copy.onclick = async () => {
+    const ok = await copyText(rawText);
+    copy.textContent = ok ? "已复制" : "复制失败";
+    setTimeout(() => { copy.textContent = "复制"; }, 1500);
+  };
+  bar.appendChild(copy);
+
+  if (question) {
+    const regen = document.createElement("button");
+    regen.type = "button";
+    regen.textContent = "重新生成";
+    regen.onclick = () => sendMessage(question);
+    bar.appendChild(regen);
+  }
+  return bar;
+}
+
+/**
+ * 创建一条消息行，返回 { row, bubble, body }。
+ * opts.markdown 为真按 Markdown 渲染；opts.actions 为真在气泡下方挂操作行。
+ * 工具消息不占头像位。
+ */
+function createRow(type, text, opts = {}) {
+  const row = document.createElement("div");
+  row.className = `msg-row ${type}`;
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+
+  const bubble = document.createElement("div");
+  bubble.className = `msg ${type}`;
+  if (opts.markdown) bubble.innerHTML = renderMarkdown(text);
+  else bubble.textContent = text;
+  body.appendChild(bubble);
+
+  if (opts.actions && text) body.appendChild(buildActions(text, opts.question));
+
+  if (type === "tool") {
+    row.appendChild(body);
+  } else {
+    const avatar = document.createElement("div");
+    avatar.className = `avatar ${type === "user" ? "user" : "ai"}`;
+    avatar.textContent = type === "user" ? USER_INITIAL : "AI";
+    row.append(avatar, body);
+  }
+
+  return { row, bubble, body };
+}
+
+function appendMessage(type, text, opts = {}) {
   const hint = messagesEl.querySelector(".empty-hint");
   if (hint) hint.remove();
-  const div = document.createElement("div");
-  div.className = `msg ${type}`;
-  div.textContent = content;
-  messagesEl.appendChild(div);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
-  return div;
+  const { row } = createRow(type, text, opts);
+  messagesEl.appendChild(row);
+  scrollToBottom();
+  return row;
 }
+
+function showEmptyHint() {
+  messagesEl.innerHTML = EMPTY_HINT_HTML;
+  const start = document.getElementById("start-btn");
+  if (start) start.onclick = () => document.getElementById("chat-input").focus();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 会话列表
+// ═══════════════════════════════════════════════════════════════
+
+function groupLabel(iso) {
+  if (!iso) return "更早";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "更早";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const day = 86400000;
+  const t = d.getTime();
+  if (t >= startOfToday) return "今天";
+  if (t >= startOfToday - day) return "昨天";
+  if (t >= startOfToday - 7 * day) return "7 天内";
+  return "更早";
+}
+
+function markActiveThread() {
+  document.querySelectorAll(".thread-item").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.threadId === threadId);
+  });
+}
+
+function renderThreads(list) {
+  const el = document.getElementById("thread-list");
+  el.innerHTML = "";
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "thread-empty";
+    empty.textContent = "暂无历史会话";
+    el.appendChild(empty);
+    return;
+  }
+  let lastGroup = null;
+  for (const t of list) {
+    const group = groupLabel(t.updated_at);
+    if (group !== lastGroup) {
+      const head = document.createElement("div");
+      head.className = "thread-group";
+      head.textContent = group;
+      el.appendChild(head);
+      lastGroup = group;
+    }
+    const title = t.title || "（新会话）";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "thread-item";
+    btn.dataset.threadId = t.thread_id;
+    btn.textContent = title;
+    btn.title = title;
+    btn.onclick = () => switchThread(t.thread_id);
+    el.appendChild(btn);
+  }
+  markActiveThread();
+}
+
+async function loadThreads() {
+  try {
+    const res = await apiGet(`${API.threads}?limit=30`);
+    if (!res.ok) return;
+    const data = await res.json();
+    renderThreads(data.threads || []);
+  } catch {
+    /* 会话列表失败不应影响主流程 */
+  }
+}
+
+async function loadHistory() {
+  let list = [];
+  try {
+    const res = await apiPost(API.history, { thread_id: threadId });
+    if (res.ok) list = (await res.json()).messages || [];
+  } catch {
+    list = [];
+  }
+  // 请求期间用户可能已开始发送 —— 放弃渲染，避免把新消息冲掉
+  if (sending) return;
+
+  messagesEl.innerHTML = "";
+  const visible = list.filter(
+    (m) => m && (m.type === "human" || m.type === "ai" || m.type === "tool")
+  );
+  if (!visible.length) {
+    showEmptyHint();
+    return;
+  }
+  for (const m of visible) {
+    if (m.type === "human") appendMessage("user", m.content);
+    else if (m.type === "ai") appendMessage("ai", m.content, { markdown: true, actions: true });
+    else appendMessage("tool", m.content);
+  }
+  scrollToBottom();
+}
+
+async function switchThread(id) {
+  if (!id || id === threadId) return;
+  threadId = id;
+  localStorage.setItem("threadId", threadId);
+  markActiveThread();
+  await loadHistory();
+}
+
+function newThread() {
+  threadId = newId();
+  localStorage.setItem("threadId", threadId);
+  showEmptyHint();
+  markActiveThread();
+  document.getElementById("chat-input").focus();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 聊天（SSE 流式）
+// ═══════════════════════════════════════════════════════════════
 
 async function sendMessage(message) {
   if (sending) return;
   sending = true;
-  document.getElementById("send-btn").disabled = true;
-  addMessage("user", message);
-  const aiDiv = addMessage("ai", "");
+  const sendBtn = document.getElementById("send-btn");
+  sendBtn.disabled = true;
+
+  appendMessage("user", message);
+
+  const hint = messagesEl.querySelector(".empty-hint");
+  if (hint) hint.remove();
+  const { row: aiRow, bubble, body } = createRow("ai", "");
+  messagesEl.appendChild(aiRow);
+  scrollToBottom();
+
+  // 后端未下发检索阶段信号，首个 token 到达前统一显示「检索中」+ 已用时长。
+  // 用首个 token 作为「检索结束、开始生成」的真实分界，不假装知道具体阶段。
+  const t0 = Date.now();
+  const renderThinking = () => {
+    const s = ((Date.now() - t0) / 1000).toFixed(1);
+    bubble.innerHTML = `<span class="thinking"><i></i>正在检索知识库… ${s}s</span>`;
+  };
+  renderThinking();
+  const timer = setInterval(renderThinking, 100);
+
+  let streamStarted = false;
+  let failed = false;
+  const stopThinking = () => {
+    if (streamStarted) return;
+    streamStarted = true;
+    clearInterval(timer);
+  };
 
   // expertRaw：专家整条回答（message 事件）；tokenRaw：supervisor 回复（token 流）。
   // 有专家回答时优先展示专家，supervisor 的收尾转述不再叠加，避免重复。
@@ -208,7 +460,9 @@ async function sendMessage(message) {
   try {
     const res = await apiPost(API.stream, { message, thread_id: threadId });
     if (!res.ok || !res.body) {
-      aiDiv.textContent = res.status === 401 ? "登录已失效，请重新登录" : `请求失败 (${res.status})`;
+      stopThinking();
+      failed = true;
+      bubble.textContent = res.status === 401 ? "登录已失效，请重新登录" : `请求失败 (${res.status})`;
       return;
     }
     const reader = res.body.getReader();
@@ -228,26 +482,40 @@ async function sendMessage(message) {
         try { evt = JSON.parse(data); } catch { continue; }
         if (evt.type === "token") {
           tokenRaw += evt.content;
+          stopThinking();
+          bubble.textContent = expertRaw || tokenRaw;
         } else if (evt.type === "message" && evt.content) {
           const m = evt.content;
           if (m.type === "ai" && m.content) {
             expertRaw = m.content;
+            stopThinking();
+            bubble.textContent = expertRaw || tokenRaw;
           }
         } else if (evt.type === "error") {
           tokenRaw += `\n[错误] ${evt.content}`;
+          stopThinking();
+          bubble.textContent = expertRaw || tokenRaw;
         }
-        aiDiv.textContent = expertRaw || tokenRaw;
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+        scrollToBottom();
       }
     }
   } catch (e) {
-    aiDiv.textContent = `网络错误：${e.message}`;
+    stopThinking();
+    failed = true;
+    bubble.textContent = `网络错误：${e.message}`;
   } finally {
-    if (expertRaw || tokenRaw) {
-      aiDiv.innerHTML = renderMarkdown(expertRaw || tokenRaw);
+    clearInterval(timer);
+    const finalText = expertRaw || tokenRaw;
+    if (finalText) {
+      bubble.innerHTML = renderMarkdown(finalText);
+      body.appendChild(buildActions(finalText, message));
+    } else if (!failed) {
+      bubble.textContent = "（没有收到回复，请重试）";
     }
     sending = false;
-    document.getElementById("send-btn").disabled = false;
+    sendBtn.disabled = false;
+    loadThreads(); // 会话标题 / 排序可能变化
+    scrollToBottom();
   }
 }
 
@@ -261,8 +529,12 @@ document.getElementById("chat-form").onsubmit = (e) => {
 };
 
 document.getElementById("start-btn").onclick = () => document.getElementById("chat-input").focus();
+document.getElementById("new-thread").onclick = newThread;
 
-// ── 出题 / 批改 ──
+// ═══════════════════════════════════════════════════════════════
+// 出题 / 批改
+// ═══════════════════════════════════════════════════════════════
+
 document.getElementById("gen-form").onsubmit = async (e) => {
   e.preventDefault();
   const btn = document.getElementById("gen-btn");
@@ -322,16 +594,16 @@ function buildQuestionCard(q, index) {
   answer.placeholder = "在此输入你的答案…";
 
   const submit = document.createElement("button");
-  submit.className = "btn-primary";
+  submit.className = "btn-primary question-submit";
   submit.textContent = "提交答案";
-  submit.style.marginTop = "10px";
 
   const result = document.createElement("div");
 
   submit.onclick = async () => {
     const userAnswer = answer.value.trim();
     if (!userAnswer) {
-      alert("请先输入答案");
+      result.className = "grade-result";
+      result.textContent = "请先输入答案";
       return;
     }
     submit.disabled = true;
@@ -358,8 +630,7 @@ function buildQuestionCard(q, index) {
       result.append(score, feedback);
       if (g.error_analysis) {
         const err = document.createElement("div");
-        err.style.marginTop = "8px";
-        err.style.color = "#7c3aed";
+        err.className = "error-analysis";
         err.textContent = `错因分析：${g.error_analysis}`;
         result.appendChild(err);
       }
@@ -377,15 +648,20 @@ function buildQuestionCard(q, index) {
 
 function buildReference(q) {
   const box = document.createElement("details");
-  box.style.marginTop = "10px";
+  box.className = "reference-box";
   const summary = document.createElement("summary");
   summary.textContent = "查看参考答案与解析";
   const answerText = document.createElement("div");
-  answerText.style.marginTop = "6px";
   answerText.textContent = `参考答案：${q.standard_answer || "（无）"}`;
   const explanation = document.createElement("div");
-  explanation.style.marginTop = "4px";
   explanation.textContent = `解析：${q.explanation || "（无）"}`;
   box.append(summary, answerText, explanation);
   return box;
 }
+
+// ── 启动：先确认用户（决定头像首字），再拉会话列表与当前会话历史 ──
+(async () => {
+  await loadUser();
+  loadThreads();
+  await loadHistory();
+})();
