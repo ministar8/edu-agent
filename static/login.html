@@ -5,9 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>登录 · 408 智能辅导</title>
   <link rel="stylesheet" href="/style.css">
+  <!-- 必须在 head 里同步加载：主题要在首次绘制前生效，否则会闪一下浅色 -->
+  <script src="/theme.js"></script>
 </head>
 <body class="auth-page">
   <div class="auth-shell">
+    <button class="theme-toggle auth-theme" id="theme-toggle">深色</button>
     <!-- 左栏：讲清这是什么产品。访客第一眼就能看懂，不用先注册 -->
     <aside class="auth-intro">
       <div class="intro-brand">

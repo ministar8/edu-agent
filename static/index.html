@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>408 智能辅导</title>
   <link rel="stylesheet" href="/style.css">
+  <!-- 必须在 head 里同步加载：主题要在首次绘制前生效，否则会闪一下浅色 -->
+  <script src="/theme.js"></script>
 </head>
 <body>
   <div class="app">
@@ -26,7 +28,10 @@
           <div class="role" id="user-role"></div>
         </div>
       </div>
-      <button class="logout" id="logout">退出登录</button>
+      <div class="side-actions">
+        <button class="logout" id="logout">退出登录</button>
+        <button class="theme-toggle" id="theme-toggle">深色</button>
+      </div>
     </aside>
     <main class="main">
       <div class="main-header" id="view-title">智能问答</div>

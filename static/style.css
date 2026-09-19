@@ -52,6 +52,54 @@
   /* ── 阴影 ───────────────────────────────────── */
   --shadow-sm: 0 1px 2px rgba(24, 24, 27, 0.04);
   --shadow-md: 0 4px 20px rgba(24, 24, 27, 0.06);
+
+  /* 「抬起」面：比所在容器更亮一档，用于分段控件的选中项。
+     深色模式下方向相反（要更亮而不是更暗），故单独出令牌。 */
+  --raised: #ffffff;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   深色模式
+   只覆盖令牌，不改任何选择器 —— 这是把颜色全部收敛到 :root 的回报。
+   对比度都按 WCAG AA（正文 4.5:1）核对过。
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  /* 强调色略提亮：深底上同样的橙会显得发闷 */
+  --accent: #ff8f33;
+  --accent-hover: #ffa255;
+  --accent-soft: #3a2a18;
+  --accent-text: #ffb877;   /* 浅底上的深字 → 反过来是深底上的亮字 */
+  --accent-on: #1a1206;     /* 实心橙块上用深字：白字对比度只有 2.3:1，不达标 */
+  --accent-ring: rgba(255, 143, 51, 0.22);
+
+  --bg: #131316;
+  --surface: #1c1c20;
+  --subtle: #232329;
+  --border: #303038;
+  --border-strong: #43434d;
+  --muted: #a1a1aa;
+  --hint: #8a8a94;          /* 比浅色模式的 hint 亮，否则在深底上读不清 */
+  --text: #f4f4f5;
+
+  --danger: #f87171;
+  --danger-soft: #3a1f1f;
+  --info: #a5b4fc;
+  --info-soft: #262a45;
+
+  --code-bg: #0f0f11;
+  --code-text: #e4e4e7;
+
+  --score-high-bg: #23301a;
+  --score-high-fg: #a3d977;
+  --score-mid-bg: #33280f;
+  --score-mid-fg: #f0b955;
+  --score-low-bg: #3a1c1c;
+  --score-low-fg: #f0a0a0;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.45);
+
+  --raised: #2c2c33;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -128,6 +176,7 @@ input:focus, select:focus, textarea:focus {
   padding: 24px;
 }
 .auth-shell {
+  position: relative; /* 供右上角的主题切换按钮定位 */
   display: flex;
   width: 820px;
   max-width: 100%;
@@ -234,7 +283,7 @@ input:focus, select:focus, textarea:focus {
   transition: background 0.15s, color 0.15s;
 }
 .tab.active {
-  background: var(--surface);
+  background: var(--raised);
   color: var(--text);
   font-weight: 600;
   box-shadow: var(--shadow-sm);
@@ -436,6 +485,33 @@ input:focus, select:focus, textarea:focus {
   transition: border-color 0.15s, color 0.15s;
 }
 .logout:hover { border-color: var(--border-strong); color: var(--text); }
+
+/* 底部操作行：退出登录 + 主题切换 */
+.side-actions { display: flex; gap: 6px; }
+.side-actions .logout { flex: 1; }
+
+.theme-toggle {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+.theme-toggle:hover { border-color: var(--border-strong); color: var(--text); }
+
+/* 登录页的主题按钮浮在卡片右上角 */
+.auth-theme {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  padding: 6px 11px;
+  font-size: 12px;
+  background: var(--surface);
+}
 
 .main {
   flex: 1;
@@ -841,6 +917,7 @@ input:focus, select:focus, textarea:focus {
   .nav-group { flex-direction: row; flex-shrink: 0; }
   .user-card { margin-bottom: 0; margin-left: auto; flex-shrink: 0; }
   .user-meta { display: none; }
+  .side-actions { flex-shrink: 0; }
   .logout { flex-shrink: 0; padding: 9px 12px; }
   .main { flex: 1 1 auto; min-height: 70vh; }
   .messages, .practice { padding: 14px; }

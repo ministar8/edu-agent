@@ -253,7 +253,7 @@ class TestStaticAssetsLoad:
     """静态资源必须真的能取到 —— 404 的 JS 会让页面静默失去全部交互。"""
 
     def test_js_and_css_are_served(self, page, live_server):
-        for asset in ("/api.js", "/auth.js", "/app.js", "/style.css"):
+        for asset in ("/api.js", "/auth.js", "/app.js", "/theme.js", "/style.css"):
             resp = page.request.get(f"{live_server}{asset}")
             assert resp.status == 200, f"{asset} 取不到（{resp.status}）"
 
