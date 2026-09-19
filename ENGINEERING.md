@@ -811,6 +811,10 @@ run2: … ('84911dc4', 0.8501), ('dbea6aaf', 0.8573), ('50296df0', 0.8609)
 - 检索链（recall → fusion → rerank → verifier）**没有任何端到端用例**，与 P0 互为因果。
 - 有大量超时常量与 token 预算（`CONTEXT_TOKEN_BUDGET`、`_WINDOW_TOKEN_BUDGET`），但**没有一个性能/预算断言**。超时设计是否真的生效，无人验证。
 - 前端 `static/app.js`（391 行）**零测试、零 lint**。
+  > **现状更新（2026-09-19）**：`app.js` 已增至 700 行；**测试已补齐** ——
+  > 见附录 A #19（`tests/test_frontend_smoke.py`，7 条 Playwright 用例）。
+  > **lint 仍为零**：项目只配了 Python 侧的 ruff，前端没有 eslint / prettier，
+  > 因此"前端缺静态检查"这个判断**依然成立**。
 
 **改进方案**：
 

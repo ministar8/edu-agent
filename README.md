@@ -41,6 +41,7 @@ edu-agent/
 ├── pyproject.toml        # uv 依赖 + ruff/pyrefly/pytest 配置
 ├── langgraph.json        # LangGraph Studio 入口（teaching_graph）
 ├── compose.yaml          # Docker 部署
+├── codecov.yml           # 覆盖率门槛（patch 阻塞）
 ├── src/
 │   ├── agents/           # 编排与业务图：supervisor / teaching_graph / factory / tools / *_core
 │   ├── rag/              # 检索流水线（retriever / fusion / reranker / hyde / cache / ingest）
@@ -54,9 +55,10 @@ edu-agent/
 │   ├── client/           # AgentClient SDK（JWT + /api）
 │   ├── tools/            # 离线数据清洗（ingest 使用，不参与运行时问答）
 │   └── run_service.py    # 服务入口
-├── static/               # 静态前端（api.js / login / index / app / auth / css）
+├── static/               # 静态前端（api.js / theme / login / index / app / auth / css）
 ├── evals/                # RAGAS 评测样本（jsonl）
-├── tests/                # pytest
+├── tests/                # pytest（含 Playwright 前端冒烟）
+├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile
 └── scripts/              # 运维脚本（TEI 部署）

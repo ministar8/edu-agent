@@ -34,7 +34,7 @@
 | `src/memory/` | 短期 checkpointer + 消息窗口 `window.trim_conversation` + 长期 Store（工厂/schema/topic/weak_topics/记忆卡） |
 | `src/db/` | SQLAlchemy User 表与建表逻辑 |
 | `src/tools/` | 离线数据清洗工具（**不参与运行时**） |
-| `static/` | 静态前端（login.html / index.html / app.js / auth.js / style.css） |
+| `static/` | 静态前端（login.html / index.html / app.js / auth.js / theme.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
 | `src/evaluation/` | RAGAS Layer-1 评测（dataset/adapters/ragas_eval/cli）+ `evals/` 样本 |
 
