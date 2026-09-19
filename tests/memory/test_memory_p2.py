@@ -109,12 +109,11 @@ async def test_weak_topics_use_normalized_topic(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_load_memory_node_writes_state():
+async def test_load_memory_node_noop_without_user():
     from agents.teaching_graph import load_memory
 
     updates = await load_memory({"messages": []}, config=None)
-    assert updates.get("memory_card") == ""
-    assert "messages" not in updates
+    assert updates == {}
 
 
 @pytest.mark.asyncio
@@ -131,7 +130,6 @@ async def test_load_memory_injects_system_message(tmp_path, monkeypatch):
 
             config = {"configurable": {"user_id": "9", "thread_id": "t"}}
             updates = await load_memory({"messages": [HumanMessage("hi")]}, config=config)
-            assert updates["memory_card"]
             msgs = updates.get("messages") or []
             assert any(isinstance(m, SystemMessage) for m in msgs)
         finally:

@@ -1,7 +1,6 @@
-"""教学图：入口写入工作记忆（Graph State），再进 supervisor。
+"""教学图：入口写入工作记忆（以 SystemMessage 形态进 messages），再进 supervisor。
 
-记忆卡进入 `TeachingState.memory_card`，并以一条 SystemMessage 让专家可见；
-service 流式侧过滤 system 消息，避免污染 SSE。
+记忆卡以一条 SystemMessage 让专家可见，service 流式侧过滤 system 消息，避免污染 SSE。
 
 记忆卡 SystemMessage 使用**固定消息 ID**（`MEMORY_CARD_MESSAGE_ID`）：
 add_messages reducer 对同 ID 消息做 upsert，因此每轮只替换不累积，
@@ -11,7 +10,6 @@ add_messages reducer 对同 ID 消息做 upsert，因此每轮只替换不累积
 from __future__ import annotations
 
 import logging
-from typing import NotRequired
 
 from langchain_core.messages import RemoveMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
@@ -30,15 +28,8 @@ logger = logging.getLogger(__name__)
 MEMORY_CARD_MESSAGE_ID = "edu_memory_card"
 
 
-class TeachingState(MessagesState, total=False):
-    """工作记忆进 Graph State；每轮 invoke 由 load_memory 写入。"""
-
-    memory_card: NotRequired[str]
-
-
-async def load_memory(state: TeachingState, config=None) -> dict:
-    """读 Store 生成记忆卡（超时/失败则空），写入 State。
-
+async def load_memory(state: MessagesState, config=None) -> dict:
+    """读 Store 生成记忆卡（超时/失败则空），以固定 ID SystemMessage 注入 messages。
     同时清理历史 checkpoint 里累积的旧 SystemMessage（旧版本无固定 ID，
     每轮追加一张卡），保证 state 里至多存在一张当前卡。
     """
@@ -60,7 +51,7 @@ async def load_memory(state: TeachingState, config=None) -> dict:
         if isinstance(m, SystemMessage) and m.id and m.id != MEMORY_CARD_MESSAGE_ID
     ]
 
-    updates: dict = {"memory_card": card}
+    updates: dict = {}
     if card:
         updates["messages"] = [
             *removes,
@@ -71,7 +62,7 @@ async def load_memory(state: TeachingState, config=None) -> dict:
     return updates
 
 
-async def run_supervisor(state: TeachingState, config=None) -> dict:
+async def run_supervisor(state: MessagesState, config=None) -> dict:
     raw = state.get("messages") or []
     # 只裁剪「本轮送给模型的输入」；state/checkpointer 仍保留完整历史
     trimmed = trim_conversation(raw, max_messages=settings.MEMORY_HISTORY_MAX_MESSAGES)
@@ -82,7 +73,7 @@ async def run_supervisor(state: TeachingState, config=None) -> dict:
 
 
 def build_teaching_graph():
-    builder: StateGraph = StateGraph(TeachingState)
+    builder: StateGraph = StateGraph(MessagesState)
     builder.add_node("load_memory", load_memory)
     builder.add_node("supervisor", run_supervisor)
     builder.add_edge(START, "load_memory")
