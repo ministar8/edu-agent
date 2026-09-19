@@ -31,6 +31,16 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "src"
 SCREENSHOT_DIR = ROOT / "_e2e_artifacts"
 
+# ── 等待超时（毫秒）──────────────────────────────────────────────
+# 按「CI 比开发机慢约一个数量级」定：实测本地整个 E2E 文件 **6.6s**，
+# 而 CI 的 Test 步骤要 **72~94s**（runner 有资源争抢）。
+# 在开发机上这些等待通常 <1s 就满足，但 CI 上偶发踩线会让整个 job 变红 ——
+# 所以留足余量。**注意**：调大只是消除「环境慢」造成的假红，
+# 真出问题时仍会失败（只是晚一点），不会把 bug 掩盖掉。
+_WAIT_UI_MS = 20_000  # 纯前端渲染（localStorage → DOM、插入消息节点）
+_WAIT_NAV_MS = 30_000  # 一次服务端往返 + 跳转（注册 → index.html）
+_WAIT_ANSWER_MS = 90_000  # 一轮完整问答：多 Agent 编排 + 8 阶段检索链 + LLM
+
 
 def _free_port() -> int:
     """要一个空闲端口 —— 固定端口在并行/重复运行时容易撞车。"""
@@ -176,7 +186,7 @@ def _register(page, base: str, username: str, password: str = "secret123") -> No
     page.fill("#username", username)
     page.fill("#password", password)
     page.click("#submit-btn")
-    page.wait_for_url("**/index.html", timeout=15000)
+    page.wait_for_url("**/index.html", timeout=_WAIT_NAV_MS)
 
 
 class TestFrontendSmoke:
@@ -190,7 +200,7 @@ class TestFrontendSmoke:
         (
             page.wait_for_function(
                 "() => (document.getElementById('user-name')||{}).textContent?.trim().length > 0",
-                timeout=10000,
+                timeout=_WAIT_UI_MS,
             ),
             f"#user-name 未填充 —— 截图: {_shot(page, 'register')}",
         )
@@ -214,7 +224,7 @@ class TestFrontendSmoke:
                     return nodes.length > 0 &&
                            [...nodes].some(n => n.textContent.trim().length > 0);
                 }""",
-                timeout=60000,
+                timeout=_WAIT_ANSWER_MS,
             )
         except Exception as exc:
             # 失败时把**页面当前状态**写进断言消息 —— 它直接进 CI 日志，
@@ -239,7 +249,7 @@ class TestFrontendSmoke:
         page.fill("#chat-input", "测试消息")
         page.click("#send-btn")
 
-        page.wait_for_selector(".msg.user", timeout=10000)
+        page.wait_for_selector(".msg.user", timeout=_WAIT_UI_MS)
         text = page.eval_on_selector_all(".msg.user", "els => els.map(e => e.textContent)")
         assert any("测试消息" in t for t in text), f"用户消息未渲染: {text}"
 
