@@ -229,17 +229,21 @@ class TestHistoryThreads:
         assert history.messages == []
 
     def test_get_user_threads_params(self, agent_client):
+        """会话列表请求只带 limit。
+
+        不再带 user_id —— 服务端只认 token 里的用户身份。
+        这里精确比对整个 params，若将来又混进 user_id 会立刻变红。
+        """
         mock = Response(
             200,
             json={"threads": []},
             request=Request("GET", "http://test/api/edu-assistant/threads"),
         )
         with patch("httpx.get", return_value=mock) as get:
-            threads = agent_client.get_user_threads("7", limit=5)
+            threads = agent_client.get_user_threads(limit=5)
         assert isinstance(threads, UserThreads)
         assert get.call_args.args[0] == "http://test/api/edu-assistant/threads"
-        assert get.call_args.kwargs["params"]["user_id"] == "7"
-        assert get.call_args.kwargs["params"]["limit"] == 5
+        assert get.call_args.kwargs["params"] == {"limit": 5}
 
 
 class TestQuestions:

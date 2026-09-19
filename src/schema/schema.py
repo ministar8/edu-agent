@@ -40,11 +40,6 @@ class UserInput(BaseModel):
         default=None,
         examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
     )
-    user_id: str | None = Field(
-        description="用户 ID（跨线程关联会话）。",
-        default=None,
-        examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
-    )
     agent_config: dict[str, Any] = Field(
         description="透传给 agent 的附加配置。",
         default={},
@@ -108,9 +103,12 @@ class ChatHistory(BaseModel):
 
 
 class UserThreadsInput(BaseModel):
-    """列出用户会话线程的输入。"""
+    """列出用户会话线程的输入。
 
-    user_id: str = Field(description="要列线程的用户 ID。")
+    没有 ``user_id``：该端点只返回**认证用户自己**的会话，
+    用户身份取自 token（`current_user.id`），不接受客户端指定。
+    """
+
     limit: int = Field(description="返回线程数上限。", default=20, ge=1, le=100)
 
 

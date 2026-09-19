@@ -232,9 +232,13 @@ class AgentClient:
         message: str,
         model: str | None,
         thread_id: str | None,
-        user_id: str | None,
         agent_config: dict[str, Any] | None,
     ) -> UserInput:
+        """组装请求体。
+
+        没有 ``user_id``：服务端一律用 token 里的用户身份，客户端传什么都不生效 ——
+        留着这个参数只会让人以为可以指定用户。
+        """
         request = UserInput(message=message)
         if thread_id:
             request.thread_id = thread_id
@@ -242,8 +246,6 @@ class AgentClient:
             request.model = model  # type: ignore[assignment]
         if agent_config:
             request.agent_config = agent_config
-        if user_id:
-            request.user_id = user_id
         return request
 
     def invoke(
@@ -251,12 +253,11 @@ class AgentClient:
         message: str,
         model: str | None = None,
         thread_id: str | None = None,
-        user_id: str | None = None,
         agent_config: dict[str, Any] | None = None,
     ) -> ChatMessage:
         if not self.agent:
             raise AgentClientError("No agent selected. Use update_agent() to select an agent.")
-        request = self._build_user_input(message, model, thread_id, user_id, agent_config)
+        request = self._build_user_input(message, model, thread_id, agent_config)
         try:
             response = httpx.post(
                 self._agent_url("invoke"),
@@ -274,12 +275,11 @@ class AgentClient:
         message: str,
         model: str | None = None,
         thread_id: str | None = None,
-        user_id: str | None = None,
         agent_config: dict[str, Any] | None = None,
     ) -> ChatMessage:
         if not self.agent:
             raise AgentClientError("No agent selected. Use update_agent() to select an agent.")
-        request = self._build_user_input(message, model, thread_id, user_id, agent_config)
+        request = self._build_user_input(message, model, thread_id, agent_config)
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.post(
@@ -320,7 +320,6 @@ class AgentClient:
         message: str,
         model: str | None = None,
         thread_id: str | None = None,
-        user_id: str | None = None,
         agent_config: dict[str, Any] | None = None,
         stream_tokens: bool = True,
     ) -> Generator[ChatMessage | str, None, None]:
@@ -331,7 +330,6 @@ class AgentClient:
             stream_tokens=stream_tokens,
             model=model,
             thread_id=thread_id,
-            user_id=user_id,
             agent_config=agent_config or {},
         )
         try:
@@ -357,7 +355,6 @@ class AgentClient:
         message: str,
         model: str | None = None,
         thread_id: str | None = None,
-        user_id: str | None = None,
         agent_config: dict[str, Any] | None = None,
         stream_tokens: bool = True,
     ) -> AsyncGenerator[ChatMessage | str, None]:
@@ -368,7 +365,6 @@ class AgentClient:
             stream_tokens=stream_tokens,
             model=model,
             thread_id=thread_id,
-            user_id=user_id,
             agent_config=agent_config or {},
         )
         async with httpx.AsyncClient() as client:
@@ -407,18 +403,19 @@ class AgentClient:
         self._raise_http(response, "Error getting history")
         return ChatHistory.model_validate(response.json())
 
-    def _user_threads_request(
-        self, user_id: str, agent: str | None, limit: int
-    ) -> tuple[str, dict[str, Any]]:
+    def _user_threads_request(self, agent: str | None, limit: int) -> tuple[str, dict[str, Any]]:
+        """组装会话列表请求。
+
+        没有 ``user_id``：服务端只返回 token 对应用户的会话，
+        传别人的 id 不生效 —— 之前那样写会**静默返回自己的会话**，更难排查。
+        """
         return (
             self._agent_url("threads", agent=agent),
-            UserThreadsInput(user_id=user_id, limit=limit).model_dump(),
+            UserThreadsInput(limit=limit).model_dump(),
         )
 
-    def get_user_threads(
-        self, user_id: str, agent: str | None = None, limit: int = 20
-    ) -> UserThreads:
-        url, params = self._user_threads_request(user_id, agent, limit)
+    def get_user_threads(self, agent: str | None = None, limit: int = 20) -> UserThreads:
+        url, params = self._user_threads_request(agent, limit)
         try:
             response = httpx.get(
                 url,
@@ -431,10 +428,8 @@ class AgentClient:
         self._raise_http(response, "Error listing threads")
         return UserThreads.model_validate(response.json())
 
-    async def aget_user_threads(
-        self, user_id: str, agent: str | None = None, limit: int = 20
-    ) -> UserThreads:
-        url, params = self._user_threads_request(user_id, agent, limit)
+    async def aget_user_threads(self, agent: str | None = None, limit: int = 20) -> UserThreads:
+        url, params = self._user_threads_request(agent, limit)
         async with httpx.AsyncClient() as client:
             try:
                 response = await client.get(
