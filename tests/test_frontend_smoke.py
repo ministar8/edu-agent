@@ -217,7 +217,17 @@ class TestFrontendSmoke:
                 timeout=60000,
             )
         except Exception as exc:
-            raise AssertionError(f"提问后页面上没有出现回答 —— 截图: {_shot(page, 'ask')}") from exc
+            # 失败时把**页面当前状态**写进断言消息 —— 它直接进 CI 日志，
+            # 比截图更容易看到（截图要另外下载 artifact）。
+            # 区分「压根没渲染出气泡」和「气泡出来了但一直空着」这两类完全不同的故障。
+            snapshot = page.eval_on_selector_all(
+                ".msg", "els => els.map(e => e.className + ' :: ' + e.textContent.slice(0, 60))"
+            )
+            raise AssertionError(
+                f"提问后页面上没有出现回答 —— 截图: {_shot(page, 'ask')}\n"
+                f"  当前 .msg 节点: {snapshot}\n"
+                f"  检索指示器 .thinking 是否还在: {page.query_selector('.thinking') is not None}"
+            ) from exc
 
         answers = page.eval_on_selector_all(".msg.ai", "els => els.map(e => e.textContent)")
         assert any(a.strip() for a in answers), f"回答为空: {answers}"

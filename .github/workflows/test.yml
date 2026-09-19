@@ -42,6 +42,17 @@ jobs:
         run: uv run playwright install --with-deps chromium chromium-headless-shell
       - name: Test
         run: uv run pytest --cov=src/ --cov-report=xml --cov-report=json
+      # 失败时把 E2E 的诊断产物传上去：截图 + 子进程服务日志。
+      # 没有这一步，断言消息里那句「截图: _e2e_artifacts/ask.png」在 CI 里毫无用处
+      # （路径在临时 runner 上，跑完就没了）—— 排查 flaky 时只能靠猜。
+      - name: Upload E2E diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-diagnostics-py${{ matrix.python-version }}
+          path: _e2e_artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Per-module coverage gate
         run: uv run python scripts/check_coverage_by_module.py
       - name: Upload coverage reports to Codecov
