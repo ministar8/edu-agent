@@ -1241,10 +1241,23 @@ coverage:
 1. **分模块覆盖率门槛**：`pytest --cov=src/rag --cov-fail-under=70` 等，避免整体数字掩盖风险。
 2. **改动覆盖率（patch coverage）从 informational 改为阻塞**：`codecov.yml` 目前 `patch.informational: true`，意味着**新代码可以零测试合入**。改为 `informational: false` + `target: 80%`——这是"新债不再产生"的关键闸门。
 3. **复杂度门禁**：接入 `ruff` 的 `C90`（mccabe）规则或 `radon`，对超阈值函数报警。
+   ✅ **已落地**：`extend-select` 加 `C90`，阈值取 **30 = 当前最复杂函数的复杂度**（开启时命中 0 处）。
+   **刻意做成"棘轮"而不是一步到位**：设常见的 15 会一次命中 11 处既有代码、门禁立刻变红，
+   结果要么被 `noqa` 绕过要么被关掉 —— 那就失去了意义。设 30 的含义是
+   「**不许再写出比今天最复杂的那个还复杂的函数**」，新债被拦、旧债不动。
+   当前三个热点：`_semantic_segment` (30) · `_chroma_window_expand` (26) · `message_generator` (26) ——
+   把它们降到 25 以下后，可把阈值随之下调到 25，逐步收紧。
 4. **检索质量回归**：✅ **已落地**（本轮）——新增独立 job `retrieval-quality-gate`，
    跑 `uv run python -m evaluation.retrieval_gate`，不依赖任何外部服务，耗时约 35s。
    与覆盖率门禁互补：覆盖率保证"代码被跑过"，它保证"跑出来的结果没变差"。
 5. **依赖安全扫描**：`uv.lock` 已有锁定，建议加 `pip-audit` 或 Dependabot。
+   ✅ **已落地（选 Dependabot）**：新增 `.github/dependabot.yml`，覆盖四个生态
+   （`uv` / `github-actions` / `docker` / `pre-commit`），按周提 PR。
+   **关键设计是分组（groups）**：把同类 minor/patch 更新合成**一个** PR ——
+   否则一周刷出十几个 PR，很快就没人看了，**没人看的 PR 等于没有**。
+   major 更新被 `ignore` 掉、单独处理（可能带破坏性变更）。
+   > 备选 `pip-audit` 未采用：它需要在 CI 里多装一个依赖并新增 job；
+   > Dependabot 是零依赖的纯配置，且顺带覆盖 Actions / 基础镜像 / 钩子版本。
 
 > **门禁设计原则**：门禁应当**阻止新增债务**，而不是**逼人还清旧债**。旧债用计划逐步还（见 §4），新债一律不许进。
 

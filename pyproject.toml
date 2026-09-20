@@ -56,11 +56,27 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-extend-select = ["I", "U", "S110"]
+extend-select = ["I", "U", "S110", "C90"]
 # S110 = try/except/pass。**只标"宽泛捕获 + 静默"**（`except Exception: pass`），
 # 不标 `except json.JSONDecodeError: pass` 这类具体异常的降级路径 ——
 # 前者会让故障无声消失，后者是有意设计的 fallback 链。
 # 确属有意忽略的，用 `# noqa: S110 — <理由>` 显式标注。
+#
+# C90 = mccabe 圈复杂度。阈值见下方 [tool.ruff.lint.mccabe]。
+
+[tool.ruff.lint.mccabe]
+# **阈值 30 就是「当前最复杂函数」的复杂度，所以开启时命中 0 处。**
+#
+# 这是刻意的**棘轮**设计：门禁的目的是**阻止新增债务**，而不是逼人还清旧债
+# （见 ENGINEERING.md §3.4 的门禁设计原则）。当前最复杂的三个函数：
+#   `_semantic_segment` (30) · `_chroma_window_expand` (26) · `message_generator` (26)
+# 设成 30 的含义是「不许再写出比今天最复杂的那个还复杂的函数」——
+# 新代码一超标就被拦，既有代码一处不动。
+#
+# **为什么不直接设常见的 15**：那样会一次命中 11 处既有代码，门禁立刻变红，
+# 结果要么被加 noqa 绕过、要么被关掉 —— 反而失去了意义。
+# 想收紧应当**配合重构逐步下调**：先把上面三个降到 25 以下，再把阈值降到 25，以此类推。
+max-complexity = 30
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
