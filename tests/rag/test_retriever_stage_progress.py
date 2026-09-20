@@ -132,3 +132,36 @@ class TestSinkIsGuarded:
         from agents.tools import _stage_sink
 
         assert _stage_sink() is None
+
+
+class TestSinkInsideGraph:
+    """端到端：**在真实 graph 节点里**拿到 sink，事件真的能从 custom 流出来。
+
+    这是「前端能看到阶段」的最后一环 —— 管道其余部分（schema / 转换 / SSE 转发）
+    由 `tests/service/test_custom_stream.py` 覆盖，这里只补上「注入点真的可用」。
+    """
+
+    @pytest.mark.asyncio
+    async def test_sink_emits_custom_event_through_graph(self):
+        from langgraph.graph import END, MessagesState, StateGraph
+
+        from agents.tools import _stage_sink
+
+        async def node(_state):
+            sink = _stage_sink()
+            assert sink is not None, "graph 节点内必须能拿到 stream writer"
+            sink("classify")
+            return {"messages": []}
+
+        builder = StateGraph(MessagesState)
+        builder.add_node("n", node)
+        builder.set_entry_point("n")
+        builder.add_edge("n", END)
+        graph = builder.compile()
+
+        payloads: list[dict] = []
+        async for chunk in graph.astream({"messages": []}, stream_mode=["custom"]):
+            msg = chunk[1] if isinstance(chunk, tuple) else chunk
+            payloads.append(msg.content[0])
+
+        assert payloads == [{"kind": "retrieval_stage", "stage": "classify"}]
