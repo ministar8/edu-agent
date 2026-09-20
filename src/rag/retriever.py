@@ -26,6 +26,7 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
@@ -707,6 +708,28 @@ def _emit_evidence_metric(
     )
 
 
+# ── 阶段进度回调 ──────────────────────────────────────────────
+# 检索链是**纯计算层**，刻意不知道 SSE / StreamWriter 的存在：
+# 这里只暴露一个可选回调，由 `agents/tools.py` 注入（那里才 import CustomData 并写 stream）。
+# 好处：UI 关注点留在上层，`rag/` 仍可独立测试与复用 ——
+# 门禁、离线评测、缓存预热都不传回调，走 no-op 分支。
+StageSink = Callable[[str], None]
+
+
+def _emit_stage(on_stage: StageSink | None, stage: str) -> None:
+    """上报「即将进入某检索阶段」。
+
+    **回调抛错绝不能影响检索结果** —— 进度是锦上添花，失败就跳过。
+    所以这里吞异常只记 debug（有日志，不是静默 pass）。
+    """
+    if on_stage is None:
+        return
+    try:
+        on_stage(stage)
+    except Exception:
+        logger.debug("阶段进度回调失败（已忽略）: stage=%s", stage, exc_info=True)
+
+
 def retrieve_documents(
     query: str,
     collection_name: str = "",
@@ -717,6 +740,7 @@ def retrieve_documents(
     depth: RetrievalDepth | None = None,
     cat: QueryCategory | None = None,
     precomputed_sub_queries: list[str] | None = None,
+    on_stage: StageSink | None = None,
 ) -> list[Document]:
     """同步检索入口：**委托给 aretrieve_documents**，不再维护第二份流水线逻辑。
 
@@ -728,6 +752,9 @@ def retrieve_documents(
     ⚠️ 不能在**已运行的事件循环**里调用（``asyncio.run`` 会抛 RuntimeError）。
     这与它唯一的使用场景（同步 CLI 入库后预热）不冲突；
     异步上下文请直接 ``await aretrieve_documents(...)``。
+
+    ``on_stage`` 必须与 ``aretrieve_documents`` **保持签名一致**（有测试钉住），
+    但预热场景不传，实际永远是 None。
     """
     try:
         asyncio.get_running_loop()
@@ -750,6 +777,7 @@ def retrieve_documents(
             depth,
             cat,
             precomputed_sub_queries,
+            on_stage,
         )
     )
 
@@ -1392,6 +1420,7 @@ async def aretrieve_documents(
     depth: RetrievalDepth | None = None,
     cat: QueryCategory | None = None,
     precomputed_sub_queries: list[str] | None = None,
+    on_stage: StageSink | None = None,
 ) -> list[Document]:
     start = time.perf_counter()
     raw_results_count = 0
@@ -1412,10 +1441,12 @@ async def aretrieve_documents(
     retrieval_layer = ""
     route_type = ""
     try:
+        _emit_stage(on_stage, "classify")
         _stage_start = time.perf_counter()
         _terms, _cat = await _stage_classify_query(query, cat)
         stage_ms["classification_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
+        _emit_stage(on_stage, "plan")
         _plan = _stage_resolve_plan(query, _cat, k, score_threshold, use_rerank, depth)
         depth = _plan.depth
         k = _plan.k
@@ -1425,12 +1456,14 @@ async def aretrieve_documents(
         retrieval_layer = _plan.retrieval_layer
         route_type = _plan.route_type
 
+        _emit_stage(on_stage, "decompose")
         _stage_start = time.perf_counter()
         sub_queries, decomposed = await _stage_decompose_query(
             query, _cat, depth, precomputed_sub_queries
         )
         stage_ms["decompose_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
+        _emit_stage(on_stage, "recall")
         _stage_start = time.perf_counter()
         results = await _stage_recall_and_merge(
             _RecallRequest(
@@ -1450,16 +1483,19 @@ async def aretrieve_documents(
         stage_ms["route_merge_ms"] = round((time.perf_counter() - _stage_start) * 1000, 3)
 
         raw_results_count = len(results)
+        _emit_stage(on_stage, "dedup")
         filtered, post_dedup_count, post_threshold_count = await _stage_dedup_and_threshold(
             results, query, _cat, effective_threshold
         )
 
+        _emit_stage(on_stage, "rerank")
         filtered, rerank_used, _rerank_ms = await _stage_rerank(
             filtered, query, k, use_rerank, decomposed
         )
         stage_ms["rerank_ms"] = round(_rerank_ms, 3)
         post_rerank_count = len(filtered)
 
+        _emit_stage(on_stage, "hyde")
         _hyde = await _stage_hyde(
             filtered,
             query=query,
@@ -1481,6 +1517,7 @@ async def aretrieve_documents(
         stage_ms["hyde_ms"] = _hyde.elapsed_ms
 
         before_window = len(filtered)
+        _emit_stage(on_stage, "expand")
         _window = await _stage_expand_windows(
             filtered, query=query, collection_name=collection_name, cat=_cat, depth=depth
         )
@@ -1563,6 +1600,7 @@ async def aretrieve_evidence(
     student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
     depth: RetrievalDepth | None = None,
+    on_stage: StageSink | None = None,
 ) -> FusedEvidence:
     from rag.evidence import FusedEvidence
     from rag.fusion import afuse_documents
@@ -1622,6 +1660,7 @@ async def aretrieve_evidence(
         depth=_resolved_depth,
         cat=_cat,
         precomputed_sub_queries=precomputed_sub_queries,
+        on_stage=on_stage,
     )
     retrieval_latency_ms = round((time.perf_counter() - _stage_start) * 1000, 3)
 
@@ -1709,6 +1748,7 @@ async def aretrieve_evidence_with_retry(
     student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
     depth: RetrievalDepth | None = None,
+    on_stage: StageSink | None = None,
     *,
     max_retries: int = 2,
     use_llm_verify: bool = False,
@@ -1727,6 +1767,7 @@ async def aretrieve_evidence_with_retry(
         "student_profile": student_profile,
         "max_tokens": max_tokens,
         "depth": depth,
+        "on_stage": on_stage,
     }
 
     fused = await aretrieve_evidence(**current_kwargs)

@@ -434,12 +434,25 @@ async function sendMessage(message) {
   messagesEl.appendChild(aiRow);
   scrollToBottom();
 
-  // 后端未下发检索阶段信号，首个 token 到达前统一显示「检索中」+ 已用时长。
-  // 用首个 token 作为「检索结束、开始生成」的真实分界，不假装知道具体阶段。
+  // 检索阶段进度：后端在检索链每个阶段前通过 custom 事件下发 stage id
+  // （发端见 rag/retriever.py 的 _emit_stage，注入见 agents/tools.py 的 _stage_sink）。
+  // 拿不到信号时（旧后端 / 直接调用）退化成「正在检索知识库… Ns」，不会显示错阶段。
+  const STAGE_LABELS = {
+    classify: "分析问题类型",
+    plan: "规划检索策略",
+    decompose: "拆解子问题",
+    recall: "召回候选文档",
+    dedup: "去重与过滤",
+    rerank: "重排精排",
+    hyde: "生成假设文档",
+    expand: "扩展上下文",
+  };
+  let stageLabel = "";
   const t0 = Date.now();
   const renderThinking = () => {
     const s = ((Date.now() - t0) / 1000).toFixed(1);
-    bubble.innerHTML = `<span class="thinking"><i></i>正在检索知识库… ${s}s</span>`;
+    const text = stageLabel ? `${stageLabel}… ${s}s` : `正在检索知识库… ${s}s`;
+    bubble.innerHTML = `<span class="thinking"><i></i>${text}</span>`;
   };
   renderThinking();
   const timer = setInterval(renderThinking, 100);
@@ -486,7 +499,14 @@ async function sendMessage(message) {
           bubble.textContent = expertRaw || tokenRaw;
         } else if (evt.type === "message" && evt.content) {
           const m = evt.content;
-          if (m.type === "ai" && m.content) {
+          if (m.type === "custom" && m.custom_data) {
+            // 阶段进度：只更新提示文字，**不 stopThinking**（还没到答案）
+            const label = STAGE_LABELS[m.custom_data.stage];
+            if (label) {
+              stageLabel = label;
+              renderThinking();
+            }
+          } else if (m.type === "ai" && m.content) {
             expertRaw = m.content;
             stopThinking();
             bubble.textContent = expertRaw || tokenRaw;

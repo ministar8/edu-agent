@@ -12,10 +12,12 @@ from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+from langgraph.config import get_stream_writer
 
+from agents.utils import CustomData
 from rag.evidence import FusedEvidence
 from rag.query_classifier import TEXT_ONLY_DEPTH
-from rag.retriever import aretrieve_evidence_with_retry
+from rag.retriever import StageSink, aretrieve_evidence_with_retry
 from rag.verifier import VerificationResult
 from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
 
@@ -79,6 +81,31 @@ def build_retrieval_result(
     )
 
 
+def _stage_sink() -> StageSink | None:
+    """把「检索阶段进度」接到 SSE 的回调；拿不到 writer 时返回 None。
+
+    为什么放在这里而不是 `rag/`：检索链是纯计算层，不该知道 SSE 的存在。
+    由这一层（已经依赖 `agents.utils`）把回调注入进去，UI 关注点就留在上层。
+
+    ⚠️ **必须守卫 `get_stream_writer()`** —— 它内部读的是 runnable 上下文，
+    在没有 graph 上下文时（直接调用工具、离线评测、脚本）会抛
+    `RuntimeError: Called get_config outside of a runnable context`。
+    不守卫的话检索链会崩在「进度上报」这种锦上添花的事情上。
+    返回 None 时 `rag/` 走 no-op 分支，**检索行为与加这个功能之前完全一致**。
+    """
+    try:
+        writer = get_stream_writer()
+    except Exception:
+        # 拿不到 writer 是正常情况（非流式调用），绝不能影响检索
+        logger.debug("无 stream writer，跳过检索阶段进度上报", exc_info=True)
+        return None
+
+    def emit(stage: str) -> None:
+        CustomData(data={"kind": "retrieval_stage", "stage": stage}).dispatch(writer)
+
+    return emit
+
+
 async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, Any]:
     """统一的「检索 → 对外载荷」封装。"""
     try:
@@ -89,6 +116,7 @@ async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, 
             depth=depth,
             max_retries=1,
             use_llm_verify=False,
+            on_stage=_stage_sink(),
         )
     except Exception as e:
         logger.error("Retrieval failed: %s", e, exc_info=True)

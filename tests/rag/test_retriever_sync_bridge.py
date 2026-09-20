@@ -42,7 +42,10 @@ class TestSyncBridgeDelegates:
         out = R.retrieve_documents("q", "coll", 7, 0.5, False, {"a": 1}, None, None, ["s"])
 
         assert out is sentinel, "必须原样返回异步实现的结果，不能另做加工"
-        assert captured == [(("q", "coll", 7, 0.5, False, {"a": 1}, None, None, ["s"]), {})]
+        # 第 10 个位置参数是 on_stage（阶段进度回调）；同步预热场景不传，恒为 None
+        assert captured == [
+            (("q", "coll", 7, 0.5, False, {"a": 1}, None, None, ["s"], None), {})
+        ]
 
     def test_defaults_are_forwarded(self, monkeypatch):
         captured: list[tuple] = []
@@ -55,7 +58,7 @@ class TestSyncBridgeDelegates:
         R.retrieve_documents("q")
         args = captured[0][0]
         assert args[0] == "q"
-        assert len(args) == 9, "9 个形参应全部透传，避免漏参导致静默丢功能"
+        assert len(args) == 10, "10 个形参应全部透传，避免漏参导致静默丢功能"
 
     def test_async_impl_is_coroutine_function(self):
         assert asyncio.iscoroutinefunction(R.aretrieve_documents)
