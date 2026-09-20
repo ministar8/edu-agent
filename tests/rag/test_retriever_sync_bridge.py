@@ -43,9 +43,7 @@ class TestSyncBridgeDelegates:
 
         assert out is sentinel, "必须原样返回异步实现的结果，不能另做加工"
         # 第 10 个位置参数是 on_stage（阶段进度回调）；同步预热场景不传，恒为 None
-        assert captured == [
-            (("q", "coll", 7, 0.5, False, {"a": 1}, None, None, ["s"], None), {})
-        ]
+        assert captured == [(("q", "coll", 7, 0.5, False, {"a": 1}, None, None, ["s"], None), {})]
 
     def test_defaults_are_forwarded(self, monkeypatch):
         captured: list[tuple] = []
