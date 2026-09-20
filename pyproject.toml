@@ -49,7 +49,14 @@ dev = [
     "langgraph-cli[inmem]",
     "pymarkdownlnt",
     "playwright>=1.55",
+    # 给浏览器 E2E 加有界重试（见 tests/test_frontend_smoke.py 的 pytestmark）。
+    # 次数有界，真失败仍会红 —— 不是「把红的刷绿」。
     "pytest-rerunfailures",
+    # 把每条失败用例的断言消息输出成 GitHub 注解（::error::），
+    # 于是失败详情会出现在**公开的 check-run annotations API** 里 ——
+    # 无需认证即可读取，比翻 Actions 日志快得多。
+    # 只在 GITHUB_ACTIONS 环境变量存在时生效，本地跑是静默 no-op。
+    "pytest-github-actions-annotate-failures>=0.4.2",
 ]
 
 [tool.ruff]
