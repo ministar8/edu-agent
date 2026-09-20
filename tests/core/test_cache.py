@@ -80,10 +80,29 @@ class TestBasicSemantics:
         assert cache.get("k") is None
 
     def test_size_stays_bounded(self):
+        """**每次插入后**都断言，而不是只看结尾 —— 这是一条确定性回归测试。
+
+        为什么必须这样（原本只在结尾断言的版本**抓不住这个 bug**）：
+
+        `_evict_locked` 的守卫曾写成 `len <= max_size`，而调用方的触发条件是
+        `len >= max_size` —— 两者在 `len == max_size` 处**正好错开一格**，
+        于是长度在 `max_size ↔ max_size+1 ↔ max_size-1` 之间**周期性振荡**。
+
+        只看结尾的话，断言过不过取决于「振荡停在哪个相位」：
+
+        - **单线程**：相位固定，原用例**恰好总是停在 max_size，于是一直是绿的** ——
+          这正是它作为回归测试失效的原因。
+        - **多线程**：调度把相位摇随机，表现为
+          `TestConcurrency::test_set_under_contention_stays_bounded`
+          **间歇性失败** —— 也就是 CI 长期红、本地却几乎复现不出的根因。
+
+        改成每次插入后都断言，**相位就无关了，单线程即可稳定复现**
+        （反向验证：把守卫改回 `<=`，本用例立刻变红且报出 `11 > 10`）。
+        """
         cache: BoundedCache[int, int] = BoundedCache(max_size=10)
         for i in range(200):
             cache.set(i, i)
-        assert len(cache) <= 10
+            assert len(cache) <= 10, f"第 {i} 次插入后长度 {len(cache)} 超过 max_size=10"
 
     def test_stats_and_clear(self):
         cache: BoundedCache[str, int] = BoundedCache(max_size=4)

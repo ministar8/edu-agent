@@ -49,13 +49,15 @@ dev = [
     "langgraph-cli[inmem]",
     "pymarkdownlnt",
     "playwright>=1.55",
-    # 给浏览器 E2E 加有界重试（见 tests/test_frontend_smoke.py 的 pytestmark）。
-    # 次数有界，真失败仍会红 —— 不是「把红的刷绿」。
-    "pytest-rerunfailures",
-    # 把每条失败用例的断言消息输出成 GitHub 注解（::error::），
+    # 把每条失败用例的断言消息输出成 GitHub 注解（::failure::），
     # 于是失败详情会出现在**公开的 check-run annotations API** 里 ——
-    # 无需认证即可读取，比翻 Actions 日志快得多。
+    # 无需认证即可读取（Actions 日志与 artifact 都要认证）。
     # 只在 GITHUB_ACTIONS 环境变量存在时生效，本地跑是静默 no-op。
+    #
+    # **实测价值**：靠它才定位到 `core/cache.py` 的淘汰 off-by-one ——
+    # 在此之前「读不到日志」导致我基于间接线索误判成 E2E 的时序问题，
+    # 白走了很长的弯路。失败注解里直接写着
+    # `TestConcurrency.test_set_under_contention_stays_bounded / assert 5 <= 4`。
     "pytest-github-actions-annotate-failures>=0.4.2",
 ]
 

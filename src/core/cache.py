@@ -129,10 +129,28 @@ class BoundedCache[K, V]:
         self._data[key] = (value, time.monotonic())
 
     def _evict_locked(self) -> None:
-        """LRU 淘汰：按最后访问时间丢掉最旧的一批。"""
-        if len(self._data) <= self._max_size:
+        """LRU 淘汰：按最后访问时间丢掉最旧的一批。
+
+        ⚠️ **本方法只在 `_insert_locked` 插入「新 key」之前调用**，所以它的任务
+        不是「把长度压回 `max_size`」，而是**为即将插入的那一项腾出位置**
+        （即压到 `max_size - 1` 及以下）。
+
+        历史 bug（已修）：这里的守卫原本写成 `len <= max_size: return`，
+        而调用方的触发条件是 `len >= max_size` —— 两者在 `len == max_size`
+        处**正好错开一格**：满了之后每次插入新 key 都会**溢出到 `max_size + 1`**，
+        下一次插入才淘汰一批降到 `max_size - 1`，于是长度在
+        `max_size → max_size+1 → max_size-1 → max_size …` 周期性振荡。
+
+        单线程就会发生，但只表现为「长度偶尔多 1」，很难察觉；
+        并发下线程调度把它摇成了**间歇性测试失败**
+        （`tests/core/test_cache.py::TestConcurrency::test_set_under_contention_stays_bounded`
+        断言 `len(cache) <= max_size`）。**这就是 CI 长期红、本地却几乎复现不出的根因。**
+        """
+        if len(self._data) < self._max_size:
             return
-        evict_count = max(1, int(len(self._data) * self._evict_ratio))
+        # 至少要腾出「即将插入的那一项」的位置
+        need = len(self._data) - self._max_size + 1
+        evict_count = max(need, int(len(self._data) * self._evict_ratio))
         oldest = sorted(self._data.items(), key=lambda item: item[1][1])[:evict_count]
         victims = []
         for key, (value, _ts) in oldest:
