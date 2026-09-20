@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: true
       - name: Install dependencies
@@ -34,7 +34,7 @@ jobs:
       # 前端冒烟测试（backlog #19）需要真实浏览器。
       # 缓存二进制，否则每次 CI 都要重下 ~150MB（chromium + headless shell）。
       - name: Cache Playwright browsers
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('uv.lock') }}
@@ -47,7 +47,7 @@ jobs:
       # （路径在临时 runner 上，跑完就没了）—— 排查 flaky 时只能靠猜。
       - name: Upload E2E diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-diagnostics-py${{ matrix.python-version }}
           path: _e2e_artifacts/
@@ -66,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.1.0
       - name: Install dependencies
         run: uv sync --frozen
       - name: Lint markdown with pymarkdown
@@ -88,14 +88,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: true
       - name: Install dependencies
         run: uv sync --frozen
       # 缓存钩子仓库，否则每次都要重新 clone pre-commit-hooks / ruff-pre-commit
       - name: Cache pre-commit environments
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -117,7 +117,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install uv
-        uses: astral-sh/setup-uv@v9.0.0
+        uses: astral-sh/setup-uv@v10.1.0
         with:
           enable-cache: true
       - name: Install dependencies
