@@ -49,6 +49,7 @@ dev = [
     "langgraph-cli[inmem]",
     "pymarkdownlnt",
     "playwright>=1.55",
+    "pytest-rerunfailures",
 ]
 
 [tool.ruff]
