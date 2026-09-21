@@ -17,8 +17,8 @@ class DecomposeResult(BaseModel):
     sub_queries: list[str] = Field(
         alias="sub_questions",
         min_length=1,
-        max_length=4,
-        description="拆分后的子问题列表，每个聚焦单一知识点。如果无需分解，返回原始查询。",
+        max_length=3,
+        description="最多 3 条补充子问题，每个聚焦单一知识点；原始查询由调用方单独保留。",
     )
 
     @model_validator(mode="before")

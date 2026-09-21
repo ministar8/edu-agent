@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 
 import pytest
+from pydantic import ValidationError
 
 from rag import query_decomposer as qd
 from rag.query_classifier import QueryCategory
@@ -55,18 +56,18 @@ class TestShouldDecompose:
     def test_plain_query_does_not_trigger(self):
         assert qd.should_decompose("进程调度", QueryCategory()) is False
 
-    def test_concept_flag_is_ignored_by_implementation(self):
-        """⚠️ 文档与实现不一致 —— 这里固定的是**实际行为**，不是文档描述。
+    def test_pure_concept_never_decomposes_even_when_long(self):
+        """纯概念查询的目标是直答，不该为长度或 is_long 标记再调一次 LLM。
 
-        `should_decompose` 的 docstring 写着「不触发：纯概念/定义查询
-        （is_concept 且非 comparison）」，但函数体**完全没有读 is_concept**。
-        所以一个超过 30 字的纯概念查询照样会触发分解。
-
-        固定实际行为而非文档，是为了让「文档说的」和「代码做的」之间的差异
-        显式暴露 —— 而不是靠 docstring 假装它不存在。
-        改不改语义要过检索门禁，不是加测试能决定的。
+        这里故意同时给出三种会触发分解的信号（长度、is_long），证明
+        is_concept 的豁免优先级高于它们；但 comparison 例外仍可分解（见下条）。
         """
-        assert qd.should_decompose("x" * 31, QueryCategory(is_concept=True)) is True
+        cat = QueryCategory(is_concept=True, is_long=True)
+        assert qd.should_decompose("x" * 31, cat) is False
+
+    def test_comparison_overrides_concept_exemption(self):
+        cat = QueryCategory(is_concept=True, is_comparison=True)
+        assert qd.should_decompose("进程和线程的区别", cat) is True
 
 
 class TestRuleDecompose:
@@ -123,23 +124,30 @@ class TestPostprocessSubs:
     def test_original_already_present_is_not_duplicated(self):
         assert qd._postprocess_subs("原查询", ["原查询", "子1"]) == ["原查询", "子1"]
 
-    def test_original_is_appended_when_missing(self):
-        assert qd._postprocess_subs("原查询", ["子1", "子2"]) == ["子1", "子2", "原查询"]
+    def test_original_is_first_when_missing(self):
+        # 原查询是主问题，子查询只是补充；固定其顺序，避免未来又追加到末尾后被截掉。
+        assert qd._postprocess_subs("原查询", ["子1", "子2"]) == ["原查询", "子1", "子2"]
 
-    def test_capped_at_three_subs_plus_original(self):
-        assert qd._postprocess_subs("原查询", ["a", "b", "c"]) == ["a", "b", "c", "原查询"]
+    def test_capped_at_original_plus_three_subs(self):
+        assert qd._postprocess_subs("原查询", ["a", "b", "c"]) == ["原查询", "a", "b", "c"]
 
-    def test_four_subs_drop_the_original_query(self):
-        """⚠️ 与模块 docstring 的承诺不一致 —— 固定实际行为。
+    def test_overflow_keeps_original_and_first_three_subs(self):
+        """LLM 即使违规多返回，也必须保住主问题；截掉的是多余子查询。"""
+        assert qd._postprocess_subs("原查询", ["a", "b", "c", "d"]) == ["原查询", "a", "b", "c"]
 
-        `_postprocess_subs` 把原查询**追加到末尾**再截断到 4 条，
-        所以当 LLM 返回 4 条子查询（`DecomposeResult.sub_queries` 的
-        max_length 正好是 4）且原查询不在其中时，被截掉的恰好是**原查询本身**。
+    def test_duplicate_original_is_removed_before_cap(self):
+        assert qd._postprocess_subs("原查询", ["子1", "原查询", "子2"]) == ["原查询", "子1", "子2"]
 
-        模块 docstring 说「原始查询本身也作为一条子查询」——
-        这条路径上不成立。是否要改成「原查询插到首位再截断」需人来定。
-        """
-        assert qd._postprocess_subs("原查询", ["a", "b", "c", "d"]) == ["a", "b", "c", "d"]
+
+class TestDecomposeResultSchema:
+    def test_accepts_at_most_three_supplementary_sub_queries(self):
+        result = DecomposeResult(sub_queries=["a", "b", "c"])
+        assert result.sub_queries == ["a", "b", "c"]
+
+    def test_rejects_four_sub_queries_before_they_can_displace_original(self):
+        """schema 与 `_MAX_SUB_QUERIES` 同步，不能再让上游制造那个溢出形态。"""
+        with pytest.raises(ValidationError):
+            DecomposeResult(sub_queries=["a", "b", "c", "d"])
 
 
 class TestParseSubQueries:
@@ -218,6 +226,21 @@ class TestDecomposeAsync:
         assert qd._get_cached("短查询") is None
 
     @pytest.mark.asyncio
+    async def test_pure_concept_short_circuits_without_llm(self, monkeypatch):
+        """概念豁免的收益是省掉一次 LLM 调用；只测返回值无法证明这一点。"""
+
+        async def boom(*_a, **_kw):
+            raise AssertionError("纯概念查询不该调用分解 LLM")
+
+        monkeypatch.setattr(qd, "call_structured", boom)
+        monkeypatch.setattr(qd, "call_text", boom)
+
+        query = "虚拟内存的工作原理是什么，它如何通过页表和缺页中断实现地址转换"
+        out = await qd.decompose(query, cat=QueryCategory(is_concept=True, is_long=True))
+
+        assert out == [query]
+
+    @pytest.mark.asyncio
     async def test_rule_path_avoids_llm_and_caches(self, monkeypatch):
         calls = {"n": 0}
 
@@ -252,7 +275,7 @@ class TestDecomposeAsync:
 
         out = await qd.decompose("x" * 40, cat=QueryCategory(is_long=True))
 
-        assert out == ["子1", "子2", "x" * 40]
+        assert out == ["x" * 40, "子1", "子2"]
         assert captured["schema"] is DecomposeResult
         assert captured["kwargs"]["stage"] == "decompose"
         assert captured["kwargs"]["timeout"] > 0
@@ -274,7 +297,7 @@ class TestDecomposeAsync:
 
         out = await qd.decompose("y" * 40, cat=QueryCategory(is_long=True))
 
-        assert out == ["子A", "子B", "y" * 40]
+        assert out == ["y" * 40, "子A", "子B"]
         assert seen["stage"] == "decompose_fallback"
 
     @pytest.mark.asyncio
@@ -306,7 +329,7 @@ class TestDecomposeAsync:
         first = await qd.decompose("q" * 40, cat=QueryCategory(is_long=True))
         second = await qd.decompose("q" * 40, cat=QueryCategory(is_long=True))
 
-        assert first == second == ["子1", "q" * 40]
+        assert first == second == ["q" * 40, "子1"]
         assert calls["n"] == 1
 
     @pytest.mark.asyncio

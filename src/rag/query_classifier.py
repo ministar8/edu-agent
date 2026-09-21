@@ -26,7 +26,7 @@ class RetrievalDepth:
 
     depth 级别：
     - shallow:  简单概念查询，k=3，跳过 BM25/KG/分解/HyDE，无元数据路由
-    - standard: 一般查询，k=5，限 2 条元数据路由（去冗余）
+    - standard: 一般查询，k=5，跳过 KG 补充、限 2 条元数据路由（L2 低延迟）
     - deep:     复杂/对比/长查询，k=8，启用分解+KG 扩展，限 3 条元数据路由
     - code:     代码相关，k=6，code_meta 路由优先，跳过 HyDE，限 2 条元数据路由
     """
@@ -74,6 +74,9 @@ SHALLOW_DEPTH = RetrievalDepth(
 STANDARD_DEPTH = RetrievalDepth(
     depth="standard",
     k=5,
+    # L2 standard 的唯一配置。此前 retrieval_strategy 维护了一份 skip_kg=True 的副本，
+    # 导致「分类推导的 standard」与「策略解析出的 standard」不一致。
+    skip_kg=True,
     max_metadata_routes=2,
     lightweight_rerank=True,
 )

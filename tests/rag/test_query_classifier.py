@@ -99,6 +99,12 @@ class TestRetrievalDepthPresets:
     def test_k_increases_with_depth(self):
         assert SHALLOW_DEPTH.k < STANDARD_DEPTH.k < DEEP_DEPTH.k
 
+    def test_standard_is_l2_low_latency_profile(self):
+        # STANDARD_DEPTH 是唯一真源；strategy 层不得再维护一个冲突副本。
+        assert STANDARD_DEPTH.skip_kg is True
+        assert STANDARD_DEPTH.max_metadata_routes == 2
+        assert STANDARD_DEPTH.lightweight_rerank is True
+
     def test_shallow_skips_expensive_stages(self):
         assert SHALLOW_DEPTH.skip_decompose
         assert SHALLOW_DEPTH.skip_hyde

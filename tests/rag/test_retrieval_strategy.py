@@ -153,31 +153,22 @@ class TestPresetShape:
 
 
 class TestDepthObjectReuse:
-    def test_four_presets_reuse_the_classifier_depth_objects(self):
+    def test_all_presets_reuse_the_classifier_depth_objects(self):
         assert L1_FAST.depth is SHALLOW_DEPTH
+        assert L2_STANDARD.depth is STANDARD_DEPTH
         assert L2_TEXT_ONLY.depth is TEXT_ONLY_DEPTH
         assert L3_DEEP.depth is DEEP_DEPTH
         assert L3_CODE.depth is CODE_DEPTH
 
-    def test_l2_standard_substitutes_its_own_depth(self):
-        """⚠️ `L2_STANDARD.depth` **不是** query_classifier 里的 `STANDARD_DEPTH`。
+    def test_standard_has_one_canonical_depth_on_both_paths(self):
+        """分类路径与显式 depth 路径必须得到同一对象，不能再分叉成两种 standard。"""
+        cat = QueryCategory()
+        assert resolve_retrieval_strategy(cat).depth is STANDARD_DEPTH
+        assert resolve_retrieval_strategy(cat, STANDARD_DEPTH).depth is STANDARD_DEPTH
+        assert strategy_from_depth(STANDARD_DEPTH).depth is STANDARD_DEPTH
 
-        两者同名同 k，但 `skip_kg` 相反（True vs False）。后果是
-        「分类 → 深度」和「分类 → 策略」两条路的实际行为不一致：
-        走 `resolve_retrieval_strategy`（生产路径，`retriever.py:841`）时，
-        standard 查询会**跳过 KG 补充**；而直接拿 `resolve_retrieval_depth`
-        的结果去用则不会。
-
-        这里固定实际行为。是否有意为之需要人来判断 —— 若是，应把
-        `STANDARD_DEPTH` 的 `skip_kg` 也改掉以消除歧义；若不是，则应删掉
-        `L2_STANDARD_DEPTH` 这个替代品。
-        """
-        assert L2_STANDARD.depth is not STANDARD_DEPTH
-        assert L2_STANDARD.depth.k == STANDARD_DEPTH.k == 5
-        assert L2_STANDARD.depth.skip_kg is True
-        assert STANDARD_DEPTH.skip_kg is False
-
-    def test_l2_standard_keeps_metadata_route_cap(self):
-        # 替代品必须保留「限 2 条元数据路由」这个关键约束
-        assert L2_STANDARD.depth.max_metadata_routes == 2
-        assert L2_STANDARD.depth.lightweight_rerank is True
+    def test_standard_skips_kg_but_keeps_lightweight_rerank_and_metadata_cap(self):
+        # 这是既有生产默认的 L2 行为；本次只把它收回唯一真源 STANDARD_DEPTH。
+        assert STANDARD_DEPTH.skip_kg is True
+        assert STANDARD_DEPTH.max_metadata_routes == 2
+        assert STANDARD_DEPTH.lightweight_rerank is True

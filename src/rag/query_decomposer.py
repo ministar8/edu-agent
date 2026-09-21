@@ -1,7 +1,8 @@
 """查询分解模块
 
-将跨知识点综合查询拆分为 2-4 个子查询，每个聚焦单一知识点。
-仅在查询长度 > 30 字或 query_classifier 判定为"综合/对比"类型时触发。
+将跨知识点综合查询拆分为「原查询 + 最多 3 个子查询」，每个子查询聚焦单一知识点。
+仅在查询长度 > 30 字或 query_classifier 判定为"综合/对比"类型时触发；
+纯概念/定义查询例外（即使很长也直接回答，不为分解额外调用 LLM）。
 
 设计要点：
   - async decompose()：LLM 调用天然 async
@@ -62,11 +63,13 @@ def should_decompose(query: str, cat: QueryCategory) -> bool:
     """
     if cat.is_short:
         return False
+    # 概念题的目标是单点直答；再按长度分解只会多一次 LLM 调用、扩大召回面。
+    # comparison 是例外：即使带 is_concept，也必须按对比题处理。
+    if cat.is_concept and not cat.is_comparison:
+        return False
     if cat.is_comparison or cat.is_long:
         return True
-    if len(query) > 30:
-        return True
-    return False
+    return len(query) > 30
 
 
 # ── JSON 解析 ──────────────────────────────────────────────
@@ -111,11 +114,17 @@ def _ensure_cat(query: str, cat: QueryCategory | None = None) -> QueryCategory:
 
 
 def _postprocess_subs(query: str, sub_queries: list[str]) -> list[str]:
-    if not sub_queries:
-        return [query]
-    if query not in sub_queries:
-        sub_queries = [*sub_queries, query]
-    return sub_queries[: _MAX_SUB_QUERIES + 1]
+    """规范成「原查询在首位 + 最多 3 条不同子查询」。
+
+    原查询是分解检索的主分支（RRF 权重 1.5），子查询只是补充（权重 1.0），
+    所以它**必须**保留且排在首位。历史实现把原查询追加到末尾再截断：当 LLM
+    返回 4 条子查询（旧 schema 的上限）时，恰好把原查询自己截掉，违背了模块契约。
+
+    即使调用方或模型违规多返回，也截子查询而非主问题；`dict.fromkeys` 去重并保留
+    首次出现顺序，避免同一子查询平白重复召回一次。
+    """
+    unique_subs = list(dict.fromkeys(sub for sub in sub_queries if sub != query))
+    return [query, *unique_subs[:_MAX_SUB_QUERIES]]
 
 
 def _clean_rule_part(text: str) -> str:

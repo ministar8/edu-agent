@@ -6,6 +6,7 @@ from rag.query_classifier import (
     CODE_DEPTH,
     DEEP_DEPTH,
     SHALLOW_DEPTH,
+    STANDARD_DEPTH,
     TEXT_ONLY_DEPTH,
     QueryCategory,
     RetrievalDepth,
@@ -21,15 +22,10 @@ class RetrievalStrategy:
 
 
 L1_FAST = RetrievalStrategy(layer="L1", route_type="l1_fast", depth=SHALLOW_DEPTH)
-L2_STANDARD_DEPTH = RetrievalDepth(
-    depth="standard",
-    k=5,
-    skip_kg=True,
-    skip_hyde=False,
-    max_metadata_routes=2,
-    lightweight_rerank=True,
-)
-L2_STANDARD = RetrievalStrategy(layer="L2", route_type="l2_standard", depth=L2_STANDARD_DEPTH)
+# ★ standard 的唯一真源在 query_classifier.STANDARD_DEPTH。历史上这里复制了一份
+# L2_STANDARD_DEPTH，只有 skip_kg 与唯一真源相反：默认生产路径（depth=None）会走
+# 这份副本，显式传 STANDARD_DEPTH 则走另一份，造成同一 "standard" 两种行为。
+L2_STANDARD = RetrievalStrategy(layer="L2", route_type="l2_standard", depth=STANDARD_DEPTH)
 L2_TEXT_ONLY = RetrievalStrategy(layer="L2", route_type="l2_text_only", depth=TEXT_ONLY_DEPTH)
 L3_DEEP = RetrievalStrategy(layer="L3", route_type="l3_deep", depth=DEEP_DEPTH)
 L3_CODE = RetrievalStrategy(layer="L3", route_type="l3_code", depth=CODE_DEPTH)
