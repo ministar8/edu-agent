@@ -1,4 +1,4 @@
-"""P2：topic 规范化、记忆卡、显式外键、教学图节点。"""
+"""topic 规范化、记忆卡、显式外键、教学图节点。"""
 
 from datetime import UTC, datetime
 

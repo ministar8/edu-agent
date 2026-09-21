@@ -1,4 +1,4 @@
-"""记忆 P0：命名空间工厂、版本化 schema、profile/episodes 读写。"""
+"""记忆命名空间工厂、版本化 schema、profile / episodes 读写。"""
 
 from pathlib import Path
 

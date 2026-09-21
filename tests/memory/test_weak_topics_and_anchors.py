@@ -1,4 +1,4 @@
-"""P1：weak_topics 防抖、safe_remember、锚点字段。"""
+"""weak_topics 防抖、safe_remember、记忆锚点字段。"""
 
 import asyncio
 from datetime import UTC, datetime, timedelta

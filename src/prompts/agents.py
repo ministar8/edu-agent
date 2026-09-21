@@ -4,7 +4,7 @@
 （LangChain 内部会包成 SystemMessage），因此这里保持纯 `str`，不是 ChatPromptTemplate。
 
 结构规范（5 段式）：`[角色] [工具] [规则] [输出] [示例]`，其中**前 4 段必填**，
-`[示例]` 可选（目前只有 grading 用）。由 `tests/test_prompt_templates.py` 断言。
+`[示例]` 可选（目前只有 grading 用）。由 `tests/prompts/test_prompt_templates.py` 断言。
 
 **规则一律用无编号列表**：早期用 `1. 2. 3.` 编号，共享规则占了 1–6，各 agent 的专属规则
 从 7 接着排 —— 往共享规则加一条，所有 agent 的编号就整体错位（且不会报错）。改用列表后
