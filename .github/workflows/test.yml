@@ -132,6 +132,24 @@ jobs:
           USE_FAKE_MODEL: "true"
         run: uv run python -m evaluation.retrieval_gate
 
+      - name: Run gated end-to-end retrieval tests
+        # 这两个测试默认被 @_skip_gate 跳过（各需建一次临时索引，约 35s）。**必须显式开启**，
+        # 因为它们覆盖的是别处覆盖不到的东西 —— 在加这一步之前，它们从未在 CI 里执行过：
+        #   · TestGateEndToEnd         —— 真建索引 + 真跑 40 条查询，验证门禁自身不退化
+        #   · TestSyncAsyncEquivalence —— 同步/异步两条路径的最终产出必须完全一致。
+        #     这是「删除 448 行同步副本」那次重构**唯一**的正确性依据：
+        #     单测只能证明"委托调用了异步实现"，证明不了"两条路径产出一致"。
+        # 放在本 job 是因为它已经付过「装依赖」的成本（本步实测约 107s）。
+        env:
+          PYTHONPATH: src
+          USE_FAKE_MODEL: "true"
+          RUN_RETRIEVAL_GATE: "1"
+        run: |
+          uv run pytest \
+            tests/evaluation/test_retrieval_gate.py::TestGateEndToEnd \
+            tests/rag/test_retriever_sync_bridge.py::TestSyncAsyncEquivalence \
+            -q
+
   test-docker:
     runs-on: ubuntu-latest
     steps:
