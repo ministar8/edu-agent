@@ -2,14 +2,19 @@
 
 使用本地 TEI bge-reranker-v2-m3 对向量检索结果进行精排。
 通过 RERANK_ENABLED 开关控制。
+
+``USE_FAKE_RERANK=true`` 时改用确定性本地打分（见 `_fake_rerank`），
+让无 TEI 的门禁 / 单测也能覆盖重排链路。
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import re
 import time
+from typing import Any
 
 import httpx
 from langchain_core.documents import Document
@@ -49,6 +54,61 @@ def _document_cache_id(doc: Document) -> str:
 def _rerank_cache_key(query: str, documents: list[Document], top_k: int) -> str:
     raw = "\n".join([query, str(top_k), *[_document_cache_id(doc) for doc in documents]])
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+# ── 假重排（测试 / 门禁用，由 settings.USE_FAKE_RERANK 启用）──────
+
+
+def _bigram_counts(text: str) -> dict[str, int]:
+    """字符 bigram 计数，与 `HashingEmbeddings` 同一套分词口径。"""
+    normalized = "".join(str(text).lower().split())
+    if not normalized:
+        return {}
+    tokens = [normalized[i : i + 2] for i in range(len(normalized) - 1)]
+    tokens.append(normalized)  # 整串参与，保证极短文本也有区分度
+    counts: dict[str, int] = {}
+    for token in tokens:
+        counts[token] = counts.get(token, 0) + 1
+    return counts
+
+
+def _bigram_cosine(a: dict[str, int], b: dict[str, int]) -> float:
+    if not a or not b:
+        return 0.0
+    common = a.keys() & b.keys()
+    if not common:
+        return 0.0
+    dot = sum(a[key] * b[key] for key in common)
+    norm_a = math.sqrt(sum(value * value for value in a.values()))
+    norm_b = math.sqrt(sum(value * value for value in b.values()))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def _fake_rerank(query: str, texts: list[str], top_n: int) -> list[dict[str, Any]]:
+    """确定性本地打分，替代 TEI ``/rerank``。返回与 TEI 同款的结构。
+
+    **与 `HashingEmbeddings` 同一哲学**：只保留**词汇重叠**信号（字符 bigram 余弦），
+    因此足以验证重排链路的**接线** —— 候选顺序是否真被改写、``top_n`` 是否被遵守、
+    ``rerank_score`` 是否被写入、阈值是否照常过滤 —— 但**没有语义泛化能力**
+    （同义不同词不会相似）。
+
+    **确定性来自纯计算**：不碰网络、也不用内置 ``hash()``（后者受 PYTHONHASHSEED
+    影响，跨进程结果不一致）。这正是原来「必须打真实 TEI 才能跑重排」做不到的事。
+
+    ⚠️ **分数分布与 bge-reranker 不同**：真实模型分数经 sigmoid 集中在 0.5~0.99，
+    而这里的余弦对「短查询 vs 长文档」天然偏低。所以本路由上绝对阈值
+    （``RERANK_ABSOLUTE_MIN_SCORE``）的行为**不代表生产** —— 该路由的指标
+    只能与**同环境**基线比，不能拿去和生产数字对照。
+    """
+    query_vec = _bigram_counts(query)
+    scored = [
+        (index, _bigram_cosine(query_vec, _bigram_counts(text))) for index, text in enumerate(texts)
+    ]
+    # 同分时按原顺序，保证排序完全确定
+    scored.sort(key=lambda item: (-item[1], item[0]))
+    return [{"index": index, "score": score} for index, score in scored[:top_n]]
 
 
 def rerank(
@@ -105,25 +165,24 @@ def rerank(
     _HEADING_PATH_RE = re.compile(r"^(?:\[[^\]]*\]\s*(?:>\s*)*)+\n")
     texts = [_HEADING_PATH_RE.sub("", doc.page_content)[:_MAX_DOC_CHARS] for doc in documents]
 
-    # ── 调用本地 TEI /rerank ──
-    api_url = f"{settings.RERANK_LOCAL_URL}/rerank"
-    payload = {
-        "query": query,
-        "texts": texts,
-        "top_n": min(top_k, len(documents)),
-    }
-
-    try:
-        with httpx.Client(timeout=settings.RERANK_TIMEOUT) as client:
-            resp = client.post(api_url, json=payload)
-            resp.raise_for_status()
-        results = resp.json()
-    except httpx.HTTPStatusError as e:
-        logger.error("Rerank HTTP error: %s %s", e.response.status_code, e.response.text[:200])
-        return documents[:top_k]
-    except Exception as e:
-        logger.error("Rerank call failed: %s", e, exc_info=True)
-        return documents[:top_k]
+    # ── 打分：默认打本地 TEI /rerank；USE_FAKE_RERANK 时走确定性本地实现 ──
+    top_n = min(top_k, len(documents))
+    if settings.USE_FAKE_RERANK:
+        results = _fake_rerank(query, texts, top_n=top_n)
+    else:
+        api_url = f"{settings.RERANK_LOCAL_URL}/rerank"
+        payload = {"query": query, "texts": texts, "top_n": top_n}
+        try:
+            with httpx.Client(timeout=settings.RERANK_TIMEOUT) as client:
+                resp = client.post(api_url, json=payload)
+                resp.raise_for_status()
+            results = resp.json()
+        except httpx.HTTPStatusError as e:
+            logger.error("Rerank HTTP error: %s %s", e.response.status_code, e.response.text[:200])
+            return documents[:top_k]
+        except Exception as e:
+            logger.error("Rerank call failed: %s", e, exc_info=True)
+            return documents[:top_k]
 
     if not results:
         logger.warning("Rerank returned empty results, using original order")

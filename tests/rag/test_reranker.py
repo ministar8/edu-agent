@@ -386,3 +386,103 @@ class TestHappyPath:
         calls = _install_client(monkeypatch, payload=[])
         R.rerank("q", _docs(2), top_k=10)
         assert calls["json"]["top_n"] == 2
+
+
+# ── 假重排（门禁用：无 TEI 也能跑重排链路）──────────────
+
+
+class TestFakeScoring:
+    """`_fake_rerank` 的纯函数契约。"""
+
+    def test_ranks_by_lexical_overlap(self):
+        texts = [
+            "红烧肉的做法需要冰糖和老抽",
+            "进程是资源分配的基本单位，线程是CPU调度的基本单位",
+            "进程与线程的区别在于资源分配与调度单位不同",
+        ]
+        out = R._fake_rerank("进程和线程的区别", texts, top_n=3)
+
+        assert out[0]["index"] == 2, "最相关的一条应排第一"
+        assert out[-1]["index"] == 0, "完全无关的一条应垫底"
+
+    def test_is_deterministic(self):
+        """确定性是门禁基线可复现的前提 —— 不能依赖内置 hash()（受 PYTHONHASHSEED 影响）。"""
+        texts = ["甲", "乙丙", "丁戊己"]
+        assert R._fake_rerank("乙", texts, 3) == R._fake_rerank("乙", texts, 3)
+
+    def test_ties_break_by_original_order(self):
+        out = R._fake_rerank("完全无关的查询", ["相同", "相同", "相同"], top_n=3)
+        assert [item["index"] for item in out] == [0, 1, 2]
+
+    def test_respects_top_n(self):
+        assert len(R._fake_rerank("q", ["a", "b", "c"], top_n=2)) == 2
+
+    def test_scores_stay_in_unit_range(self):
+        out = R._fake_rerank("进程调度", ["进程调度算法", "无关内容"], top_n=2)
+        assert all(0.0 <= item["score"] <= 1.0 for item in out)
+
+    def test_empty_texts_returns_empty(self):
+        assert R._fake_rerank("q", [], top_n=3) == []
+
+    def test_blank_query_scores_everything_zero(self):
+        assert R._fake_rerank("   ", ["有内容"], top_n=1) == [{"index": 0, "score": 0.0}]
+
+    def test_output_shape_matches_tei(self):
+        """结构必须与 TEI 一致（`index` / `score`），否则下游组装会静默丢文档。"""
+        out = R._fake_rerank("q", ["x"], top_n=1)
+        assert set(out[0]) == {"index", "score"}
+
+
+class TestFakeRerankInPipeline:
+    """`USE_FAKE_RERANK` 与 `RERANK_ENABLED` 的组合行为。"""
+
+    @pytest.fixture
+    def fake(self, monkeypatch):
+        monkeypatch.setattr(R.settings, "RERANK_ENABLED", True)
+        monkeypatch.setattr(R.settings, "USE_FAKE_RERANK", True)
+
+    def test_never_touches_http(self, monkeypatch, fake):
+        """打开假重排后**绝不能**再构造 httpx.Client —— 否则 CI 会真去打 TEI。
+
+        断言 `calls == {}` 而不是"结果非空"：即使真打了 TEI 拿到空结果，
+        代码也会静默回退成原始顺序，光看结果分不出走没走网络。
+        """
+        calls = _install_client(monkeypatch, payload=[])
+        docs = [
+            Document(page_content="红烧肉的做法", metadata={"chunk_id": "c0"}),
+            Document(page_content="进程调度的基本概念", metadata={"chunk_id": "c1"}),
+        ]
+
+        out = R.rerank("进程调度", docs, top_k=2)
+
+        assert calls == {}, "不该构造 httpx.Client"
+        assert out[0].page_content == "进程调度的基本概念", "排序应被改写"
+
+    def test_writes_rerank_metadata_like_real_path(self, fake):
+        docs = [Document(page_content="进程调度算法", metadata={"chunk_id": "c"})]
+        out = R.rerank("进程调度", docs, top_k=1)
+
+        assert 0.0 <= out[0].metadata["rerank_score"] <= 1.0
+        assert out[0].metadata["rerank_method"] == "bge-reranker-v2-m3"
+
+    def test_result_is_cached(self, fake):
+        docs = [Document(page_content="进程调度", metadata={"chunk_id": "c"})]
+        R.rerank("进程调度", docs, top_k=1)
+        assert len(R._rerank_cache) == 1
+
+    def test_still_respects_rerank_enabled(self, monkeypatch):
+        """`USE_FAKE_RERANK` 开着但 `RERANK_ENABLED` 关着 → 仍然早退、不排序。
+
+        两个开关是**与**关系。只开假重排不该激活重排路径 ——
+        否则门禁的 `GATE_USE_RERANK=0` 路由会被悄悄变成"开了重排"。
+        """
+        monkeypatch.setattr(R.settings, "RERANK_ENABLED", False)
+        monkeypatch.setattr(R.settings, "USE_FAKE_RERANK", True)
+        docs = [
+            Document(page_content="红烧肉", metadata={"chunk_id": "c0"}),
+            Document(page_content="进程调度", metadata={"chunk_id": "c1"}),
+        ]
+
+        out = R.rerank("进程调度", docs, top_k=2)
+
+        assert [d.page_content for d in out] == ["红烧肉", "进程调度"], "应保持原始顺序"

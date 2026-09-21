@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     # 测试用：以确定性哈希向量替代 TEI embedding，使检索链无需外部服务即可运行。
     # 与 USE_FAKE_MODEL 同一模式（见 core.llm.FakeToolModel）。
     USE_FAKE_EMBEDDING: bool = False
+    # 测试用：以确定性本地打分替代 TEI ``/rerank``，使**重排链路**（预筛选 / top_k 截断 /
+    # 双重阈值过滤 / rerank_score 写入）在无 TEI 环境下也能被门禁覆盖。
+    # 同样与 USE_FAKE_MODEL 同一模式（实现见 rag.reranker._fake_rerank）。
+    #
+    # ⚠️ 它只让**管线**可跑，不复制 bge-reranker 的分数分布 —— 生产里的绝对阈值
+    # （RERANK_ABSOLUTE_MIN_SCORE 等）是按真实模型分布标定的。所以假重排路由上的
+    # 指标**不能**与生产对比，只能自己和自己比（与基线同环境）。
+    USE_FAKE_RERANK: bool = False
 
     # ── 网关端点 ──────────────────────────────
     DASHSCOPE_API_BASE: Annotated[str, BeforeValidator(check_str_is_http)] = (

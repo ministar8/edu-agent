@@ -22,11 +22,24 @@ RAG 检索链的改动（阈值常数、RRF 路由权重、切分策略、去重
    只看 ``category_precision`` 会有一个致命盲区：**返回 0 条时精确率无定义/被算成完美**。
    这两个指标就是用来堵这个盲区的 —— 检索链"静默返回空"是最危险的退化形态。
 
+4. **重排路由单独一条，而且只测「接线」不测「质量」。**
+   生产是 ``use_rerank=True``，门禁却一直跑 ``False`` —— 重排相关的代码
+   （候选池 expand 倍率、预筛选、``_apply_rerank_threshold``、``rerank_score`` 写入）
+   **从未被门禁覆盖**。现在可用 ``GATE_USE_RERANK=1`` 跑第二条路由，走
+   ``USE_FAKE_RERANK``（确定性字符 bigram 余弦，不需要 TEI）。
+   但假打分的**分数分布与 bge-reranker 不同**，绝对阈值的行为不代表生产，
+   所以这条路由的指标**只能与同环境基线比**。基线因此分成两份，
+   ``main()`` 还会校验 ``_meta.rerank_enabled`` 是否与本次运行一致。
+
 用法::
 
-    python -m evaluation.retrieval_gate                    # 跑门禁并与基线对比
+    python -m evaluation.retrieval_gate                    # 跑门禁并与基线对比（rerank 关闭）
     python -m evaluation.retrieval_gate --update-baseline  # 重录基线（需在 PR 里说明原因）
     python -m evaluation.retrieval_gate --limit 10         # 快速抽查
+
+    # 重排路由（生产实际走的那条；用确定性假打分，无需 TEI）
+    GATE_USE_RERANK=1 python -m evaluation.retrieval_gate
+    GATE_USE_RERANK=1 python -m evaluation.retrieval_gate --update-baseline
 """
 
 from __future__ import annotations
@@ -35,6 +48,7 @@ import argparse
 import asyncio
 import json
 import logging
+import os
 import shutil
 import sys
 import tempfile
@@ -57,10 +71,55 @@ SUBJECT_TO_CATEGORY: dict[str, str] = {
 
 DEFAULT_GOLDEN_PATH = "evals/sample_408.jsonl"
 DEFAULT_BASELINE_PATH = "evals/retrieval_baseline.json"
+# 重排路由**单独一份基线**：两条路由的指标口径不同（候选池 expand 倍率、粗排 k、
+# 是否过双重阈值都不同），混用等于拿苹果比橘子。
+RERANK_BASELINE_PATH = "evals/retrieval_baseline_rerank.json"
+
+
+def _env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
 
 # 门禁运行参数。写进基线文件，避免"拿不同配置的数字互相比较"。
 GATE_K = 5
-GATE_USE_RERANK = False
+
+# 重排路由开关。**默认关闭** —— 保持既有基线的口径不变。
+# 打开：`GATE_USE_RERANK=1 python -m evaluation.retrieval_gate`
+# 打开后走 `USE_FAKE_RERANK`（确定性本地打分），因此**不需要 TEI**。
+#
+# 为什么需要这条路由：生产是 `use_rerank=True`，而门禁一直跑 `False` ——
+# 也就是说重排相关的代码（候选池 expand、预筛选、`_apply_rerank_threshold`、
+# `rerank_score` 写入）**从来没有被门禁覆盖过**。改坏了不会有任何信号。
+GATE_USE_RERANK = _env_flag("GATE_USE_RERANK")
+
+
+def default_baseline_path() -> str:
+    """按当前路由选默认基线，避免误拿另一条路由的数字来比。"""
+    return RERANK_BASELINE_PATH if GATE_USE_RERANK else DEFAULT_BASELINE_PATH
+
+
+def load_baseline(path: Path) -> dict[str, Any] | None:
+    """读基线并**校验口径**；文件不存在返回 None。
+
+    口径校验：基线里记录的 ``rerank_enabled`` 必须与本次运行一致。
+    少了这一步，两条路由的数字会被拿来互比 —— 那恰恰是最容易得出错误结论的
+    一类对比（见 MEMORY 的「基线口径必须一致」）。历史基线没有这个字段时放行。
+
+    Raises:
+        ValueError: 口径不匹配。由调用方转成退出码 2（"配置错误"，非"指标退化"）。
+    """
+    if not path.exists():
+        return None
+
+    recorded = json.loads(path.read_text(encoding="utf-8"))
+    recorded_rerank = recorded.get("_meta", {}).get("rerank_enabled")
+    if recorded_rerank is not None and bool(recorded_rerank) != GATE_USE_RERANK:
+        raise ValueError(
+            f"基线口径不匹配：{path} 记录 rerank_enabled={recorded_rerank}，"
+            f"本次运行是 {GATE_USE_RERANK}。两条路由的指标不可直接比较 —— "
+            "请改用对应路由的基线，或先 `--update-baseline` 重录。"
+        )
+    return recorded.get("metrics")
 
 
 @dataclass
@@ -232,6 +291,10 @@ def configure_for_gate(persist_dir: str) -> None:
     ``openai.OpenAIError: Missing credentials``，实测让 40 条 query 里 6 条崩溃。
     settings 侧已有"USE_FAKE_MODEL 拉回假网关"的逻辑，这里再显式设一次是**故意的重复**：
     门禁的正确性不该依赖 settings 的默认推导，显式声明才能保证任何环境下行为一致。
+
+    同理，重排路由下必须**同时**打开 ``RERANK_ENABLED`` 与 ``USE_FAKE_RERANK``：
+    只开前者会真去打 TEI（CI 里没有这个服务），``rerank()`` 会静默走 except 分支
+    退回原始顺序 —— 门禁照样"通过"，但重排路径一行都没执行到。
     """
     from core.settings import GATEWAY_DEFAULT_MODEL, Gateway, make_model_ref, settings
     from rag import semantic_cache as sc
@@ -241,7 +304,8 @@ def configure_for_gate(persist_dir: str) -> None:
     settings.CHROMA_PORT = 1
     settings.CHROMA_PERSIST_DIR = persist_dir
     settings.SEMANTIC_CACHE_ENABLED = False
-    settings.RERANK_ENABLED = False
+    settings.RERANK_ENABLED = GATE_USE_RERANK
+    settings.USE_FAKE_RERANK = GATE_USE_RERANK
 
     settings.USE_FAKE_MODEL = True
     fake_ref = make_model_ref(Gateway.FAKE, GATEWAY_DEFAULT_MODEL[Gateway.FAKE])
@@ -388,6 +452,8 @@ def _build_report(
     lines: list[str] = []
     lines.append("=" * 68)
     lines.append("  检索质量黄金集门禁")
+    # 把路由写进标题：两条路由的指标不可互比，报告必须自证口径
+    lines.append(f"  路由 rerank={'on (fake)' if GATE_USE_RERANK else 'off'}   k={GATE_K}")
     lines.append("=" * 68)
 
     current = metrics.as_dict()
@@ -431,7 +497,12 @@ def _build_report(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="检索质量黄金集回归门禁")
     parser.add_argument("--golden", default=DEFAULT_GOLDEN_PATH, help="黄金集 jsonl 路径")
-    parser.add_argument("--baseline", default=DEFAULT_BASELINE_PATH, help="基线 json 路径")
+    parser.add_argument(
+        "--baseline",
+        default=None,
+        help="基线 json 路径（不传则按路由自动选：rerank off → retrieval_baseline.json，"
+        "on → retrieval_baseline_rerank.json）",
+    )
     parser.add_argument("--limit", type=int, default=None, help="只跑前 N 条（抽查用）")
     parser.add_argument("--update-baseline", action="store_true", help="重录基线")
     parser.add_argument("--keep-index", action="store_true", help="保留临时索引目录（调试用）")
@@ -442,6 +513,16 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.INFO if args.verbose else logging.WARNING,
         format="%(levelname)s %(name)s: %(message)s",
     )
+
+    # 基线先读、先校验：口径不对就没必要花一分钟建索引再告诉你。
+    baseline_path = Path(args.baseline or default_baseline_path())
+    baseline: dict[str, Any] | None = None
+    if not args.update_baseline:
+        try:
+            baseline = load_baseline(baseline_path)
+        except ValueError as exc:
+            print(f"[拒绝] {exc}", file=sys.stderr)
+            return 2
 
     tmp_dir = tempfile.mkdtemp(prefix="retrieval_gate_")
     try:
@@ -464,11 +545,6 @@ def main(argv: list[str] | None = None) -> int:
         start = time.perf_counter()
         metrics, outcomes, errors = asyncio.run(run_gate(args.golden, limit=args.limit))
         query_seconds = time.perf_counter() - start
-
-        baseline: dict[str, Any] | None = None
-        baseline_path = Path(args.baseline)
-        if baseline_path.exists() and not args.update_baseline:
-            baseline = json.loads(baseline_path.read_text(encoding="utf-8")).get("metrics")
 
         print(_build_report(metrics, outcomes, baseline))
         print(f"索引 {index_seconds:.1f}s / 检索 {query_seconds:.1f}s")

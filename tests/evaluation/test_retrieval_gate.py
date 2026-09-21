@@ -20,9 +20,11 @@ from pathlib import Path
 
 import pytest
 
+from evaluation import retrieval_gate as gate
 from evaluation.retrieval_gate import (
     DEFAULT_BASELINE_PATH,
     DEFAULT_GOLDEN_PATH,
+    RERANK_BASELINE_PATH,
     SUBJECT_TO_CATEGORY,
     QueryOutcome,
     compare_to_baseline,
@@ -345,6 +347,89 @@ class TestBaselineFile:
 
     def test_baseline_passes_against_itself(self):
         metrics = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))["metrics"]
+        assert compare_to_baseline(metrics, metrics) == []
+
+
+class TestLoadBaseline:
+    """基线**口径校验**：跨路由比对必须被拒。
+
+    这是「基线口径必须一致」那条判断规则的**代码化**。没有它，rerank 开/关
+    两条路由的数字会被直接拿来比，得出的"改进/退化"结论完全是假的 ——
+    而这类错误恰恰最难自己发现，因为两组数字看起来都"很正常"。
+    """
+
+    @staticmethod
+    def _write(tmp_path: Path, *, rerank: bool | None, metrics: dict | None = None) -> Path:
+        path = tmp_path / "baseline.json"
+        meta = {} if rerank is None else {"rerank_enabled": rerank}
+        payload = {"_meta": meta, "metrics": metrics or {"x": 1.0}}
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
+    def test_missing_file_returns_none(self, tmp_path):
+        assert gate.load_baseline(tmp_path / "nope.json") is None
+
+    def test_matching_route_loads_metrics(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", False)
+        assert gate.load_baseline(self._write(tmp_path, rerank=False)) == {"x": 1.0}
+
+    def test_rerank_route_accepts_rerank_baseline(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", True)
+        assert gate.load_baseline(self._write(tmp_path, rerank=True)) == {"x": 1.0}
+
+    def test_mismatched_route_is_rejected(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", False)
+        with pytest.raises(ValueError, match="口径不匹配"):
+            gate.load_baseline(self._write(tmp_path, rerank=True))
+
+    def test_reverse_mismatch_is_also_rejected(self, tmp_path, monkeypatch):
+        """反方向同样要拦 —— 只拦一个方向等于没拦。"""
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", True)
+        with pytest.raises(ValueError, match="口径不匹配"):
+            gate.load_baseline(self._write(tmp_path, rerank=False))
+
+    def test_legacy_baseline_without_meta_is_accepted(self, tmp_path):
+        """历史基线没有 rerank_enabled 字段时放行 —— 加校验不该让老基线直接失效。"""
+        assert gate.load_baseline(self._write(tmp_path, rerank=None)) == {"x": 1.0}
+
+    def test_default_baseline_path_follows_route(self, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", False)
+        assert gate.default_baseline_path() == DEFAULT_BASELINE_PATH
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", True)
+        assert gate.default_baseline_path() == RERANK_BASELINE_PATH
+
+    def test_two_routes_use_different_files(self):
+        assert DEFAULT_BASELINE_PATH != RERANK_BASELINE_PATH
+
+
+class TestRerankBaselineFile:
+    """重排路由的基线文件。与关闭路由的那份是**两套口径**，不能互换。"""
+
+    def test_rerank_baseline_exists(self):
+        assert Path(RERANK_BASELINE_PATH).exists(), (
+            f"重排路由基线缺失: {RERANK_BASELINE_PATH} —— "
+            "用 `GATE_USE_RERANK=1 ... --update-baseline` 生成"
+        )
+
+    def test_records_rerank_enabled_true(self):
+        meta = json.loads(Path(RERANK_BASELINE_PATH).read_text(encoding="utf-8"))["_meta"]
+        assert meta["rerank_enabled"] is True, "这份基线必须是重排路由录的"
+
+    def test_metric_keys_match_golden_count(self):
+        baseline = json.loads(Path(RERANK_BASELINE_PATH).read_text(encoding="utf-8"))
+        assert baseline["metrics"]["n_queries"] == len(load_golden_queries(GOLDEN_PATH))
+
+    def test_baseline_is_not_vacuous(self):
+        """防"门禁假绿"：重排路由若把文档全过滤成空，这条路由就等于没测。"""
+        metrics = json.loads(Path(RERANK_BASELINE_PATH).read_text(encoding="utf-8"))["metrics"]
+        assert metrics["category_hit_at_k"] > 0.5, "基线本身太差，门禁失去意义"
+        assert metrics["empty_result_rate"] == 0.0, (
+            "重排路由出现空结果 —— 假打分的分数分布可能把文档全过滤掉了"
+        )
+        assert metrics["mean_evidence_count"] > 0, "平均证据数为 0，这条路由形同虚设"
+
+    def test_baseline_passes_against_itself(self):
+        metrics = json.loads(Path(RERANK_BASELINE_PATH).read_text(encoding="utf-8"))["metrics"]
         assert compare_to_baseline(metrics, metrics) == []
 
 

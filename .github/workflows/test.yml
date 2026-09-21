@@ -132,6 +132,20 @@ jobs:
           USE_FAKE_MODEL: "true"
         run: uv run python -m evaluation.retrieval_gate
 
+      - name: Run retrieval quality gate (rerank route)
+        # 生产走的是 use_rerank=True，而上面那步跑的是 False —— 重排相关代码
+        # （候选池 expand 倍率、预筛选、_apply_rerank_threshold、rerank_score 写入）
+        # 在此之前**从未被门禁覆盖**，改坏了不会有任何信号。
+        # 这步用 GATE_USE_RERANK=1 跑第二条路由，走 USE_FAKE_RERANK
+        # （确定性本地打分），因此同样不需要 TEI。
+        # 它读自己的基线文件；门禁会校验基线 _meta.rerank_enabled 是否与本次运行
+        # 匹配，防止两条路由的数字被拿来互比（那会得出完全虚假的"退化/改进"）。
+        env:
+          PYTHONPATH: src
+          USE_FAKE_MODEL: "true"
+          GATE_USE_RERANK: "1"
+        run: uv run python -m evaluation.retrieval_gate
+
       - name: Run gated end-to-end retrieval tests
         # 这两个测试默认被 @_skip_gate 跳过（各需建一次临时索引，约 35s）。**必须显式开启**，
         # 因为它们覆盖的是别处覆盖不到的东西 —— 在加这一步之前，它们从未在 CI 里执行过：
