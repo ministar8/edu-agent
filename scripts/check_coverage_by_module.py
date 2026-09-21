@@ -24,13 +24,39 @@ from pathlib import Path
 
 # 模块 -> (门槛%, 设定时的实测值%)。留 ~3pp 余量，避免正常波动误报。
 THRESHOLDS: dict[str, tuple[float, float]] = {
-    "rag": (60.0, 63.2),
+    "rag": (71.0, 74.3),
     "agents": (90.0, 96.7),
     "service": (80.0, 85.1),
 }
 
-# 离线数据清洗工具：不参与运行时，codecov.yml 里也已排除，此处同样不计
+# 整包排除：离线数据清洗工具，不参与运行时，codecov.yml 里也已排除
 EXCLUDED = {"tools"}
+
+# 模块级排除：只从**所属包的门槛**里摘出去（模块本身仍出现在覆盖率报告里）。
+# 路径以 `src/` 开头，与 coverage.json 的 key 一致。
+#
+# ★ 为什么离线入库链可以排除 —— 它们**不是没有保护，而是保护机制不是单测**：
+#   `evaluation.retrieval_gate.build_index()` 刻意复用真实入库链路
+#   （load → clean → split → enhance → tag → add），每次 CI 都在真实 `knowledge/`
+#   语料上端到端跑一遍（约 2200 chunks）。内容被洗坏、切错、标签打歪，都会让
+#   门禁指标漂移并失败。再用单测覆盖一遍是同一条链路的重复投入。
+#
+# ⚠️ **这个前提有守卫**：`tests/evaluation/test_retrieval_gate.py` 的
+#   `TestBuildIndexUsesRealPipeline` 断言 build_index 必须依次调用链路每一步。
+#   有人把它换成评测专用旁路时那条测试会红 —— 否则这里的排除就是**没有依据的**
+#   （排除照旧、指标照旧绿，但保护已经没了：典型的「保护机制存在 ≠ 生效」）。
+#
+# 连带效果：排除后 `rag` 口径从 68.4% 升到 74.3%，门槛因此可以从 60% 抬到 71%
+# —— 用「不再重复覆盖离线链」换来「对运行时路径更严的守住」。
+EXCLUDED_MODULES: frozenset[str] = frozenset(
+    {
+        "src/rag/loader.py",
+        "src/rag/cleaner.py",
+        "src/rag/enhancer.py",
+        "src/rag/knowledge_tagger.py",
+        "src/rag/ingest.py",
+    }
+)
 
 DEFAULT_JSON = Path("coverage.json")
 
@@ -43,12 +69,23 @@ def load_package_coverage(path: Path) -> dict[str, tuple[int, int]]:
         norm = str(file_path).replace("\\", "/")
         parts = norm.split("/")
         pkg = parts[1] if len(parts) > 1 and parts[0] == "src" else "(root)"
-        if pkg in EXCLUDED:
+        if pkg in EXCLUDED or norm in EXCLUDED_MODULES:
             continue
         bucket = groups.setdefault(pkg, [0, 0])
         bucket[0] += int(info["summary"]["num_statements"])
         bucket[1] += int(info["summary"]["missing_lines"])
     return {pkg: (s, m) for pkg, (s, m) in groups.items()}
+
+
+def missing_excluded_modules(path: Path) -> list[str]:
+    """``EXCLUDED_MODULES`` 里写了、但覆盖率报告里不存在的路径。
+
+    防的是「路径打错 → 排除静默失效」：那种情况下门槛会因口径不符而报红，
+    但信息指向"覆盖率不达标"，会让人往错的方向查 —— 所以单独报出来。
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    present = {str(key).replace("\\", "/") for key in data.get("files", {})}
+    return sorted(EXCLUDED_MODULES - present)
 
 
 def evaluate(
@@ -72,6 +109,13 @@ def main(argv: list[str]) -> int:
     if not path.exists():
         print(f"找不到 {path} —— 请先跑 `pytest --cov=src/ --cov-report=json`")
         return 2
+
+    missing = missing_excluded_modules(path)
+    if missing:
+        print("[警告] EXCLUDED_MODULES 里以下路径不在覆盖率报告中（拼错了？）：")
+        for name in missing:
+            print(f"  - {name}")
+        print("       排除会静默失效，本次门槛按「未排除」口径计算。\n")
 
     results = evaluate(load_package_coverage(path))
     failed = []

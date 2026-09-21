@@ -67,9 +67,75 @@ class TestLoadPackageCoverage:
         assert "(root)" in C.load_package_coverage(p)
 
 
+class TestExcludedModules:
+    """模块级排除：把离线入库链从 `rag` 门槛里摘出去。
+
+    这个决定的依据是「**门禁端到端覆盖了真实入库链路**」，而不是「它们不重要」。
+    该前提由 `tests/evaluation/test_retrieval_gate.py::TestBuildIndexUsesRealPipeline`
+    守着 —— 没有那条测试，这里的排除就是没有依据的。
+    """
+
+    def test_excluded_modules_do_not_count_toward_package(self, tmp_path):
+        p = _write_json(
+            tmp_path,
+            {
+                "src/rag/cleaner.py": (1000, 1000),  # 已排除：不该拖累 rag
+                "src/rag/retriever.py": (100, 0),
+            },
+        )
+        assert C.load_package_coverage(p)["rag"] == (100, 0)
+
+    def test_non_excluded_module_in_same_package_still_counts(self, tmp_path):
+        p = _write_json(tmp_path, {"src/rag/loader.py": (10, 10), "src/rag/recall.py": (10, 5)})
+        assert C.load_package_coverage(p)["rag"] == (10, 5)
+
+    def test_package_disappears_when_all_its_modules_excluded(self, tmp_path):
+        """整包的模块全被排除时该包不出现 —— `evaluate` 会把它当"模块消失"判失败。
+
+        固定这个行为是为了让人知道：**排除不能排到把包掏空**，
+        否则门槛会以"模块缺失"的形式报红。
+        """
+        p = _write_json(tmp_path, {name: (10, 10) for name in C.EXCLUDED_MODULES})
+        assert "rag" not in C.load_package_coverage(p)
+
+    def test_missing_excluded_modules_is_empty_for_real_coverage(self):
+        """真实 coverage.json 里这些路径必须都存在 —— 否则排除是**静默失效**的。"""
+        real = Path(C.DEFAULT_JSON)
+        if not real.exists():
+            pytest.skip("coverage.json 不存在（先跑一次带 --cov --cov-report=json 的测试）")
+        assert C.missing_excluded_modules(real) == []
+
+    def test_missing_excluded_modules_reports_typos(self, tmp_path):
+        p = _write_json(tmp_path, {"src/rag/loader.py": (10, 0)})
+        missing = C.missing_excluded_modules(p)
+        assert "src/rag/loader.py" not in missing, "存在的路径不该被报为缺失"
+        assert "src/rag/cleaner.py" in missing
+        assert len(missing) == len(C.EXCLUDED_MODULES) - 1
+
+    def test_main_warns_about_typoed_exclusions(self, tmp_path, capsys):
+        """路径打错时要显式告警 —— 否则会以"覆盖率不达标"的形式误报，把人带偏。"""
+        p = _write_json(tmp_path, {"src/rag/a.py": (100, 0)})
+        C.main(["prog", str(p)])
+        out = capsys.readouterr().out
+        assert "EXCLUDED_MODULES" in out
+        assert "排除会静默失效" in out
+
+    def test_main_is_silent_when_all_exclusions_resolve(self, tmp_path, capsys):
+        files = {name: (100, 0) for name in C.EXCLUDED_MODULES}
+        files.update({"src/rag/a.py": (100, 0), "src/agents/a.py": (100, 0)})
+        files["src/service/a.py"] = (100, 0)
+        p = _write_json(tmp_path, files)
+        assert C.main(["prog", str(p)]) == 0
+        assert "排除会静默失效" not in capsys.readouterr().out
+
+
 class TestEvaluate:
     def test_passing_module(self):
-        results = C.evaluate({"rag": (100, 30)})  # 70%
+        # 覆盖率取「门槛 +1pp」而不是写死一个数字 —— 门槛上调后写死的值会静默
+        # 变成"在测失败路径"，测试照旧绿但测的东西变了
+        threshold = C.THRESHOLDS["rag"][0]
+        missing = 100 - int(threshold) - 1
+        results = C.evaluate({"rag": (100, missing)})
         rag = [r for r in results if r[0] == "rag"][0]
         assert rag[3] is True
 

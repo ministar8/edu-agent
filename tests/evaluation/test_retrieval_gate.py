@@ -434,6 +434,97 @@ class TestRerankBaselineFile:
 
 
 # ══════════════════════════════════════════════════════
+# 4.5 build_index 的契约（"离线入库链可排除门槛"的唯一依据）
+# ══════════════════════════════════════════════════════
+
+
+class TestBuildIndexUsesRealPipeline:
+    """`build_index` 必须继续走**真实入库链路**。
+
+    这是 `scripts/check_coverage_by_module.py` 把 rag/loader、cleaner、enhancer、
+    knowledge_tagger、ingest 排除出 `rag` 门槛的**唯一依据** —— 理由不是"它们不重要"，
+    而是"门禁每次 CI 都在真实语料上端到端跑它们"。
+
+    一旦有人把 `build_index` 换成评测专用旁路（比如直接读预切好的 chunk），
+    那句理由会**静默变成假的**：排除照旧、门槛照旧绿，但保护已经没了。
+    这正是「保护机制存在 ≠ 生效」—— 所以这个前提必须由测试守着。
+    """
+
+    def test_every_chain_step_is_invoked(self, monkeypatch):
+        from langchain_core.documents import Document
+
+        from rag import cleaner, enhancer, knowledge_tagger, loader, splitter
+        from rag import vectorstore as vs
+
+        calls: list[str] = []
+        doc = Document(page_content="内容" * 60, metadata={"source_file": "a.md"})
+
+        def spy(name: str, result: list):
+            def _inner(*_args, **_kwargs):
+                calls.append(name)
+                return result
+
+            return _inner
+
+        monkeypatch.setattr(loader, "load_single_file", spy("load", [doc]))
+        monkeypatch.setattr(cleaner, "clean_documents", spy("clean", [doc]))
+        monkeypatch.setattr(splitter, "split_documents", spy("split", [doc]))
+        monkeypatch.setattr(enhancer, "enhance_documents", spy("enhance", [doc]))
+        monkeypatch.setattr(knowledge_tagger, "tag_chunks_with_knowledge_points", spy("tag", [doc]))
+
+        added: list[tuple[str, int]] = []
+
+        class _Manager:
+            def add_documents(self, chunks, collection_name):
+                added.append((collection_name, len(chunks)))
+                return ["id"] * len(chunks)
+
+        monkeypatch.setattr(vs, "get_vector_store_manager", lambda: _Manager())
+
+        # learning_paths 只有 1 个文件 —— 取最小的分类，测试才够快
+        counts = gate.build_index(categories=["learning_paths"])
+
+        assert calls[:5] == ["load", "clean", "split", "enhance", "tag"], (
+            "build_index 必须依次走完真实入库链的每一步；"
+            "换成旁路会让「离线入库链已由门禁覆盖」这个前提静默失效"
+        )
+        assert counts["learning_paths"] > 0, "链路跑完却什么都没入库，说明链路是假的"
+        assert added and added[0][0] == "learning_paths"
+
+    def test_category_is_stamped_on_every_chunk(self, monkeypatch):
+        """黄金集的 ground truth 就是 `metadata["category"]` —— 打歪了门禁全错。"""
+        from langchain_core.documents import Document
+
+        from rag import cleaner, enhancer, knowledge_tagger, loader, splitter
+        from rag import vectorstore as vs
+
+        docs = [Document(page_content="内容" * 60, metadata={})]
+
+        def passthrough(result: list):
+            return lambda *_a, **_kw: result
+
+        monkeypatch.setattr(loader, "load_single_file", passthrough(docs))
+        monkeypatch.setattr(cleaner, "clean_documents", passthrough(docs))
+        monkeypatch.setattr(splitter, "split_documents", passthrough(docs))
+        monkeypatch.setattr(enhancer, "enhance_documents", passthrough(docs))
+        monkeypatch.setattr(knowledge_tagger, "tag_chunks_with_knowledge_points", passthrough(docs))
+
+        seen: list = []
+
+        class _Manager:
+            def add_documents(self, chunks, collection_name):
+                seen.extend(chunks)
+                return ["id"] * len(chunks)
+
+        monkeypatch.setattr(vs, "get_vector_store_manager", lambda: _Manager())
+
+        gate.build_index(categories=["learning_paths"])
+
+        assert seen, "没有 chunk 被送进向量库"
+        assert all(chunk.metadata.get("category") == "learning_paths" for chunk in seen)
+
+
+# ══════════════════════════════════════════════════════
 # 5. 端到端（默认跳过）
 # ══════════════════════════════════════════════════════
 
