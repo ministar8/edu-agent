@@ -59,7 +59,14 @@ jobs:
         uses: codecov/codecov-action@v7
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          fail_ci_if_error: false
+          # 必须是 true：这个开关管的是「上传失败是否让 CI 变红」。
+          #
+          # 原来写 false，代价是**两种故障都会被静默吞掉**：
+          #   ① 上传本身失败（实测 codecov 侧 sessions 长期为 1 —— 历史上传基本全失败）
+          #   ② 上传成功但 codecov 没贴检查状态（仓库 deactivated 时就是这样）
+          # 两者都让这一步显示 success，CI 一路全绿，只能靠翻 codecov API 才发现。
+          # 一个绿色的步骤掩盖一整条断掉的链路 —— 正是「保护机制存在 ≠ 生效」。
+          fail_ci_if_error: true
 
   lint-markdown:
     runs-on: ubuntu-latest
