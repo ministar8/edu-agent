@@ -11,11 +11,11 @@
   },
   "metrics": {
     "n_queries": 40,
-    "category_hit_at_1": 0.9,
+    "category_hit_at_1": 0.95,
     "category_hit_at_k": 1.0,
-    "category_mrr": 0.9333,
-    "category_precision": 0.9309,
+    "category_mrr": 0.9708,
+    "category_precision": 0.9591,
     "empty_result_rate": 0.0,
-    "mean_evidence_count": 5.425
+    "mean_evidence_count": 5.5
   }
 }

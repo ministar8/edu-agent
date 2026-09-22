@@ -286,16 +286,6 @@ _CATEGORY_FLAGS = ("code", "exercise", "answer", "concept", "comparison", "struc
 ALL_ROUTES: tuple[str, ...] = tuple(dict.fromkeys(route for route, _cat in _ROUTE_WEIGHTS))
 
 
-# 全部路由名（**单一真源**，backlog #14）。
-#
-# 从权重表的键推导，而不是在别处再抄一份名单 ——
-# 抄漏会导致某个路由的权重不参与阈值校准，抄多会引入不存在的路由名，
-# 两种错误都**不会报错**，只会让阈值静默偏掉。
-#
-# 需要遍历路由的地方（如 `retriever` 的阈值权重校准）都应从这里取。
-ALL_ROUTES: tuple[str, ...] = tuple(dict.fromkeys(route for route, _cat in _ROUTE_WEIGHTS))
-
-
 def get_route_weight(route_name: str, cat: QueryCategory | None = None) -> float:
     """根据路由名和查询分类获取 RRF 权重
 
@@ -372,6 +362,8 @@ _COLLECTION_KEYWORDS = {
         "cpu",
         "中央处理器",
         "指令系统",
+        "指令周期",
+        "指令执行",
         "总线",
         "存储器",
         "cache",
@@ -395,6 +387,10 @@ _COLLECTION_KEYWORDS = {
         "快表",
         "页表",
         "段表",
+        # 段页式在知识库里**两科都有**（CO 的「存储系统」讲段页式虚拟存储器，
+        # OS 的「内存管理」讲段页式存储管理），所以两边都收录 —— 不收窄到单科，
+        # 但至少不让它退化成"全 4 科检索"。
+        "段页式",
         "虚拟存储器",
         "存储层次",
         "co",
@@ -414,6 +410,7 @@ _COLLECTION_KEYWORDS = {
         "内存管理",
         "分页",
         "分段",
+        "段页式",
         "虚拟内存",
         "虚拟存储器",
         "文件管理",
@@ -496,11 +493,18 @@ _COLLECTION_KEYWORDS = {
 def _infer_subject_collections(query: str) -> list[str]:
     normalized = normalize_query_text(query).lower()
     expanded = expand_query_with_synonyms(normalized, max_expansions=6).lower()
+    # 空格是**排版差异**、不是语义差异：关键词表里写的是 `ip地址` / `mac地址`，
+    # 而查询常写成 `IP 地址` / `MAC 地址`。不做这一步，这类写法**一个关键词都匹配不上**
+    # （实测 `'ip地址' in 'ip 地址与 mac 地址有什么区别？'` → False），
+    # `resolve_collection_routes` 于是退化成「全 4 科检索」—— 学科收窄机制直接失效，
+    # 错学科的文档得以挤进首条。去掉空格再匹配一次即可。
+    compact = normalized.replace(" ", "")
     matched: list[str] = []
     for collection, keywords in _COLLECTION_KEYWORDS.items():
         if any(
             _contains_collection_keyword(normalized, keyword)
             or _contains_collection_keyword(expanded, keyword)
+            or _contains_collection_keyword(compact, keyword)
             for keyword in keywords
         ):
             matched.append(collection)
