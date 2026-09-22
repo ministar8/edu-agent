@@ -13,6 +13,11 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .coverage
+# 覆盖率数据文件的**自定义名**：本机 safe-delete 层会拦截 pytest-cov 删除默认 `.coverage`，
+# 已验证的绕法是 `COVERAGE_FILE=./_cov_x`（指向新路径，无需删除）。
+# 这种文件既不是目录（`/_*/` 匹配不到）、也不以 .py 结尾（`/_*.py` 匹配不到）——
+# **必须单独忽略**，否则每次跑覆盖率都会在 git status 里留下一个未跟踪项。
+/_cov*
 # pytest --cov-report=xml / json 的产物（CI 也会生成）。.coverage 与 coverage/ 已在上方忽略，
 # 但这两个**文件**不在其中 —— 漏掉会让每次本地跑覆盖率都在 git status 里留下未跟踪项。
 coverage.json
@@ -85,6 +90,9 @@ Desktop.ini
 # 只忽略 worktrees（每次会话的临时检出，内含整份仓库副本）；
 # .claude/ 下的 hooks / settings / skills 属于可版本化的项目配置，保留可提交。
 .claude/worktrees/
+# 同类：某些工具会在仓库根建 `.worktrees/` 做临时检出（内含整份仓库副本）。
+# 它通常自带一个内容为 `*` 的 .gitignore 自我隐藏 —— 但那是巧合、不是规则，显式忽略。
+.worktrees/
 
 # ── 本地 Agent 工具运行时数据 ───────────────────────────
 # .mimosa/    ：代码审查 hook 的台账/基线快照（含整份文件副本，体积大）

@@ -61,8 +61,17 @@ edu-agent/
 ├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile
-└── scripts/              # 运维脚本（TEI 部署）
+└── scripts/              # 运维与诊断（覆盖率门槛 / TEI 部署 / 召回与排序诊断）
 ```
+
+### scripts/ 一览
+
+| 脚本 | 用途 |
+|---|---|
+| `check_coverage_by_module.py` | 分模块覆盖率门槛（**CI 调用**，本地也可自查） |
+| `tei_deploy.ps1` | 本机 TEI 容器部署 |
+| `probe_recall_determinism.py` | 复测 recall 层的残余非确定性（低频现象，故**不**写成 CI 测试） |
+| `diagnose_query_ranking.py` | 分离「收窄层」与「融合层」，打印查询排序的中间结果 |
 
 ## 快速开始
 

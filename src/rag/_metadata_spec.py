@@ -27,6 +27,16 @@ Chunk 级字段（section.* 续）：
   section.chunk_parent_id — 所属 section 的 id
   section.chunk_index     — section 内 chunk 序号（0-based）
   section.chunk_role      — chunk 角色："detail"(细粒度) / "summary"(摘要)
+
+## 双写：扁平名与 section.* 并存
+
+`section.*` 与扁平名（`heading` / `heading_path` / `chunk_id` …）是**双写**关系 ——
+`rag.splitter._append_chunk_metadata()` 会**同时**写入两套；扁平名保留以兼容既有索引
+与既有消费方（那个函数的 docstring 也写着「新规范 + 旧字段兼容」）。
+
+★ **本模块不再维护字段映射表**：曾有一份 `LEGACY_FIELD_MAP` + `migrate_metadata()`，
+但**从未被调用**（双写已在 splitter 内完成），属**重复真源**，已于 2026-09-22 删除。
+要查扁平名 ↔ `section.*` 的对应关系，直接看 `splitter._append_chunk_metadata()`。
 """
 
 from __future__ import annotations
@@ -146,29 +156,6 @@ CHROMA_EXCLUDED_FIELDS = frozenset(
         "auto_sections",
     }
 )
-
-# ── 旧字段 → 新字段 映射（兼容迁移） ──
-LEGACY_FIELD_MAP: dict[str, str] = {
-    "heading": "section.path",
-    "heading_title": "section.title",
-    "heading_level": "section.heading_level",
-    "heading_path": "section.path",
-    "section_index": "section.index",
-    "chunk_id": "section.chunk_id",
-    "chunk_index": "section.chunk_index",
-    "chunk_index_in_section": "section.chunk_index",
-}
-
-
-def migrate_metadata(metadata: dict) -> dict:
-    """将旧字段名迁移为新规范字段名
-
-    保留旧字段以兼容，同时写入新字段。
-    """
-    for old_key, new_key in LEGACY_FIELD_MAP.items():
-        if old_key in metadata and new_key not in metadata:
-            metadata[new_key] = metadata[old_key]
-    return metadata
 
 
 def sanitize_for_chroma(metadata: dict) -> dict:

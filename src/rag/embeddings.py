@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 16
 # 单条文本最大字符数（bge-m3 8192 tokens，中文约 1-2 token/字，保守取 3000）
 MAX_TEXT_LENGTH = 3000
-_sparse_probe_cache: dict[str, object] | None = None
 
 
 def _embedding_timeout() -> httpx.Timeout:
@@ -387,54 +386,3 @@ def get_embeddings() -> Embeddings:
         base_url=settings.EMBEDDING_API_BASE,
         model=settings.EMBEDDING_MODEL,
     )
-
-
-def probe_bge_m3_sparse_support(force: bool = False) -> dict[str, object]:
-    global _sparse_probe_cache
-    if _sparse_probe_cache is not None and not force:
-        return dict(_sparse_probe_cache)
-
-    probe = OpenAICompatibleEmbeddings(
-        api_key=_embedding_api_key(),
-        base_url=settings.EMBEDDING_API_BASE,
-        model=settings.EMBEDDING_MODEL,
-    )
-    payload = {
-        "model": settings.EMBEDDING_MODEL,
-        "input": ["进程调度算法"],
-        "return_sparse": True,
-        "return_colbert_vecs": True,
-    }
-    result: dict[str, object] = {
-        "model": settings.EMBEDDING_MODEL,
-        "base_url": settings.EMBEDDING_API_BASE,
-        "available": False,
-        "has_dense": False,
-        "has_sparse": False,
-        "has_colbert": False,
-        "response_keys": [],
-        "error": "",
-    }
-    try:
-        resp = httpx.post(
-            f"{settings.EMBEDDING_API_BASE}/embeddings",
-            headers=probe._build_headers(),
-            json=payload,
-            timeout=_embedding_timeout(),
-        )
-        result["status_code"] = resp.status_code
-        resp.raise_for_status()
-        data = resp.json()
-        item = (data.get("data") or [{}])[0]
-        keys = sorted(item.keys())
-        result["available"] = True
-        result["response_keys"] = keys
-        result["has_dense"] = "embedding" in item
-        result["has_sparse"] = any(
-            k in item for k in ("sparse_embedding", "sparse", "lexical_weights")
-        )
-        result["has_colbert"] = any(k in item for k in ("colbert_vecs", "colbert", "multi_vector"))
-    except Exception as e:
-        result["error"] = str(e)
-    _sparse_probe_cache = result
-    return dict(result)
