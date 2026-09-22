@@ -15,6 +15,7 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
 from agents.utils import CustomData
+from rag.errors import RetrievalUnavailable, classify_retrieval_error
 from rag.evidence import FusedEvidence
 from rag.query_classifier import TEXT_ONLY_DEPTH
 from rag.retriever import StageSink, aretrieve_evidence_with_retry
@@ -106,8 +107,44 @@ def _stage_sink() -> StageSink | None:
     return emit
 
 
+def _retrieval_error_payload(query: str, exc: BaseException) -> dict[str, Any]:
+    """把检索异常映射为对外载荷，**按类别**决定日志级别与文案。
+
+    这是「三类失败被抹平成同一类」的修复点（见 ENGINEERING.md §1 P1）：
+    在此之前一律 `logger.error` + `检索失败：{e}`，于是日志里的 ERROR
+    既可能是 TEI 抖了一下，也可能是真代码缺陷，值班的人无从判断。
+
+    - `RetrievalUnavailable` → WARNING（**不触发告警**）+ 可重试文案
+    - 其余 → ERROR + 完整堆栈（**必须有人看**）
+
+    两种情况的 `status` 仍是 `"error"`（对外契约不变），但 `error_kind`
+    让程序可以区分 —— 空结果则走 `status="empty"` 的正常路径，不经此处。
+    """
+    err = classify_retrieval_error(exc)
+    if isinstance(err, RetrievalUnavailable):
+        logger.warning("检索依赖不可用（可重试）：%s", err, exc_info=True)
+        kind = "unavailable"
+        context = f"{_ERR_RETRIEVE}：知识库服务暂时不可用，请稍后重试"
+    else:
+        logger.exception("检索内部错误（需排查）：%s", err)
+        kind = "internal"
+        context = f"{_ERR_RETRIEVE}：{err}"
+
+    return RetrievalResult(
+        status="error",
+        query=query,
+        context=context,
+        error=str(err),
+        error_kind=kind,
+    ).as_tool_payload()
+
+
 async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, Any]:
-    """统一的「检索 → 对外载荷」封装。"""
+    """统一的「检索 → 对外载荷」封装。
+
+    catch-all 只允许出现在这类**最外层边界**（见 §2.2 规范 2），
+    且必须分级处理 —— 具体分级见 `_retrieval_error_payload`。
+    """
     try:
         fused, verification = await aretrieve_evidence_with_retry(
             query=query,
@@ -119,13 +156,7 @@ async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, 
             on_stage=_stage_sink(),
         )
     except Exception as e:
-        logger.error("Retrieval failed: %s", e, exc_info=True)
-        return RetrievalResult(
-            status="error",
-            query=query,
-            context=f"{_ERR_RETRIEVE}：{e}",
-            error=str(e),
-        ).as_tool_payload()
+        return _retrieval_error_payload(query, e)
 
     return build_retrieval_result(
         query=query, fused=fused, verification=verification

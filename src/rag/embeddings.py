@@ -10,6 +10,7 @@ from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel
 
 from core.settings import settings
+from rag.errors import RagInternalError, RetrievalUnavailable
 from rag.metrics import metrics
 
 logger = logging.getLogger(__name__)
@@ -69,11 +70,11 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             timeout=_embedding_timeout(),
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"单条 embedding 失败：HTTP {resp.status_code}")
+            raise RetrievalUnavailable(f"单条 embedding 失败：HTTP {resp.status_code}")
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
-            raise RuntimeError(f"单条 embedding 返回 NaN：{s[:80]}")
+            raise RagInternalError(f"单条 embedding 返回 NaN：{s[:80]}")
         return vec
 
     def _embed_batch(self, texts: list[str]) -> list[list[float]]:
@@ -154,11 +155,11 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             json={"model": self.model, "input": [s[:MAX_TEXT_LENGTH]]},
         )
         if resp.status_code != 200:
-            raise RuntimeError(f"异步单条 embedding 失败：HTTP {resp.status_code}")
+            raise RetrievalUnavailable(f"异步单条 embedding 失败：HTTP {resp.status_code}")
         data = resp.json()
         vec = data["data"][0]["embedding"]
         if self._has_nan(vec):
-            raise RuntimeError(f"异步单条 embedding 返回 NaN：{s[:80]}")
+            raise RagInternalError(f"异步单条 embedding 返回 NaN：{s[:80]}")
         return vec
 
     async def _aembed_batch(

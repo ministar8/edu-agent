@@ -46,6 +46,15 @@ class RetrievalResult(BaseModel):
     verification: str = Field(default="", description="证据校验 verdict，如 pass/warn/fail")
     verification_reasons: list[str] = Field(default_factory=list)
     error: str | None = Field(default=None, description="status=error 时的错误摘要")
+    error_kind: Literal["unavailable", "internal"] | None = Field(
+        default=None,
+        description=(
+            "status=error 时的**机器可读**分类："
+            "unavailable=外部依赖暂时不可用（可重试，别当故障上报）；"
+            "internal=检索链内部缺陷（重试无用，需排查）。"
+            "只有 status=error 时非空；empty 是正常结局，不属于错误。"
+        ),
+    )
 
     def as_tool_payload(self) -> dict[str, Any]:
         """工具返回值：模型读 context，程序读 docs/status。"""

@@ -567,6 +567,40 @@ except Exception as e:
 3. **catch-all 只允许出现在"最外层边界"**（HTTP 路由、agent 工具入口），且必须区分 `except (RetrievalUnavailable, TimeoutError)` 与 `except Exception` 两级，后者一律 `logger.exception` + 上报。
 4. **空结果不是错误**：`status=empty` 走正常返回路径，不产生 ERROR 日志。
 
+> **✅ 第一步已落地（后续轮次）** —— 但**刻意只做了一半**，理由如下。
+>
+> **已做**：
+>
+> | 内容 | 位置 |
+> |---|---|
+> | 异常层级 `RagError` / `RetrievalUnavailable` / `RagInternalError` | 新增 `src/rag/errors.py`（**100% 覆盖**，14/14 语句） |
+> | 分类器 `classify_retrieval_error()` | 同上（网络/超时 → Unavailable；其余 → Internal） |
+> | **调用点抛正确类型**：TEI HTTP 失败 → `RetrievalUnavailable`；返回 NaN → `RagInternalError` | `src/rag/embeddings.py`（4 处，同步+异步各 2） |
+> | **边界分级**：Unavailable → `logger.warning` + 可重试文案；其余 → `logger.exception` | `src/agents/tools.py::_retrieval_error_payload` |
+> | 机器可读分类 `error_kind` | `src/schema/evidence.py` |
+>
+> **★ 一处有意偏离设计稿：不实现 `RetrievalEmpty`。** 空结果在本项目走的是**正常返回路径**
+> （`RetrievalResult.status="empty"`，见 `agents/tools.py:57`），把它做成异常会让
+> 「正常」与「故障」共用同一条控制流 —— 那正是这一项要消除的问题。
+> 测试 `test_empty_result_is_not_an_error` 把这个取舍钉住了。
+>
+> **★ 为什么只做一半（而不是改完 94 处 catch-all）**：
+> 1. **真正的问题只在边界** —— 错误被抹平发生在「异常变成用户可见字符串」那一刻，
+>    而全项目只有 `agents/tools.py` 构造 `RetrievalResult`（已核实：3 处构造点全在该文件）。
+>    改 94 个 catch-all 里的大部分属于**为改而改**。
+> 2. **分类的可靠性取决于调用点**，不取决于边界。`embeddings.py` 原先把 HTTP 失败和
+>    NaN 都抛成通用 `RuntimeError` —— 边界**不可能**区分它们。所以先把最容易出错的那条
+>    外部依赖（TEI）标注正确，其余留给各自的模块按同样模式处理。
+> 3. **风险不对称**：动 94 处会显著提高回归风险，而收益集中在边界那一处。
+>
+> **剩余（明确记录，不掩盖）**：`vectorstore.py`（9 处，Chroma 失败目前仍是裸 `RuntimeError`，
+> 会被分类器归为 `RagInternalError` —— **偏保守的误报方向**，宁可误报也不漏报）；
+> `semantic_cache.py`（19 处）、`service.py`（7 处）。做法同 `embeddings.py`：在**外部调用点**抛正确类型。
+>
+> **验证**：反向验证 **2/2**（改回 `RuntimeError` → 2 条变红；关掉边界分级 → 2 条变红）；
+> 全量 **1564 passed / 2 skipped**（+26）；三条门禁路由的默认路由六项**逐项不低于基线**；
+> `ruff check` / `ruff format` / `pyrefly` 全过；分模块覆盖率门槛 `rag` **79.3%**（门槛 71%）通过。
+
 ---
 
 ### P1 — 类型检查对"最复杂的模块"最宽松
