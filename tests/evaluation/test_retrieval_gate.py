@@ -714,3 +714,58 @@ class TestRunGateErrorHandling:
         self._patch_retriever(monkeypatch, lambda q: (_Fused(), None))
         _metrics, _outcomes, errors = asyncio.run(gate.run_gate(golden))
         assert errors == []
+
+
+# ══════════════════════════════════════════════════════
+# 4.6 检索期查询异常的过滤（「指标不可信」的判据）
+# ══════════════════════════════════════════════════════
+
+
+class TestUnexpectedQueryFailures:
+    """只有「本次真正建过索引」的集合的查询失败才算索引故障。
+
+    ★ 这一条是**实测逼出来的**：修复的第一版**不过滤**，结果被 `answers` 集合误触发 ——
+    它不在 `DEFAULT_CATEGORIES` 里、本来就不存在，查询失败是**设计内的降级**。
+    不加区分的话，门禁会在**完全正常**的运行时也报「指标不可信」并以退出码 2 结束。
+    """
+
+    def test_failure_on_built_collection_is_reported(self):
+        assert gate.unexpected_query_failures(
+            ["data_structure: InternalError"], {"data_structure", "questions"}
+        ) == ["data_structure: InternalError"]
+
+    def test_failure_on_optional_collection_is_ignored(self):
+        """`answers` 是可选集合，不存在属预期 —— 必须忽略。"""
+        assert (
+            gate.unexpected_query_failures(
+                ["answers: InternalError"], {"data_structure", "questions"}
+            )
+            == []
+        )
+
+    def test_mixed_failures_only_keep_built(self):
+        failures = [
+            "answers: InternalError",
+            "operating_system: InternalError",
+            "answers: InternalError",
+        ]
+        assert gate.unexpected_query_failures(failures, {"operating_system"}) == [
+            "operating_system: InternalError"
+        ]
+
+    def test_no_failures_returns_empty(self):
+        assert gate.unexpected_query_failures([], {"data_structure"}) == []
+
+    def test_uses_built_set_not_error_message(self):
+        """判据是「是否建过索引」，**不是**错误文案 —— 换个文案结论必须不变。
+
+        依赖 Chroma 文案的判据会在它升级时**静默失效**（本项目已有同类教训：
+        「靠字符串猜语义」）。
+        """
+        assert gate.unexpected_query_failures(
+            ["data_structure: 完全不同的错误文案"], {"data_structure"}
+        ) == ["data_structure: 完全不同的错误文案"]
+        assert (
+            gate.unexpected_query_failures(["answers: Nothing found on disk"], {"data_structure"})
+            == []
+        )

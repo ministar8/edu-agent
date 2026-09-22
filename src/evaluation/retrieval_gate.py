@@ -556,6 +556,88 @@ def _build_report(
     return "\n".join(lines)
 
 
+def unexpected_query_failures(failures: list[str], built: set[str]) -> list[str]:
+    """从查询失败记录里挑出**真正算故障**的那些。
+
+    检索链会查询 `answers` 等**可选集合** —— 它们不在 ``DEFAULT_CATEGORIES`` 里、
+    本来就不存在，查询失败是**设计内的降级**（多路召回容忍单路失败）。
+    只有「本次**真正建过索引**却仍然查不了」才是索引故障。
+
+    判据用 `built` 集合过滤，**不去匹配错误字符串** —— 后者依赖 Chroma 的文案，
+    升级即失效（本项目已有「靠字符串猜语义」的教训）。
+
+    Args:
+        failures: `VectorStoreManager.query_failures`，形如 `"集合: 异常类型"`。
+        built: 本次实际建过索引的集合名。
+
+    Returns:
+        属于已建集合的失败记录；空列表表示没有索引故障。
+    """
+    return [f for f in failures if f.split(":", 1)[0] in built]
+
+
+def report_retrieval_anomalies(
+    failures: list[str], errors: list[tuple[str, str]]
+) -> int | None:
+    """统一报出检索期的异常情况；需要提前退出时返回退出码，否则返回 None。
+
+    ★ 检索期查询异常 = 索引坏了，**指标毫无意义**，必须在比对基线之前拦下。
+    检索链对单路失败是**静默降级**（返回 `[]`），所以这不会被 `errors` 捕获 ——
+    实测后果：HNSW 段文件未落盘时，集合可能通过建索引期的就绪检查、却在检索期失败，
+    于是 `hit@1` 从 0.95 掉到 **0.725**，门禁却把它当成「检索质量退化」报出来。
+    那既可能是**巨大的假回归**，也可能**掩盖真实退化** —— 两种都比「明确说不知道」更糟。
+
+    ★ 抽成函数的原因不只是复用：`main()` 已达 126 行（规范 1 上限 60，结构棘轮冻结），
+    **再加代码会被棘轮拦下** —— 那是棘轮按设计工作，正确反应是抽出来而不是放宽基线。
+    """
+    if failures:
+        affected = sorted({f.split(":", 1)[0] for f in failures})
+        print(
+            f"\n[失败] 已建索引的集合中有 {len(failures)} 次检索期查询异常，"
+            f"**指标不可信**，已跳过基线比对。\n"
+            f"  受影响集合：{affected}\n"
+            f"  典型原因：Chroma HNSW 段文件未落盘 —— 集合在建索引期的就绪检查**通过**，\n"
+            f"  却在检索期失败，检索链静默返回空。此时指标只反映「索引坏了」。\n"
+            f"  处理：**重跑门禁**。若反复出现，见 docs/ENGINEERING.md 的「Chroma 索引落盘竞态」。",
+            file=sys.stderr,
+        )
+        return 2
+
+    if errors:
+        print(f"\n[严重] {len(errors)} 条 query 抛异常（已按空结果计入指标）：")
+        for query, reason in errors[:10]:
+            print(f"  - {query[:38]:<38} {reason[:70]}")
+        if len(errors) > 10:
+            print(f"  … 另有 {len(errors) - 10} 条")
+    return None
+
+
+def build_baseline_payload(
+    *,
+    metrics: RetrievalMetrics,
+    golden_path: str | Path,
+    indexed_chunks: int,
+) -> dict[str, Any]:
+    """构造基线 JSON 的载荷（`_meta` 里记录口径，供 `load_baseline` 校验）。"""
+    return {
+        "_meta": {
+            "note": "由 evaluation.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
+            "embedding_mode": embedding_mode(),
+            "embedding": (
+                "real TEI bge-m3"
+                if GATE_USE_REAL_EMBEDDING
+                else "USE_FAKE_EMBEDDING (deterministic hashing)"
+            ),
+            "rerank_enabled": GATE_USE_RERANK,
+            "k": GATE_K,
+            "golden_path": str(golden_path),
+            "indexed_chunks": indexed_chunks,
+            "recorded_at": time.strftime("%Y-%m-%d"),
+        },
+        "metrics": metrics.as_dict(),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="检索质量黄金集回归门禁")
     parser.add_argument("--golden", default=DEFAULT_GOLDEN_PATH, help="黄金集 jsonl 路径")
@@ -617,33 +699,21 @@ def main(argv: list[str] | None = None) -> int:
         metrics, outcomes, errors = asyncio.run(run_gate(args.golden, limit=args.limit))
         query_seconds = time.perf_counter() - start
 
+        from rag import vectorstore as vs
+
+        code = report_retrieval_anomalies(
+            unexpected_query_failures(vs.get_vector_store_manager().query_failures, set(counts)),
+            errors,
+        )
+        if code is not None:
+            return code
+
         print(_build_report(metrics, outcomes, baseline))
         print(f"索引 {index_seconds:.1f}s / 检索 {query_seconds:.1f}s")
 
-        if errors:
-            print(f"\n[严重] {len(errors)} 条 query 抛异常（已按空结果计入指标）：")
-            for query, reason in errors[:10]:
-                print(f"  - {query[:38]:<38} {reason[:70]}")
-            if len(errors) > 10:
-                print(f"  … 另有 {len(errors) - 10} 条")
-
-        payload = {
-            "_meta": {
-                "note": "由 evaluation.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
-                "embedding_mode": embedding_mode(),
-                "embedding": (
-                    "real TEI bge-m3"
-                    if GATE_USE_REAL_EMBEDDING
-                    else "USE_FAKE_EMBEDDING (deterministic hashing)"
-                ),
-                "rerank_enabled": GATE_USE_RERANK,
-                "k": GATE_K,
-                "golden_path": str(args.golden),
-                "indexed_chunks": total,
-                "recorded_at": time.strftime("%Y-%m-%d"),
-            },
-            "metrics": metrics.as_dict(),
-        }
+        payload = build_baseline_payload(
+            metrics=metrics, golden_path=args.golden, indexed_chunks=total
+        )
 
         if args.update_baseline:
             if errors:

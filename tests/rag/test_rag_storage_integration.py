@@ -929,3 +929,71 @@ class TestSemanticOversampling:
         self._patch_manager(monkeypatch, pairs)
         out = R._raw_search("q", "coll", 1)
         assert out[0][0].page_content == "high"
+
+
+class TestQueryFailuresAreRecorded:
+    """查询失败必须被记录 —— 这是「静默降级」唯一的可观测出口。
+
+    ★ 没有它，上游无法区分「知识库确实没有」与「索引坏了」：实测中 HNSW 段文件
+    未落盘会让门禁 `hit@1` 从 0.95 掉到 **0.725**，而门禁会把这种**无意义的指标**
+    当成「检索质量退化」去比对基线 —— 既可能报出巨大的假回归，也可能掩盖真实退化。
+    """
+
+    @staticmethod
+    def _manager():
+        from rag import vectorstore as vs
+
+        m = object.__new__(vs.VectorStoreManager)
+        m.client_mode = "persistent"
+        m._query_failures = []
+        return m
+
+    @pytest.mark.asyncio
+    async def test_failed_query_is_recorded_and_returns_empty(self, monkeypatch):
+        from rag import vectorstore as vs
+
+        m = self._manager()
+
+        class _Emb:
+            async def aembed_query(self, _text):
+                return [0.0] * 8
+
+        monkeypatch.setattr(vs.VectorStoreManager, "embeddings", property(lambda self: _Emb()))
+
+        def _boom(*_a, **_k):
+            raise RuntimeError("Error creating hnsw segment reader: Nothing found on disk")
+
+        monkeypatch.setattr(vs.VectorStoreManager, "_similarity_search_by_embedding_sync", _boom)
+
+        out = await m.asimilarity_search_with_score("data_structure", "q", k=5)
+
+        assert out == [], "失败时仍返回空 —— 多路召回容忍单路失败，这是设计"
+        assert m.query_failures == ["data_structure: RuntimeError"]
+
+    @pytest.mark.asyncio
+    async def test_successful_query_records_nothing(self, monkeypatch):
+        from rag import vectorstore as vs
+
+        m = self._manager()
+
+        class _Emb:
+            async def aembed_query(self, _text):
+                return [0.0] * 8
+
+        monkeypatch.setattr(vs.VectorStoreManager, "embeddings", property(lambda self: _Emb()))
+        monkeypatch.setattr(
+            vs.VectorStoreManager, "_similarity_search_by_embedding_sync", lambda *a, **k: []
+        )
+
+        out = await m.asimilarity_search_with_score("data_structure", "q", k=5)
+
+        assert out == []
+        assert m.query_failures == [], "正常空结果不得被记成失败"
+
+    def test_failures_are_returned_as_a_copy(self):
+        """返回副本 —— 调用方改它不应影响内部状态。"""
+        m = self._manager()
+        m._query_failures.append("x: Y")
+        got = m.query_failures
+        got.append("z: W")
+        assert m.query_failures == ["x: Y"]

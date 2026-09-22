@@ -5,7 +5,7 @@
     "function": 60
   },
   "files": {
-    "src/evaluation/retrieval_gate.py": 688,
+    "src/evaluation/retrieval_gate.py": 758,
     "src/evaluation/stage_trace.py": 615,
     "src/rag/cleaner.py": 674,
     "src/rag/retriever.py": 1908,
@@ -16,7 +16,7 @@
   },
   "functions": {
     "src/evaluation/ragas_eval.py::run_ragas_on_samples": 71,
-    "src/evaluation/retrieval_gate.py::main": 126,
+    "src/evaluation/retrieval_gate.py::main": 114,
     "src/evaluation/stage_trace.py::compare_traces": 107,
     "src/evaluation/stage_trace.py::main": 141,
     "src/rag/bm25.py::bm25_search": 109,

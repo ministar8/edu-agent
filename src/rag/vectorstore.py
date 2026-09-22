@@ -136,6 +136,25 @@ class VectorStoreManager:
         self._hash_cache: dict[str, tuple[set[str], float]] = {}
         self._hnsw_checked: set[str] = set()
         self._rw_lock = _RWLock()
+        # 查询期失败的记录（见 query_failures）。**这是「静默降级」的可观测出口**：
+        # 异步查询失败时返回 `[]`（多路召回容忍单路失败，这是有意的），但调用方
+        # 若据此比对质量基线，就会把「索引坏了」误读成「检索质量下降」。
+        self._query_failures: list[str] = []
+
+    @property
+    def query_failures(self) -> list[str]:
+        """本次进程内查询失败的记录（`集合: 异常类型`），按发生顺序。
+
+        ★ **为什么必须有这个出口**：异步查询失败会返回 `[]`，于是上游无法区分
+        「知识库确实没有」与「索引坏了」。实测后果：HNSW 段文件未落盘时，
+        集合可能**通过建索引期的就绪检查、却在检索期**才失败 —— 检索链静默返回空，
+        门禁把这种**无意义的指标**当成正常指标去比对基线，
+        既可能报出**巨大的假回归**（实测 hit@1 从 0.95 掉到 0.725），
+        也可能**掩盖真实退化**。
+
+        调用方（如 `evaluation.retrieval_gate`）应在比对指标**之前**断言它为空。
+        """
+        return list(self._query_failures)
 
     @property
     def embeddings(self):
@@ -318,6 +337,7 @@ class VectorStoreManager:
                 values={"k": k, "error_type": e.__class__.__name__},
             )
             logger.warning("Async Chroma query failed for %s: %s", collection_name, e)
+            self._query_failures.append(f"{collection_name}: {e.__class__.__name__}")
             return []
 
     def _get_existing_hashes(self, collection_name: str) -> set[str]:
