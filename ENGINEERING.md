@@ -593,9 +593,22 @@ except Exception as e:
 >    外部依赖（TEI）标注正确，其余留给各自的模块按同样模式处理。
 > 3. **风险不对称**：动 94 处会显著提高回归风险，而收益集中在边界那一处。
 >
-> **剩余（明确记录，不掩盖）**：`vectorstore.py`（9 处，Chroma 失败目前仍是裸 `RuntimeError`，
-> 会被分类器归为 `RagInternalError` —— **偏保守的误报方向**，宁可误报也不漏报）；
-> `semantic_cache.py`（19 处）、`service.py`（7 处）。做法同 `embeddings.py`：在**外部调用点**抛正确类型。
+> **★ 后续核实：「`vectorstore.py` 有 9 处需要改」是计数驱动的假设，逐处看代码后基本不成立。**
+>
+> 实际分布：**6 处是刻意的优雅降级** —— HttpClient→PersistentClient 回退、HNSW 参数回退、
+> 删集合告警、统计默认值、哈希缓存默认值。**改它们才是错的**（把可降级路径改成抛异常会放大故障面）。
+> **2 处正常重抛**：`add_documents`（重抛原异常）与 `wait_until_ready`（重抛并附带可照做的补救命令
+> `rebuild=True`）。剩余 1 处是异步查询，失败时记 WARNING 并返回 `[]` —— 对「多路召回容忍单路失败」
+> 的设计而言是合理的。
+>
+> **唯一真缺口**：分类器不认识 Chroma 的**暂时性**异常，于是限流/配额会被误报为内部缺陷（假告警）。
+> 已补 `RateLimitError` / `QuotaError` → `RetrievalUnavailable`；
+> **并刻意不列 `InternalError`** —— 它在本项目里对应「HNSW 段文件未落盘」，实测重试与重开 client
+> 都无效、**只有 `rebuild=True` 能修**，归为「可重试」会误导值班的人反复重跑入库。
+> 测试用**反向断言**（`assert not isinstance(err, RetrievalUnavailable)`）钉住了这条边界。
+>
+> **剩余**：`semantic_cache.py`（19 处）、`service.py`（7 处）**尚未逐处核实** ——
+> **在核实之前不预设它们需要修改**（这正是上面这条教训的意义）。
 >
 > **验证**：反向验证 **2/2**（改回 `RuntimeError` → 2 条变红；关掉边界分级 → 2 条变红）；
 > 全量 **1564 passed / 2 skipped**（+26）；三条门禁路由的默认路由六项**逐项不低于基线**；

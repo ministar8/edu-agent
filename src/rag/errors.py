@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 
 import httpx
+from chromadb.errors import QuotaError, RateLimitError
 
 __all__ = [
     "RagError",
@@ -61,11 +62,21 @@ class RagInternalError(RagError):
 # 判定为「外部依赖不可用」的异常类型。
 # httpx.HTTPError 已覆盖 TimeoutException / TransportError / HTTPStatusError（4xx/5xx）；
 # asyncio.TimeoutError 在 3.11+ 即内置 TimeoutError，两者都列上以兼容旧写法。
+#
+# ★ Chroma 只列**真正暂时性**的两类：
+#   - `RateLimitError` / `QuotaError` → 退避重试有效
+#   - **故意不列** `InternalError`：它在本项目里对应「HNSW 段文件未落盘」，
+#     实测重试与重开 client 都无效，**只有 `rebuild=True` 能修** —— 那是需要人介入的
+#     持久故障，归为 `RagInternalError`（ERROR + 告警）才是对的。
+#     若把它归为「可重试」，会误导值班的人反复重跑入库。
+#   - `InvalidArgumentError` / `InvalidDimensionException` 等属调用方缺陷 → 同样归 Internal。
 _UNAVAILABLE_TYPES: tuple[type[BaseException], ...] = (
     httpx.HTTPError,
     asyncio.TimeoutError,
     TimeoutError,
     ConnectionError,
+    RateLimitError,
+    QuotaError,
 )
 
 

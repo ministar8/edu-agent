@@ -93,6 +93,50 @@ class TestClassifyRetrievalError:
             raise classify_retrieval_error(KeyError("x"))
 
 
+class TestChromaClassification:
+    """Chroma 异常：只把**真正暂时性**的归为可重试。
+
+    ★ 这里的反向断言才是重点：`InternalError` 在本项目里对应
+    「HNSW 段文件未落盘」，实测**重试与重开 client 都无效，只有 `rebuild=True` 能修**
+    （见 `tests/rag/test_ingest_readiness.py` 的实测结论）。
+    把它误归为「可重试」会让值班的人反复重跑入库，而问题永远不会自愈。
+    """
+
+    def test_rate_limit_is_unavailable(self):
+        from chromadb.errors import RateLimitError
+
+        err = classify_retrieval_error(RateLimitError("429 too many requests"))
+        assert isinstance(err, RetrievalUnavailable)
+
+    def test_quota_error_is_unavailable(self):
+        from chromadb.errors import QuotaError
+
+        assert isinstance(
+            classify_retrieval_error(QuotaError("quota exceeded")), RetrievalUnavailable
+        )
+
+    def test_chroma_internal_error_is_not_unavailable(self):
+        """★ 核心反向断言：持久故障不得被归为「可重试」。"""
+        from chromadb.errors import InternalError
+
+        err = classify_retrieval_error(
+            InternalError("Error creating hnsw segment reader: Nothing found on disk")
+        )
+        assert isinstance(err, RagInternalError)
+        assert not isinstance(err, RetrievalUnavailable)
+
+    @pytest.mark.parametrize(
+        "exc_name",
+        ["InvalidArgumentError", "InvalidDimensionException", "DuplicateIDError"],
+    )
+    def test_chroma_client_errors_are_internal(self, exc_name):
+        """调用方用错 API 属代码缺陷，不是「依赖挂了」。"""
+        import chromadb.errors as ce
+
+        exc = getattr(ce, exc_name)("boom")
+        assert isinstance(classify_retrieval_error(exc), RagInternalError)
+
+
 class TestEmbeddingCallSiteRaisesTypedErrors:
     """调用点契约：`embeddings.py` 必须抛出正确的类型。
 
