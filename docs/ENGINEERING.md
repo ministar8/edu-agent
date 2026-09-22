@@ -1062,7 +1062,9 @@ Error executing plan: Internal error: Error creating hnsw segment reader: Nothin
   > 已补上依据说明，并新增守卫测试
   > `tests/rag/test_cleaner.py::TestIngestionChainReachesTools`（反向验证：断掉调用链 → 变红）。
 - `_active_routes` 与 `_ROUTE_WEIGHTS` 的真源统一（见 P2）。
-- `docs/` 在 `.gitignore` 中，导致工程文档无处存放；本报告放在根目录 `ENGINEERING.md` 以纳入版本控制。
+- ~~`docs/` 在 `.gitignore` 中，导致工程文档无处存放；本报告放在根目录 `ENGINEERING.md` 以纳入版本控制。~~
+  ✅ **已解决（2026-09-22）**：`docs/` 已移出 `.gitignore` 的忽略名单，本报告迁至
+  **`docs/ENGINEERING.md`**，全仓库引用（12 处代码/文档注释）同步更新为 `docs/ENGINEERING.md`。
 - **仓库行尾不统一**（本轮新增发现）：`src/` + `tests/` 共 150 个 `.py` 文件中，
   **115 个是 CRLF、35 个是 LF**，且仓库**没有 `.gitattributes`**。同一目录内混用两种行尾
   （如 `tests/rag/` 下部分文件 CRLF、部分 LF）。风险不在功能，而在协作与工具链：

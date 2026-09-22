@@ -98,7 +98,7 @@ async def test_knowledge_search_error_status():
     assert "检索失败" in payload["context"]
 
 
-# ── 错误分级：三类失败不再被抹平成同一类（ENGINEERING.md §1 P1）───────────────
+# ── 错误分级：三类失败不再被抹平成同一类（docs/ENGINEERING.md §1 P1）───────────────
 
 
 @pytest.mark.asyncio

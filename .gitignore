@@ -67,9 +67,10 @@ logs/
 *.log
 
 # ── Local Knowledge / Thesis Materials ─────────────────
+# ★ `docs/` 已于 2026-09-22 **移出**忽略名单 —— 它现在放**工程文档**
+# （`docs/ENGINEERING.md` 等）。个人/论文材料请放下面两个已忽略的目录。
 knowledge/general/
 knowledge/answers/
-docs/
 
 # ── OS Files ───────────────────────────────────────────
 .DS_Store

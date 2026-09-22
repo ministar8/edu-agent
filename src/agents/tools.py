@@ -110,7 +110,7 @@ def _stage_sink() -> StageSink | None:
 def _retrieval_error_payload(query: str, exc: BaseException) -> dict[str, Any]:
     """把检索异常映射为对外载荷，**按类别**决定日志级别与文案。
 
-    这是「三类失败被抹平成同一类」的修复点（见 ENGINEERING.md §1 P1）：
+    这是「三类失败被抹平成同一类」的修复点（见 docs/ENGINEERING.md §1 P1）：
     在此之前一律 `logger.error` + `检索失败：{e}`，于是日志里的 ERROR
     既可能是 TEI 抖了一下，也可能是真代码缺陷，值班的人无从判断。
 

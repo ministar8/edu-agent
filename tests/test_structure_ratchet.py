@@ -2,7 +2,7 @@
 
 ## 为什么需要
 
-`ENGINEERING.md` §2.2 规范 1 定了红线（单文件 ≤600 行、单函数 ≤60 行），
+`docs/ENGINEERING.md` §2.2 规范 1 定了红线（单文件 ≤600 行、单函数 ≤60 行），
 但**此前没有任何机制在执行它** —— 实测 **8 个文件、54 个函数**超标，而且可以继续长。
 规范没有执行机制，等于没有规范。
 
@@ -20,7 +20,7 @@
 
 ## 为什么不直接重构掉这 54 个函数
 
-`ENGINEERING.md` §4.2 阶段二把这件事列为 **6–8 周**的工作量；且部分目标
+`docs/ENGINEERING.md` §4.2 阶段二把这件事列为 **6–8 周**的工作量；且部分目标
 （如 `tools/imputer.py`，含全项目复杂度最高的 `_semantic_segment` = 30）
 **单测覆盖率是 0%** —— 没有安全网的重构正是 §1 P0 警告的陷阱。
 
@@ -46,7 +46,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
 BASELINE_PATH = Path(__file__).resolve().parent / "_structure_baseline.json"
 
-# 规范 1 的红线（ENGINEERING.md §2.2）
+# 规范 1 的红线（docs/ENGINEERING.md §2.2）
 FILE_LIMIT = 600
 FUNC_LIMIT = 60
 

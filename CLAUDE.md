@@ -37,6 +37,7 @@
 | `static/` | 静态前端（login.html / index.html / app.js / auth.js / theme.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
 | `src/evaluation/` | RAGAS Layer-1 评测（dataset/adapters/ragas_eval/cli）+ `evals/` 样本 |
+| `docs/` | **工程文档**（`docs/ENGINEERING.md` 工程指导报告：问题清单 / 规范 / 路线图 / backlog） |
 
 ## 常用命令
 
@@ -73,7 +74,7 @@ docker compose up --build                # 容器化启动
 - **LangSmith 追踪**：`LANGCHAIN_*` 由 `Settings.export_langsmith_env()` 在 lifespan 中写入
   `os.environ`（LangChain 只从进程环境读取并自动埋点，放 Settings 里无效）。
   开追踪只需在 `.env` 设 `LANGCHAIN_TRACING_V2=true` 与 `LANGCHAIN_API_KEY`，不需要改代码。
-- **规模红线有门禁**：单文件 ≤600 行、单函数 ≤60 行（`ENGINEERING.md` §2.2 规范 1）。
+- **规模红线有门禁**：单文件 ≤600 行、单函数 ≤60 行（`docs/ENGINEERING.md` §2.2 规范 1）。
   `tests/test_structure_ratchet.py` 会拦住**新增**超标代码；已有超标项冻结在
   `tests/_structure_baseline.json`，**只能变小不能变大**（改小了跑
   `python tests/test_structure_ratchet.py` 收紧基线；数值变大 = 回退，review 时应被质疑）。
@@ -94,7 +95,7 @@ docker compose up --build                # 容器化启动
 - **`splitter.py` 的 Q&A 原子机制在真实语料上未激活**（已知缺陷，勿误判为"已实现"）：
   `_ANSWER_RE` 只识别 `答案：/解答：/正确答案：`，而 408 真题用的是「选项行尾 `✅` + `**解析**：`」，
   因此 `content_type` 永远不会成为 `merged_qa`，`qa.question/answer/answer_key` 字段恒为空，
-  `recall.py` 的 `merged_qa_meta` 路由恒返回空。改动 `splitter` 前先看 `ENGINEERING.md`
+  `recall.py` 的 `merged_qa_meta` 路由恒返回空。改动 `splitter` 前先看 `docs/ENGINEERING.md`
   的 §1「Q&A 原子机制在真实语料上从未激活」一节。
 - **`tests/rag/test_splitter.py::TestKnownDefects` 是"变更哨兵"类**：里面断言的是**当前缺陷行为**
   而非期望行为。修好对应缺陷后这些用例会变红 —— 这是设计如此，请把断言改成期望值并移出该类，

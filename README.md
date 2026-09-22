@@ -61,7 +61,8 @@ edu-agent/
 ├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile
-└── scripts/              # 运维与诊断（覆盖率门槛 / TEI 部署 / 召回与排序诊断）
+├── scripts/              # 运维与诊断（覆盖率门槛 / TEI 部署 / 召回与排序诊断）
+└── docs/                 # 工程文档（ENGINEERING.md 工程指导报告）
 ```
 
 ### scripts/ 一览
