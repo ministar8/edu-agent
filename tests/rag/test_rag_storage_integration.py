@@ -342,6 +342,343 @@ class TestSemanticCacheRoundTrip:
 # ── 向量库 ──────────────────────────────────────────────
 
 
+class _FakeCollection:
+    """最小可用的假集合：记录调用、可注入异常。"""
+
+    def __init__(self, *, query_result=None, query_error=None, count_error=None):
+        self.query_result = query_result or {"distances": [[]], "metadatas": [[]]}
+        self.query_error = query_error
+        self.count_error = count_error
+        self.query_calls = 0
+        self.delete_calls: list = []
+
+    def query(self, **_kwargs):
+        self.query_calls += 1
+        if self.query_error is not None:
+            raise self.query_error
+        return self.query_result
+
+    def count(self):
+        if self.count_error is not None:
+            raise self.count_error
+        return 0
+
+    def delete(self, ids=None):
+        self.delete_calls.append(ids)
+
+
+class TestStaleCollectionRecovery:
+    """集合被外部删除/损坏后的**自愈路径**。
+
+    ★ 静默失效的高危区：`_reinit_if_stale` 判错时，缓存要么**永久失效**
+    （后续查询全部 miss，性能静默退化），要么把异常吞掉让人以为一切正常。
+    这条路径在生产里会被真实触发 —— `ingest(rebuild=True)` 会删除集合并重建。
+    """
+
+    def test_stale_markers_match_chroma_messages(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        assert cache._is_stale_error(RuntimeError("Collection [x] does not exist"))
+        assert cache._is_stale_error(RuntimeError("Nothing found on disk"))
+        assert cache._is_stale_error(RuntimeError("NOTHING FOUND ON DISK")), "应大小写无关"
+
+    def test_unrelated_errors_are_not_stale(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        assert not cache._is_stale_error(RuntimeError("connection refused"))
+        assert not cache._is_stale_error(TimeoutError("timed out"))
+
+    def test_reinit_ignores_non_stale_errors(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        called: list[int] = []
+        cache._ensure_init = lambda: called.append(1)
+
+        assert cache._reinit_if_stale(RuntimeError("connection refused")) is False
+        assert called == [], "非陈旧错误不该触发重建"
+
+    def test_reinit_rebuilds_on_stale_error(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._collection = _FakeCollection()
+        rebuilt = _FakeCollection()
+        cache._ensure_init = lambda: setattr(cache, "_collection", rebuilt)
+
+        assert cache._reinit_if_stale(RuntimeError("does not exist")) is True
+        assert cache._collection is rebuilt
+
+    def test_reinit_returns_false_when_rebuild_fails(self):
+        """重建失败必须返回 False（缓存保持禁用），而不是假装成功。"""
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._collection = _FakeCollection()
+        cache._ensure_init = lambda: setattr(cache, "_collection", None)
+
+        assert cache._reinit_if_stale(RuntimeError("does not exist")) is False
+
+    def test_query_collection_retries_once_after_reinit(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        broken = _FakeCollection(query_error=RuntimeError("Collection [c] does not exist"))
+        healthy = _FakeCollection(query_result={"distances": [[0.1]], "metadatas": [[{"k": 1}]]})
+        cache._collection = broken
+        cache._ensure_init = lambda: setattr(cache, "_collection", healthy)
+
+        out = cache._query_collection([0.1, 0.2])
+
+        assert broken.query_calls == 1
+        assert healthy.query_calls == 1
+        assert out["distances"] == [[0.1]]
+
+    def test_query_collection_reraises_when_not_stale(self):
+        """非陈旧错误必须原样抛出 —— 吞掉它会让人以为缓存正常工作。"""
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._collection = _FakeCollection(query_error=RuntimeError("connection refused"))
+
+        with pytest.raises(RuntimeError, match="connection refused"):
+            cache._query_collection([0.1])
+
+    def test_check_alive_true_when_count_works(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._collection = _FakeCollection()
+        assert cache._check_collection_alive() is True
+
+    def test_check_alive_recovers_stale_collection(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._collection = _FakeCollection(count_error=RuntimeError("does not exist"))
+        cache._ensure_init = lambda: setattr(cache, "_collection", _FakeCollection())
+        assert cache._check_collection_alive() is True
+
+    def test_check_alive_false_for_unrelated_error(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._collection = _FakeCollection(count_error=RuntimeError("boom"))
+        assert cache._check_collection_alive() is False
+
+
+class TestJsonlEvidencePersistence:
+    """JSONL 是**证据正文的持久层**，进程重启后靠它恢复。
+
+    ★ 静默失效的后果很具体：读错了会返回**别的 query 的证据**（缓存命中却答错）；
+    读不到则表现为"重启后缓存全空"（性能退化，但没有任何报警）。
+    """
+
+    @staticmethod
+    def _entry(key: str, query: str, evidence: FusedEvidence, stored_at: float = 0.0) -> str:
+        import json as _json
+
+        from rag.semantic_cache import _serialize_evidence
+
+        return _json.dumps(
+            {
+                "key": key,
+                "query": query,
+                "stored_at": stored_at,
+                "evidence": _serialize_evidence(evidence),
+            },
+            ensure_ascii=False,
+        )
+
+    @staticmethod
+    def _write(cache, lines: list[str]) -> None:
+        cache._data_dir.mkdir(parents=True, exist_ok=True)
+        cache._jsonl_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_save_appends_and_records_offset(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._data_dir.mkdir(parents=True, exist_ok=True)
+        cache._meta["k1"] = {"timestamp": 0.0, "hit_count": 0, "query": "q"}
+
+        cache._save_evidence("k1", "q", _fused("正文"))
+
+        assert cache._jsonl_path.exists()
+        assert "k1" in cache._jsonl_offsets
+        # 再存一条，偏移应递增 —— 说明是 append 而不是覆盖
+        cache._meta["k2"] = {"timestamp": 0.0, "hit_count": 0, "query": "q2"}
+        cache._save_evidence("k2", "q2", _fused("正文2"))
+        assert cache._jsonl_offsets["k2"] > cache._jsonl_offsets["k1"]
+
+    def test_wrong_offset_falls_back_to_scan_and_never_returns_others_evidence(self):
+        """偏移索引指错时**必须回退扫描**，且绝不能返回别人的证据。
+
+        同时固定一个实测取舍：错误的偏移**不会被就地修正**（扫描只补"缺失"的键，
+        不覆盖已有值）。所以该键后续每次 lookup 都会退化成线性扫描 ——
+        这是**性能**问题，不是正确性问题。可以接受，但不能没人知道。
+        """
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        self._write(
+            cache,
+            [self._entry("k1", "q1", _fused("A")), self._entry("k2", "q2", _fused("B"))],
+        )
+        cache._jsonl_offsets = {"k2": 0}  # 故意指向 k1 那一行
+
+        got = cache._load_evidence("k2")
+
+        assert got is not None and got.final_context == "B", "必须回退扫描拿到正确证据"
+        assert cache._jsonl_offsets["k1"] == 0, "扫描时应补建缺失的键"
+        assert cache._jsonl_offsets["k2"] == 0, "已知取舍：错误偏移不被覆盖"
+
+    def test_load_returns_none_for_unknown_key(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        self._write(cache, [self._entry("k1", "q1", _fused("A"))])
+        assert cache._load_evidence("不存在的键") is None
+
+    def test_load_returns_none_when_file_missing(self):
+        from rag.semantic_cache import SemanticCache
+
+        assert SemanticCache()._load_evidence("k1") is None
+
+    def test_corrupt_line_does_not_invalidate_earlier_entries(self):
+        """**回归测试**：一条坏行不能让整份 JSONL 失效。
+
+        原实现让 `json.loads` 的异常冒到外层 `except`，于是**任何**一条坏行都会让
+        `_load_evidence` 直接返回 `None` —— 即使目标键在坏行**之前**已经扫描到了。
+        坏行的现实来源：上次 append 写到一半进程被杀。
+
+        后果是**静默**的：所有未进偏移索引的键全部查不到，缓存看起来只是"命中率变低"，
+        没有任何错误可见。这正是本次「给 semantic_cache 加看管」要堵的那类洞。
+        """
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        self._write(cache, [self._entry("k1", "q1", _fused("A")), "{ 这不是合法 JSON"])
+
+        got = cache._load_evidence("k1")
+
+        assert got is not None and got.final_context == "A"
+
+    def test_corrupt_line_does_not_hide_later_entries(self):
+        """坏行**之后**的条目同样必须能读到 —— 扫描要继续，而不是中断。"""
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        self._write(
+            cache,
+            [
+                self._entry("k1", "q1", _fused("A")),
+                "{ 坏行",
+                self._entry("k2", "q2", _fused("B")),
+            ],
+        )
+
+        got = cache._load_evidence("k2")
+
+        assert got is not None and got.final_context == "B"
+
+    def test_compact_removes_expired_and_keeps_fresh(self):
+        import time as _time
+
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache(ttl=100)
+        self._write(
+            cache,
+            [self._entry("fresh", "q", _fused("新")), self._entry("gone", "q", _fused("旧"))],
+        )
+        now = _time.monotonic()
+        cache._meta = {
+            "fresh": {"timestamp": now, "hit_count": 0, "query": "q"},
+            "gone": {"timestamp": now - 10_000, "hit_count": 0, "query": "q"},
+        }
+
+        assert cache.compact_jsonl() == 1
+
+        text = cache._jsonl_path.read_text(encoding="utf-8")
+        assert "fresh" in text and "gone" not in text
+
+    def test_compact_returns_zero_when_file_missing(self):
+        from rag.semantic_cache import SemanticCache
+
+        assert SemanticCache().compact_jsonl() == 0
+
+    def test_compact_keeps_file_untouched_when_nothing_expired(self):
+        import time as _time
+
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache(ttl=100)
+        self._write(cache, [self._entry("a", "q", _fused("A"))])
+        cache._meta = {"a": {"timestamp": _time.monotonic(), "hit_count": 0, "query": "q"}}
+
+        assert cache.compact_jsonl() == 0
+        assert "a" in cache._jsonl_path.read_text(encoding="utf-8")
+
+
+class TestEviction:
+    """淘汰路径：满了要丢掉最旧的，且丢的是**真正最旧**的那个。"""
+
+    def test_evict_removes_meta_and_deletes_from_collection(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        fake = _FakeCollection()
+        cache._collection = fake
+        cache._meta = {"a": {"timestamp": 0.0, "hit_count": 0, "query": "q"}}
+
+        cache._evict("a")
+
+        assert "a" not in cache._meta
+        assert fake.delete_calls == [["a"]]
+
+    def test_evict_tolerates_collection_error(self):
+        """删底层集合失败不能中断淘汰 —— meta 已弹出，缓存语义仍然正确。"""
+        from rag.semantic_cache import SemanticCache
+
+        class _Bad:
+            def delete(self, ids=None):
+                raise RuntimeError("boom")
+
+        cache = SemanticCache()
+        cache._collection = _Bad()
+        cache._meta = {"a": {"timestamp": 0.0, "hit_count": 0, "query": "q"}}
+
+        cache._evict("a")
+
+        assert "a" not in cache._meta
+
+    def test_evict_oldest_picks_smallest_timestamp(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._collection = _FakeCollection()
+        cache._meta = {
+            "new": {"timestamp": 100.0, "hit_count": 0, "query": "q"},
+            "old": {"timestamp": 1.0, "hit_count": 0, "query": "q"},
+            "mid": {"timestamp": 50.0, "hit_count": 0, "query": "q"},
+        }
+
+        cache._evict_oldest()
+
+        assert "old" not in cache._meta
+        assert set(cache._meta) == {"new", "mid"}
+
+    def test_evict_oldest_is_noop_when_empty(self):
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        cache._evict_oldest()  # 空缓存不该抛异常
+        assert cache._meta == {}
+
+
 class TestVectorStoreRoundTrip:
     def test_similarity_search_returns_lexically_matching_document(self):
         from rag.vectorstore import get_vector_store_manager

@@ -552,8 +552,9 @@ class SemanticCache:
         # Slow path: linear scan (and rebuild offset index)
         if not self._jsonl_path.exists():
             return None
+        found = None
+        corrupt = 0
         try:
-            found = None
             with open(self._jsonl_path, encoding="utf-8") as f:
                 while True:
                     pos = f.tell()
@@ -563,17 +564,32 @@ class SemanticCache:
                     line = line.strip()
                     if not line:
                         continue
-                    entry = json.loads(line)
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        # **单行损坏不能让整个扫描失败。**
+                        # 坏行的现实来源：上次 append 写到一半进程被杀。
+                        # 原实现让 json.loads 的异常冒到外层 except，于是**一条坏行
+                        # 使所有未进偏移索引的键全部查不到** —— 缓存静默变空，
+                        # 只表现为"重启后命中率变低"，没有任何错误可见。
+                        # 跳过坏行、继续扫描，并在最后统一告警。
+                        corrupt += 1
+                        continue
                     entry_key = entry.get("key", "")
                     # Track all offsets while scanning
                     if entry_key not in self._jsonl_offsets:
                         self._jsonl_offsets[entry_key] = pos
                     if entry_key == key and "evidence" in entry:
-                        found = _deserialize_evidence(entry["evidence"])
-            return found
+                        try:
+                            found = _deserialize_evidence(entry["evidence"])
+                        except Exception:
+                            logger.warning("Semantic cache 条目反序列化失败 key=%s，已跳过", key)
         except Exception as e:
             logger.warning("Failed to load evidence for key=%s: %s", key, e)
             return None
+        if corrupt:
+            logger.warning("Semantic cache JSONL 有 %d 行损坏，已跳过", corrupt)
+        return found
 
     def _save_evidence(self, key: str, query: str, fused: FusedEvidence) -> None:
         """Append evidence entry to JSONL file. Must be called under _lock."""
