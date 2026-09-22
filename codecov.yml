@@ -17,7 +17,10 @@ coverage:
         target: 80%
   ignore:
     - "tests/"
-    # 离线数据清洗工具，不参与运行时，不拉低覆盖率评价
+    # 离线数据清洗工具。★ 原写「不参与运行时」不准确：clean_documents() 会调用
+    # tools.imputer / tools.anomaly，它们在入库链里。排除的真正依据是
+    # 「门禁 build_index() 跑真实入库链时会一并执行它们」（pytest 侧实测 0% 覆盖，
+    # 因为门禁跑在独立进程）。守卫见 tests/rag/test_cleaner.py::TestIngestionChainReachesTools
     - "src/tools/"
 
 comment:

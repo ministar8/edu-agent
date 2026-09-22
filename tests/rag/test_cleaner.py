@@ -55,3 +55,62 @@ class TestCleanMarkdownText:
 
     def test_normalizes_fullwidth(self):
         assert "AB" in _clean_markdown_text("ＡＢ")
+
+
+class TestIngestionChainReachesTools:
+    """入库链必须真的执行 `tools/` 下的模块。
+
+    `scripts/check_coverage_by_module.py` 用 `EXCLUDED = {"tools"}` 把整个 `tools/`
+    排除出覆盖率门槛。这个排除**只有在「门禁端到端跑真实入库链」成立时才是对的** ——
+    但门禁跑在**独立进程**里，pytest 的覆盖率测不到它
+    （实测 `tools/imputer.py` 单测覆盖 **0%**，0/525 语句）。
+
+    所以这个前提必须由测试守着：一旦 `clean_documents` 不再调用它们，
+    排除照旧、门槛照旧绿，而 `tools/imputer.py`（1348 行、**全项目复杂度最高的函数** 30）
+    会静默变成既无单测、也无门禁覆盖的死代码。这正是「保护机制存在 ≠ 生效」。
+
+    ★ 与 `TestBuildIndexUsesRealPipeline` 的分工：那个测试把 `clean_documents` **整体 spy 掉**，
+    只证明它"被调用"；这里跑**真实** `clean_documents`，只 spy 最底层的 tools 函数 ——
+    补上"函数内部链路还在不在"这一段。
+    """
+
+    @staticmethod
+    def _doc():
+        from langchain_core.documents import Document
+
+        return Document(
+            page_content="# 进程管理\n\n进程是资源分配的基本单位，也是调度的基本单位。\n\n" * 20,
+            metadata={"source_file": "knowledge/operating_system/01.md"},
+        )
+
+    def test_clean_documents_reaches_imputer(self, monkeypatch):
+        import tools.imputer as imputer_mod
+        from rag.cleaner import clean_documents
+
+        calls: list[int] = []
+        real = imputer_mod.impute_documents
+
+        def spy(docs):
+            calls.append(len(docs))
+            return real(docs)
+
+        monkeypatch.setattr(imputer_mod, "impute_documents", spy)
+        clean_documents([self._doc()], fuzzy_dedup=False)
+
+        assert calls, "clean_documents 必须到达 tools.imputer.impute_documents"
+
+    def test_clean_documents_reaches_anomaly_detector(self, monkeypatch):
+        import tools.anomaly as anomaly_mod
+        from rag.cleaner import clean_documents
+
+        calls: list[int] = []
+        real = anomaly_mod.detect_content_anomalies
+
+        def spy(docs):
+            calls.append(len(docs))
+            return real(docs)
+
+        monkeypatch.setattr(anomaly_mod, "detect_content_anomalies", spy)
+        clean_documents([self._doc()], fuzzy_dedup=False)
+
+        assert calls, "clean_documents 必须到达 tools.anomaly.detect_content_anomalies"

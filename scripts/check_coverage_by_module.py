@@ -29,7 +29,20 @@ THRESHOLDS: dict[str, tuple[float, float]] = {
     "service": (80.0, 85.1),
 }
 
-# 整包排除：离线数据清洗工具，不参与运行时，codecov.yml 里也已排除
+# 整包排除：离线数据清洗工具（`imputer` / `anomaly` / `normalizer` 等）。
+#
+# ★ **此处原写「不参与运行时」，实测不准确，已更正**：
+#   `rag/cleaner.clean_documents()` 会调用 `tools.imputer.impute_documents()` 与
+#   `tools.anomaly.detect_content_anomalies()` —— 它们**就在入库链里**。
+#
+# 排除的**真正依据**与下方 `EXCLUDED_MODULES` 完全相同：门禁的 `build_index()`
+# 跑真实入库链时会**一并执行**它们。所以不是「没有保护」，而是「保护机制不是单测」——
+# 实测这些模块的 pytest 覆盖率是 **0%**（门禁跑在**独立进程**里，pytest 测不到）。
+#
+# ⚠️ **这个前提有守卫**：`tests/rag/test_cleaner.py::TestIngestionChainReachesTools`
+#   断言**真实的** `clean_documents` 必须到达 `tools.imputer` / `tools.anomaly`。
+#   ★ 注意它与 `TestBuildIndexUsesRealPipeline` 的分工：后者把 `clean_documents`
+#   **整体 spy 掉**、只证明「被调用」，**证明不了函数内部链路还在** —— 两者互补。
 EXCLUDED = {"tools"}
 
 # 模块级排除：只从**所属包的门槛**里摘出去（模块本身仍出现在覆盖率报告里）。
