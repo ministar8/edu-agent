@@ -73,6 +73,10 @@ docker compose up --build                # 容器化启动
 - **LangSmith 追踪**：`LANGCHAIN_*` 由 `Settings.export_langsmith_env()` 在 lifespan 中写入
   `os.environ`（LangChain 只从进程环境读取并自动埋点，放 Settings 里无效）。
   开追踪只需在 `.env` 设 `LANGCHAIN_TRACING_V2=true` 与 `LANGCHAIN_API_KEY`，不需要改代码。
+- **规模红线有门禁**：单文件 ≤600 行、单函数 ≤60 行（`ENGINEERING.md` §2.2 规范 1）。
+  `tests/test_structure_ratchet.py` 会拦住**新增**超标代码；已有超标项冻结在
+  `tests/_structure_baseline.json`，**只能变小不能变大**（改小了跑
+  `python tests/test_structure_ratchet.py` 收紧基线；数值变大 = 回退，review 时应被质疑）。
 - 关键逻辑与复杂函数写中文注释。
 
 ## 注意事项
