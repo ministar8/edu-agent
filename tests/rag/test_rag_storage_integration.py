@@ -535,6 +535,36 @@ class TestJsonlEvidencePersistence:
         assert cache._jsonl_offsets["k1"] == 0, "扫描时应补建缺失的键"
         assert cache._jsonl_offsets["k2"] == 0, "已知取舍：错误偏移不被覆盖"
 
+    def test_offset_index_failure_is_logged_and_falls_back(self, caplog):
+        """偏移索引读取失败必须**留痕**（§2.2 规范 2），同时仍然回退扫描。
+
+        为什么必须记：偏移索引若**持续**失效，每次 lookup 都会退化成线性扫描 ——
+        这是**性能退化、不影响正确性**，所以用 DEBUG 而不是 WARNING；
+        但完全不记的话，这个退化在日志里彻底不可见。
+        这正是 #11「禁止无日志的 pass」要堵的那类洞（本处当时只有注释、没有日志）。
+
+        触发方式：**负偏移** → `f.seek(-5)` 抛 `ValueError`，走的正是 fast path 的 except。
+        """
+        import logging
+
+        from rag.semantic_cache import SemanticCache
+
+        cache = SemanticCache()
+        self._write(cache, [self._entry("k1", "q1", _fused("A"))])
+        cache._jsonl_offsets = {"k1": -5}  # 负偏移：seek 必然抛异常
+
+        with caplog.at_level(logging.DEBUG, logger="rag.semantic_cache"):
+            got = cache._load_evidence("k1")
+
+        assert got is not None and got.final_context == "A", "必须回退扫描拿到正确证据"
+        debug_records = [
+            r
+            for r in caplog.records
+            if r.name == "rag.semantic_cache" and r.levelno == logging.DEBUG
+        ]
+        assert debug_records, "有意忽略的异常必须留痕（§2.2 规范 2）"
+        assert any("偏移索引" in r.getMessage() for r in debug_records)
+
     def test_load_returns_none_for_unknown_key(self):
         from rag.semantic_cache import SemanticCache
 

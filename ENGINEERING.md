@@ -607,8 +607,26 @@ except Exception as e:
 > 都无效、**只有 `rebuild=True` 能修**，归为「可重试」会误导值班的人反复重跑入库。
 > 测试用**反向断言**（`assert not isinstance(err, RetrievalUnavailable)`）钉住了这条边界。
 >
-> **剩余**：`semantic_cache.py`（19 处）、`service.py`（7 处）**尚未逐处核实** ——
-> **在核实之前不预设它们需要修改**（这正是上面这条教训的意义）。
+> **★ 第二轮核实（`semantic_cache.py` 20 处 / `service.py` 8 处）：同样基本不需要改。**
+>
+> - **`service.py` 8 处全部正确** —— 都是 HTTP 路由边界上的 `logger.error` + `raise internal_error(...)`，
+>   正是规范要求的「最外层边界」写法。★ 其中 `history` 那处**先 `except HTTPException: raise`**
+>   再兜底，归属校验的 404 不会被吞成 500 —— 这是个**正面样本**，值得当范例。
+> - **`semantic_cache.py` 20 处里 19 处正确** —— 全是「记日志 + 降级/自愈」：
+>   HNSW 损坏自愈（`_ensure_init` / `_reinit_if_stale`）、JSONL 坏行跳过、
+>   lookup/store 失败记 warning 并当 miss、evict/clear 失败记日志。
+> - **发现并修复 1 处真缺口**：`_load_evidence` 的偏移索引 fast path 是
+>   `except Exception: pass` —— **只有注释、没有日志**，违反 §2.2 规范 2「禁止无日志的 pass」。
+>   危害：偏移索引若**持续**失效，每次 lookup 都退化成线性扫描，**纯性能退化且完全不可见**。
+>   已补 `logger.debug(..., exc_info=True)`（用 DEBUG 而非 WARNING —— 不影响正确性），
+>   并加回归测试用 `caplog` 断言日志确实发出；**反向验证：退回 `pass` → 断言精准变红**。
+>   ★ 这是 `src/` 里**唯一**一处 `noqa: S110`，说明 #11 的清理基本到位，
+>   只漏了「注释与日志配套」这半条要求。
+>
+> **结论：P1「宽泛异常处理」的可执行部分到此收口。**
+> 94 处里真正需要动的只有**边界那一处分级**（`agents/tools.py`）+ **1 处缺日志的 pass**；
+> 其余是**已被设计过的降级**，动它们才是错的。这与 §1 P0 的判断一致：
+> **问题从来不是「异常处理写得多」，而是「失败的类型无法被程序判断」。**
 >
 > **验证**：反向验证 **2/2**（改回 `RuntimeError` → 2 条变红；关掉边界分级 → 2 条变红）；
 > 全量 **1564 passed / 2 skipped**（+26）；三条门禁路由的默认路由六项**逐项不低于基线**；

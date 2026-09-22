@@ -547,7 +547,11 @@ class SemanticCache:
                         if entry.get("key") == key and "evidence" in entry:
                             return _deserialize_evidence(entry["evidence"])
             except Exception:  # noqa: S110 — 有意忽略：读偏移索引失败即退回线性扫描
-                pass
+                # 必须留痕（§2.2 规范 2：禁止无日志的 pass）。
+                # 偏移索引若**持续**失效，每次 lookup 都会退化成线性扫描 ——
+                # 这是**性能退化、不影响正确性**，所以用 DEBUG 而不是 WARNING；
+                # 但完全不记的话，这个退化在日志里就彻底不可见。
+                logger.debug("偏移索引读取失败，退回线性扫描 key=%s", key, exc_info=True)
 
         # Slow path: linear scan (and rebuild offset index)
         if not self._jsonl_path.exists():
