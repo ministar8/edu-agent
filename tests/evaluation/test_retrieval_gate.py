@@ -24,6 +24,7 @@ from evaluation import retrieval_gate as gate
 from evaluation.retrieval_gate import (
     DEFAULT_BASELINE_PATH,
     DEFAULT_GOLDEN_PATH,
+    REAL_EMBED_BASELINE_PATH,
     RERANK_BASELINE_PATH,
     SUBJECT_TO_CATEGORY,
     QueryOutcome,
@@ -359,9 +360,17 @@ class TestLoadBaseline:
     """
 
     @staticmethod
-    def _write(tmp_path: Path, *, rerank: bool | None, metrics: dict | None = None) -> Path:
+    def _write(
+        tmp_path: Path,
+        *,
+        rerank: bool | None,
+        embed: str | None = None,
+        metrics: dict | None = None,
+    ) -> Path:
         path = tmp_path / "baseline.json"
-        meta = {} if rerank is None else {"rerank_enabled": rerank}
+        meta: dict = {} if rerank is None else {"rerank_enabled": rerank}
+        if embed is not None:
+            meta["embedding_mode"] = embed
         payload = {"_meta": meta, "metrics": metrics or {"x": 1.0}}
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
@@ -393,13 +402,74 @@ class TestLoadBaseline:
         assert gate.load_baseline(self._write(tmp_path, rerank=None)) == {"x": 1.0}
 
     def test_default_baseline_path_follows_route(self, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", False)
         monkeypatch.setattr(gate, "GATE_USE_RERANK", False)
         assert gate.default_baseline_path() == DEFAULT_BASELINE_PATH
         monkeypatch.setattr(gate, "GATE_USE_RERANK", True)
         assert gate.default_baseline_path() == RERANK_BASELINE_PATH
 
-    def test_two_routes_use_different_files(self):
-        assert DEFAULT_BASELINE_PATH != RERANK_BASELINE_PATH
+    def test_default_baseline_path_follows_embedding_route(self, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", False)
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", False)
+        assert gate.default_baseline_path() == DEFAULT_BASELINE_PATH
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", True)
+        assert gate.default_baseline_path() == REAL_EMBED_BASELINE_PATH
+
+    def test_real_embedding_wins_the_default_path_over_rerank(self, monkeypatch):
+        """两个开关都开时默认路径指向真实 embedding 基线。
+
+        （`main()` 会直接拒绝这个组合，这里只固定 `default_baseline_path` 的取值，
+        避免它在这种情形下返回一个语义不明的路径。）
+        """
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", True)
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", True)
+        assert gate.default_baseline_path() == REAL_EMBED_BASELINE_PATH
+
+    def test_all_three_routes_use_different_files(self):
+        paths = {DEFAULT_BASELINE_PATH, RERANK_BASELINE_PATH, REAL_EMBED_BASELINE_PATH}
+        assert len(paths) == 3, "三条路由必须各有一份基线，否则跨口径比对拦不住"
+
+    def test_embedding_mode_helper(self, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", False)
+        assert gate.embedding_mode() == "fake"
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", True)
+        assert gate.embedding_mode() == "real"
+
+    def test_embedding_mode_mismatch_is_rejected(self, tmp_path, monkeypatch):
+        """**回归测试**：真/假 embedding 的基线不可互比。
+
+        这是本次新增口径的守卫。少了它，真实 embedding 路由的数字会被拿去和假
+        embedding 的基线比 —— 而那个差距可能**全部来自 embedding 本身**，
+        却会被读成"代码改动带来的改善/退化"。这是本仓库最容易犯且最难自查的错。
+        """
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", False)
+        with pytest.raises(ValueError, match="embedding_mode"):
+            gate.load_baseline(self._write(tmp_path, rerank=False, embed="real"))
+
+    def test_reverse_embedding_mismatch_is_also_rejected(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", True)
+        with pytest.raises(ValueError, match="embedding_mode"):
+            gate.load_baseline(self._write(tmp_path, rerank=False, embed="fake"))
+
+    def test_real_embedding_route_accepts_real_baseline(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", True)
+        assert gate.load_baseline(self._write(tmp_path, rerank=False, embed="real")) == {"x": 1.0}
+
+    def test_legacy_baseline_without_embedding_mode_is_accepted(self, tmp_path, monkeypatch):
+        """加口径校验不该让既有基线（没这个字段）直接失效。"""
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", False)
+        assert gate.load_baseline(self._write(tmp_path, rerank=False)) == {"x": 1.0}
+
+    def test_main_rejects_both_experimental_routes(self, monkeypatch, capsys):
+        """两个开关同时开 = 一个没有基线的组合，两个变量一起变就无法归因。
+
+        注意 `main` 走 argparse（不像覆盖率脚本那样自己取 `argv[1]`），
+        所以这里传空列表表示"全用默认值"。
+        """
+        monkeypatch.setattr(gate, "GATE_USE_REAL_EMBEDDING", True)
+        monkeypatch.setattr(gate, "GATE_USE_RERANK", True)
+        assert gate.main([]) == 2
+        assert "不能同时开启" in capsys.readouterr().err
 
 
 class TestRerankBaselineFile:

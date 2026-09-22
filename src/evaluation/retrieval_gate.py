@@ -31,15 +31,28 @@ RAG 检索链的改动（阈值常数、RRF 路由权重、切分策略、去重
    所以这条路由的指标**只能与同环境基线比**。基线因此分成两份，
    ``main()`` 还会校验 ``_meta.rerank_enabled`` 是否与本次运行一致。
 
+5. **真实 embedding 单独一条，用来补上「语义质量」这个口径空白。**
+   默认路由跑确定性哈希 embedding，**只能证明管线没退化**；它上面那几条固定的
+   ``hit@1`` 未命中全是跨学科词汇重合，光看假口径无法区分"生产问题"与"假 embedding
+   的伪影"。``GATE_USE_REAL_EMBEDDING=1`` 用 ``.env`` 里的 TEI bge-m3 跑同一条链路
+   —— 那条路由上仍然未命中的，才值得当成真问题去查。
+   ⚠️ **它不进 CI**（CI 无 TEI），定位是发布前的手动对照。两条路由各有一份基线，
+   ``main()`` 会同时校验 ``_meta.embedding_mode`` 与 ``_meta.rerank_enabled``；
+   两个开关同时开启会被直接拒绝（没有那个组合的基线，无法归因）。
+
 用法::
 
-    python -m evaluation.retrieval_gate                    # 跑门禁并与基线对比（rerank 关闭）
+    python -m evaluation.retrieval_gate                    # 默认：假 embedding + rerank 关
     python -m evaluation.retrieval_gate --update-baseline  # 重录基线（需在 PR 里说明原因）
     python -m evaluation.retrieval_gate --limit 10         # 快速抽查
 
     # 重排路由（生产实际走的那条；用确定性假打分，无需 TEI）
     GATE_USE_RERANK=1 python -m evaluation.retrieval_gate
     GATE_USE_RERANK=1 python -m evaluation.retrieval_gate --update-baseline
+
+    # 真实 embedding 路由（本地手动跑；需要 TEI 在 .env 配的地址上）
+    GATE_USE_REAL_EMBEDDING=1 python -m evaluation.retrieval_gate
+    GATE_USE_REAL_EMBEDDING=1 python -m evaluation.retrieval_gate --update-baseline
 """
 
 from __future__ import annotations
@@ -74,6 +87,10 @@ DEFAULT_BASELINE_PATH = "evals/retrieval_baseline.json"
 # 重排路由**单独一份基线**：两条路由的指标口径不同（候选池 expand 倍率、粗排 k、
 # 是否过双重阈值都不同），混用等于拿苹果比橘子。
 RERANK_BASELINE_PATH = "evals/retrieval_baseline_rerank.json"
+# 真实 embedding 路由的基线。**与假 embedding 的数字不可比** —— 这是本仓库最危险的
+# 一类跨口径对比：两条路由的 hit@1 差异可能全部来自"真/假 embedding"，
+# 而不是来自代码改动。
+REAL_EMBED_BASELINE_PATH = "evals/retrieval_baseline_real_embed.json"
 
 
 def _env_flag(name: str) -> bool:
@@ -92,18 +109,44 @@ GATE_K = 5
 # `rerank_score` 写入）**从来没有被门禁覆盖过**。改坏了不会有任何信号。
 GATE_USE_RERANK = _env_flag("GATE_USE_RERANK")
 
+# 真实 embedding 路由开关。**默认关闭**，且**只能在本地跑**（需要 TEI，CI 里没有）。
+# 打开：`GATE_USE_REAL_EMBEDDING=1 python -m evaluation.retrieval_gate`
+#
+# ★ 为什么需要它：默认路由跑 `USE_FAKE_EMBEDDING`（字符 bigram 哈希），它**只保留
+# 词汇重叠信号、没有语义泛化能力** —— 门禁因此只能证明「管线没退化」，**证明不了
+# 语义质量**。后果很具体：默认路由上那几条固定的 `hit@1` 未命中全是**跨学科词汇
+# 重合**，光看假口径无法判断它们是生产问题还是假 embedding 的伪影。这条路由就是
+# 用来回答这个问题的。
+#
+# ⚠️ 它**不进 CI**（CI 无 TEI）。定位是「改动检索语义后、发布前的手动对照」，
+# 所以没有对应的 CI 步骤是**有意为之**，不是遗漏。
+GATE_USE_REAL_EMBEDDING = _env_flag("GATE_USE_REAL_EMBEDDING")
+
+
+def embedding_mode() -> str:
+    """当前运行的 embedding 口径：``"real"`` | ``"fake"``。"""
+    return "real" if GATE_USE_REAL_EMBEDDING else "fake"
+
 
 def default_baseline_path() -> str:
     """按当前路由选默认基线，避免误拿另一条路由的数字来比。"""
+    if GATE_USE_REAL_EMBEDDING:
+        return REAL_EMBED_BASELINE_PATH
     return RERANK_BASELINE_PATH if GATE_USE_RERANK else DEFAULT_BASELINE_PATH
 
 
 def load_baseline(path: Path) -> dict[str, Any] | None:
     """读基线并**校验口径**；文件不存在返回 None。
 
-    口径校验：基线里记录的 ``rerank_enabled`` 必须与本次运行一致。
-    少了这一步，两条路由的数字会被拿来互比 —— 那恰恰是最容易得出错误结论的
-    一类对比（见 MEMORY 的「基线口径必须一致」）。历史基线没有这个字段时放行。
+    口径校验两项，都必须与本次运行一致：
+
+    - ``_meta.rerank_enabled``
+    - ``_meta.embedding_mode``
+
+    少了这一步，不同路由的数字会被拿来互比 —— 那恰恰是最容易得出错误结论的一类
+    对比（见 MEMORY 的「基线口径必须一致」）。**embedding 这一项尤其危险**：
+    真/假 embedding 之间的差距很大，会被误读成"代码改动带来的改善/退化"。
+    历史基线没有这些字段时放行（兼容）。
 
     Raises:
         ValueError: 口径不匹配。由调用方转成退出码 2（"配置错误"，非"指标退化"）。
@@ -112,11 +155,22 @@ def load_baseline(path: Path) -> dict[str, Any] | None:
         return None
 
     recorded = json.loads(path.read_text(encoding="utf-8"))
-    recorded_rerank = recorded.get("_meta", {}).get("rerank_enabled")
+    meta = recorded.get("_meta", {})
+
+    recorded_rerank = meta.get("rerank_enabled")
     if recorded_rerank is not None and bool(recorded_rerank) != GATE_USE_RERANK:
         raise ValueError(
             f"基线口径不匹配：{path} 记录 rerank_enabled={recorded_rerank}，"
             f"本次运行是 {GATE_USE_RERANK}。两条路由的指标不可直接比较 —— "
+            "请改用对应路由的基线，或先 `--update-baseline` 重录。"
+        )
+
+    recorded_embed = meta.get("embedding_mode")
+    if recorded_embed is not None and str(recorded_embed) != embedding_mode():
+        raise ValueError(
+            f"基线口径不匹配：{path} 记录 embedding_mode={recorded_embed}，"
+            f"本次运行是 {embedding_mode()}。真/假 embedding 的指标不可直接比较 "
+            "（差异可能全部来自 embedding 本身，而非代码改动）—— "
             "请改用对应路由的基线，或先 `--update-baseline` 重录。"
         )
     return recorded.get("metrics")
@@ -295,12 +349,17 @@ def configure_for_gate(persist_dir: str) -> None:
     同理，重排路由下必须**同时**打开 ``RERANK_ENABLED`` 与 ``USE_FAKE_RERANK``：
     只开前者会真去打 TEI（CI 里没有这个服务），``rerank()`` 会静默走 except 分支
     退回原始顺序 —— 门禁照样"通过"，但重排路径一行都没执行到。
+
+    真实 embedding 路由（``GATE_USE_REAL_EMBEDDING``）是唯一**需要** TEI 的一条：
+    它关掉 ``USE_FAKE_EMBEDDING``，改用 ``.env`` 里的 ``EMBEDDING_API_BASE``
+    （这里不写死地址 —— 生产地址由 ``.env`` 提供）。**LLM 仍然拉回假网关**：
+    那件事与 embedding 无关，且 CI/本地都不该为了跑门禁去打真实模型。
     """
     from core.settings import GATEWAY_DEFAULT_MODEL, Gateway, make_model_ref, settings
     from rag import semantic_cache as sc
     from rag import vectorstore as vs
 
-    settings.USE_FAKE_EMBEDDING = True
+    settings.USE_FAKE_EMBEDDING = not GATE_USE_REAL_EMBEDDING
     settings.CHROMA_PORT = 1
     settings.CHROMA_PERSIST_DIR = persist_dir
     settings.SEMANTIC_CACHE_ENABLED = False
@@ -453,7 +512,10 @@ def _build_report(
     lines.append("=" * 68)
     lines.append("  检索质量黄金集门禁")
     # 把路由写进标题：两条路由的指标不可互比，报告必须自证口径
-    lines.append(f"  路由 rerank={'on (fake)' if GATE_USE_RERANK else 'off'}   k={GATE_K}")
+    lines.append(
+        f"  路由 embed={embedding_mode()}  rerank={'on (fake)' if GATE_USE_RERANK else 'off'}"
+        f"   k={GATE_K}"
+    )
     lines.append("=" * 68)
 
     current = metrics.as_dict()
@@ -514,6 +576,15 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(name)s: %(message)s",
     )
 
+    # 两个实验开关一起开 = 一个没有基线的组合；两个变量同时变就无法归因。
+    if GATE_USE_REAL_EMBEDDING and GATE_USE_RERANK:
+        print(
+            "[拒绝] GATE_USE_REAL_EMBEDDING 与 GATE_USE_RERANK 不能同时开启 —— "
+            "那是一个没有基线的组合，两个变量同时变化就无法归因。请一次只开一个。",
+            file=sys.stderr,
+        )
+        return 2
+
     # 基线先读、先校验：口径不对就没必要花一分钟建索引再告诉你。
     baseline_path = Path(args.baseline or default_baseline_path())
     baseline: dict[str, Any] | None = None
@@ -559,7 +630,12 @@ def main(argv: list[str] | None = None) -> int:
         payload = {
             "_meta": {
                 "note": "由 evaluation.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
-                "embedding": "USE_FAKE_EMBEDDING (deterministic hashing)",
+                "embedding_mode": embedding_mode(),
+                "embedding": (
+                    "real TEI bge-m3"
+                    if GATE_USE_REAL_EMBEDDING
+                    else "USE_FAKE_EMBEDDING (deterministic hashing)"
+                ),
                 "rerank_enabled": GATE_USE_RERANK,
                 "k": GATE_K,
                 "golden_path": str(args.golden),

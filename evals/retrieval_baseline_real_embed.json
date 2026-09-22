@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "note": "由 evaluation.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
+    "embedding_mode": "real",
+    "embedding": "real TEI bge-m3",
+    "rerank_enabled": false,
+    "k": 5,
+    "golden_path": "evals/sample_408.jsonl",
+    "indexed_chunks": 2205,
+    "recorded_at": "2026-09-22"
+  },
+  "metrics": {
+    "n_queries": 40,
+    "category_hit_at_1": 0.9,
+    "category_hit_at_k": 1.0,
+    "category_mrr": 0.9333,
+    "category_precision": 0.9309,
+    "empty_result_rate": 0.0,
+    "mean_evidence_count": 5.425
+  }
+}
