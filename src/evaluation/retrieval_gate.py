@@ -576,9 +576,7 @@ def unexpected_query_failures(failures: list[str], built: set[str]) -> list[str]
     return [f for f in failures if f.split(":", 1)[0] in built]
 
 
-def report_retrieval_anomalies(
-    failures: list[str], errors: list[tuple[str, str]]
-) -> int | None:
+def report_retrieval_anomalies(failures: list[str], errors: list[tuple[str, str]]) -> int | None:
     """统一报出检索期的异常情况；需要提前退出时返回退出码，否则返回 None。
 
     ★ 检索期查询异常 = 索引坏了，**指标毫无意义**，必须在比对基线之前拦下。
