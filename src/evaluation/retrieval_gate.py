@@ -596,7 +596,9 @@ def report_retrieval_anomalies(failures: list[str], errors: list[tuple[str, str]
             f"  受影响集合：{affected}\n"
             f"  典型原因：Chroma HNSW 段文件未落盘 —— 集合在建索引期的就绪检查**通过**，\n"
             f"  却在检索期失败，检索链静默返回空。此时指标只反映「索引坏了」。\n"
-            f"  处理：**重跑门禁**。若反复出现，见 docs/ENGINEERING.md 的「Chroma 索引落盘竞态」。",
+            f"  处理：**重跑门禁**。若反复出现，见归档报告 "
+            f"`../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md` 的"
+            f"「Chroma 索引落盘竞态」。",
             file=sys.stderr,
         )
         return 2

@@ -77,8 +77,10 @@ extend-select = ["I", "U", "S110", "C90"]
 [tool.ruff.lint.mccabe]
 # **阈值 25 就是「当前最复杂函数」的复杂度，所以开启时命中 0 处。**
 #
-# 这是刻意的**棘轮**设计：门禁的目的是**阻止新增债务**，而不是逼人还清旧债
-# （见 docs/ENGINEERING.md §3.4 的门禁设计原则）。
+# 这是刻意的**棘轮**设计：门禁的目的是**阻止新增债务**，而不是逼人还清旧债。
+# ★ 原引用的 `docs/ENGINEERING.md §3.4` 已于 2026-09-23 归档到
+#   `../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md`，故去掉了文档交叉引用
+#   （留一个指向不存在文件的链接，比不写更糟）。
 # 设成 25 的含义是「不许再写出比今天最复杂的那个还复杂的函数」——
 # 新代码一超标就被拦，既有代码一处不动。
 #
@@ -99,7 +101,10 @@ max-complexity = 25
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["tests"]
+# ★ `tests/` 已于 2026-09-23 归档到 `../edu-agent-engineering-archive/batch2/tests`。
+# 保留 `testpaths` 会让 pytest 发 `PytestConfigWarning: No files were found in testpaths`
+# 并**退回从仓库根递归搜索** —— 那是比报错更隐蔽的信号：将来若在根目录误放测试文件，
+# 会被无声收集。故删除该项，等测试套件取回时再一并恢复。
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.pytest_env]

@@ -224,7 +224,8 @@ def _floats_close(a: Any, b: Any, *, rel_tol: float) -> bool:
 
 
 # recall 层的输出依赖 Chroma 的**近似**向量检索，可能在 top-k 边界抖动
-# （实测：首次访问少返回一个本该进 top-k 的候选；详见 docs/ENGINEERING.md §1 P1）。
+# （实测：首次访问少返回一个本该进 top-k 的候选；详见归档报告
+#  ../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md §1 P1）。
 # 这些阶段的**输出**容许有界差异；它们下游的阶段因为吃到了不同输入，
 # 其差异归为"无法判定"而不是失败。
 VOLATILE_OUTPUT_STAGES = frozenset({"recall_multi_route", "recall_multi_route_async"})

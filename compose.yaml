@@ -22,6 +22,12 @@ services:
       start_period: 20s
     # 开发热同步：源码改动后自动同步进容器并重启服务。
     # 注意 target 是 /app/src/...（Dockerfile 中代码位于 /app/src，PYTHONPATH=/app/src）
+    # ★ 覆盖范围 = 「容器运行时真正会用到的模块」，判据是**调用链**，不是目录清单。
+    #   2026-09-23 补上 prompts（运行期被 agents/*.py import，漏了会让提示词改动不生效）
+    #   与 evaluation（容器内基本不用，补上只为保持列表与包结构一致）。
+    # ★ 有意**排除 `src/client/`**：它是给外部程序用的 AgentClient SDK，服务端代码
+    #   **没有任何一处 import 它**（已 grep 核实）→ 同步进去也不会被容器加载，纯属噪声。
+    #   改动 client 后若要让容器生效，重建镜像即可，不需要热同步。
     develop:
       watch:
         - path: src/agents/
@@ -33,9 +39,15 @@ services:
         - path: src/db/
           action: sync+restart
           target: /app/src/db/
+        - path: src/evaluation/
+          action: sync+restart
+          target: /app/src/evaluation/
         - path: src/memory/
           action: sync+restart
           target: /app/src/memory/
+        - path: src/prompts/
+          action: sync+restart
+          target: /app/src/prompts/
         - path: src/rag/
           action: sync+restart
           target: /app/src/rag/
