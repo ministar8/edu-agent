@@ -32,7 +32,7 @@ RAG 检索管线: 查询归一 → 分类 → 多路召回(语义 + BM25 + 元�
 | 评测 | RAGAS Layer-1（faithfulness / context_precision / context_recall / answer_relevancy） |
 | LLM | DashScope / DeepSeek（OpenAI 兼容接口） |
 | 依赖管理 | uv + pyproject.toml |
-| 质量 | ruff + pyrefly + pytest + pre-commit + GitHub Actions |
+| 质量 | ruff + pyrefly + pre-commit（提交前钩子）+ 检索质量门禁（三路由比基线） |
 
 ## 项目结构
 
@@ -40,8 +40,7 @@ RAG 检索管线: 查询归一 → 分类 → 多路召回(语义 + BM25 + 元�
 edu-agent/
 ├── pyproject.toml        # uv 依赖 + ruff/pyrefly/pytest 配置
 ├── langgraph.json        # LangGraph Studio 入口（teaching_graph）
-├── compose.yaml          # Docker 部署
-├── codecov.yml           # 覆盖率门槛（patch 阻塞）
+├── compose.yaml          # Docker 部署（Dockerfile 见 docker/）
 ├── src/
 │   ├── agents/           # 编排与业务图：supervisor / teaching_graph / factory / tools / *_core
 │   ├── rag/              # 检索流水线（retriever / fusion / reranker / hyde / cache / ingest）
@@ -49,30 +48,33 @@ edu-agent/
 │   ├── prompts/          # 系统提示词与模板（import 期校验 + PROMPT_SET_VERSION）
 │   ├── schema/           # 协议/领域模型（questions / grading / evidence / auth …）
 │   ├── memory/           # 短期窗口 + 长期 Store 业务封装
-│   ├── evaluation/       # RAGAS 评测（dataset / adapters / ragas_eval / cli）
+│   ├── evaluation/       # 评测：RAGAS（dataset / adapters / ragas_eval / cli）
+│   │                     #      + 检索质量门禁（retrieval_gate，三路由比基线）
 │   ├── db/               # SQLAlchemy User 表
 │   ├── service/          # FastAPI（service / auth / threads / errors / health）
-│   ├── client/           # AgentClient SDK（JWT + /api）
+│   ├── client/           # AgentClient SDK（JWT + /api，供外部程序集成）
 │   ├── tools/            # 离线数据清洗（ingest 使用，不参与运行时问答）
 │   └── run_service.py    # 服务入口
 ├── static/               # 静态前端（api.js / theme / login / index / app / auth / css）
-├── evals/                # RAGAS 评测样本（jsonl）
-├── tests/                # pytest（含 Playwright 前端冒烟）
+├── evals/                # 评测样本（sample_408.jsonl）+ 三份检索基线（retrieval_baseline*.json）
 ├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
-├── docker/               # Dockerfile
-├── scripts/              # 运维与诊断（覆盖率门槛 / TEI 部署 / 召回与排序诊断）
-└── docs/                 # 工程文档（ENGINEERING.md 工程指导报告）
+├── docker/               # Dockerfile.service
+├── scripts/              # tei_deploy.ps1（本机 TEI 容器部署）
+└── docs/                 # 架构与路线图（ARCHITECTURE.md / RETRIEVAL_ROADMAP.md）
 ```
 
-### scripts/ 一览
+### 评测与门禁入口
 
-| 脚本 | 用途 |
+| 入口 | 用途 |
 |---|---|
-| `check_coverage_by_module.py` | 分模块覆盖率门槛（**CI 调用**，本地也可自查） |
-| `tei_deploy.ps1` | 本机 TEI 容器部署 |
-| `probe_recall_determinism.py` | 复测 recall 层的残余非确定性（低频现象，故**不**写成 CI 测试） |
-| `diagnose_query_ranking.py` | 分离「收窄层」与「融合层」，打印查询排序的中间结果 |
+| `python -m evaluation.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
+| `python -m evaluation.retrieval_gate` | 检索质量门禁：六项指标对基线，**三条路由各一份基线** |
+| `scripts/tei_deploy.ps1` | 本机 TEI 容器部署（embedding + reranker） |
+
+> 检索门的真实口径需区分三条路由：默认（假 embedding / 重排关）、`GATE_USE_RERANK=1`（假重排）、
+> `GATE_USE_REAL_EMBEDDING=1`（真实 TEI，**只有这条能回答语义质量问题**）。
+> 跨口径比对会被拒绝（退出码 2）。细节见 `docs/ARCHITECTURE.md`。
 
 ## 快速开始
 
@@ -92,18 +94,21 @@ cp .env.example .env          # 必填：DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY�
 ### 3. 启动外部服务（Embedding / Reranker）
 
 ```bash
-# Embedding (bge-m3)
+# Embedding (bge-m3) → 端口 11435
 docker run -d --name tei-embedding --gpus all -p 11435:80 \
-  ghcr.io/huggingface/text-embeddings-inference:latest \
+  ghcr.io/huggingface/text-embeddings-inference:89-1.7 \
   --model-id BAAI/bge-m3 --dtype float16 --pooling mean
 
-# Reranker (bge-reranker-v2-m3)
-docker run -d --name tei-reranker --gpus all -p 8080:80 \
-  ghcr.io/huggingface/text-embeddings-inference:latest \
+# Reranker (bge-reranker-v2-m3) → 端口 11436
+docker run -d --name tei-reranker --gpus all -p 11436:80 \
+  ghcr.io/huggingface/text-embeddings-inference:89-1.7 \
   --model-id BAAI/bge-reranker-v2-m3 --dtype float16 --pooling cls
 ```
 
-Windows 也可用 `scripts/tei_deploy.ps1`。
+Windows 下推荐用 `scripts/tei_deploy.ps1`（容器已存在时用 `docker start`，勿 `docker run` 重建）。
+
+> 启动后模型加载约需 50 秒。**校验请用真实推理请求**，`/health` 返回 200 不代表模型已就绪。
+> 端口须与 `.env` 的 `EMBEDDING_BASE_URL` / `RERANK_BASE_URL` 一致（默认 11435 / 11436）。
 
 ### 4. 构建知识库
 
@@ -141,16 +146,21 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 
 ### Python Client
 
+`src/client/` 提供 `AgentClient`，把上述 REST/SSE 接口封装成类型化方法
+（自动拼 agent 路径、带 JWT 头、解析错误体与 SSE 事件）：
+
 ```python
 from client import AgentClient
 
 ac = AgentClient(base_url="http://127.0.0.1:8000")
-ac.login("alice", "secret12")  # 或 ac.set_token(jwt)
+ac.login("alice", "secret12")          # 或 ac.set_token(jwt)
 # 登录成功后自动拉取 /api/info（该端点需认证），无需手动调用
 msg = ac.invoke("什么是虚拟内存？", thread_id="t1")
 for chunk in ac.stream("再举个例子", stream_tokens=True):
-    ...
+    print(chunk)                        # token 片段或完整 ChatMessage
 ```
+
+异步场景用 `ainvoke` / `astream`。该 SDK 不参与服务自身的运行时，仅供外部程序集成。
 
 ## RAGAS 评测
 
@@ -162,21 +172,34 @@ python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 40
 
 报告输出到 `evals/results/ragas_*.json`。
 
-## 测试与质量
+## 代码质量
 
 ```bash
-uv run pytest                  # 运行测试
-uv run ruff check src/ tests/  # Lint
-uv run ruff format src/        # 格式化
-uv run pyrefly check           # 类型检查
-pre-commit install             # 安装 git 钩子
+uv run ruff check src/         # Lint
+uv run ruff format src/        # 格式化（CI 用 --check，只校验不改）
+uv run pyrefly check           # 类型检查（须 0 错误）
+pre-commit install             # 安装 git 钩子（一次性；此后每次 commit 自动跑）
 ```
+
+钩子包含：YAML 校验、文件尾换行、行尾空白、ruff（`--fix`）、ruff-format、pyrefly。
+`evals/` 为门禁基线输入，已豁免空白类改写。
+
+> 说明：仓库当前的有效检查范围是 `src/`。原测试套件（`tests/`）与 CI 配置已移出工作区，
+> 保留在 `../edu-agent-engineering-archive/`（见其 `ARCHIVE_INDEX.md`），需要时可取回。
 
 ## Docker
 
 ```bash
-docker compose up --build      # 构建并启动 agent_service
+docker compose up --build      # 构建并启动 agent_service（http://127.0.0.1:8000）
 ```
+
+镜像用 `uv sync --frozen --no-dev` 安装依赖，只 COPY `src/` `static/` `knowledge/`。
+`chroma_db` 与 SQLite 库通过 volume 挂载，不打进镜像。
+
+开发热同步：`docker compose watch`。
+
+> 完整说明（构建要点、卷挂载、容器访问宿主 TEI 的地址问题、常见问题排查）见
+> **[docs/DOCKER.md](docs/DOCKER.md)**。
 
 ## LangGraph Studio
 

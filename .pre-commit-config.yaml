@@ -9,12 +9,13 @@ repos:
         # knowledge/ 是 RAG 语料（内容，不是代码），空白规范不适用它：
         # 改这些文件会让磁盘内容与已入库的向量索引不同步，
         # 而收益只是清掉几个行尾空格 —— 不划算，故排除。
-        exclude: ^knowledge/
+        # ★ evals/ 同理（见文件末尾说明性钩子）：它是门禁基线的输入。
+        exclude: ^(knowledge|evals)/
       - id: trailing-whitespace
         # 保留 Markdown 的「行尾两个空格 = 硬换行」语义，
         # 否则正文里的强制换行会被静默吃掉（渲染结果变化）。
         args: [--markdown-linebreak-ext=md]
-        exclude: ^knowledge/
+        exclude: ^(knowledge|evals)/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.21
@@ -48,9 +49,13 @@ repos:
       # ★ 适配 3：`evals/` 下 4 个文件（3 份门禁基线 + 1 份评测集）是门禁
       # **精确比对的输入**（`retrieval_gate` 逐指标比基线值）。让空白类钩子
       # 改写它们有双重害处：① 可能破坏基线可解析性；② 在 diff 里混入无意义
-      # 噪声、掩盖真实改动。故整目录豁免。
+      # 噪声、掩盖真实改动。
+      # ★ 豁免的**实现**是上面 end-of-file-fixer / trailing-whitespace 的
+      # `exclude: ^(knowledge|evals)/` —— 本钩子只负责在被 `evals/` 触发时
+      # 打印一行说明，**它本身不构成任何拦截**（曾经误以为「声明即豁免」，
+      # 实测钩子照改不误、只是改了行尾换行，故补上真正的 exclude）。
       - id: evals-baselines-excluded
         name: evals/ 基线豁免空白改写（说明性钩子）
-        entry: bash -c 'echo "[pre-commit] evals/ 是门禁基线输入，跳过空白类改写" >&2'
+        entry: bash -c 'echo "[pre-commit] evals/ 是门禁基线输入，已由 exclude 跳过空白类改写" >&2'
         language: system
         files: ^evals/

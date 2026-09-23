@@ -1,0 +1,38 @@
+{
+  "_meta": {
+    "n": 5,
+    "run_config": {
+      "dataset": "evals/sample_408.jsonl",
+      "limit": 5,
+      "retrieval_k": 5,
+      "requested_use_rerank": true,
+      "effective_rerank_enabled": true,
+      "embedding_fake": false,
+      "embedding_model": "BAAI/bge-m3",
+      "metrics_requested": [
+        "faithfulness",
+        "context_precision",
+        "context_recall",
+        "answer_relevancy"
+      ],
+      "n_filled": 5,
+      "n_loaded": 5
+    }
+  },
+  "faithfulness": {
+    "mean": 0.9056,
+    "n": 5
+  },
+  "context_precision": {
+    "mean": 0.6967,
+    "n": 5
+  },
+  "context_recall": {
+    "mean": 0.6333,
+    "n": 5
+  },
+  "answer_relevancy": {
+    "mean": 0.8947,
+    "n": 5
+  }
+}
