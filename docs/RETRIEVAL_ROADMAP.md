@@ -1,7 +1,7 @@
 # EDU-Agent 检索层优化路线图
 
-> **定位**：与工程指导报告互补 —— 后者管**工程质量**（已于 2026-09-23 归档到
-> `../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md`），本文件管**检索效果与产品功能**。
+> **定位**：本文件管**检索效果与产品功能**；工程质量部分原由工程指导报告承担，
+> 该报告已归档移出本仓库。
 > **依据**：2026-09-23 全量代码核实（评测口径 / 配置一致性 / 前端能力面，均为实测非估算）。
 > **执行约定**：每个任务给「改哪里 + 验收标准 + 风险」；验收标准必须是**可判定的数字或可观测行为**。
 
@@ -18,7 +18,7 @@
 | 1 | **度量口径断层** | 门禁只测「学科类目」（4 选 1），且 `category_hit_at_k = 1.0000`（40/40 全中）**已饱和**；答案级度量（RAGAS）**从未跑过**（`evals/results/` 目录不存在） |
 | 2 | **本机链路 ≠ 生产链路** | `.env` 是 `RERANK_ENABLED=false`，但 `settings.py:116` 默认 `True`、`.env.example:51` 是 `true`、`agents/tools.py:152` **硬编码 `use_rerank=True`** |
 
-**工程侧的定位调整（不是停止）**：覆盖率 36% → 72.3%、`retriever` 7% → 65.6%、6 个 0% 模块清零、质量门禁 + 结构棘轮在位 —— 工程侧**已经从「阻塞项」降级为「服务项」**。
+**工程侧的定位调整（不是停止）**：覆盖率 36% → 72.3%、`retriever` 7% → 65.6%、6 个 0% 模块清零、质量门禁 + 结构规模棘轮在位 —— 工程侧**已经从「阻塞项」降级为「服务项」**。
 剩余的是**规模债**（8 文件 >600 行 / 53 函数 >60 行），它不阻塞检索迭代，因为安全网已经建好。
 **处置方式见 §4：不设独立路线，只在改动触达处偿还。**
 
@@ -44,18 +44,18 @@
 
 ### 1.2 假 embedding 上的「改善」已被证明是伪影
 
-归档报告 `../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md` backlog #34 的四条路由对照实验：
+backlog #34 的四条路由对照实验：
 
 - 放宽 BM25 候选池在**假路由**上 `hit@1` +5pp
 - 在**真实 embedding 路由**上**收益为零 —— 连小数位都不变**
 
-**推论**：CI 默认路由（假 embedding）给出的任何涨跌都不可信。**取舍必须真实路由复验。**
+**推论**：默认路由（假 embedding）给出的任何涨跌都不可信。**取舍必须真实路由复验。**
 
 ### 1.3 答案级度量完全空白
 
 - `evals/results/` ★ **状态已更新（09-23 22:00）**：目录已建立，含 `ragas_probe.json` 与
   `ragas_smoke.json` 两份冒烟产物；**全量（40 条）仍未跑**
-- `.github/workflows/test.yml` 里**没有 RAGAS job**（★ `.github/` 整体已于 09-23 归档，本工作区无 CI）
+- 本工作区无 CI（`.github/` 已归档），原 `test.yml` 里也没有 RAGAS job
 - `src/evaluation/cli.py` 需要 `uv sync --group eval` + 真实 LLM，纯手工
 
 **所以「让检索出来的答案更准确」目前没有可操作的定义。**
@@ -238,10 +238,10 @@
 | 策略 | 说明 |
 |---|---|
 | 不设独立路线 | 工程侧不再单独立项 |
-| 只在改动触达处还债 | 改了 `retriever.py` 就顺手拆函数、补测试 |
-| 棘轮只收紧不放松 | 改小后跑 `python tests/test_structure_ratchet.py` 收紧基线；**数值变大 = 回退，应被质疑** |
-| CI 三条命令照跑 | `ruff check src/ tests/ scripts/`、`ruff format --check src/ tests/ scripts/`（**两条单独跑，check 通过 ≠ 格式通过**）、`pyrefly check` |
-| 改了检索链必须跑门禁 | `uv run python -m evaluation.retrieval_gate`（CI 有独立 job `retrieval-quality-gate`） |
+| 只在改动触达处还债 | 改了 `retriever.py` 就顺手拆函数 |
+| 圈复杂度棘轮只收紧不放松 | 改小 `max-complexity`（pyproject 的 ruff C90）后跑 `ruff check src/`；**数值变大 = 回退，应被质疑** |
+| 本地三条命令照跑 | `ruff check src/`、`ruff format --check src/`（**两条单独跑，check 通过 ≠ 格式通过**）、`pyrefly check` |
+| 改了检索链必须跑门禁 | `uv run python -m evaluation.retrieval_gate` |
 
 ---
 

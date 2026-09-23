@@ -158,10 +158,6 @@ async def info(_current_user: User = Depends(get_current_user)) -> ServiceMetada
     **需要认证**：未认证时不应暴露部署结构（agent 清单、模型清单、默认模型）。
     这也让"服务是否在线"不再是匿名可探测的。
 
-    代价是客户端 SDK 不能在构造期拉取（那时还没凭证）——
-    `AgentClient.login()` / `register()` 成功后会**自动补齐**，
-    所以 `AgentClient(base_url=...)` 的用法不变。
-
     形参名带下划线：依赖只用于鉴权，值本身不用。
     """
     models = list(settings.AVAILABLE_MODELS)

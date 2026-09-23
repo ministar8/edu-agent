@@ -28,8 +28,8 @@
 | `src/agents/` | `supervisor.py` + 专业 agent（`factory.build_agent`）+ `tools.py` + 出题/批改真源 `*_core.py` + `temperature.py` |
 | `src/rag/` | 检索流水线：`retriever.py`（门面）、`postprocess.py`（RRF）、`fusion.py`（证据融合）、`reranker.py`、`hyde.py`、`semantic_cache.py`、`ingest.py` |
 | `src/core/` | `settings.py`（配置单例）、`llm.py`（`get_model` / `get_llm` 工厂） |
+| `src/prompts/` | 提示词集中管理（agents 的 system prompt / supervisor 分派 / rag 单轮模板 / service 出题批改模板），import 期校验变量与花括号 |
 | `src/service/` | FastAPI：`service.py`（路由 + SSE）、`auth.py`（JWT）、`threads.py`（会话列表）、`utils.py` |
-| `src/client/` | `AgentClient` SDK：路径根为 `/api`，JWT 登录/注入，invoke/stream/history/threads/出题批改 |
 | `src/schema/` | Pydantic 协议/领域模型（`schema.py` / `models.py` / `auth.py` / `questions.py` / `grading.py` / `evidence.py` 检索对外契约）；`rag/schemas.py` 只放检索链内部 LLM 输出 |
 | `src/memory/` | 短期 checkpointer + 消息窗口 `window.trim_conversation` + 长期 Store（工厂/schema/topic/weak_topics/记忆卡） |
 | `src/db/` | SQLAlchemy User 表与建表逻辑 |
@@ -38,7 +38,6 @@
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
 | `src/evaluation/` | RAGAS Layer-1 评测（dataset/adapters/ragas_eval/cli）+ `evals/` 样本 |
 | `docs/` | **工程文档**（`ARCHITECTURE.md` 架构 / `DOCKER.md` 容器 / `RETRIEVAL_ROADMAP.md` 检索路线 / `ENGINEERING_COMPARISON.md` 与上游模板对比） |
-| — | ★ 原 `docs/ENGINEERING.md`（工程指导报告）已于 2026-09-23 归档到 `../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md` |
 
 ## 常用命令
 
@@ -50,8 +49,7 @@ uv run python src/run_service.py         # 启动服务 → http://127.0.0.1:800
 uv run python -m rag.ingest              # 知识库增量入库
 uv run python -m rag.ingest --rebuild    # 知识库全量重建
 
-uv run pytest                            # 测试
-uv run ruff check src/ tests/            # Lint
+uv run ruff check src/                   # Lint
 uv run ruff format src/                  # 格式化
 uv run pyrefly check                     # 类型检查
 langgraph dev                            # LangGraph Studio 调试
@@ -75,34 +73,36 @@ docker compose up --build                # 容器化启动
 - **LangSmith 追踪**：`LANGCHAIN_*` 由 `Settings.export_langsmith_env()` 在 lifespan 中写入
   `os.environ`（LangChain 只从进程环境读取并自动埋点，放 Settings 里无效）。
   开追踪只需在 `.env` 设 `LANGCHAIN_TRACING_V2=true` 与 `LANGCHAIN_API_KEY`，不需要改代码。
-- **规模红线**：单文件 ≤600 行、单函数 ≤60 行。
-  ★ 对应门禁（`tests/test_structure_ratchet.py` + `tests/_structure_baseline.json`）随测试套件
-  **已归档**到 `../edu-agent-engineering-archive/batch2/tests/`，本工作区**跑不了**；
-  要检查需从归档取回。规范原文见归档的 `docs_ENGINEERING.md` §2.2。
+- **规模红线**：单文件 ≤600 行、单函数 ≤60 行（人工遵守，本工作区无自动门禁）。
 - 关键逻辑与复杂函数写中文注释。
+
+## 工作区边界
+
+本仓库是**运行时 + 论文核心**的裁剪版：
+
+- **不含**测试套件、CI 工作流、代码覆盖率与结构规模棘轮门禁 —— 已移出到
+  `../edu-agent-engineering-archive/`（其 `ARCHIVE_INDEX.md` 记录清单与取回方式）。
+- **保留**的自研门禁：`evaluation.retrieval_gate`（检索质量）与 `pre-commit`（ruff / pyrefly / 空白检查）。
+- 源码中的质量约束靠**人工遵守**，本工作区没有 CI 强制。
 
 ## 注意事项
 
 - 检索依赖两个本地 TEI 服务：Embedding（`localhost:11435`）与 Reranker（`localhost:8080`），
   用 `scripts/tei_deploy.ps1` 或 README 中的 docker 命令启动，否则检索类请求会失败。
-- **单测不需要 TEI**：`pyproject.toml` 的 `[tool.pytest_env]` 已设 `USE_FAKE_EMBEDDING=true`，
-  `get_embeddings()` 会返回本地确定性哈希实现（`rag.embeddings.HashingEmbeddings`），
-  使 `vectorstore` / `semantic_cache` / `recall` 可在无外部服务下被集成测试覆盖。
-  该实现**只保留词汇重叠信号、没有语义泛化能力，严禁用于生产**。
-  写这类测试时注意：`semantic_cache._DATA_DIR` / `_JSONL_FILE` 是**模块级常量（import 期固化）**，
-  必须用 `monkeypatch` 重定向到 `tmp_path`，否则会写坏真实的 `chroma_db/semantic_cache/`。
+- **假 embedding 模式**：`pyproject.toml` 的 `[tool.pytest_env]` 设 `USE_FAKE_EMBEDDING=true` 后，
+  `get_embeddings()` 返回本地确定性哈希实现（`rag.embeddings.HashingEmbeddings`）——
+  **检索质量门禁靠它在无 TEI 时做确定性比对**。该实现**只保留词汇重叠信号、
+  没有语义泛化能力，严禁用于生产**。
+  注意：`semantic_cache._DATA_DIR` / `_JSONL_FILE` 是**模块级常量（import 期固化）**，
+  临时重定向须用 `monkeypatch` 指向临时目录，否则会写坏真实的 `chroma_db/semantic_cache/`。
 - Windows 下 `run_service.py` 会把事件循环切到 `WindowsSelectorEventLoopPolicy`（异步 DB 驱动不兼容 Proactor）。
 - `src/rag/` 与 `src/tools/` 的类型注解尚不严格，`pyproject.toml` 中对这两个目录放宽了 pyrefly 检查（技术债）。
 - **`splitter.py` 的 Q&A 原子机制在真实语料上未激活**（已知缺陷，勿误判为"已实现"）：
   `_ANSWER_RE` 只识别 `答案：/解答：/正确答案：`，而 408 真题用的是「选项行尾 `✅` + `**解析**：`」，
   因此 `content_type` 永远不会成为 `merged_qa`，`qa.question/answer/answer_key` 字段恒为空，
-  `recall.py` 的 `merged_qa_meta` 路由恒返回空。改动 `splitter` 前先看归档的
-  `../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md` 的 §1「Q&A 原子机制在真实语料上从未激活」一节。
-- **`tests/rag/test_splitter.py::TestKnownDefects` 是"变更哨兵"类**：里面断言的是**当前缺陷行为**
-  而非期望行为。修好对应缺陷后这些用例会变红 —— 这是设计如此，请把断言改成期望值并移出该类，
-  **不要**为了让它变绿而回退修复。
+  `recall.py` 的 `merged_qa_meta` 路由恒返回空（该路由已按 backlog #8 删除）。
 - **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑
-  `uv run python -m evaluation.retrieval_gate`（CI 里有独立 job `retrieval-quality-gate`）。
+  `uv run python -m evaluation.retrieval_gate`。
   它用确定性哈希 embedding + 临时索引跑 40 条黄金集 query，与 `evals/retrieval_baseline.json`
   对比，任一指标退化即失败。**它衡量的是检索管线是否退化，不是语义质量**（语义质量用
   `evals/cli.py` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，

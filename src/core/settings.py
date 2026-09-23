@@ -150,8 +150,6 @@ class Settings(BaseSettings):
     #   **但放宽的收益是假 embedding 的伪影**：09-23 复测（四条配置对照）显示，
     #   假路由上 `hit@1` +5pp，**真实 embedding 路由上收益为零**（逐位相同）。
     #   → 默认值**刻意保持现状**；这里提成配置只是为了让它可测、可调，**不改行为**。
-    #   ★ 详见归档报告 `../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md`
-    #     的「#34 实测结论（09-23 复测）」（该报告已于 2026-09-23 移出本仓库）。
     BM25_CANDIDATE_FACTOR: int = 3
     """候选池 = `k × FACTOR`。"""
 

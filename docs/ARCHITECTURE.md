@@ -243,15 +243,12 @@ GATE_USE_REAL_EMBEDDING=1 ...
 | 类型检查 | `pyrefly check` | **必须 0 错误**；可选依赖导入标 `# type: ignore[import-not-found]` |
 | 静态检查 | `ruff check src/` | 含 `S110`（拦静默吞异常）、`C90`（圈复杂度 ≤25） |
 | 格式 | `ruff format --check src/` | ★ **与 check 是两条命令，必须分别跑** |
-| 结构棘轮 | （已归档，见下方说明） | 单文件 ≤600 行、单函数 ≤60 行，基线**只能变小不能变大** |
-| 覆盖率门槛 | （已归档，见下方说明） | rag 71% / agents 90% / service 80% |
 | 检索回归 | `evaluation.retrieval_gate` | 六项指标比基线，容差 0.02；三路由各一份基线 |
 
-> ★ **上方命令的路由范围**：`tests/` 已于 2026-09-23 归档，本地范围只剩 `src/`
-> （带 `tests/` 会报 `E902`，**不是代码问题**）。结构棘轮与覆盖率门槛的实现随测试套件
-> 一起归档到 `../edu-agent-engineering-archive/batch2/`，要用时取回。
+> ★ **命令范围**：本工作区不含 `tests/`，有效范围是 `src/`（带 `tests/` 会报 `E902`，
+> **不是代码问题**）。结构规模棘轮与覆盖率门槛**已随测试套件移出**，本工作区无自动门禁。
 
-**棘轮设计的意图**：门禁的目的是**阻止新增债务**，不是逼人还清旧债。
+**圈复杂度棘轮的设计意图**：门禁的目的是**阻止新增债务**，不是逼人还清旧债。
 所以复杂度阈值设成「当前最复杂函数的复杂度」，开启时命中 0 处 —— 新代码一超标就被拦，既有代码一处不动。
 
 ★ **改检索链必须重跑门禁**，且**先确认改动落在门禁覆盖范围内** —— 门禁通过 ≠ 改动安全。
@@ -279,7 +276,7 @@ GATE_USE_REAL_EMBEDDING=1 ...
 
 ## 9. 模块归属与规模
 
-按「对论文的价值」三分（不含已归档部分）：
+按「对论文的价值」三分：
 
 | 归属 | 模块 | 行数 | 占比 |
 |---|---|---|---|
@@ -293,10 +290,10 @@ GATE_USE_REAL_EMBEDDING=1 ...
 > `src/tools/` 被 `evaluation/retrieval_gate.py` 与 `rag/ingest.py` 依赖（`clean_documents`），
 > **不能单独归档** —— 删它会让门禁与入库链一起崩。
 
-**已归档的工程化设施**（`mv` 同盘重命名，未删除）见
+**已归档的工程化设施**（`mv` 同盘重命名，未删除），清单见
 `../edu-agent-engineering-archive/ARCHIVE_INDEX.md`：
-测试套件 17,540 行 / CI（`.github/`）/ codecov / `docs/ENGINEERING.md` / 3 个诊断脚本。
-★ 其中 **`.pre-commit-config.yaml` 与 `src/client/` 已取回**（前者适配后启用，后者保留供外部集成）。
+测试套件 17,540 行 / CI（`.github/`）/ codecov / `docs/ENGINEERING.md` / 3 个诊断脚本 /
+`src/client/` SDK。★ 其中 **`.pre-commit-config.yaml` 已取回并适配启用**。
 归档前固化的论文素材：**1,688 测试用例 / 覆盖率 75.2% / 8,982 语句**。
 
 ---
@@ -319,8 +316,7 @@ GATE_USE_REAL_EMBEDDING=1 ...
    已处理：RAGAS 路径显式声明 `settings.RERANK_ENABLED = cfg.use_rerank`，
    并在跑前用**真实推理请求**探活（不是只看 `/health`），不通即退出码 2；
    报告写入 `_meta.run_config` 自描述实际生效口径。
-   **未处理**：`retriever.py` 本身未改（改检索链必须重跑门禁，且 `retriever.py` 在
-   结构棘轮基线内，加行数会让 `test_structure_ratchet.py` 变红）。
+   **未处理**：`retriever.py` 本身未改（改检索链必须重跑门禁）。
 5. **配置漂移**（`Settings` 用 `extra="ignore"`，`.env` 里它不认识的键**静默无效**）：
    - `.env` 有 `RERANK_MODE`，但 `Settings` **没有这个字段** → 一直是无效残留；
    - `.env` **缺** `RERANK_EXPAND_FACTOR`（`.env.example` 有）→ 走默认值 5。
@@ -330,7 +326,7 @@ GATE_USE_REAL_EMBEDDING=1 ...
    所以命令行临时覆盖是有效的 —— **两类字段必须区分对待**。
 7. **测试套件已移出工作区**，本工作区无法跑全量测试；覆盖率数字是归档前固化的快照
    （1,688 用例 / 75.2% / 8,982 语句）。
-   ★ 因此**结构棘轮与覆盖率门禁在本工作区跑不了** —— 改动 `src/` 时要靠人工判断
+   ★ 因此**结构规模棘轮与覆盖率门禁在本工作区跑不了** —— 改动 `src/` 时要靠人工判断
    是否会让某个文件/函数变长。
 
 ---

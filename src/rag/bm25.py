@@ -31,8 +31,6 @@ def _candidate_limit(k: int) -> int:
     现状（3 / 0）实测**确实在截断**：某词命中 178 篇只取 15 篇。
     **但放宽的收益是假 embedding 的伪影** —— 09-23 四条配置对照显示，假路由 `hit@1` +5pp，
     **真实 embedding 路由上收益为零**，故默认值刻意保持现状。
-    详见归档报告 `../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md`
-    的「#34 实测结论（09-23 复测）」（该报告已于 2026-09-23 移出本仓库）。
     """
     return max(k * settings.BM25_CANDIDATE_FACTOR, settings.BM25_CANDIDATE_FLOOR)
 

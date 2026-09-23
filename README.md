@@ -52,24 +52,23 @@ edu-agent/
 │   │                     #      + 检索质量门禁（retrieval_gate，三路由比基线）
 │   ├── db/               # SQLAlchemy User 表
 │   ├── service/          # FastAPI（service / auth / threads / errors / health）
-│   ├── client/           # AgentClient SDK（JWT + /api，供外部程序集成）
 │   ├── tools/            # 离线数据清洗（ingest 使用，不参与运行时问答）
 │   └── run_service.py    # 服务入口
-├── static/               # 静态前端（api.js / theme / login / index / app / auth / css）
+├── static/               # 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css）
 ├── evals/                # 评测样本（sample_408.jsonl）+ 三份检索基线（retrieval_baseline*.json）
 ├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile.service
 ├── scripts/              # tei_deploy.ps1（本机 TEI 容器部署）
-└── docs/                 # 架构与路线图（ARCHITECTURE.md / RETRIEVAL_ROADMAP.md）
+└── docs/                 # 工程文档（ARCHITECTURE / RETRIEVAL_ROADMAP / DOCKER / ENGINEERING_COMPARISON）
 ```
 
 ### 评测与门禁入口
 
 | 入口 | 用途 |
 |---|---|
-| `python -m evaluation.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
-| `python -m evaluation.retrieval_gate` | 检索质量门禁：六项指标对基线，**三条路由各一份基线** |
+| `uv run python -m evaluation.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
+| `uv run python -m evaluation.retrieval_gate` | 检索质量门禁：六项指标对基线，**三条路由各一份基线** |
 | `scripts/tei_deploy.ps1` | 本机 TEI 容器部署（embedding + reranker） |
 
 > 检索门的真实口径需区分三条路由：默认（假 embedding / 重排关）、`GATE_USE_RERANK=1`（假重排）、
@@ -144,30 +143,12 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 
 请求体可选 `model`：形如 `dashscope:qwen3.8-max` / `deepseek:deepseek-v4-flash`，经运行时中间件生效。
 
-### Python Client
-
-`src/client/` 提供 `AgentClient`，把上述 REST/SSE 接口封装成类型化方法
-（自动拼 agent 路径、带 JWT 头、解析错误体与 SSE 事件）：
-
-```python
-from client import AgentClient
-
-ac = AgentClient(base_url="http://127.0.0.1:8000")
-ac.login("alice", "secret12")          # 或 ac.set_token(jwt)
-# 登录成功后自动拉取 /api/info（该端点需认证），无需手动调用
-msg = ac.invoke("什么是虚拟内存？", thread_id="t1")
-for chunk in ac.stream("再举个例子", stream_tokens=True):
-    print(chunk)                        # token 片段或完整 ChatMessage
-```
-
-异步场景用 `ainvoke` / `astream`。该 SDK 不参与服务自身的运行时，仅供外部程序集成。
-
 ## RAGAS 评测
 
 ```bash
 uv sync --group eval
 # 需 TEI embedding + 知识库 + LLM 配置
-python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 40
+uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 40
 ```
 
 报告输出到 `evals/results/ragas_*.json`。
@@ -176,7 +157,7 @@ python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 40
 
 ```bash
 uv run ruff check src/         # Lint
-uv run ruff format src/        # 格式化（CI 用 --check，只校验不改）
+uv run ruff format src/        # 格式化
 uv run pyrefly check           # 类型检查（须 0 错误）
 pre-commit install             # 安装 git 钩子（一次性；此后每次 commit 自动跑）
 ```
@@ -184,8 +165,8 @@ pre-commit install             # 安装 git 钩子（一次性；此后每次 co
 钩子包含：YAML 校验、文件尾换行、行尾空白、ruff（`--fix`）、ruff-format、pyrefly。
 `evals/` 为门禁基线输入，已豁免空白类改写。
 
-> 说明：仓库当前的有效检查范围是 `src/`。原测试套件（`tests/`）与 CI 配置已移出工作区，
-> 保留在 `../edu-agent-engineering-archive/`（见其 `ARCHIVE_INDEX.md`），需要时可取回。
+> 说明：本工作区不含测试套件与 CI，有效检查范围是 `src/`。移出的内容见
+> `../edu-agent-engineering-archive/ARCHIVE_INDEX.md`（含清单与取回方式）。
 
 ## Docker
 

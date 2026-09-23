@@ -585,7 +585,7 @@ def report_retrieval_anomalies(failures: list[str], errors: list[tuple[str, str]
     于是 `hit@1` 从 0.95 掉到 **0.725**，门禁却把它当成「检索质量退化」报出来。
     那既可能是**巨大的假回归**，也可能**掩盖真实退化** —— 两种都比「明确说不知道」更糟。
 
-    ★ 抽成函数的原因不只是复用：`main()` 已达 126 行（规范 1 上限 60，结构棘轮冻结），
+    ★ 抽成函数的原因不只是复用：`main()` 已达 126 行（规范 1 上限 60，结构规模棘轮冻结），
     **再加代码会被棘轮拦下** —— 那是棘轮按设计工作，正确反应是抽出来而不是放宽基线。
     """
     if failures:
@@ -596,9 +596,7 @@ def report_retrieval_anomalies(failures: list[str], errors: list[tuple[str, str]
             f"  受影响集合：{affected}\n"
             f"  典型原因：Chroma HNSW 段文件未落盘 —— 集合在建索引期的就绪检查**通过**，\n"
             f"  却在检索期失败，检索链静默返回空。此时指标只反映「索引坏了」。\n"
-            f"  处理：**重跑门禁**。若反复出现，见归档报告 "
-            f"`../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md` 的"
-            f"「Chroma 索引落盘竞态」。",
+            f"  处理：**重跑门禁**。",
             file=sys.stderr,
         )
         return 2

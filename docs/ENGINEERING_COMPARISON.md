@@ -11,7 +11,7 @@
 上游是**「给所有人用的模板」**——广度优先，覆盖多部署目标（Azure / 多镜像 / 周巡检）、
 多维护者自动化（`.claude/` Routine + playbook），但**质量门禁偏松**（codecov patch 不阻塞、无规模/复杂度门槛）。
 
-本项目是**「一个具体毕设」**——深度优先，**自研了三层质量门禁**（检索质量门禁 + 结构棘轮 + 分模块覆盖率），
+本项目是**「一个具体毕设」**——深度优先，**自研了三层质量门禁**（检索质量门禁 + 结构规模棘轮 + 分模块覆盖率），
 但**交付面窄**（单一镜像、单条 CI、无维护者脚手架）。
 
 **两者不是好坏之分，是「模板」与「交付物」的定位差异。** 本项目在「够用」标准下已达标且有富余。
@@ -27,7 +27,7 @@
 | ③ | **pre-commit** | 4 组钩子（+pymarkdown fix/scan） | 4 组钩子（**+evals 基线豁免**，三条适配带理由注释） | ⚖ 相当；上游多 markdown 扫描，我方多基线保护 |
 | ④ | **CI 流水线** | 1 条 `test.yml`（3 job：test-python 矩阵 **3.12/3.13/3.14**、lint-markdown、test-docker）+ 3 条 owner-guard workflow | **已归档**（原 5 job，多 `pre-commit` 与自研 `retrieval-quality-gate`） | ⚠ 归档后**我方 CI = 0**；上游矩阵更宽 |
 | ⑤ | **容器化** | `docker/Dockerfile.app` + `Dockerfile.service` + `compose.mongo.yaml` | `docker/Dockerfile.service` + `compose.yaml`（**单镜像**） | ⚠ 上游多一个 Streamlit app 镜像 |
-| ⑥ | **测试分层** | `tests/`（unit / integration / e2e_ui / smoke） | **已归档**到 `../edu-agent-engineering-archive/` | ⚠ 归档后**本地无测试套件** |
+| ⑥ | **测试分层** | `tests/`（unit / integration / e2e_ui / smoke） | **已归档**（移出本仓库） | ⚠ 本地无测试套件 |
 | ⑦ | **维护者自动化** | `.claude/`（hooks + skills + settings）+ `docs/maintenance/`（3 份 playbook）+ `CLAUDE.md` | `CLAUDE.md`（有）+ `.claude/`（**空目录**） | ❌ 上游明显领先 |
 
 ---
@@ -46,20 +46,23 @@
 | **`scripts/smoke_test.sh`** | ★ **反静默回退**：除 API 检查外，还回查容器/DB/langfuse 确认**真的用了那个依赖** | △ **值得学思路**。我们本地 TEI 排查时已吃过「`/health` 200 ≠ 就绪」的亏 |
 | **`.claude/` 维护者 Routine** | SessionStart hooks + skills + 5 条 GitHub MCP 危险操作 deny | ❌ 属「单人长期维护大仓」的投入，毕设阶段不划算 |
 | **`docs/maintenance/` playbook** | 3 份 Routine（Daily Sentinel / Weekly / CI Follow-Through）+「no self-wake-ups」原则 | ❌ 同上 |
-| **`client` 依赖组** | 只装 httpx/pydantic/streamlit 即可跑前端 | △ **我方已有 `src/client/`（已取回）**，但没有对应的精简依赖组 |
+| **`client` 依赖组** | 只装 httpx/pydantic/streamlit 即可跑前端 | ❌ 我方 `src/client/` 已归档（零运行时引用），没有对应的精简依赖组 |
 
 ---
 
 ## 3. 我方有、上游没有（自研增量）
 
+> ★ 标「已归档」的项随测试套件移出本仓库 —— 或代码/配置已移走，或留在 `pyproject.toml`
+> 里但**没有执行者**。
+
 | 项 | 说明 | 价值 |
 |---|---|---|
 | **★ 检索质量门禁** | `evaluation.retrieval_gate`：三条路由（默认 / `GATE_USE_RERANK` / `GATE_USE_REAL_EMBEDDING`）各比一份基线，容差 0.02，**跨口径比对直接拒（退出码 2）** | 上游**完全没有**「RAG 质量」这一维度的门禁。这是本项目最核心的技术资产 |
-| **★ 结构棘轮** | `mccabe max-complexity = 25`，恰等于「当前最复杂函数」→ 开启时 0 命中，**只拦新增** | 上游无任何规模/复杂度门槛 |
-| **★ 分模块覆盖率门槛** | 强制显式 `--cov=src/`，`tools/` 与离线入库链不计入 | 上游只有全局 codecov 上报 |
-| **codecov patch 阻塞** | 我方要求 **target 80% 且阻塞**，且有量化立论 | 上游 `codecov.yml` 是 **`informational: true`（不阻塞）** |
+| **★ 圈复杂度棘轮** | `mccabe max-complexity = 25`，恰等于「当前最复杂函数」→ 开启时 0 命中，**只拦新增** | 上游无任何规模/复杂度门槛 |
+| **★ 分模块覆盖率门槛**（已归档） | 强制显式 `--cov=src/`，`tools/` 与离线入库链不计入 | 上游只有全局 codecov 上报 |
+| **codecov patch 阻塞**（已归档） | 我方要求 **target 80% 且阻塞**，且有量化立论 | 上游 `codecov.yml` 是 **`informational: true`（不阻塞）** |
 | **pyrefly 2 个 sub-config** | `src/rag/**` 关 7 项、`src/tools/**` 关 8 项，**逐项带迁移理由** | 上游只有 1 条 `bad-specialization = false` |
-| **`eval` 依赖组** | `ragas` / `datasets` 独立分组，**CI 不装**（故代码里 6 处 `# type: ignore[import-not-found]`） | 上游无评测依赖组 |
+| **`eval` 依赖组** | `ragas` / `datasets` 独立分组，**默认不装**（故代码里 6 处 `# type: ignore[import-not-found]`） | 上游无评测依赖组 |
 | **`evals/` 基线集** | 3 份基线 JSON + 1 份 `sample_408.jsonl`，且 pre-commit 专门豁免空白改写 | 上游无 |
 | **`src/tools/`** | 数据清洗 / 分块 / 入库工具链（5 文件） | 上游无离线知识加工链 |
 
@@ -77,13 +80,14 @@
 | `coverage.json` | `batch2/coverage.json` | 已移出 |
 | `scripts/*.py`（3 个） | `batch2/scripts_*.py` | 已移出 |
 | `docs/ENGINEERING.md` | `batch1/docs_ENGINEERING.md` | 已移出 |
-| `src/client/` | `batch1/src_client` | ★ **已取回**（用户决定保留） |
+| `src/client/` | `batch1/src_client` | 已移出（零运行时引用；与其测试 `tests/client/` 团聚） |
 | `tests/client/` | `batch1/tests_client` | 仍在归档（无测试套件） |
 | `.pre-commit-config.yaml` | `batch2/pre-commit-config.yaml` | ★ **已取回并三处适配** |
 
 **当前仍保留的工程化：**
 `.pre-commit-config.yaml` · `docker/Dockerfile.service` · `compose.yaml` · `.dockerignore` ·
-`pyproject.toml`（含 4 类门禁配置）· `uv.lock` · `evals/` · `src/client/` · `docs/`（3 篇）· `scripts/tei_deploy.ps1`
+`pyproject.toml`（含 ruff / pyrefly / pymarkdown 配置）· `uv.lock` · `evals/` ·
+`docs/`（4 篇）· `scripts/tei_deploy.ps1`
 
 **空目录待决：** `.claude/`（存在但无文件）→ 建议移出或删除，避免「看起来有、其实没有」的误导。
 
@@ -97,7 +101,6 @@
 | **不加 `.claude/` / `docs/maintenance/`** | 那是给长期维护开源大仓的投入，与毕设不对齐 |
 | **不加多镜像 / Azure / 周巡检** | 无对应部署目标；且上游那几条在 fork 中本就是死代码 |
 | **可考虑补：uv 版本钉死** | 若要让「别人 clone 下来能复现构建」，这是最低成本的一步。但要**三处一起钉** |
-| **可考虑补：`client` 依赖组** | 既然 `src/client/` 已保留，给它一个精简安装组（`uv sync --only-group client`）能让「外部程序集成」这一卖点更完整 |
 | **建议清理：`.claude/` 空目录** | 空目录会误导读者以为项目有维护者脚手架 |
 | **★ 反思：门禁 vs 无 CI 的张力** | 当前是「有严格门禁配置，但没有强制执行者」。**答辩时应主动说明**：门禁通过 pre-commit 在本地强制，CI 部分为归档状态 |
 

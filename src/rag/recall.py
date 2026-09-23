@@ -214,8 +214,8 @@ def build_metadata_routes(
 
     # 注：这里曾有 `merged_qa_meta` 路由（对 exercise / answer / comparison 查询按
     # `content_type=merged_qa` 过滤）。**实测该 content_type 恒不存在** ——
-    # splitter 的 Q&A 检测链断在三处（见归档报告
-    # ../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md「Q&A 链路实测结论」），
+    # splitter 的 Q&A 检测链断在三处（`_ANSWER_RE` 只认「答案：/解答：/正确答案：」，
+    # 而真题用「选项行尾 ✅ + **解析**：」，故 `content_type` 永不成为 `merged_qa`），
     # 于是这条路由**永远返回空**，而它带的权重 2.0 从未被真实数据校准过。
     # 已按 backlog #8 删除。
     #
