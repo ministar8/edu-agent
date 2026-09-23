@@ -11,6 +11,7 @@ import math
 from langchain_core.documents import Document
 
 from core.cache import BoundedCache
+from core.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,20 @@ _AVGDL_CACHE_TTL = 300
 _avgdl_cache: BoundedCache[str, float] = BoundedCache(
     max_size=64, ttl=_AVGDL_CACHE_TTL, name="bm25_avgdl"
 )
+
+
+def _candidate_limit(k: int) -> int:
+    """词面命中查询的候选池大小：`max(k × FACTOR, FLOOR)`。
+
+    ★ **调用时读 settings，不在 import 期固化** —— 否则调参必须改代码重跑，
+    且门禁实验无法在同一进程内切换取值对比（backlog #34 的对照实验就依赖这一点）。
+
+    现状（3 / 0）实测**确实在截断**：某词命中 178 篇只取 15 篇。
+    **但放宽的收益是假 embedding 的伪影** —— 09-23 四条配置对照显示，假路由 `hit@1` +5pp，
+    **真实 embedding 路由上收益为零**，故默认值刻意保持现状。
+    详见 `docs/ENGINEERING.md` 的「#34 实测结论（09-23 复测）」。
+    """
+    return max(k * settings.BM25_CANDIDATE_FACTOR, settings.BM25_CANDIDATE_FLOOR)
 
 
 def bm25_search(
@@ -67,7 +82,7 @@ def bm25_search(
         try:
             query_kwargs: dict = {
                 "where_document": {"$contains": term},
-                "limit": k * 3,
+                "limit": _candidate_limit(k),
                 "include": ["documents", "metadatas"],
             }
             if filter:

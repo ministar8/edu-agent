@@ -144,6 +144,19 @@ class Settings(BaseSettings):
     """权重校准基准（semantic 的 default 权重）。
     实际阈值 = 基础阈值 × `max_w / RRF_BASELINE_WEIGHT`。"""
 
+    # ── BM25 候选池（backlog #34）────────────────────
+    # 词面命中的候选集截断：`limit = max(k * FACTOR, FLOOR)`。
+    # ★ 现状（3 / 0）实测确实在触发截断 —— 某词命中 178 篇只取 15 篇。
+    #   **但放宽的收益是假 embedding 的伪影**：09-23 复测（四条配置对照）显示，
+    #   假路由上 `hit@1` +5pp，**真实 embedding 路由上收益为零**（逐位相同）。
+    #   → 默认值**刻意保持现状**；这里提成配置只是为了让它可测、可调，**不改行为**。
+    #   详见 `docs/ENGINEERING.md` 的「#34 实测结论（09-23 复测）」。
+    BM25_CANDIDATE_FACTOR: int = 3
+    """候选池 = `k × FACTOR`。"""
+
+    BM25_CANDIDATE_FLOOR: int = 0
+    """候选池下限（0 = 不设下限）。★ 别按直觉设成 300 —— 见上面 #34 的复测结论。"""
+
     # ── Semantic Cache（ChromaDB-backed）──────────
     SEMANTIC_CACHE_ENABLED: bool = True
     SEMANTIC_CACHE_SIMILARITY_THRESHOLD: float = 0.88
