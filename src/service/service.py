@@ -353,8 +353,8 @@ async def message_generator(
             if stream_mode == "updates":
                 for node, updates in event.items():
                     if node == "__interrupt__":
-                        for interrupt in updates:
-                            new_messages.append(AIMessage(content=interrupt.value))
+                        # 生成器代替「for + append」：少 1 判定点（backlog #36 第三步）
+                        new_messages.extend(AIMessage(content=i.value) for i in updates)
                         continue
                     # 内层/外层节点统一收集，交给 _is_user_visible_message + ID 去重筛选
                     new_messages.extend((updates or {}).get("messages", []))

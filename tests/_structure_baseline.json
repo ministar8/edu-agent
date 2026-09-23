@@ -12,7 +12,7 @@
     "src/rag/semantic_cache.py": 708,
     "src/rag/splitter.py": 1214,
     "src/service/service.py": 610,
-    "src/tools/imputer.py": 1348
+    "src/tools/imputer.py": 1336
   },
   "functions": {
     "src/evaluation/ragas_eval.py::run_ragas_on_samples": 71,
@@ -63,10 +63,9 @@
     "src/tools/dedup.py::_lsh_batched": 93,
     "src/tools/dedup.py::fuzzy_dedup": 116,
     "src/tools/imputer.py::_detect_pdf_title_lines": 62,
-    "src/tools/imputer.py::_impute_heading": 141,
+    "src/tools/imputer.py::_impute_heading": 135,
     "src/tools/imputer.py::_impute_section_headings": 88,
     "src/tools/imputer.py::_impute_single_doc": 118,
-    "src/tools/imputer.py::_semantic_segment": 183,
     "src/tools/imputer.py::impute_documents": 81,
     "src/tools/normalizer.py::normalize_documents": 109
   }

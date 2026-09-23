@@ -3,7 +3,7 @@
 ## 为什么需要
 
 `docs/ENGINEERING.md` §2.2 规范 1 定了红线（单文件 ≤600 行、单函数 ≤60 行），
-但**此前没有任何机制在执行它** —— 实测 **8 个文件、54 个函数**超标，而且可以继续长。
+但**此前没有任何机制在执行它** —— 实测（2026-09-22）**8 个文件、54 个函数**超标，而且可以继续长。
 规范没有执行机制，等于没有规范。
 
 ## 规则
@@ -14,15 +14,19 @@
 
 ## 这是棘轮，不是「逼人还清旧债」
 
-与 `ruff` 的 `C90 max-complexity = 30` 同一思路（见 §3.4「门禁设计原则」）：
-**旧债按计划逐步还，新债一律不许进。** 一次性把阈值收到 60/600 会让 54 个函数
+与 `ruff` 的 `C90 max-complexity = 25` 同一思路（见 §3.4「门禁设计原则」）：
+**旧债按计划逐步还，新债一律不许进。** 一次性把阈值收到 60/600 会让 53 个函数
 同时变红，结果必然是被 `noqa` 绕过或被关掉 —— 那就失去了意义。
 
-## 为什么不直接重构掉这 54 个函数
+## 为什么不直接重构掉这 53 个函数
 
 `docs/ENGINEERING.md` §4.2 阶段二把这件事列为 **6–8 周**的工作量；且部分目标
-（如 `tools/imputer.py`，含全项目复杂度最高的 `_semantic_segment` = 30）
-**单测覆盖率是 0%** —— 没有安全网的重构正是 §1 P0 警告的陷阱。
+**单测覆盖率极低**（`tools/imputer.py` 曾低至 35.6%）—— 没有安全网的重构正是
+§1 P0 警告的陷阱。
+
+★ **09-23 进展**：`tools/imputer.py` 补了 **106** 条表征测试（覆盖率 **35.6% → 77.4%**），
+并把 `_semantic_segment` 从 **183 行 / 复杂度 30** 重构成薄编排（复杂度已 ≤24，
+**不在超标函数列表里了**）；文件 **1348 → 1336 行**。基线已相应收紧。
 
 ## 如何更新基线
 
@@ -169,7 +173,7 @@ class TestRatchetIntegrity:
         assert baseline["limits"] == {"file": FILE_LIMIT, "function": FUNC_LIMIT}
 
     def test_baseline_is_not_empty_by_accident(self, baseline):
-        """基线被清空会让门禁**变严**（54 个函数立刻变红），不是静默放水 —— 但要能察觉。"""
+        """基线被清空会让门禁**变严**（53 个函数立刻变红），不是静默放水 —— 但要能察觉。"""
         assert baseline["files"], "基线 files 为空，疑似被误清空"
         assert baseline["functions"], "基线 functions 为空，疑似被误清空"
 
@@ -178,10 +182,15 @@ class TestRatchetIntegrity:
 
         如果扫描器坏了（路径写错、ast 解析失败），上面的测试会**全部通过** ——
         这正是「保护机制存在 ≠ 生效」。用一个必然超标的真实文件验证。
+
+        ★ 探针换过一次：原来用 `src/tools/imputer.py::_semantic_segment`，
+        09-23 把它从 183 行重构成薄编排（降到 60 行以内）之后，它**不再是超标函数**，
+        探针随之失效 —— 于是这条元测试自己红了。改用当前最长的 `split_documents`（240 行）。
+        **教训：探针要挑「短期不会被修好」的对象**，否则修好它的时候会连带把门禁弄红。
         """
         files, funcs = scan_violations()
         assert "src/rag/retriever.py" in files, "扫描器没找到已知超标文件，可能已失效"
-        assert any("_semantic_segment" in k for k in funcs), "扫描器没找到已知超标函数"
+        assert "src/rag/splitter.py::split_documents" in funcs, "扫描器没找到已知超标函数"
 
 
 if __name__ == "__main__":  # pragma: no cover — 手动重新生成基线用

@@ -596,6 +596,25 @@ def _extract_pdf_heading_by_features(text: str) -> str | None:
     return None
 
 
+def _looks_like_heading_line(line: str) -> bool:
+    """首行是否**像**一个标题（纯形态判断，不验证内容相关性）。
+
+    短、不以 Markdown 标记符开头、非纯数字、不像句子（不以终结标点收尾）、非停用词堆。
+
+    ★ 抽出来的理由主要是**可读性**；对复杂度只贡献 **1** —— ruff 的 mccabe **不统计 `and`/`or`**，
+    省下的是原来套在外层 `if` 里的 `if _validate_heading_candidate(...)`。
+    """
+    return bool(
+        line
+        and len(line) <= 30
+        and not line.startswith(("#", "*", "-", "`", "```", "~~~"))
+        and not line.isdigit()
+        and _HEADING_CANDIDATE_RE.match(line)
+        and not _ENDS_WITH_PUNCT_RE.search(line)
+        and _non_stopword_ratio(line) > 0.5
+    )
+
+
 def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, str, str] | None:
     """标题缺失填充
 
@@ -642,8 +661,9 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, st
     _conf_level = {"high": 0, "medium": 1, "low": 2}
     min_level = _conf_level.get(min_confidence, 2)
 
-    # 2. 缓存命中
-    cache_key = f"{source_ext}:{source_name}"
+    # 2. 缓存命中。★ 键必须**唯一标识来源文件**（backlog #37）：用完整路径；无路径时退到
+    #    内容前缀 —— 原来只用 `(扩展名, 文件名 stem)`，同名文件跨目录会互相串标题。
+    cache_key = f"{source_ext}:{source_path or text[:64]}"
     if cache_key in _heading_cache:
         cached_heading, cached_conf = _heading_cache[cache_key]
         cached_method = [k for k, v in _METHOD_CONFIDENCE.items() if v == cached_conf]
@@ -689,19 +709,8 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, st
     # 7. 首行提取 [low]
     if heading is None and text and min_level >= 2:
         first_line = text.splitlines()[0].strip()
-        if (
-            first_line
-            and len(first_line) <= 30
-            and not first_line.startswith(("#", "*", "-", "`", "```", "~~~"))
-            and not first_line.isdigit()
-            and _HEADING_CANDIDATE_RE.match(first_line)
-            and not _ENDS_WITH_PUNCT_RE.search(first_line)
-            and _non_stopword_ratio(first_line) > 0.5
-        ):
-            candidate = first_line
-            # 内容覆盖验证
-            if _validate_heading_candidate(candidate, text):
-                heading, method, confidence = candidate, "first_line_filtered", _CONFIDENCE_LOW
+        if _looks_like_heading_line(first_line) and _validate_heading_candidate(first_line, text):
+            heading, method, confidence = first_line, "first_line_filtered", _CONFIDENCE_LOW
 
     # 8. 关键词组合 [low]
     if heading is None and text and min_level >= 2:
@@ -725,8 +734,12 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, st
             if candidate and _validate_heading_candidate(candidate, text):
                 heading, method, confidence = candidate, "keyword", _CONFIDENCE_LOW
 
-    # 9. 兜底 [low]
-    if heading is None and min_level >= 2:
+    # 9. 兜底 [low]。★ 拆成嵌套 `if` 是为了顺带拿到正确语义：`min_confidence` 高于 low 时
+    #    兜底不生效，此时「没推出标题」应返回 `None`（无需填充），而不是把 `None` 拼成
+    #    字符串 `"[推测]None"` 并写进缓存（backlog #38）。
+    if heading is None:
+        if min_level < 2:
+            return None
         heading, method, confidence = "[未命名文档]", "fallback", _CONFIDENCE_LOW
 
     # ── 低置信度标记 ──
@@ -851,20 +864,127 @@ def _detect_pdf_title_lines(text: str) -> list[dict]:
     return title_lines
 
 
-def _tokenize_text(text: str) -> list[str]:
-    """对整段文本做一次分词，返回词序列（含停用词过滤）
+def _tokenize_with_positions(text: str) -> tuple[list[str], list[int]]:
+    """分词，并同时给出每个词的字符起点。
 
-    一次分词，后续复用，避免重复调用 jieba。
+    ★ 合并了原先分散在两处的分词（`_tokenize_text` 与 `_semantic_segment` 里重建位置的那段）。
     """
     if not text or not text.strip():
-        return []
+        return [], []
+
     try:
         import jieba
 
-        return [w for w in jieba.cut(text) if w.strip() and w not in _STOPWORDS]
+        raw = list(jieba.cut(text))
     except ImportError:
-        # 降级：字符级
-        return [c for c in text if c.strip() and c not in _STOPWORDS]
+        # 字符级降级：词序列与位置一一对应
+        chars = [(i, c) for i, c in enumerate(text) if c.strip() and c not in _STOPWORDS]
+        return [c for _i, c in chars], [i for i, _c in chars]
+
+    words = [w for w in raw if w.strip() and w not in _STOPWORDS]
+    positions: list[int] = []
+    search_start = 0
+    for word in raw:
+        if word.strip() and word not in _STOPWORDS:
+            idx = text.find(word, search_start)
+            if idx >= 0:
+                positions.append(idx)
+                search_start = idx + len(word)
+    return words, positions
+
+
+def _tokenize_text(text: str) -> list[str]:
+    """分词，返回词序列（含停用词过滤）。薄委托 —— 逻辑在 `_tokenize_with_positions`。"""
+    return _tokenize_with_positions(text)[0]
+
+
+def _window_jaccard_distances(
+    words: list[str], window_size: int, stride: int
+) -> list[tuple[int, float]]:
+    """相邻滑窗的词集 Jaccard 距离 → `[(分割点词索引, 距离)]`；分割点取右窗口起始索引。"""
+    n_words = len(words)
+    bags = [
+        frozenset(words[i : i + window_size]) for i in range(0, n_words - window_size + 1, stride)
+    ]
+
+    out: list[tuple[int, float]] = []
+    for k in range(len(bags) - 1):
+        left, right = bags[k], bags[k + 1]
+        if not left or not right:
+            continue
+        union = len(left | right)
+        sim = len(left & right) / union if union > 0 else 0.0
+        out.append(((k + 1) * stride, 1.0 - sim))
+    return out
+
+
+def _find_split_word_indices(
+    distances: list[tuple[int, float]], diff_threshold: float
+) -> list[int]:
+    """取「距离 ≥ 阈值」且**严格大于**左右邻居的局部峰值（相等时仍算峰值，见表征测试）。"""
+    peaks: list[int] = []
+    for k, (idx, dist) in enumerate(distances):
+        if dist < diff_threshold:
+            continue
+        if k > 0 and distances[k - 1][1] > dist:
+            continue
+        if k < len(distances) - 1 and distances[k + 1][1] > dist:
+            continue
+        peaks.append(idx)
+    return peaks
+
+
+def _segments_from_split_indices(
+    text: str, split_indices: list[int], word_positions: list[int], min_chunk: int
+) -> list[dict]:
+    """把分割点（词索引）映射成字符位置，产出达到 `min_chunk` 的分段 + 末尾余段。"""
+    segments: list[dict] = []
+    prev_char_pos = 0
+    for word_idx in split_indices:
+        # 词索引越界时退到文末（分词器与位置映射理论上应当等长，这是兜底）
+        char_pos = word_positions[word_idx] if word_idx < len(word_positions) else len(text)
+
+        seg_len = char_pos - prev_char_pos
+        if seg_len < min_chunk:
+            continue
+
+        segments.append({"position": prev_char_pos, "label": "", "char_count": seg_len})
+        prev_char_pos = char_pos
+
+    remaining = len(text) - prev_char_pos
+    if remaining > 0:
+        segments.append({"position": prev_char_pos, "label": "", "char_count": remaining})
+    return segments
+
+
+def _merge_short_segments(segments: list[dict], min_chunk: int) -> list[dict]:
+    """过短的段落并入**前一段**（首段无处可并时保留原样）。"""
+    merged: list[dict] = []
+    for seg in segments:
+        if merged and seg["char_count"] < min_chunk:
+            merged[-1]["char_count"] += seg["char_count"]
+        else:
+            merged.append(seg)
+    return merged
+
+
+def _split_long_segments(segments: list[dict], max_chunk: int) -> list[dict]:
+    """过长段落按 `max_chunk` 等分；最后一片是**余数**，可能小于 `min_chunk`（69 按 60 拆 → 60+9）。"""
+    final: list[dict] = []
+    for seg in segments:
+        if seg["char_count"] <= max_chunk:
+            final.append(seg)
+            continue
+        n_parts = (seg["char_count"] + max_chunk - 1) // max_chunk
+        for p in range(n_parts):
+            final.append(
+                {
+                    "position": seg["position"] + p * max_chunk,
+                    "label": "",
+                    "char_count": min(max_chunk, seg["char_count"] - p * max_chunk),
+                }
+            )
+    return final
 
 
 def _semantic_segment(
@@ -877,18 +997,12 @@ def _semantic_segment(
 ) -> list[dict]:
     """基于滑动窗口的语义分段
 
-    策略：
-    1. 对全文本做一次 jieba 分词，得到词序列
-    2. 预计算所有窗口词袋（利用重叠复用，stride < window_size 时窗口间共享词汇）
-    3. 计算相邻窗口的词集 Jaccard 距离 = 1 - Jaccard相似度
-    4. 距离峰值 > diff_threshold → 主题切换候选点
-    5. 在候选点中按文本位置映射到字符偏移，生成分段
-    6. 合并过短段落，拆分过长段落
+    策略：一次分词 → 预计算滑窗词袋 → 相邻窗 Jaccard 距离 → 取局部峰值作分割点 →
+    映射到字符位置 → 合并过短段、拆分过长段。全文只分词一次（O(N)，而非逐句 O(N×M)），
+    `stride` 控制计算密度（stride=25 时窗口数约 N/25）。
 
-    性能优化：
-    - 全文只做一次分词（O(N)），而非逐句分词（O(N×M)）
-    - 窗口词袋预计算：避免每次循环重建 frozenset
-    - stride 控制计算密度，stride=25 时窗口数约为 N/25
+    ★ **本函数是薄编排**：上述六步各抽成独立函数，每步可单独测。直接原因是它原来的
+    mccabe 复杂度是 **30**（全项目最高，钉住 `max-complexity` 棘轮）。
 
     Args:
         text: 正文文本
@@ -899,153 +1013,27 @@ def _semantic_segment(
         diff_threshold: Jaccard 距离阈值，默认 0.55（即相似度 < 0.45 时分割）
 
     Returns:
-        分段列表 [{"position": int, "label": str, "char_count": int}]
+        分段列表 [{"position": int, "label": str, "char_count": int}]；
+        **只有 ≥2 段时才返回**，否则返回 `[]`（单段等于「没分段」）。
     """
     if not text or len(text) <= min_chunk:
         return []
 
-    # 1. 一次分词 + 建立词→字符位置映射
-    words = _tokenize_text(text)
+    words, word_positions = _tokenize_with_positions(text)
     if len(words) < window_size * 2:
         # 词数太少，无法做窗口比较
         return []
 
-    # 建立词索引到字符偏移的映射
-    # 通过在原文中逐词定位，记录每个词的起始字符位置
-    word_positions: list[int] = []
-    search_start = 0
-    # 重新分词获取位置（使用同样的分词器）
-    try:
-        import jieba
-
-        tokenizer = jieba
-    except ImportError:
-        tokenizer = None
-
-    if tokenizer:
-        # 用 `tokenizer` 而不是 `jieba` —— 二者目前等价，但 `jieba` 只在 try 块内
-        # 绑定，出了 try 就依赖 `if tokenizer:` 这个间接守卫。直接引用未绑定的名字
-        # 是**脆弱**的：守卫一旦被重构掉（比如改成 `if True:`），这里就会
-        # NameError。用 `tokenizer` 让静态检查也能确认它是绑定的（backlog #12）。
-        for word in tokenizer.cut(text):
-            if word.strip() and word not in _STOPWORDS:
-                idx = text.find(word, search_start)
-                if idx >= 0:
-                    word_positions.append(idx)
-                    search_start = idx + len(word)
-    else:
-        # 字符级降级
-        for i, ch in enumerate(text):
-            if ch.strip() and ch not in _STOPWORDS:
-                word_positions.append(i)
-
-    # 2. 预计算所有窗口词袋（避免循环中重复构建 frozenset）
-    n_words = len(words)
-    window_bags: list[frozenset[str]] = []
-    for i in range(0, n_words - window_size + 1, stride):
-        window_bags.append(frozenset(words[i : i + window_size]))
-
-    # 3. 计算相邻窗口对 Jaccard 距离
-    #    相邻对: bag[k] vs bag[k+1]，对应词索引 k*stride vs (k+1)*stride
-    distances: list[tuple[int, float]] = []  # (分割点词索引, 距离)
-
-    for k in range(len(window_bags) - 1):
-        bag_left = window_bags[k]
-        bag_right = window_bags[k + 1]
-
-        if not bag_left or not bag_right:
-            continue
-
-        intersection = len(bag_left & bag_right)
-        union = len(bag_left | bag_right)
-        jaccard_sim = intersection / union if union > 0 else 0.0
-        jaccard_dist = 1.0 - jaccard_sim
-
-        # 分割点 = 右窗口起始词索引
-        center_word_idx = (k + 1) * stride
-        distances.append((center_word_idx, jaccard_dist))
-
+    distances = _window_jaccard_distances(words, window_size, stride)
     if not distances:
         return []
 
-    # 3. 找距离峰值：大于阈值 且 大于前后邻居
-    split_word_indices: list[int] = []
-    for k in range(len(distances)):
-        idx, dist = distances[k]
-        if dist < diff_threshold:
-            continue
-        # 检查是否为局部峰值（大于左右邻居）
-        is_peak = True
-        if k > 0 and distances[k - 1][1] > dist:
-            is_peak = False
-        if k < len(distances) - 1 and distances[k + 1][1] > dist:
-            is_peak = False
-        if is_peak:
-            split_word_indices.append(idx)
-
-    if not split_word_indices:
+    split_indices = _find_split_word_indices(distances, diff_threshold)
+    if not split_indices:
         return []
 
-    # 4. 将词索引映射到字符位置，生成分段
-    segments: list[dict] = []
-    prev_char_pos = 0
-
-    for word_idx in split_word_indices:
-        if word_idx < len(word_positions):
-            char_pos = word_positions[word_idx]
-        else:
-            char_pos = len(text)
-
-        # 确保分段达到最小长度
-        seg_len = char_pos - prev_char_pos
-        if seg_len < min_chunk:
-            continue
-
-        segments.append(
-            {
-                "position": prev_char_pos,
-                "label": "",
-                "char_count": seg_len,
-            }
-        )
-        prev_char_pos = char_pos
-
-    # 最后一段
-    remaining = len(text) - prev_char_pos
-    if remaining > 0:
-        segments.append(
-            {
-                "position": prev_char_pos,
-                "label": "",
-                "char_count": remaining,
-            }
-        )
-
-    # 5. 合并过短段落
-    merged: list[dict] = []
-    for seg in segments:
-        if merged and seg["char_count"] < min_chunk:
-            merged[-1]["char_count"] += seg["char_count"]
-        else:
-            merged.append(seg)
-
-    # 6. 拆分过长段落
-    final: list[dict] = []
-    for seg in merged:
-        if seg["char_count"] > max_chunk:
-            n_parts = (seg["char_count"] + max_chunk - 1) // max_chunk
-            for p in range(n_parts):
-                final.append(
-                    {
-                        "position": seg["position"] + p * max_chunk,
-                        "label": "",
-                        "char_count": min(max_chunk, seg["char_count"] - p * max_chunk),
-                    }
-                )
-        else:
-            final.append(seg)
-
-    # 7. 编号
+    segments = _segments_from_split_indices(text, split_indices, word_positions, min_chunk)
+    final = _split_long_segments(_merge_short_segments(segments, min_chunk), max_chunk)
     for i, seg in enumerate(final):
         seg["label"] = f"[第{i + 1}段]"
 

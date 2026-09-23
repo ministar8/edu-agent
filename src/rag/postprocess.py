@@ -438,11 +438,11 @@ def _chroma_window_expand(
         if anchor_idx is None or not isinstance(anchor_idx, int) or anchor_idx < 0:
             anchor_idx = 0
 
-        anchor_pos = 0
-        for pos, (idx, _) in enumerate(all_details):
-            if idx == anchor_idx:
-                anchor_pos = pos
-                break
+        # 锚点在按索引排序后的位置；找不到（理论上不会）时退回 0。
+        # ★ 原来是一个「for + if + break」的循环 —— 等价，但少了 2 个判定点（backlog #36 第三步）。
+        anchor_pos = next(
+            (pos for pos, (idx, _d) in enumerate(all_details) if idx == anchor_idx), 0
+        )
 
         lo = max(0, anchor_pos - window_size)
         hi = min(len(all_details) - 1, anchor_pos + window_size)

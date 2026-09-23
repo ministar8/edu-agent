@@ -75,18 +75,27 @@ extend-select = ["I", "U", "S110", "C90"]
 # C90 = mccabe 圈复杂度。阈值见下方 [tool.ruff.lint.mccabe]。
 
 [tool.ruff.lint.mccabe]
-# **阈值 30 就是「当前最复杂函数」的复杂度，所以开启时命中 0 处。**
+# **阈值 25 就是「当前最复杂函数」的复杂度，所以开启时命中 0 处。**
 #
 # 这是刻意的**棘轮**设计：门禁的目的是**阻止新增债务**，而不是逼人还清旧债
-# （见 docs/ENGINEERING.md §3.4 的门禁设计原则）。当前最复杂的三个函数：
-#   `_semantic_segment` (30) · `_chroma_window_expand` (26) · `message_generator` (26)
-# 设成 30 的含义是「不许再写出比今天最复杂的那个还复杂的函数」——
+# （见 docs/ENGINEERING.md §3.4 的门禁设计原则）。
+# 设成 25 的含义是「不许再写出比今天最复杂的那个还复杂的函数」——
 # 新代码一超标就被拦，既有代码一处不动。
 #
 # **为什么不直接设常见的 15**：那样会一次命中 11 处既有代码，门禁立刻变红，
 # 结果要么被加 noqa 绕过、要么被关掉 —— 反而失去了意义。
-# 想收紧应当**配合重构逐步下调**：先把上面三个降到 25 以下，再把阈值降到 25，以此类推。
-max-complexity = 30
+# 想收紧应当**配合重构逐步下调**，以此类推。
+#
+# ★ 收敛历史（每次都是「先把最复杂的降下来，再调阈值」）：
+#   - 30 → **25**（09-23，backlog #36）：`_semantic_segment` 30 → 薄编排；
+#     `_chroma_window_expand` 26 → 25（找锚点的 `for`+`if`+`break` 改为 `next(...)`）；
+#     `message_generator` 26 → 25（`__interrupt__` 的 `for`+`append` 改为 `extend(生成器)`）。
+#     ★ 现在**恰为 25 的有两个**：`_impute_heading` 与 `message_generator`（都零余量）。
+#
+# ★ **实测：ruff 的 mccabe 不统计 `and`/`or`，也不统计推导式的 `for`。**
+#   加 `and` 条件、把 `x or y` 塞进表达式都**不加分**；显式 `for` 加分、改成生成器不加分。
+#   → 想减复杂度只能拆/并 `if`/`for`/`while`/`except`，别指望合并布尔条件。
+max-complexity = 25
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
