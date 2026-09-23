@@ -64,10 +64,15 @@ class TestIngestionChainReachesTools:
     排除出覆盖率门槛。这个排除**只有在「门禁端到端跑真实入库链」成立时才是对的** ——
     但门禁跑在**独立进程**里，pytest 的覆盖率测不到它
     （实测 `tools/imputer.py` 单测覆盖 **0%**，0/525 语句）。
+    ★ **09-23 更正这个数字**：本文件新增 `test_clean_documents_reaches_anomaly_detector`
+    之后，它已升到 **35.6%**（那条测试只 spy 了 anomaly、**真跑了** imputer）；
+    补完 **106** 条表征测试后为 **77.4%**。**但这不削弱本测试的价值** —— 它守的是
+    「`clean_documents` 还调不调 tools」，那是覆盖率数字答不了的问题。
 
     所以这个前提必须由测试守着：一旦 `clean_documents` 不再调用它们，
-    排除照旧、门槛照旧绿，而 `tools/imputer.py`（1348 行、**全项目复杂度最高的函数** 30）
-    会静默变成既无单测、也无门禁覆盖的死代码。这正是「保护机制存在 ≠ 生效」。
+    排除照旧、门槛照旧绿，而 `tools/imputer.py`（**1336 行**、曾含全项目复杂度最高的
+    `_semantic_segment` = 30，09-23 已降到 ≤24）会静默变成既无单测、也无门禁覆盖的死代码。
+    这正是「保护机制存在 ≠ 生效」。
 
     ★ 与 `TestBuildIndexUsesRealPipeline` 的分工：那个测试把 `clean_documents` **整体 spy 掉**，
     只证明它"被调用"；这里跑**真实** `clean_documents`，只 spy 最底层的 tools 函数 ——
