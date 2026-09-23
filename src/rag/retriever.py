@@ -665,7 +665,6 @@ def _emit_evidence_metric(
     if not isinstance(verdict, dict):
         verdict = {}
     text_evidences = getattr(fused, "text_evidences", []) or []
-    kg_evidences = getattr(fused, "kg_evidences", []) or []
     final_context = getattr(fused, "final_context", "") or ""
     metrics.emit_evidence_summary(
         query=query,
@@ -680,19 +679,11 @@ def _emit_evidence_metric(
             "route_type": meta.get("route_type", ""),
             "score_threshold": meta.get("score_threshold", 0.0),
             "text_evidence_count": len(text_evidences),
-            "kg_evidence_count": meta.get("kg_evidence_count", len(kg_evidences)),
-            "kg_used": meta.get("kg_used", bool(kg_evidences)),
-            "kg_skipped": meta.get("kg_skipped", False),
-            "kg_category": meta.get("kg_category", ""),
-            "kg_nodes_count": meta.get("kg_nodes_count", 0),
-            "kg_edges_count": meta.get("kg_edges_count", 0),
-            "kg_paths_count": meta.get("kg_paths_count", 0),
             "source_count": len(getattr(fused, "sources", []) or []),
             "context_chars": len(final_context),
             "context_tokens": getattr(fused, "used_token_budget", 0),
             "retrieval_latency_ms": meta.get("retrieval_latency_ms", None),
             "rerank_latency_ms": meta.get("rerank_latency_ms", None),
-            "kg_latency_ms": meta.get("kg_latency_ms", None),
             "generation_latency_ms": None,
             "governance_latency_ms": None,
             "verifier_used": bool(verdict),
@@ -786,7 +777,8 @@ def retrieve_documents(
 #
 # 这组函数把原本 428 行的单体编排按**已有的阶段边界**拆开。每个函数都有明确的
 # 输入输出，因此可以单独测试 —— 这正是此前覆盖率上不去的结构性原因
-# （见 docs/ENGINEERING.md §1 P0：单体函数让纯函数有"结构性上限"）。
+# （见归档报告 ../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md §1 P0：
+#  单体函数让纯函数有"结构性上限"）。
 #
 # 拆分原则：**只搬代码，不改行为**。原实现里的测量点仍由调用方负责，
 # `stage_ms` 的所有权留在编排层，保证计时口径与拆分前逐字一致。
@@ -1389,7 +1381,6 @@ def _finalize_retrieval(
             "hyde_error": ctx.hyde_error,
             "skip_bm25": ctx.depth.skip_bm25 if ctx.depth else False,
             "skip_metadata_routes": ctx.depth.skip_metadata_routes if ctx.depth else False,
-            "skip_kg": ctx.depth.skip_kg if ctx.depth else False,
             "before_threshold": ctx.counters.raw_results,
             "after_section_dedup": ctx.counters.after_dedup,
             "after_threshold": ctx.counters.after_threshold,
@@ -1597,7 +1588,6 @@ async def aretrieve_evidence(
     score_threshold: float = SCORE_THRESHOLD,
     use_rerank: bool = True,
     filter: dict | None = None,
-    student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
     depth: RetrievalDepth | None = None,
     on_stage: StageSink | None = None,
@@ -1685,7 +1675,6 @@ async def aretrieve_evidence(
         fused = await afuse_documents(
             docs,
             query=query,
-            student_profile=student_profile,
             max_tokens=max_tokens,
             depth=_resolved_depth.depth,
         )
@@ -1745,7 +1734,6 @@ async def aretrieve_evidence_with_retry(
     score_threshold: float = SCORE_THRESHOLD,
     use_rerank: bool = True,
     filter: dict | None = None,
-    student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
     depth: RetrievalDepth | None = None,
     on_stage: StageSink | None = None,
@@ -1764,7 +1752,6 @@ async def aretrieve_evidence_with_retry(
         "score_threshold": score_threshold,
         "use_rerank": use_rerank,
         "filter": filter,
-        "student_profile": student_profile,
         "max_tokens": max_tokens,
         "depth": depth,
         "on_stage": on_stage,

@@ -3,7 +3,7 @@
 Caches FusedEvidence by query semantic similarity using embedding vectors
 stored in a dedicated ChromaDB collection ``semantic_cache``.
 When a semantically similar query is received, the cached FusedEvidence is
-reused, skipping the entire retrieval pipeline (vector search, BM25, KG,
+reused, skipping the entire retrieval pipeline (vector search, BM25,
 fusion, verification).
 
 Only the retrieval layer is cached — LLM generation + governance + reflection

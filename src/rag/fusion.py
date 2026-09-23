@@ -2,26 +2,20 @@ from __future__ import annotations
 
 import logging
 from collections import Counter, defaultdict
-from collections.abc import Iterable
 
 from langchain_core.documents import Document
 
 from core.settings import settings
 from rag.evidence import (
-    AgentEvidence,
     FusedEvidence,
-    KGEvidence,
     TextEvidence,
-    format_kg_evidence,
     format_text_evidence,
-    kg_evidence_from_text,
     text_evidence_from_document,
 )
 from rag.rag_utils import estimate_tokens
 
 logger = logging.getLogger(__name__)
 _MAX_PER_SOURCE = 3
-_KG_TEXT_BOOST = 1.2
 _PARENT_WINDOW_BONUS = 1.08
 _HYDE_PENALTY = 0.95
 _NOISE_DOWNGRADE_PENALTY = 0.5  # window 噪声降级惩罚（排到 context 末尾）
@@ -43,35 +37,7 @@ def _truncate_to_tokens(text: str, max_tokens: int) -> str:
     return text[: max(0, char_budget)] + "\n[...truncated]"
 
 
-def _truncate_profile(student_profile: str) -> str:
-    if not student_profile:
-        return ""
-    if estimate_tokens(student_profile) <= settings.MAX_STUDENT_PROFILE_TOKENS:
-        return student_profile
-    return _truncate_to_tokens(student_profile, settings.MAX_STUDENT_PROFILE_TOKENS)
-
-
-def _extract_kg_terms(kg_evidences: Iterable[KGEvidence]) -> set[str]:
-    terms: set[str] = set()
-    for ev in kg_evidences:
-        for node in ev.nodes:
-            node = str(node).strip()
-            if node:
-                terms.add(node)
-        for path in ev.paths:
-            for item in path:
-                item = str(item).strip()
-                if item:
-                    terms.add(item)
-        for edge in ev.edges:
-            for key in ("source", "target", "name"):
-                val = str(edge.get(key) or "").strip()
-                if val:
-                    terms.add(val)
-    return terms
-
-
-def _score_text_evidence(ev: TextEvidence, kg_terms: set[str]) -> float:
+def _score_text_evidence(ev: TextEvidence) -> float:
     if "rerank_score" in ev.metadata:
         score = float(ev.rerank_score or 0.0)
     elif "recall_score" in ev.metadata:
@@ -89,31 +55,36 @@ def _score_text_evidence(ev: TextEvidence, kg_terms: set[str]) -> float:
         score *= _HYDE_PENALTY
     if ev.metadata.get("_noise_downgraded"):
         score *= ev.metadata.get("_noise_downgrade_factor", _NOISE_DOWNGRADE_PENALTY)
-    if kg_terms:
-        kp = set(ev.knowledge_points)
-        if kp & kg_terms:
-            score *= _KG_TEXT_BOOST
-        elif any(len(term) >= 2 and term in ev.content for term in kg_terms):
-            score *= _KG_TEXT_BOOST
     return score
 
 
 def fuse_evidence(
     text_evidences: list[TextEvidence] | None = None,
-    kg_evidences: list[KGEvidence] | None = None,
-    agent_evidences: list[AgentEvidence] | None = None,
     query: str = "",
-    student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
     depth: str = "standard",
 ) -> FusedEvidence:
+    """把逐条文本证据融合成 `FusedEvidence`。
+
+    ★ 这里**曾经**还有三条输入：`kg_evidences`（知识图谱证据）、`agent_evidences`、
+    `student_profile`。三者在生产链路里**恒为空**，已于 2026-09-23 随 KG 遗留一起移除：
+
+    - `kg_evidences` / `agent_evidences`：`retriever.aretrieve_evidence` 从不传值，
+      且 KG 本体早已下线（原 `KGEvidence` 的 docstring 自己写着「KG 已移除」）；
+    - `student_profile`：三个调用方（`agents/tools.py`、`evaluation/adapters.py`、
+      `evaluation/retrieval_gate.py`）都没传，恒为 `""`。
+
+    **移除是行为等价的**，逐项核对过：
+    · `_extract_kg_terms([])` 恒返回空集 → `_score_text_evidence` 里的 KG 加权分支
+      （`if kg_terms:`）从不执行 → 删掉不影响任何排序；
+    · `kg_tokens` / `profile_tokens` 恒为 0 → `doc_budget` 由
+      `max(1000, max_tokens - 0 - 0)` 化简为 `max(1000, max_tokens)`，逐字等价；
+    · `parts` 里的 `if kg_text:` / `if profile:` 恒为假 → 最终 `final_context` 不变；
+    · `sources` 的 KG 兜底 `if not sources: for ev in kg_evidences` 对空列表是空转。
+    """
     text_evidences = text_evidences or []
-    kg_evidences = kg_evidences or []
-    agent_evidences = agent_evidences or []
     if not max_tokens:
         max_tokens = settings.CONTEXT_TOKEN_BUDGET
-
-    kg_terms = _extract_kg_terms(kg_evidences)
 
     deduped: dict[str, TextEvidence] = {}
     for ev in text_evidences:
@@ -122,12 +93,12 @@ def fuse_evidence(
         if existing is None:
             deduped[key] = ev
             continue
-        if _score_text_evidence(ev, kg_terms) > _score_text_evidence(existing, kg_terms):
+        if _score_text_evidence(ev) > _score_text_evidence(existing):
             deduped[key] = ev
 
     ranked = sorted(
         deduped.values(),
-        key=lambda ev: _score_text_evidence(ev, kg_terms),
+        key=lambda ev: _score_text_evidence(ev),
         reverse=True,
     )
 
@@ -142,31 +113,9 @@ def fuse_evidence(
             overflow.append(ev)
     ranked = diversified + overflow
 
-    profile = _truncate_profile(student_profile)
-    kg_parts = [format_kg_evidence(ev) for ev in kg_evidences if ev.serialized.strip()]
-    kg_text = "\n".join(kg_parts).strip()
-    kg_tokens = estimate_tokens(kg_text) if kg_text else 0
-    kg_nodes_count = sum(len(ev.nodes) for ev in kg_evidences)
-    kg_edges_count = sum(len(ev.edges) for ev in kg_evidences)
-    kg_paths_count = sum(len(ev.paths) for ev in kg_evidences)
-    kg_resolved_topics = sorted(
-        {
-            str(topic)
-            for ev in kg_evidences
-            for topic in ev.metadata.get("resolved_topics", [])
-            if str(topic).strip()
-        }
-    )
-    kg_matched_candidates = sorted(
-        {
-            str(candidate)
-            for ev in kg_evidences
-            for candidate in ev.metadata.get("matched_candidates", [])
-            if str(candidate).strip()
-        }
-    )
-    profile_tokens = estimate_tokens(profile) if profile else 0
-    doc_budget = max(1000, max_tokens - kg_tokens - profile_tokens)
+    # 文档预算。原式为 `max(1000, max_tokens - kg_tokens - profile_tokens)`，
+    # 而 kg_tokens / profile_tokens 恒为 0（KG 与 student_profile 都已移除）→ 逐字等价。
+    doc_budget = max(1000, max_tokens)
 
     selected_texts: list[tuple[TextEvidence, str]] = []
     used_doc_tokens = 0
@@ -200,13 +149,7 @@ def fuse_evidence(
             interleaved = selected_texts
 
         parts.append(interleaved[0][1])
-        if kg_text:
-            parts.append(kg_text)
         parts.extend(text for _, text in interleaved[1:])
-    elif kg_text:
-        parts.append(kg_text)
-    if profile:
-        parts.append(profile)
 
     sources = []
     seen_sources = set()
@@ -214,11 +157,6 @@ def fuse_evidence(
         if ev.source and ev.source not in seen_sources:
             sources.append(ev.source)
             seen_sources.add(ev.source)
-    if not sources:
-        for ev in kg_evidences:
-            if ev.source and ev.source not in seen_sources:
-                sources.append(ev.source)
-                seen_sources.add(ev.source)
 
     selected_source_counts = Counter(ev.source for ev, _ in selected_texts if ev.source)
     diversity_score = 0.0
@@ -238,11 +176,10 @@ def fuse_evidence(
         )
     elif used_token_budget > max_tokens * 0.9:
         logger.info(
-            "Evidence fusion budget query=%s text=%d/%d kg=%d tokens=%d/%d diversity=%.3f",
+            "Evidence fusion budget query=%s text=%d/%d tokens=%d/%d diversity=%.3f",
             query[:30],
             len(selected_texts),
             len(text_evidences),
-            len(kg_evidences),
             used_token_budget,
             max_tokens,
             diversity_score,
@@ -250,8 +187,6 @@ def fuse_evidence(
 
     fused = FusedEvidence(
         text_evidences=[ev for ev, _ in selected_texts],
-        kg_evidences=kg_evidences,
-        agent_evidences=agent_evidences,
         final_context=final_context,
         sources=sources,
         used_token_budget=used_token_budget,
@@ -260,16 +195,6 @@ def fuse_evidence(
             "input_text_evidence_count": len(text_evidences),
             "deduped_text_evidence_count": len(deduped),
             "selected_text_evidence_count": len(selected_texts),
-            "kg_used": bool(kg_evidences),
-            "kg_evidence_count": len(kg_evidences),
-            "kg_nodes_count": kg_nodes_count,
-            "kg_edges_count": kg_edges_count,
-            "kg_paths_count": kg_paths_count,
-            "kg_tokens": kg_tokens,
-            "kg_resolved_topics": kg_resolved_topics,
-            "kg_matched_candidates": kg_matched_candidates,
-            "kg_text_boost_terms": sorted(kg_terms),
-            "profile_tokens": profile_tokens,
             "doc_token_budget": doc_budget,
             "max_tokens": max_tokens,
             "retrieval_depth": depth,
@@ -282,38 +207,13 @@ def fuse_evidence(
 def fuse_documents(
     docs: list[Document],
     query: str = "",
-    kg_supplement: str = "",
-    student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
-    kg_evidences: list[KGEvidence] | None = None,
     depth: str = "standard",
 ) -> FusedEvidence:
-    """Fuse retrieved documents into FusedEvidence.
-
-    Args:
-        docs: Retrieved document list
-        query: Original query
-        kg_supplement: KG supplement text (legacy, used only when kg_evidences=None)
-        student_profile: Student profile summary
-        max_tokens: Token budget cap
-        kg_evidences: Structured KG evidence list (priority over kg_supplement).
-                      When provided, used directly; when None, converted from kg_supplement text.
-    """
-    text_evidences = [text_evidence_from_document(doc) for doc in docs]
-
-    if kg_evidences is not None:
-        # Use caller-provided structured KG evidence (with nodes/edges/paths)
-        kg_evs = kg_evidences
-    else:
-        # Backward compat: convert from plain text (nodes/edges/paths stay empty)
-        kg_ev = kg_evidence_from_text(kg_supplement)
-        kg_evs = [kg_ev] if kg_ev else []
-
+    """把检索到的 Document 融合成 `FusedEvidence`（同步版）。"""
     return fuse_evidence(
-        text_evidences=text_evidences,
-        kg_evidences=kg_evs,
+        text_evidences=[text_evidence_from_document(doc) for doc in docs],
         query=query,
-        student_profile=student_profile,
         max_tokens=max_tokens,
         depth=depth,
     )
@@ -322,25 +222,13 @@ def fuse_documents(
 async def afuse_documents(
     docs: list[Document],
     query: str = "",
-    kg_supplement: str = "",
-    student_profile: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
-    kg_evidences: list[KGEvidence] | None = None,
     depth: str = "standard",
 ) -> FusedEvidence:
-    text_evidences = [text_evidence_from_document(doc) for doc in docs]
-    if kg_evidences is not None:
-        kg_evs = kg_evidences
-    else:
-        kg_ev = kg_evidence_from_text(kg_supplement)
-        kg_evs = [kg_ev] if kg_ev else []
-
-    fused = fuse_evidence(
-        text_evidences=text_evidences,
-        kg_evidences=kg_evs,
+    """`fuse_documents` 的异步版（当前实现同步完成，签名保持异步以适配调用方）。"""
+    return fuse_evidence(
+        text_evidences=[text_evidence_from_document(doc) for doc in docs],
         query=query,
-        student_profile=student_profile,
         max_tokens=max_tokens,
         depth=depth,
     )
-    return fused

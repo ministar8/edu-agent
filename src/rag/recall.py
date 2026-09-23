@@ -76,7 +76,6 @@ def build_recall_queries(
     - keyword_bm25: 关键词走 BM25 全文检索
     - focus: 核心关键词走向量检索（短词组语义聚焦）
     - expanded: 同义词扩展 query 走向量检索
-    - kg_expand: 知识图谱关联扩展
 
     剪枝策略（按查询类型跳过低效路由）：
     - 短查询/代码查询：跳过 expanded（同义词扩展引入噪声）
@@ -215,7 +214,8 @@ def build_metadata_routes(
 
     # 注：这里曾有 `merged_qa_meta` 路由（对 exercise / answer / comparison 查询按
     # `content_type=merged_qa` 过滤）。**实测该 content_type 恒不存在** ——
-    # splitter 的 Q&A 检测链断在三处（见 docs/ENGINEERING.md「Q&A 链路实测结论」），
+    # splitter 的 Q&A 检测链断在三处（见归档报告
+    # ../edu-agent-engineering-archive/batch1/docs_ENGINEERING.md「Q&A 链路实测结论」），
     # 于是这条路由**永远返回空**，而它带的权重 2.0 从未被真实数据校准过。
     # 已按 backlog #8 删除。
     #

@@ -1,3 +1,5 @@
+# 提交前门禁。2026-09-23 从 `../edu-agent-engineering-archive/batch2/` 取回，
+# 并针对「工程化归档后」的工作区做了三处适配（见各条注释）。
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -18,13 +20,37 @@ repos:
     rev: v0.15.21
     hooks:
       - id: ruff
-        args: [--fix]
+        # ★ 适配 1：`tests/` 与 `scripts/diagnose_query_ranking.py` 等已归档，
+        # 照抄原范围会因「路径不存在」失败（ruff 报 E902，不是真实代码问题）。
+        # 本地有效范围只剩 `src/`（`scripts/` 现仅剩 tei_deploy.ps1，非 Python）。
+        args: [--fix, src/]
       - id: ruff-format
+        args: [src/]
 
   - repo: local
     hooks:
       - id: pyrefly
         name: pyrefly
-        entry: uv run pyrefly check
+        # ★ 适配 2：原为 `uv run pyrefly check`，依赖 PATH 上的全局 uv
+        # （实测 `~/.local/bin/uv` 0.10.7，**不在 .venv 里**）—— 钩子能否运行
+        # 取决于 shell 环境，脆弱。改为直调 venv 内可执行文件，与手动检查同口径。
+        # ★ 必须用**绝对路径**：pre-commit 不保证 cwd 是仓库根，
+        # 实测相对路径会报 `Executable .venv/Scripts/pyrefly.exe not found`
+        # 并让整个提交失败（pyrefly 退出码 1）——那是假失败，不是代码问题。
+        entry: C:/Users/26452/Desktop/edu-agent/.venv/Scripts/pyrefly.exe check
         language: system
         pass_filenames: false
+        # pyrefly 只查 Python；无 Python 变更时跳过，省一次全量检查
+        types: [python]
+
+  - repo: local
+    hooks:
+      # ★ 适配 3：`evals/` 下 4 个文件（3 份门禁基线 + 1 份评测集）是门禁
+      # **精确比对的输入**（`retrieval_gate` 逐指标比基线值）。让空白类钩子
+      # 改写它们有双重害处：① 可能破坏基线可解析性；② 在 diff 里混入无意义
+      # 噪声、掩盖真实改动。故整目录豁免。
+      - id: evals-baselines-excluded
+        name: evals/ 基线豁免空白改写（说明性钩子）
+        entry: bash -c 'echo "[pre-commit] evals/ 是门禁基线输入，跳过空白类改写" >&2'
+        language: system
+        files: ^evals/

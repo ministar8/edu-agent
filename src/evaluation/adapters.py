@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import logging
 
+from langchain_core.embeddings import Embeddings
+
 from core.llm import get_llm
 from evaluation.dataset import EvalSample
 from rag.retriever import aretrieve_evidence_with_retry
@@ -13,7 +15,25 @@ logger = logging.getLogger(__name__)
 
 
 async def retrieve_contexts(query: str, *, k: int, use_rerank: bool) -> list[str]:
-    """跑生产检索链，抽出 final_context / evidence 文本列表。"""
+    """跑生产检索链，抽出**逐条证据正文**作为 RAGAS 的 contexts。
+
+    ⚠️ 这里**不返回 `fused.final_context`**，这是刻意的口径选择：
+
+    `final_context` 在 `rag/fusion.py` 里是
+    ``"\\n\\n".join(parts)``，而 `parts` 就是各条 evidence 的格式化文本。
+    若把它与各条 evidence
+    **一起**作为 contexts 交给 RAGAS，指标会因「拼接体 vs 成员」的
+    自我包含关系被系统性抬高 —— 而且 ``not in contexts`` 只能挡住
+    完全相同的整串，挡不住这种包含关系。
+
+    另外 `context_precision` 需要**多条独立上下文**才有判别力；把拼接体
+    作为单条 context 会让它退化成「这一大坨里有没有相关内容」。
+
+    评测口径因此定义为「chunk 粒度」：一条 evidence = 一条 context。
+    ★ 下面那个回退到 `final_context` 的分支自 KG 移除后已不可达（`final_context`
+    就是文本证据的拼接，证据为空则它必为空）；保留它只为防止 fusion 将来改口径时
+    静默返回空列表。
+    """
     fused, _ver = await aretrieve_evidence_with_retry(
         query=query,
         k=k,
@@ -22,12 +42,15 @@ async def retrieve_contexts(query: str, *, k: int, use_rerank: bool) -> list[str
         use_llm_verify=False,
     )
     contexts: list[str] = []
-    if fused.final_context and fused.final_context.strip():
-        contexts.append(fused.final_context)
+    seen: set[str] = set()
     for ev in fused.text_evidences:
         text = (ev.content or "").strip()
-        if text and text not in contexts:
+        if text and text not in seen:
+            seen.add(text)
             contexts.append(text)
+    if not contexts and fused.final_context.strip():
+        # 兜底（当前不可达，理由见 docstring）：证据为空但融合体非空时至少给一条
+        contexts = [fused.final_context.strip()]
     return contexts or [""]
 
 
@@ -84,12 +107,22 @@ def build_judge_llm():
     return LangchainLLMWrapper(langchain_llm=llm)
 
 
-def build_embeddings_for_relevancy():
-    """answer_relevancy 需要 embeddings；复用 TEI。失败返回 None（跳过该指标）。"""
+def build_embeddings_for_relevancy() -> Embeddings | None:
+    """`answer_relevancy` 要用的 embeddings —— 复用检索链的同一套（TEI / 哈希桩）。
+
+    ★ 返回 None 的语义是「**该指标不要测**」，调用方必须把它从 `metrics` 里摘掉。
+    原因：ragas 0.4.3 的 `aevaluate` 对 `embeddings is None` 的指标会**自动兜底**注入
+    一套默认 OpenAI embedding —— 于是「不注入」会静默变成「换一套向量度量」，
+    该指标与其余三个不同源、口径不可比。摘掉它，报告里的指标集才保持同口径。
+
+    ★ 不包 `LangchainEmbeddingsWrapper`：`ResponseRelevancy` 是 dataclass，
+    `calculate_similarity` 只调用 `embed_query` / `embed_documents`，
+    langchain `Embeddings` 原生满足，包装只会引入 deprecated 警告与易错的 kwarg 名。
+    """
     try:
         from rag.embeddings import get_embeddings
 
         return get_embeddings()
     except Exception:
-        logger.warning("初始化 embeddings 失败，answer_relevancy 可能不可用", exc_info=True)
+        logger.warning("初始化 embeddings 失败，answer_relevancy 将不参与本次评测", exc_info=True)
         return None

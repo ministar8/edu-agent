@@ -68,7 +68,6 @@ _MIN_CONTENT_LENGTH = 50  # 单条证据最少字符
 _MIN_TOTAL_CONTENT_LENGTH = 200  # 总内容最少字符
 _MAX_DUPLICATE_RATIO = 0.7  # 重复内容占比上限
 _MIN_RERANK_SCORE = 0.1  # rerank 最低分
-_MIN_KG_CONFIDENCE = 0.3  # KG 最低置信度
 
 
 def _primary_score(ev: TextEvidence) -> float:
@@ -84,13 +83,6 @@ def _check_evidence_count(fused: FusedEvidence) -> CheckResult:
     """检查证据数量是否足够"""
     n = len(fused.text_evidences)
     if n == 0:
-        if fused.kg_evidences and fused.final_context.strip():
-            return CheckResult(
-                name="evidence_count",
-                passed=True,
-                score=0.45,
-                detail=f"无文本证据，使用 KG 证据: {len(fused.kg_evidences)}",
-            )
         return CheckResult(name="evidence_count", passed=False, score=0.0, detail="零条文本证据")
     # 1-3 条: 0.5, 4-5: 0.8, 6+: 1.0
     score = min(1.0, 0.3 + 0.15 * n)
@@ -100,14 +92,6 @@ def _check_evidence_count(fused: FusedEvidence) -> CheckResult:
 def _check_score_quality(fused: FusedEvidence) -> CheckResult:
     """检查证据分数质量"""
     if not fused.text_evidences:
-        if fused.kg_evidences:
-            avg_conf = sum(ev.confidence for ev in fused.kg_evidences) / len(fused.kg_evidences)
-            return CheckResult(
-                name="score_quality",
-                passed=avg_conf >= _MIN_KG_CONFIDENCE,
-                score=avg_conf,
-                detail=f"KG-only avg_conf={avg_conf:.2f}",
-            )
         return CheckResult(name="score_quality", passed=False, score=0.0, detail="无证据可评估")
 
     scores = [_primary_score(ev) for ev in fused.text_evidences]
@@ -148,10 +132,6 @@ def _check_score_quality(fused: FusedEvidence) -> CheckResult:
 def _check_source_diversity(fused: FusedEvidence) -> CheckResult:
     """检查来源多样性"""
     if not fused.text_evidences:
-        if fused.kg_evidences:
-            return CheckResult(
-                name="source_diversity", passed=True, score=0.5, detail="KG-only 来源"
-            )
         return CheckResult(name="source_diversity", passed=False, score=0.0, detail="无证据")
 
     sources = [ev.source for ev in fused.text_evidences]
@@ -180,15 +160,6 @@ def _check_source_diversity(fused: FusedEvidence) -> CheckResult:
 def _check_content_sufficiency(fused: FusedEvidence) -> CheckResult:
     """检查内容充分性（长度 + 非空）"""
     if not fused.text_evidences:
-        if fused.kg_evidences and fused.final_context.strip():
-            total_len = len(fused.final_context)
-            min_len = _MIN_CONTENT_LENGTH
-            return CheckResult(
-                name="content_sufficiency",
-                passed=total_len >= min_len,
-                score=min(1.0, total_len / min_len),
-                detail=f"KG-only final_context len={total_len}",
-            )
         return CheckResult(name="content_sufficiency", passed=False, score=0.0, detail="无证据")
 
     empty_count = sum(
@@ -250,41 +221,12 @@ def _check_duplication(fused: FusedEvidence) -> CheckResult:
     )
 
 
-def _check_kg_support(fused: FusedEvidence) -> CheckResult:
-    """检查 KG 证据补充（bonus check，不决定 pass/fail）"""
-    if not fused.kg_evidences:
-        return CheckResult(name="kg_support", passed=True, score=0.5, detail="无 KG 证据（非必须）")
-
-    avg_conf = sum(ev.confidence for ev in fused.kg_evidences) / len(fused.kg_evidences)
-    low_kg = sum(1 for ev in fused.kg_evidences if ev.confidence < _MIN_KG_CONFIDENCE)
-
-    score = min(1.0, 0.5 + avg_conf * 0.5)
-    return CheckResult(
-        name="kg_support",
-        passed=True,
-        score=score,
-        detail=f"kg_count={len(fused.kg_evidences)}, avg_conf={avg_conf:.2f}, low={low_kg}",
-    )
-
-
 def _check_final_context(fused: FusedEvidence) -> CheckResult:
     """检查 final_context 是否为空或过短"""
     ctx = fused.final_context
     if not ctx or not ctx.strip():
         return CheckResult(
             name="final_context", passed=False, score=0.0, detail="final_context 为空"
-        )
-    if fused.kg_evidences and not fused.text_evidences:
-        min_len = _MIN_CONTENT_LENGTH
-        if len(ctx) < min_len:
-            return CheckResult(
-                name="final_context",
-                passed=False,
-                score=len(ctx) / min_len,
-                detail=f"KG-only final_context 过短: {len(ctx)} 字符",
-            )
-        return CheckResult(
-            name="final_context", passed=True, score=1.0, detail=f"KG-only len={len(ctx)}"
         )
     if len(ctx) < _MIN_TOTAL_CONTENT_LENGTH:
         return CheckResult(
@@ -304,7 +246,6 @@ _RULE_CHECKS = [
     _check_source_diversity,
     _check_content_sufficiency,
     _check_duplication,
-    _check_kg_support,
     _check_final_context,
 ]
 
@@ -396,13 +337,28 @@ async def _arun_llm_relevance_check(
 # ════════════════════════════════════════════════════════
 
 # 各检查项权重（用于计算 overall_score）
+#
+# ★ 2026-09-23：随 KG 遗留移除删掉了 `"kg_support": 0.05`。
+# **这不是纯删除，会改变 overall_score** —— 该检查在 KG 下线后恒返回
+# `passed=True, score=0.5`（常量），占权重 0.05，等于把总分**恒定稀释**向 0.5。
+# 删掉后其余权重按比例重新归一化，总分更贴近剩余检查的真实水平。
+# 边界效应：当其余检查的加权均值恰在 0.6（PASS 阈值）附近时，判定可能从
+# SOFT_FAIL 翻为 PASS。
+#
+# ★ 复验（2026-09-23，KG 删除完成后）：三条门禁路由**全部通过**，且
+#   重排路由 / 真实 embedding 路由的六项指标与基线**逐位相同**；
+#   只有默认路由出现确定性差异（category_precision 0.9559→0.9561、
+#   mean_evidence_count 5.1000→5.1250）—— 同一命令重跑两次结果**逐位相同**，
+#   故跨进程极差为 0，不是抖动。方向为改善，量级为「40 条查询里多出 1 条证据」。
+#   ⚠️ 该差异**可归因到改动区间，但无法区分是「工程化归档」还是「KG 移除」所致**
+#   （归档后那次复跑未留存具体数值）。最可能路径：overall_score 变化 → 判定变化
+#   → 重试分支不同 → 证据条数变化。未进一步定位到具体 query。
 _CHECK_WEIGHTS: dict[str, float] = {
     "evidence_count": 0.20,
     "score_quality": 0.20,
     "source_diversity": 0.10,
     "content_sufficiency": 0.15,
     "duplication": 0.05,
-    "kg_support": 0.05,
     "final_context": 0.15,
     "llm_relevance": 0.10,  # LLM 层可选，未执行时权重重分配
 }

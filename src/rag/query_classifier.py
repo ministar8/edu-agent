@@ -25,16 +25,15 @@ class RetrievalDepth:
     """检索深度配置：由查询分类自动决定
 
     depth 级别：
-    - shallow:  简单概念查询，k=3，跳过 BM25/KG/分解/HyDE，无元数据路由
-    - standard: 一般查询，k=5，跳过 KG 补充、限 2 条元数据路由（L2 低延迟）
-    - deep:     复杂/对比/长查询，k=8，启用分解+KG 扩展，限 3 条元数据路由
+    - shallow:  简单概念查询，k=3，跳过 BM25/分解/HyDE，无元数据路由
+    - standard: 一般查询，k=5，限 2 条元数据路由（L2 低延迟）
+    - deep:     复杂/对比/长查询，k=8，启用分解，限 3 条元数据路由
     - code:     代码相关，k=6，code_meta 路由优先，跳过 HyDE，限 2 条元数据路由
     """
 
     depth: str = "standard"  # shallow / standard / deep / code
     k: int = 5  # 目标返回文档数
     skip_bm25: bool = False  # 跳过 BM25 路由
-    skip_kg: bool = False  # 跳过 KG 补充
     skip_decompose: bool = False  # 跳过查询分解
     skip_hyde: bool = False  # 跳过 HyDE fallback
     skip_metadata_routes: bool = False  # 跳过元数据路由（concept_meta 等）
@@ -46,7 +45,7 @@ class RetrievalDepth:
     def __repr__(self) -> str:
         skips = [
             s
-            for s in ("bm25", "kg", "decompose", "hyde", "meta", "rerank", "lw_rerank")
+            for s in ("bm25", "decompose", "hyde", "meta", "rerank", "lw_rerank")
             if getattr(
                 self,
                 f"skip_{s}"
@@ -64,7 +63,6 @@ SHALLOW_DEPTH = RetrievalDepth(
     depth="shallow",
     k=3,
     skip_bm25=False,
-    skip_kg=True,
     skip_decompose=True,
     skip_hyde=True,
     skip_metadata_routes=True,
@@ -74,9 +72,9 @@ SHALLOW_DEPTH = RetrievalDepth(
 STANDARD_DEPTH = RetrievalDepth(
     depth="standard",
     k=5,
-    # L2 standard 的唯一配置。此前 retrieval_strategy 维护了一份 skip_kg=True 的副本，
-    # 导致「分类推导的 standard」与「策略解析出的 standard」不一致。
-    skip_kg=True,
+    # ★ standard 的唯一配置。此前 retrieval_strategy 维护了一份副本，两者只有
+    # `skip_kg` 相反（该字段已随 KG 遗留移除），造成「分类推导的 standard」与
+    # 「策略解析出的 standard」行为不一致 —— 现在只有这一处真源。
     max_metadata_routes=2,
     lightweight_rerank=True,
 )
@@ -84,7 +82,6 @@ DEEP_DEPTH = RetrievalDepth(
     depth="deep",
     k=8,
     skip_bm25=False,
-    skip_kg=False,
     skip_decompose=False,
     skip_hyde=False,
     skip_metadata_routes=False,
@@ -95,7 +92,6 @@ CODE_DEPTH = RetrievalDepth(
     depth="code",
     k=6,
     skip_bm25=False,
-    skip_kg=False,
     skip_decompose=False,
     skip_hyde=True,
     skip_metadata_routes=False,
@@ -104,7 +100,6 @@ CODE_DEPTH = RetrievalDepth(
 TEXT_ONLY_DEPTH = RetrievalDepth(
     depth="text_only",
     k=5,
-    skip_kg=True,  # 跳过 KG 补充，纯文本检索
     skip_bm25=False,
     skip_decompose=False,
     skip_hyde=False,

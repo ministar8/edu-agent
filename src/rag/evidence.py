@@ -26,31 +26,8 @@ class TextEvidence(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-class KGEvidence(BaseModel):
-    """知识图谱证据占位模型（KG 已移除，保留空结构以兼容缓存序列化）。"""
-
-    evidence_id: str = Field(description="KG evidence unique ID")
-    serialized: str = Field(description="serialized graph evidence text")
-    nodes: list[str] = Field(default_factory=list, description="related nodes")
-    edges: list[dict[str, Any]] = Field(default_factory=list, description="related edges")
-    paths: list[list[str]] = Field(default_factory=list, description="path evidence")
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0, description="KG evidence confidence")
-    source: str = Field(default="knowledge_graph", description="evidence source")
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class AgentEvidence(BaseModel):
-    evidence_id: str = Field(description="Agent evidence unique ID")
-    agent_name: str = Field(description="agent that produced the evidence")
-    content: str = Field(description="agent output content")
-    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
 class FusedEvidence(BaseModel):
     text_evidences: list[TextEvidence] = Field(default_factory=list)
-    kg_evidences: list[KGEvidence] = Field(default_factory=list)
-    agent_evidences: list[AgentEvidence] = Field(default_factory=list)
     final_context: str = Field(default="")
     sources: list[str] = Field(default_factory=list)
     used_token_budget: int = Field(default=0)
@@ -117,24 +94,9 @@ def text_evidence_from_document(doc: Document, fallback_score: float = 0.0) -> T
     )
 
 
-def kg_evidence_from_text(text: str, confidence: float = 0.7) -> KGEvidence | None:
-    stripped = (text or "").strip()
-    if not stripped:
-        return None
-    return KGEvidence(
-        evidence_id=_stable_id("kg", stripped[:300]),
-        serialized=stripped,
-        confidence=confidence,
-    )
-
-
 # -- Formatting utilities (shared by fusion.py) --
 
 
 def format_text_evidence(index: int, ev: TextEvidence) -> str:
     path_info = f" [{ev.section_path}]" if ev.section_path else ""
     return f"[Source {index}: {ev.source}{path_info}]\n{ev.content}"
-
-
-def format_kg_evidence(ev: KGEvidence) -> str:
-    return ev.serialized

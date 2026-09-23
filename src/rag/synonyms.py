@@ -2,12 +2,11 @@
 
 单一数据源（Single Source of Truth），供以下模块复用：
 - recall.py：查询扩展（正向 + 反向映射）
-- knowledge_graph.py：Tier 1 同义词精确匹配
 - cleaner.py：入库时同义词归一
 
 映射关系：
   SYNONYM_MAP   — 原始映射：{变体/标准词: 标准词}（含自映射，cleaner 用）
-  SYNONYM_FORWARD — 正向映射：{变体: 标准词}（不含自映射，recall/kg 用）
+  SYNONYM_FORWARD — 正向映射：{变体: 标准词}（不含自映射，recall 用）
   SYNONYM_REVERSE — 反向映射：{标准词: [所有变体]}（recall 扩展用）
 """
 
@@ -346,8 +345,6 @@ _SYNONYM_RAW: dict[str, str] = {
     "电路交换": "电路交换",
     "报文交换": "报文交换",
     # ── 通用 ──
-    "KG": "知识图谱",
-    "知识图谱": "知识图谱",
     "RAG": "检索增强生成",
     "检索增强生成": "检索增强生成",
     "LLM": "大语言模型",
