@@ -65,6 +65,26 @@ def _rank_terms_by_specificity(terms: list[str]) -> list[str]:
     return [t for t, _ in scores]
 
 
+# 非陈述性 query 的考点短语提取：把「考查 X 的题」「X 的适用条件」里的 X 挖出来，
+# 用完整短语做精准检索，避免指令框架词稀释语义 / 专名被 jieba 拆散。
+_GENERATE_TOPIC_RE = re.compile(r"考查\s*(.+?)\s*(?:的\s*题|题|$)")
+_CONCEPT_TOPIC_RE = re.compile(r"(.+?)\s*的\s*适用条件")
+
+
+def _extract_focus_topic(query: str, cat: QueryCategory) -> str:
+    if cat.is_exercise:
+        m = _GENERATE_TOPIC_RE.search(query)
+    elif cat.is_concept:
+        m = _CONCEPT_TOPIC_RE.search(query)
+    else:
+        return ""
+    if not m:
+        return ""
+    topic = m.group(1).strip(" ：:，,。？? ")
+    # 太短或等于原 query 视为提取失败，避免把噪声当考点
+    return topic if len(topic) >= 2 and topic != query else ""
+
+
 def build_recall_queries(
     query: str,
     cat: QueryCategory | None = None,
@@ -164,6 +184,13 @@ def build_metadata_routes(
                 combine_filters(base_filter, {"is_exercise_content": True}),
             )
         )
+        # 出题类 query（「考查 X 的题」）提取考点短语，补一条指向考点正文的 section 路由，
+        # 否则考点内容只能靠带指令噪声的整句去撞 semantic/bm25。
+        topic = _extract_focus_topic(normalized, cat)
+        if topic:
+            metadata_routes.append(
+                ("section_meta", topic, combine_filters(base_filter, {"content_type": "section"}))
+            )
 
     if cat.is_answer:
         metadata_routes.append(
@@ -172,8 +199,16 @@ def build_metadata_routes(
 
     # concept 查询走 section 路由；comparison 查询额外走 table 路由（对比表多为 table 类型）
     if cat.is_concept:
+        # 「X 的适用条件」类 query 提取完整专名（如「折半查找」）替换被拆散的 focus_query，
+        # 否则通用词「查找」主导，召回同族其他算法而非「折半查找」本体。
+        topic = _extract_focus_topic(normalized, cat)
+        concept_query = topic or focus_query
         metadata_routes.append(
-            ("concept_meta", focus_query, combine_filters(base_filter, {"content_type": "section"}))
+            (
+                "concept_meta",
+                concept_query,
+                combine_filters(base_filter, {"content_type": "section"}),
+            )
         )
     if cat.is_comparison:
         metadata_routes.append(

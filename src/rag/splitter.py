@@ -1159,8 +1159,27 @@ def split_documents(documents: list[Document]) -> list[Document]:
                         continue
                     is_qa = sc.get("is_qa", False) if isinstance(sc, dict) else False
                     qa_fields = sc.get("qa_fields") if isinstance(sc, dict) else None
+                    # 含代码围栏的 chunk：把 heading_path 拼回 page_content 作为语义锚点。
+                    # 纯代码 chunk 的 page_content 缺少中文语义，bge-m3 无法把
+                    # 「用信号量写出生产者—消费者问题的伪代码」这类 query 映射到纯 C 代码上，
+                    # 导致 code 类检索召回失败。这里按 **chunk 级**是否含代码围栏判断，
+                    # 而非 section 级 content_type —— 后者由 section 前 200 字推断，会漏掉
+                    # 「section 开头是长文字、代码在后面」的讲义嵌代码 chunk。
+                    # 其余类型仍保持「heading 不进 page_content」的约定。
+                    if ("```" in chunk_text or "~~~" in chunk_text) and section.get("heading_path"):
+                        # 只保留考点级父标题（去掉文件级标题与当前标题）作为锚点，
+                        # 避免「操作系统代码实现」这类文件级泛词稀释 embedding 区分度。
+                        _hp = section["heading_path"].strip("[]")
+                        _parts = [p.strip() for p in _hp.split(">") if p.strip()]
+                        if len(_parts) >= 3:
+                            _anchor = " > ".join(_parts[1:-1])
+                        elif len(_parts) == 2:
+                            _anchor = _parts[-1]
+                        else:
+                            _anchor = _hp
+                        if _anchor:
+                            chunk_text = f"[{_anchor}]\n{chunk_text}"
                     chunk = _make_chunk(doc.metadata, chunk_text)
-                    # heading_path 不拼入 page_content，避免干扰 embedding/reranker
                     # 临时存储 qa_fields，后续 _append_chunk_metadata 会消费
                     if is_qa and qa_fields:
                         chunk.metadata["_qa_fields"] = qa_fields

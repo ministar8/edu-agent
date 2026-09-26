@@ -574,3 +574,48 @@ def downgrade_window_noise(
         )
 
     return docs
+
+
+def merge_window_into_anchors(docs: list[Document]) -> list[Document]:
+    """把窗口扩展 chunk 的内容合并回其锚点，窗口 chunk 本身不再作为独立证据返回。
+
+    背景：`sentence_window_expand` 会把同 section 相邻 chunk 以 score=0 的独立条目
+    追加到结果尾部。这些「窗口 chunk」未经 rerank、collection 为空，混入最终证据
+    列表会被 RAGAS 当作独立 top-k context 计分，稀释 context_precision。
+
+    处理规则：
+    - 被 `downgrade_window_noise` 判为噪声的窗口 chunk（_noise_downgraded=True）直接丢弃；
+    - 其余窗口 chunk 的内容追加到其锚点 chunk 的 page_content 末尾（锚点由
+      _window_anchor_chunk_id / _parent_anchor_chunk_id 指向），窗口 chunk 本身移除；
+    - 找不到锚点（锚点已在前序阶段被过滤）的孤儿窗口 chunk 直接丢弃。
+    """
+    # 只索引非窗口 chunk 作为锚点。窗口 chunk 的 section.chunk_id 可能复制自锚点
+    # （parent window 尤甚），若一并索引会与锚点撞 key。
+    anchor_by_chunk_id: dict[str, Document] = {}
+    for d in docs:
+        if d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded"):
+            continue
+        cid = str(d.metadata.get("section.chunk_id") or "")
+        if cid:
+            anchor_by_chunk_id[cid] = d
+
+    result: list[Document] = []
+    for d in docs:
+        is_window = d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded")
+        if not is_window:
+            result.append(d)
+            continue
+        if d.metadata.get("_noise_downgraded"):
+            continue  # 噪声窗口直接丢弃
+        anchor_id = str(
+            d.metadata.get("_window_anchor_chunk_id")
+            or d.metadata.get("_parent_anchor_chunk_id")
+            or ""
+        )
+        anchor = anchor_by_chunk_id.get(anchor_id)
+        if anchor is None:
+            continue  # 孤儿窗口丢弃
+        anchor.page_content = anchor.page_content + "\n\n" + d.page_content
+        anchor.metadata["_window_merged"] = True
+
+    return result
