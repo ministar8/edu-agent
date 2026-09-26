@@ -899,6 +899,53 @@ uv run python -c "from rag.semantic_cache import get_semantic_cache; get_semanti
 
 **建议**：先把上表前两项补完（零 LLM 成本），再改默认值 + 重入库 + 重录基线。
 
+### 5.14 分级深度的实际配置，以及两处「文档说 A、代码做 B」
+
+用户指出检索层分 **L1/L2/L3** 深度分级，且「BM25 和 rerank 有时候根本不执行」。
+读代码后的**实际配置**如下（`query_classifier.py` 的预定义深度 + `retrieval_strategy.py` 的层级映射）：
+
+| 层 | `depth` | k | `skip_bm25` | `skip_rerank` | 其它 | 哪些查询落到这里 |
+|---|---|---|---|---|---|---|
+| **L1** | `shallow` | 3 | **False** | **True** | 跳过分解 / HyDE / 元数据路由 | **短查询** |
+| **L2** | `standard` | 5 | False | False | `lightweight_rerank=True`（候选池 10 而非 30）、元数据路由 ≤2 | 对比 / 练习 / 答案 / 其余 |
+| L2 | `text_only` | 5 | False | False | 元数据路由 ≤2 | 文本类 |
+| **L3** | `deep` | 8 | False | False | 启用分解、元数据路由 ≤3、`extra_k_for_deep=3` | 学习路径长查询 / 长且结构化 |
+| L3 | `code` | 6 | False | False | 跳过 HyDE、元数据路由 ≤2 | 代码查询 |
+
+**★ 两处「文档说 A、代码做 B」**
+
+| # | 文档 | 代码 | 影响 |
+|---|---|---|---|
+| 1 | `RetrievalDepth` 类 docstring：「shallow: k=3，**跳过 BM25**/分解/HyDE」 | `SHALLOW_DEPTH` 实为 **`skip_bm25=False`** | **文档说 L1 跳 BM25，代码没跳**。用户对「BM25 有时不执行」的印象与**文档**一致、与**代码**不一致 |
+| 2 | `select_depth` docstring：「3. 对比查询 → **deep**（多角度覆盖）」 | 实际 `return STANDARD_DEPTH`（L2），内联注释写了改成 L2 的理由 | 方法 docstring 未同步内联注释 |
+
+**⇒ 对 §5.12 问题界定的修正**
+
+我先前说的「BM25 静默失效」**不是**「BM25 不执行」，而是
+「**BM25 执行了但返回 0 条**」—— 证据是**直接调用**
+`bm25_search(['CPU'], 'computer_organization', 5)` → 0 条，
+**绕过了深度与路由白名单逻辑**，所以与分级无关。
+
+**⇒ 影响面重估（比我先前说的更广）**
+
+- `skip_bm25` 在**四级深度全为 False** ⇒ **BM25 在 L1/L2/L3 全部都会执行**；
+- 对比类查询的子查询走 `_COMPACT_SUBQUERY_ROUTES`
+  （`{"keyword_bm25", "concept_meta", "structured_meta", "section_meta"}`）——
+  **BM25 在子查询里也被允许**。
+- 因此「变体写法在 BM25 上恒 0 命中」是**全局性**缺陷，覆盖面比受分级限制的情形更大。
+- 尤其 **L1 只有 k=3 且不重排**，BM25 是 L1 里少数能提供「精确关键词命中」的路径 ——
+  它恒 0 命中的代价在 L1 上更直接。
+
+这同时解释了 §5.13 里 3-② 收益为何那么大（`fake/off` 的 `kp_hit_at_k` **+0.0705**）：
+**修好 BM25 是全局收益，不受分级限制。**
+
+**⇒ 需要用户裁决的两件事**
+
+1. **`skip_bm25` 到底该不该在 L1 跳过？** 文档说跳、代码没跳。若本意是跳，
+   则 L1 上 BM25 的 0 命中无关紧要；若不跳，则应采纳 3-② 修好它。
+2. **`.env` 的 `RERANK_ENABLED=false`**（V1 的 T0.1）是否要打开？
+   打开后 S4 变必需 —— 而采纳 3-② 会让它不再需要。
+
 ---
 
 ## 6. 每一步必须交付的证据
