@@ -58,7 +58,7 @@ pnpm-debug.log*
 *.db-wal
 *.sqlite
 *.sqlite3
-chroma_db/
+chroma_db*/
 data/
 
 # ── Generated Data / Logs ──────────────────────────────
