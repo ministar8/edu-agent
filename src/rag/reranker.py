@@ -21,6 +21,7 @@ from langchain_core.documents import Document
 
 from core.cache import BoundedCache
 from core.settings import settings
+from rag.synonyms import normalize_synonyms
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,31 @@ def rerank(
         return documents[:top_k]
 
     start = time.perf_counter()
+
+    # ── 与入库归一保持一致（S4 / A1）──────────────────────────
+    # 文档侧在**入库时**已被 `cleaner.normalize_synonyms()` 改写（把「折半查找」等
+    # 变体统一成标准术语「二分查找」），而这里是**唯一**拿「原始 query × 索引文本」
+    # 做比较的地方 —— query 侧不归一就必然与文档错配。
+    #
+    # 实测（探针 #4「折半查找的适用条件是什么？」）：
+    #   未归一 rerank = 0.0576（低于绝对阈值 0.15 → 被 `_apply_rerank_threshold` 筛掉）
+    #   归一后 rerank = 0.9831
+    # 17 倍差距，且是确定性差异（同文档、同模型，只改术语）。
+    #
+    # ★ 必须复用**同一个** `normalize_synonyms()`，不要另建别名表 ——
+    #   那是第二个真源，与入库侧迟早漂移。
+    # ★ 归一后的 query 也用于缓存键：否则「折半查找」与「二分查找」两个 query
+    #   会各占一条缓存，内容却完全相同。
+    if settings.RERANK_QUERY_NORMALIZE:
+        normalized_query, normalize_hits = normalize_synonyms(query)
+        if normalize_hits:
+            logger.debug(
+                "Rerank query 归一 %d 处：%s → %s",
+                normalize_hits,
+                query[:40],
+                normalized_query[:40],
+            )
+            query = normalized_query
 
     # ── 预筛选：按可用分数保留 top N 候选 ──
     # lightweight（L2）：候选池 10，省延迟；deep（L3）：候选池 30，高精度

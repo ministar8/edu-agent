@@ -596,6 +596,73 @@ uv run python -c "from rag.semantic_cache import get_semantic_cache; get_semanti
 - 去掉 → 需确认 BM25 与 embedding 对未归一的语料是否仍够用（`SYNONYM_MAP` 的另一半用途是
   **query 侧扩展**，那个与入库改写是两件事，可独立保留）。
 
+### 5.10 S4（A1）已实现并验证（2026-09-26 22:2x）
+
+**改动**（3 个文件）：
+
+| 文件 | 改动 |
+|---|---|
+| `src/core/settings.py` | 新增 `RERANK_QUERY_NORMALIZE: bool = True`（可关，用于 A/B 与反向验证） |
+| `.env.example` | 同步该键并写明理由 |
+| `src/rag/reranker.py` | `rerank()` 内对 query 调 **同一个** `normalize_synonyms()`；归一后的 query 也用于缓存键（否则两个 query 各占一条内容相同的缓存） |
+
+**L0 直探（最直接）** —— 同文档、同模型，只改术语：
+
+| `RERANK_QUERY_NORMALIZE` | `#4` 目标 chunk 的 rerank 分 | 是否过绝对阈值 0.15 |
+|---|---|---|
+| `false` | **0.0576** | ✗ 被筛 |
+| `true` | **0.9739** | ✓ 通过 |
+
+**L1 候选追踪**（`evaluation.candidate_trace`，四条 probe）：
+
+| probe | 开关 OFF | 开关 ON |
+|---|---|---|
+| `#4` 折半查找 | `rerank_topn`（缺失） | **`survived`，rank 1** ✅ |
+| `#17` float 32 位 | `survived` rank 2 | **`survived` rank 1** ✅ |
+| `#18` 生产者伪代码 | `rerank_topn` | `rerank_topn`（**未改善**，属 A2） |
+| `#9` 磁盘空闲空间 | `not_recalled` | `not_recalled`（属 C） |
+
+**反向验证**（关掉新逻辑应回退）：
+
+- `#4` 立刻回退到 `rerank_topn`；
+- 门禁 `(real, on)` 路由的 `cat@1 / cat@k / cat_mrr` **逐位回到基线**（0.9231 / 0.9359 / 0.9284）
+  ⇒ 证明差异确实由这一处改动造成，不是噪声。
+
+**门禁 A/B（`GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1`，156 条）**
+
+| 指标 | S4 OFF | S4 ON | Δ |
+|---|---|---|---|
+| `category_hit_at_1` | 0.9231 | **0.9295** | +0.0064 |
+| `category_hit_at_k` | 0.9359 | **0.9423** | +0.0064 |
+| `category_mrr` | 0.9284 | **0.9348** | +0.0064 |
+| `category_precision` | 0.9500 | **0.9598** | +0.0098 |
+| `mean_evidence_count` | 3.4615 | **3.8269** | +0.3654 |
+| `kp_hit_at_k` | 0.8333 | 0.8333 | 0 |
+| `kp_mrr` | 0.7250 | 0.7114 | −0.0136（容差 0.02 内） |
+| `empty_result_rate` | 0 | 0 | 0 |
+
+⇒ **净改善**：6 项上升 / 持平，1 项微降（容差内）。
+
+**`mean_evidence_count` 上升的机制**（值得记住）：S4 抬高了整条分数分布 ——
+此前因词汇不匹配而拿到 ≈0 分的文档，现在能拿到真实分，于是**更多候选越过绝对阈值 0.15**。
+这与 B2（窗口合并）压低证据数的方向相反，两者部分抵消。
+
+**★ 顺带发现：另外 5 条路由的基线是陈旧的（B2 合并后未重录）**
+
+`(real, on)` 基线原记 `mean_evidence_count = 4.4936`，而**把 S4 关掉**也只能测到 **3.4615**
+⇒ 该差值来自**合并进来的 B2（窗口填充合并回锚点）**，与 S4 无关。
+合并提交 `f280a04` 当时只重录了 `retrieval_baseline.json`（fake+off）一条，
+**其余 5 条的 `mean_evidence_count` 基线仍是 B2 之前的值** ——
+它们会在门禁里报「退化」，但那是**陈旧基线**，不是新退化。
+
+**处置**：本次重录了 S4 直接影响的那条（`retrieval_baseline_real_rerank.json`，
+`--force-baseline`，理由：B2 改变证据构成 + S4 提升质量指标）。
+**其余 4 条（fake/real × off/disabled 中的 3 条 + fake on）待批量重录**，
+理由同上（B2），与 S4 无关。
+
+**仍未解决**：`#18`（纯代码 chunk，需 A2 候选侧文本增强）、
+`#9` / `#17`（学科路由，需 C1/C2）。
+
 ---
 
 ## 6. 每一步必须交付的证据

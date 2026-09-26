@@ -117,6 +117,15 @@ class Settings(BaseSettings):
     RERANK_LOCAL_URL: Annotated[str, BeforeValidator(check_str_is_http)] = "http://localhost:11436"
     RERANK_MIN_SCORE: float = 0.3
     RERANK_ABSOLUTE_MIN_SCORE: float = 0.15
+    # 是否把 **rerank 的 query** 也做同义词归一（复用 cleaner 同一份 `normalize_synonyms`）。
+    # ★ 为什么必须有：文档在**入库时**已被 `cleaner.normalize_synonyms()` 改写
+    #   （「折半查找」→「二分查找」等），而 rerank 是**唯一**拿「原始 query × 索引文本」
+    #   做比较的地方 —— query 侧不归一就必然与文档错配。
+    #   实测（探针 #4）：未归一 rerank=0.0576（低于绝对阈值 0.15 被筛掉）；
+    #   归一后 rerank=0.9831。**17 倍差距**，且这是可复现的确定性差异。
+    #   注意只影响 rerank：检索（embedding / BM25）侧靠 `expand_query_with_synonyms`
+    #   做的是**追加**扩展、原词仍在，故不需要改。
+    RERANK_QUERY_NORMALIZE: bool = True
 
     # ── HyDE ──────────────────────────────────────
     HYDE_ENABLED: bool = True
