@@ -211,6 +211,17 @@ class Settings(BaseSettings):
     # 返回后段文件可能尚未落盘，此时查询会抛 "Nothing found on disk"（间歇性）。
     INGEST_READY_RETRIES: int = 8
     INGEST_READY_DELAY: float = 0.5
+    # 入库时是否用 `synonyms.normalize_synonyms()` 把文档里的变体统一成标准词
+    # （`CPU→中央处理器`、`折半查找→二分查找`…，全库实测 **5191 处**）。
+    # ★ 这是**跨侧契约的文档侧**：一旦改写，query 侧的字面匹配消费者
+    #   （BM25 的 `$contains`、cross-encoder reranker）就必须同样归一，否则错配。
+    #   实测代价：BM25 对变体写法 0 命中（`bm25_search(['CPU'])` → 0 条）；
+    #   reranker 给同义词变体极低分（#4 折半查找 0.0576 vs 0.9739）；
+    #   且**索引文本 ≠ 源文件**，引用溯源展示的摘录与原文不符。
+    #   本开关存在的目的是**可对照**：关掉它即「文档保持原文」，
+    #   此时 query 侧**不应**再归一（`RERANK_QUERY_NORMALIZE` 需同步关），
+    #   两者是一对，见 `docs/RETRIEVAL_PLAN_V2.md` §5.12。
+    INGEST_SYNONYM_NORMALIZE: bool = True
     # 预热成功率低于此值即视为异常并告警。预热全落空通常意味着索引未就绪或检索链故障，
     # 但旧代码只打印一行 INFO，导致问题无声无息。
     WARMUP_MIN_SUCCESS_RATE: float = 0.8
