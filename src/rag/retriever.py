@@ -42,6 +42,7 @@ from rag.postprocess import (
     dedup_same_section,
     downgrade_window_noise,
     merge_route_results,
+    merge_window_into_anchors,
     sentence_window_expand,
     weighted_rrf_merge,
 )
@@ -1216,6 +1217,7 @@ async def _stage_hyde(
 class _WindowOutcome:
     docs: list[Document]
     elapsed_ms: float
+    window_merged_count: int = 0  # 合并进锚点的窗口 chunk 数
 
 
 async def _stage_expand_windows(
@@ -1279,8 +1281,27 @@ async def _stage_expand_windows(
     expanded = downgrade_window_noise(
         expanded, query, is_comparison=bool(cat and cat.is_comparison)
     )
+    # 把窗口 chunk 合并回锚点，消除 score=0 独立证据对 top-k 的污染
+    window_before = sum(
+        1
+        for d in expanded
+        if d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded")
+    )
+    expanded = merge_window_into_anchors(expanded)
+    window_merged = sum(1 for d in expanded if d.metadata.get("_window_merged"))
+    if window_before:
+        logger.debug(
+            "Window merge: before=%d merged=%d dropped=%d",
+            window_before,
+            window_merged,
+            window_before - window_merged,
+        )
     _log_final_retrieval_summary("async-post-window", query, expanded)
-    return _WindowOutcome(expanded, round((time.perf_counter() - started) * 1000, 3))
+    return _WindowOutcome(
+        expanded,
+        round((time.perf_counter() - started) * 1000, 3),
+        window_merged_count=window_merged,
+    )
 
 
 @dataclass(frozen=True)
@@ -1346,7 +1367,7 @@ def _finalize_retrieval(
         doc.metadata["_effective_k"] = ctx.k
         doc.metadata["_coarse_k"] = ctx.coarse_k
 
-    window_expanded_count = sum(1 for doc in filtered if doc.metadata.get("_window_expanded"))
+    window_expanded_count = sum(1 for doc in filtered if doc.metadata.get("_window_merged"))
     context_chars = sum(len(doc.page_content or "") for doc in filtered)
     role_counts = {
         "detail": sum(1 for doc in filtered if doc.metadata.get("section.chunk_role") == "detail"),
@@ -1506,7 +1527,6 @@ async def aretrieve_documents(
         rerank_used = _hyde.rerank_used
         stage_ms["hyde_ms"] = _hyde.elapsed_ms
 
-        before_window = len(filtered)
         _emit_stage(on_stage, "expand")
         _window = await _stage_expand_windows(
             filtered, query=query, collection_name=collection_name, cat=_cat, depth=depth
@@ -1514,7 +1534,7 @@ async def aretrieve_documents(
         filtered = _window.docs
         stage_ms["window_ms"] = _window.elapsed_ms
         post_window_count = len(filtered)
-        window_added_count = post_window_count - before_window
+        window_added_count = _window.window_merged_count  # 合并进锚点的窗口 chunk 数
 
         return _finalize_retrieval(
             filtered,

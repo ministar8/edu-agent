@@ -7,15 +7,15 @@
     "k": 5,
     "golden_path": "evals/sample_408.jsonl",
     "indexed_chunks": 2205,
-    "recorded_at": "2026-09-22"
+    "recorded_at": "2026-09-26"
   },
   "metrics": {
     "n_queries": 40,
     "category_hit_at_1": 0.95,
     "category_hit_at_k": 1.0,
     "category_mrr": 0.975,
-    "category_precision": 0.9559,
+    "category_precision": 0.9711,
     "empty_result_rate": 0.0,
-    "mean_evidence_count": 5.1
+    "mean_evidence_count": 4.325
   }
 }
