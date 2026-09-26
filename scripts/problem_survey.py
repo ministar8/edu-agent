@@ -70,24 +70,40 @@ def _target_doc(case: int) -> Document | None:
     return None
 
 
-def _tei_rerank_available() -> bool:
-    """TEI 是否可用。
+def _tei_available() -> tuple[bool, str]:
+    """探测 TEI 的 embedding 与 rerank 是否都可用。
 
     本地 TEI 是**反复出现的故障点**（仓库文档记录过它宕机后闲置 24h，`restart=no`）。
-    不可用时 B/C 两块会拿到全 None 的分数，若照常打印会**误导**成「目标排名靠后」，
-    故显式探测并跳过。
-    """
-    try:
-        import httpx
+    两个端点**必须都探**：只探 rerank 时，若 embedding 宕机，召回池会不完整，
+    B/C 块仍会打印出「目标排名靠后」这类**看起来像结论的失真数据**。
 
-        resp = httpx.post(
+    ★ 请求体 schema 两个端点不同（见 `docs/DOCKER.md` 的「TEI 端点契约」）：
+    `/embeddings` 是 **OpenAI 兼容**（`input`），`/rerank` 是 **TEI 原生**（`query/texts`）。
+    """
+    import httpx
+
+    problems: list[str] = []
+    try:
+        r = httpx.post(
+            f"{settings.EMBEDDING_API_BASE}/embeddings",
+            json={"model": settings.EMBEDDING_MODEL, "input": ["探活"]},
+            timeout=15.0,
+        )
+        if r.status_code != 200:
+            problems.append(f"embedding HTTP {r.status_code}")
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"embedding {type(exc).__name__}")
+    try:
+        r = httpx.post(
             f"{settings.RERANK_LOCAL_URL}/rerank",
             json={"query": "探活", "texts": ["探活"], "top_n": 1},
-            timeout=8.0,
+            timeout=15.0,
         )
-        return resp.status_code == 200
-    except Exception:  # noqa: BLE001
-        return False
+        if r.status_code != 200:
+            problems.append(f"rerank HTTP {r.status_code}")
+    except Exception as exc:  # noqa: BLE001
+        problems.append(f"rerank {type(exc).__name__}")
+    return (not problems), "、".join(problems)
 
 
 async def main() -> None:
@@ -110,10 +126,12 @@ async def main() -> None:
     print("=" * 72)
     print("B/C. 目标 chunk 的 rerank 分与完整排名（A2 / A3′ 靶心）")
     print("=" * 72)
-    if not _tei_rerank_available():
-        print(f"  [跳过] TEI rerank 不可用（{settings.RERANK_LOCAL_URL}）——")
-        print("         此时 rerank() 不打分，分数全为 None，打印出来会误导。")
-        print("         恢复 TEI 后重跑本脚本。")
+    ok, detail = _tei_available()
+    if not ok:
+        print(f"  [跳过] TEI 未就绪：{detail}")
+        print("         embedding 或 rerank 任一不可用都会让 B/C 的数据失真")
+        print("         （召回池不完整 / 分数全 None），打印出来会被误读成结论。")
+        print("         恢复后重跑本脚本。")
     else:
         for case in (4, 18):
             q = QUERIES[case]

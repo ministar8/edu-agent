@@ -96,6 +96,44 @@ healthcheck:
 > 注意：`/health` 会检查外部依赖（TEI / LLM）。**依赖未就绪时健康检查会持续失败**，
 > 但服务本身可能已能响应请求。排查时不要只看健康状态。
 
+## TEI 端点契约（**探活时不要凭记忆写 curl**）
+
+TEI 由**使用者另行启动**（不在 `compose.yaml` 里 —— 该文件只有 `agent_service`）。
+两个端口都在 `.env` 里配置，且**它们的请求体 schema 并不相同**：
+
+| 端口（`.env` 键） | 路由 | 请求体 | 响应 |
+|---|---|---|---|
+| `EMBEDDING_API_BASE`（11435） | `/embed` | **TEI 原生** `{"inputs": "文本"}` | TEI 原生 |
+| `EMBEDDING_API_BASE`（11435） | **`/embeddings`**、`/v1/embeddings` | **OpenAI 兼容** `{"model": ..., "input": ["文本"]}` | `data[0].embedding` |
+| `RERANK_LOCAL_URL`（11436） | `/rerank` | **TEI 原生** `{"query": ..., "texts": [...], "top_n": n}` | `[{"index","score"}]` |
+| 两端 | `/health` | — | 200 |
+
+★ **同一个 11435 端口上同时挂着 TEI 原生与 OpenAI 兼容两套路由**，
+所以「TEI 用 `inputs` 还是 `input`」**取决于打的是哪条路由**：
+
+- 打 `/embed` 用 `{"inputs": ...}`；
+- 打 `/embeddings` 用 `{"input": ...}` —— 用 `{"inputs": ...}` 会得到 **422**。
+
+**项目代码固定用哪套**（改动前先读这几处）：
+
+| 调用方 | 打的路由 | 请求体 |
+|---|---|---|
+| `rag/embeddings.py`（`_embed_single` / `_embed_batch` / 异步版） | `{EMBEDDING_API_BASE}/embeddings` | `{"model": self.model, "input": [文本]}` |
+| `rag/reranker.py`（`rerank()`） | `{RERANK_LOCAL_URL}/rerank` | `{"query", "texts", "top_n"}` |
+| `service/health.py` | `{EMBEDDING_API_BASE}/health` | — |
+
+> ⚠️ **422 不是「服务没起来」。** 2026-09-27 踩过一次：手写 curl 用 TEI 原生格式
+> 打 `/embeddings` 得到 422，误判为服务故障；而同一时刻 `/rerank` 返回 200。
+> **判据应看代码怎么发，而不是凭记忆。**
+>
+> **探活的正确姿势是复用代码路径**，不要手写 curl：
+>
+> ```bash
+> PYTHONPATH=src .venv/Scripts/python.exe -c "
+> from rag.embeddings import get_embeddings
+> print(len(get_embeddings().embed_query('探活')))"
+> ```
+
 ## 开发热同步
 
 ```bash
