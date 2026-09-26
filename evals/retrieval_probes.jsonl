@@ -1,0 +1,11 @@
+# 检索探针（固定 probe 表）
+#
+# 每条 probe 声明「正确 chunk」的定位方式：source_file 精确匹配 + section.path 子串匹配。
+# ★ 匹配的是**索引里的文本**，不是知识库源文件 —— 因为入库链会做同义词归一
+#   （见 cleaner.normalize_synonyms），源文件里的「折半查找」在索引里是「二分查找」。
+#
+# 用途：evaluation.candidate_trace 用它定位「正确 chunk 在哪一层从候选池消失」。
+{"id": 4, "query": "折半查找的适用条件是什么？", "expect_source": "07_查找.md", "expect_section": "二分查找", "note": "同义词：query 用「折半查找」，索引被归一成「二分查找」"}
+{"id": 18, "query": "用信号量写出生产者—消费者问题的伪代码。", "expect_source": "06_代码实现.md", "expect_section": "生产者进程", "note": "纯代码 chunk"}
+{"id": 9, "query": "请出一道考查磁盘空闲空间管理的题。", "expect_source": "04_文件管理.md", "expect_section": "空闲", "note": "学科路由：OS 集合是否被检索"}
+{"id": 17, "query": "用 C 语言写一段程序打印 float 的 32 位二进制表示，并说明如何据此读出阶码与尾数。", "expect_source": "02_数据表示与运算.md", "expect_section": "浮点数", "note": "跨学科噪声"}

@@ -525,6 +525,40 @@ uv run python -c "from rag.semantic_cache import get_semantic_cache; get_semanti
 
 > 复现脚本：`scripts/compare_indexes.py`（20 条配对样本的检索层对照，零 LLM 成本）。
 
+### 5.8 S2 结果：候选追踪探针已就位，四条 probe 全部定位到层（2026-09-26 21:55）
+
+新增 `src/evaluation/candidate_trace.py`（探针）+ `evals/retrieval_probes.jsonl`（固定 probe 表）。
+逐层快照：**召回池 → 同section去重 → RRF阈值 → 重排 `top_n` → 相对阈值 → 最终证据**，
+`dropped_by` 是**封闭枚举**（`not_recalled` / `section_dedup` / `rrf_threshold` /
+`rerank_topn` / `rel_threshold` / `window_expand` / `survived`）。
+
+| probe | 召回池位置 | 归因 `dropped_by` |
+|---|---|---|
+| `#4` 折半查找适用条件 | rank 2 | **`rerank_topn`** |
+| `#18` 生产者-消费者伪代码 | rank 6 | **`rerank_topn`** |
+| `#9` 磁盘空闲空间管理 | 不在池 | `not_recalled` |
+| `#17` float 32 位表示 | 不在池 | `not_recalled` |
+
+**结论**：`#4` / `#18` 的流失点是 **`rerank()` 的 `top_n` 截断** ——
+**不是** RRF 阈值、**不是** `min_keep` 兜底、**不是**同 section 去重。
+这给 A3′ 定了靶心：`top_n = k*2 if decomposed else k` **偏小**，
+正确 chunk 排到第 6 名之外就没了。
+（`#18` 重排后前 3 名是 0.7026 / 0.2909 / 0.0523 —— 正确 chunk 连前 3 都没进。）
+
+**顺带两个新发现**
+
+1. **`#17` 的召回池被 DS 文件占满**，尽管这是 CO 的浮点数问题。
+   根因：`recall._COLLECTION_KEYWORDS` 里的**单字关键词会误匹配** ——
+   `"表"` 命中「表**示**」、`"图"` 命中「试**图**」等，于是 DS 被误推断为相关学科。
+   与 `#9` 的学科路由问题**同源**，一并归入 C 阶段。
+2. **重排会改变召回池规模**：`_route_adaptive_k` 在 `use_rerank` 时上限 40、否则 20，
+   且 `coarse_k` 也随 `use_rerank` 变化 ——
+   所以「重排开 / 关」不只是排序差异，**候选池本身就不同**。
+   做相关 A/B 时必须声明这一点，否则会把「池子变了」误读成「排序变好了」。
+
+> 命令：`PYTHONPATH=src uv run python -m evaluation.candidate_trace`
+> （默认**强制开重排 + 关语义缓存**；`--no-rerank` 可切回）
+
 ---
 
 ## 6. 每一步必须交付的证据
