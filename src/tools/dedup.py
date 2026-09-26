@@ -28,8 +28,6 @@ def _doc_source(doc: Document) -> str:
 # LSH 单批最大文档数（超出则分批处理，降低峰值内存）
 _LSH_BATCH_SIZE = 10_000
 
-# MinHash 签名估算内存：每个签名约 num_perm * 4 bytes + 开销
-_MINHASH_MEM_BYTES = 128 * 4 + 200  # ~712 bytes/doc (num_perm=128)
 
 # 内存安全阈值：可用内存低于此值时降级到暴力比对
 _MEM_SAFETY_MB = 200

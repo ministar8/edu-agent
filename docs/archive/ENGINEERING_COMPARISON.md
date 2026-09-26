@@ -1,3 +1,6 @@
+> [!WARNING]
+> **本文件已归档，仅作历史记录 —— 与上游模板对比，不描述当前实现。** 当前方案见 [`docs/RETRIEVAL_PLAN.md`](../RETRIEVAL_PLAN.md)。
+
 # 工程化对比：edu-agent vs agent-service-toolkit
 
 > 参考基准：`ministar8/agent-service-toolkit`（`JoshuaC215/agent-service-toolkit` 的 fork）

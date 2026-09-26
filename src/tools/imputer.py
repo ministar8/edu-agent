@@ -258,9 +258,6 @@ def _resolve_segment_profile(doc: Document) -> _SegmentProfile:
     return _SEGMENT_PROFILES[default_cat]
 
 
-# 未闭合括号对
-_UNCLOSED_BRACKET_RE = re.compile(r"[(（](?:(?![)）]).)*$|[\[{](?:(?![\]}]).)*$", re.MULTILINE)
-
 # 首行标题候选：≤30字符的非空行，非代码/列表/纯数字
 _HEADING_CANDIDATE_RE = re.compile(r"^[^#\-*`\d\s].{0,28}[^\s]$")
 
@@ -287,8 +284,6 @@ _CHAPTER_MARK_RE = re.compile(
 # ── PDF 标题特征检测 ──
 # 全大写英文行（可能为标题）
 _ALL_CAPS_RE = re.compile(r"^[A-Z][A-Z\s]{2,40}$")
-# 短行 + 无句末标点（标题候选）
-_TITLE_LINE_RE = re.compile(r"^[^\n]{2,40}$", re.MULTILINE)
 # 行末无句号等终结标点
 _NO_END_PUNCT_RE = re.compile(r"[^。！？；：…—.!?,;:]$")
 
@@ -372,8 +367,6 @@ _STOPWORDS = frozenset(
     }
 )
 
-# ── 句子边界检测 ──
-_SENTENCE_END_RE = re.compile(r"[。！？；.!?;]\s*")
 
 # ── Heading 推断缓存 ──
 # key = f"{source_ext}:{source_name}", value = (heading, confidence)

@@ -9,7 +9,7 @@
 
 怎么做到不侵入源码
 ------------------
-被追踪的阶段函数**已经是独立的模块级函数**（`_multi_route_search` / `dedup_same_section` /
+被追踪的阶段函数**已经是独立的模块级函数**（`_amulti_route_search` / `dedup_same_section` /
 `rerank` / `sentence_window_expand` …），单体函数只是把它们串起来。所以只要在
 `rag.retriever` 上临时替换这些名字，就能记录"阶段之间的接口"，而不用改一行源码。
 这个性质也决定了它对重构友好：**拆分只改变调用点，不改变这些函数的契约**，
@@ -37,7 +37,7 @@
 ----------------
 - `_safe_to_thread`：它是"把调用挪到线程"的实现细节，不是行为契约。
   重构中合法地改变线程策略不应导致失败。
-- 顺序的严格性：阶段内部可能有并发调用（`_multi_route_search` 走 ThreadPoolExecutor），
+- 顺序的严格性：阶段内部可能有并发调用（`_amulti_route_search` 走 ThreadPoolExecutor），
   完成次序天然不定。故比对前按 `(阶段名, 入参)` 归一化排序 —— 我们断言的是
   "每个阶段被同样的输入调用、返回同样的输出"，而不是"调用次序"。
 
@@ -88,7 +88,6 @@ STAGE_TARGETS: tuple[tuple[str, str], ...] = (
     ("resolve_strategy", "resolve_retrieval_strategy"),
     ("resolve_policy", "_resolve_retrieval_policy"),
     ("decompose", "decompose"),
-    ("recall_multi_route", "_multi_route_search"),
     ("recall_multi_route_async", "_amulti_route_search"),
     # RRF 融合有**两个入口**，此前只追踪了分解用的那个，导致主 RRF 成为观测盲区：
     #   - `weighted_rrf_merge`  仅**查询分解**时走（原始查询 1.5 : 子查询 1.0 加权）

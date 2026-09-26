@@ -286,7 +286,7 @@ C 的运行时行为与 A **完全一致**，唯一收益是消除 `use_rerank` 
 
 ### C 组：文档同步（已完成）
 
-`README.md`、`docs/ARCHITECTURE.md`（§6.3）、`docs/ENGINEERING_COMPARISON.md`、
+`README.md`、`docs/ARCHITECTURE.md`（§6.3）、`docs/archive/ENGINEERING_COMPARISON.md`、
 `docs/RETRIEVAL_ROADMAP.md`、本文件 —— 路由数、`GATE_USE_RERANK` → `GATE_RERANK_MODE`、
 门禁命令补 `PYTHONPATH=src`（原命令裸跑会 `ModuleNotFoundError`）。
 

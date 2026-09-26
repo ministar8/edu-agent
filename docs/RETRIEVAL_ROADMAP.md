@@ -319,7 +319,7 @@ merged_qa 占比 65.4% → **79.4%**、grade 17.0% → **46.7%**；但全部门�
 不加这条路由，generate 类的 top-5 里**本来就有 65.4% 是 merged_qa**
 （经 `semantic` / `keyword_bm25` / `focus` 等基础路由召回）。
 
-**1.1 标题清理** —— 详见 `docs/RETRIEVAL_PLAN.md` §10.9：作用路径（标题文本）与门禁判据
+**1.1 标题清理** —— 详见 `docs/archive/RETRIEVAL_PLAN_V1.md` §10.9：作用路径（标题文本）与门禁判据
 （`kp_*` 看文件名、`category_*` 看集合名）**不重叠**，没有尺子能测它；真路由实测中性偏略负。
 已回退，清理版本存于 `edu-agent-1.1-title-cleaned/`。
 

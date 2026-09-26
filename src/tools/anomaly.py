@@ -54,8 +54,6 @@ _GARBAGE_CHAR_RE = re.compile(f"[^{_NORMAL_CHARS}]")
 # 重复词模式：同一词在短距离内重复3次以上
 _REPETITION_RE = re.compile(r"(.{2,8}?)\1{2,}")
 
-# 乱码行特征：行中乱码字符占比 > 40%
-_GARBAGE_LINE_RATIO = 0.4
 
 # 全乱码文档阈值：正文乱码字符占比 > 60% 视为全乱码
 _FULL_GARBAGE_RATIO = 0.6

@@ -61,7 +61,6 @@ class VerificationResult(BaseModel):
 # ════════════════════════════════════════════════════════
 
 # ── 阈值常量 ──
-_MIN_EVIDENCE_COUNT = 1
 _MIN_AVG_SCORE = 0.3
 _MIN_SOURCE_DIVERSITY = 0.2  # 至少 20% 来源不同
 _MIN_CONTENT_LENGTH = 50  # 单条证据最少字符

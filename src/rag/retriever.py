@@ -37,7 +37,6 @@ import json
 import logging
 import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from langchain_core.documents import Document
@@ -430,82 +429,6 @@ def _route_adaptive_k(k: int, use_rerank: bool, route_name: str = "") -> int:
         # 知识库扩充后 meta 路由命中激增，限制上限为 10 避免噪声
         base_k = max(3, min(int(base_k * 0.6), 10))
     return min(base_k, 40 if use_rerank else 20)
-
-
-def _multi_route_search(
-    query: str,
-    collection_name: str,
-    k: int,
-    filter: dict | None = None,
-    cat: QueryCategory | None = None,
-    use_rerank: bool = True,
-    terms: list[str] | None = None,
-    depth: RetrievalDepth | None = None,
-    route_allowlist: set[str] | None = None,
-) -> list[tuple[Document, float]]:
-    """同步多路召回（支持 Adaptive Depth 跳过不必要路由）"""
-    collection_routes = resolve_collection_routes(query, collection_name, cat=cat)
-    route_queries = build_recall_queries(query, cat=cat)
-
-    # Adaptive Depth: shallow 模式跳过 BM25 路由
-    if depth and depth.skip_bm25:
-        route_queries = [(name, rq) for name, rq in route_queries if name != "keyword_bm25"]
-
-    route_specs: list[tuple[str, str, dict | None]] = [
-        (route_name, route_query, filter) for route_name, route_query in route_queries
-    ]
-
-    # Adaptive Depth: shallow 模式跳过元数据路由；standard/deep/code 限制条数去冗余
-    if not (depth and depth.skip_metadata_routes):
-        meta_routes = build_metadata_routes(query, base_filter=filter, cat=cat, terms=terms)
-        if depth and depth.max_metadata_routes < len(meta_routes):
-            meta_routes = meta_routes[: depth.max_metadata_routes]
-        route_specs.extend(meta_routes)
-    if route_allowlist is not None:
-        route_specs = [spec for spec in route_specs if spec[0] in route_allowlist]
-        if not route_specs:
-            route_specs = [("semantic", query, filter)]
-    # Build flat list of all route specs (collection x route cross product)
-    all_specs: list[tuple[str, str, str, dict | None]] = [
-        (target_collection, route_name, route_query, route_filter)
-        for target_collection in collection_routes
-        for route_name, route_query, route_filter in route_specs
-    ]
-
-    def _search_one(spec):
-        target_collection, route_name, route_query, route_filter = spec
-        route_k = _route_adaptive_k(k, use_rerank, route_name)
-        result = _raw_search(
-            route_query, target_collection, route_k, filter=route_filter, route_name=route_name
-        )
-        return (f"{target_collection}:{route_name}", result)
-
-    max_workers = min(len(all_specs), 8)
-    route_results: list[tuple[str, list[tuple[Document, float]]]] = []
-    with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_search_one, spec): spec for spec in all_specs}
-        for future in as_completed(futures):
-            try:
-                route_results.append(future.result())
-            except Exception as e:
-                spec = futures[future]
-                logger.warning("Route search failed: %s/%s: %s", spec[0], spec[1], e)
-    logger.info(
-        "Multi-route retrieval query=%s collections=%s routes=%s",
-        query[:50],
-        collection_routes,
-        [route_name for route_name, _, _ in route_specs],
-    )
-    _log_route_diagnostics(
-        query,
-        route_specs=[
-            (f"{target_collection}:{route_name}", route_query, route_filter)
-            for target_collection in collection_routes
-            for route_name, route_query, route_filter in route_specs
-        ],
-        route_results=route_results,
-    )
-    return merge_route_results(route_results, cat=cat)
 
 
 def _route_timeout_seconds(route_name: str) -> float:
