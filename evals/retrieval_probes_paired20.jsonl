@@ -1,0 +1,22 @@
+# 由 ragas_paired20.jsonl 生成：用 metadata.knowledge_points 作**章级**目标。
+# 用途：把候选追踪跑遍全部 20 条配对样本，统计 dropped_by 分布（量化每层漏斗的影响面）。
+{"id": 6, "query": "什么是进程死锁？死锁的四个必要条件是什么？", "expect_source": "进程管理", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 7, "query": "图的深度优先遍历和广度优先遍历有什么不同？", "expect_source": "图", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 8, "query": "Cache 的作用是什么？", "expect_source": "存储系统", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 9, "query": "折半查找的适用条件是什么？", "expect_source": "查找", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 10, "query": "曼彻斯特编码与差分曼彻斯特编码的区别是什么？", "expect_source": "物理层", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 11, "query": "请出一道考查二叉树遍历与重建的题。", "expect_source": "树与二叉树", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 12, "query": "请出一道考查 Cache 映射与地址划分的题。", "expect_source": "存储系统", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 13, "query": "请出一道考查进程同步的题。", "expect_source": "进程管理", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 14, "query": "请出一道考查磁盘空闲空间管理的题。", "expect_source": "文件管理", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 15, "query": "请出一道考查 UDP 校验和的题。", "expect_source": "传输层", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 16, "query": "学生的答案是：完全二叉树的结点数一定是 2^k−1 个。请批改。", "expect_source": "树与二叉树", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 17, "query": "学生的答案是：Cache 命中率越高，平均访问时间一定越短。请批改。", "expect_source": "存储系统", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 18, "query": "学生的答案是：进程就是程序，二者是一回事。请批改。", "expect_source": "进程管理", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 19, "query": "学生的答案是：时间片轮转调度中时间片越大系统开销越小，所以时间片越大越好。请批改。", "expect_source": "进程管理", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 20, "query": "学生的答案是：HTTP 是无状态协议，所以服务器无法识别老用户。请批改。", "expect_source": "应用层", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 21, "query": "用 C 语言写出单链表就地逆置的函数，并说明空间复杂度。", "expect_source": "线性表", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 22, "query": "用 C 语言写一段程序打印 float 的 32 位二进制表示，并说明如何据此读出阶码与尾数。", "expect_source": "数据表示与运算", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 23, "query": "用信号量写出生产者—消费者问题的伪代码。", "expect_source": "进程管理", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 24, "query": "写出死锁检测算法（资源分配图化简）的伪代码。", "expect_source": "进程管理", "expect_section": "", "note": "配对样本（章级目标）"}
+{"id": 25, "query": "用 C 写一个简单 HTTP GET 客户端的要点。", "expect_source": "应用层", "expect_section": "", "note": "配对样本（章级目标）"}
