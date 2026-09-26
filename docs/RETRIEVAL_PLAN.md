@@ -117,7 +117,7 @@ TEI 承载 embedding 与 rerank，本会话内**宕机过一次**（两端点 50
 |---|---|
 | `INGEST_SYNONYM_NORMALIZE` 默认改 `false`（或移除该归一调用） | 文档保持原文 |
 | **删除 S4**（`RERANK_QUERY_NORMALIZE` 及其在 `rerank()` 内的分支） | 它存在的前提（文档被归一）已消失 |
-| 重入库 | 可直接提升已验证过的 `chroma_db_unnorm/`（2092 chunk），省一次重建 |
+| 重入库 | 重跑一次 `rag.ingest` 即可（约 2 分钟，零 LLM 成本）。<br>命令：`INGEST_SYNONYM_NORMALIZE=false CHROMA_PERSIST_DIR=./chroma_db PYTHONPATH=src .venv/Scripts/python.exe -m rag.ingest`<br>（此前那份验证用的 `chroma_db_unnorm/` 是**可随时重建的本地产物**，已在收尾时清理，不要把它当资产） |
 | 清空语义缓存 | chunk_id 全变，否则旧答案继续命中 |
 | 重录 6 条基线 | 按 §6 纪律 |
 
