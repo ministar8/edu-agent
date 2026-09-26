@@ -57,7 +57,7 @@
 
 | 项 | 说明 | 价值 |
 |---|---|---|
-| **★ 检索质量门禁** | `evaluation.retrieval_gate`：三条路由（默认 / `GATE_USE_RERANK` / `GATE_USE_REAL_EMBEDDING`）各比一份基线，容差 0.02，**跨口径比对直接拒（退出码 2）** | 上游**完全没有**「RAG 质量」这一维度的门禁。这是本项目最核心的技术资产 |
+| **★ 检索质量门禁** | `evaluation.retrieval_gate`：按 `(embedding, rerank)` 组合分路由（默认 / `GATE_RERANK_MODE=on` / `=disabled` / `GATE_USE_REAL_EMBEDDING=1`）各比一份基线，容差 0.02，**跨口径比对与未登记组合直接拒（退出码 2）**，并有「路由前提自检」抓静默回退 | 上游**完全没有**「RAG 质量」这一维度的门禁。这是本项目最核心的技术资产 |
 | **★ 圈复杂度棘轮** | `mccabe max-complexity = 25`，恰等于「当前最复杂函数」→ 开启时 0 命中，**只拦新增** | 上游无任何规模/复杂度门槛 |
 | **★ 分模块覆盖率门槛**（已归档） | 强制显式 `--cov=src/`，`tools/` 与离线入库链不计入 | 上游只有全局 codecov 上报 |
 | **codecov patch 阻塞**（已归档） | 我方要求 **target 80% 且阻塞**，且有量化立论 | 上游 `codecov.yml` 是 **`informational: true`（不阻塞）** |

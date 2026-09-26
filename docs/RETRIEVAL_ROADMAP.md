@@ -13,10 +13,10 @@
 
 **但有两个前置条件必须先解决，否则后续全是盲调：**
 
-| # | 前置条件 | 现状（实测） |
+| # | 前置条件 | 现状（2026-09-24 更新） |
 |---|---|---|
-| 1 | **度量口径断层** | 门禁只测「学科类目」（4 选 1），且 `category_hit_at_k = 1.0000`（40/40 全中）**已饱和**；答案级度量（RAGAS）**从未跑过**（`evals/results/` 目录不存在） |
-| 2 | **本机链路 ≠ 生产链路** | `.env` 是 `RERANK_ENABLED=false`，但 `settings.py:116` 默认 `True`、`.env.example:51` 是 `true`、`agents/tools.py:152` **硬编码 `use_rerank=True`** |
+| 1 | **度量口径断层** | ⚠️ **已补一半**：门禁新增**章级** `kp_hit@k` / `kp_mrr`，实测 **0.9250 / 0.9000** —— 有真实下降空间（学科级仍饱和在 `1.0000`，测不出任何改动），见 T0.5。答案级 RAGAS 全量 40 条**仍未跑**（只有 probe n=1 / smoke n=5），见 T0.4 |
+| 2 | **本机链路 ≠ 生产链路** | ⚠️ **已补门禁侧**：新增 `GATE_RERANK_MODE=disabled` 路由（复现 `.env` 的 `RERANK_ENABLED=false`）并录了基线，见 T0.1。`.env` 本身仍未跟随生产意图（属产品决策）。另注：`tools.py:152` 的硬编码是**路径声明**而非开关（真正的开关是 `RERANK_ENABLED`），`settings.py:116` / `.env.example:51` 的 `true` 与 `.env` 的 `false` 是「生产意图 vs 本机实况」的正常差异 |
 
 **工程侧的定位调整（不是停止）**：覆盖率 36% → 72.3%、`retriever` 7% → 65.6%、6 个 0% 模块清零、质量门禁 + 结构规模棘轮在位 —— 工程侧**已经从「阻塞项」降级为「服务项」**。
 剩余的是**规模债**（8 文件 >600 行 / 53 函数 >60 行），它不阻塞检索迭代，因为安全网已经建好。
@@ -42,6 +42,11 @@
 
 **结论**：在学科粒度上，任何改动的效果都测不出来；测出来了也大概率是噪声。
 
+> ★ **2026-09-24 更新**：门禁已补**章级** `kp_hit@k` / `kp_mrr`（见 T0.5）——
+> 实测 **0.9250 / 0.9000**，**有真实下降空间**，且能区分 `off` 与 `disabled` 两条路由
+> （学科级对两者都是 `1.0`，完全区分不出）。
+> **本节的「测不出改动」只对学科粒度成立**，章级已可用。
+
 ### 1.2 假 embedding 上的「改善」已被证明是伪影
 
 backlog #34 的四条路由对照实验：
@@ -66,25 +71,38 @@ backlog #34 的四条路由对照实验：
 
 ### T0.1 对齐本地与生产链路
 
+> **状态：⚠️ 部分完成（2026-09-24）** —— 门禁侧已就绪（`disabled` 路由 + 基线），
+> 但 `.env` 的 `RERANK_ENABLED` 仍为 `false`、**未跟随生产意图**，属产品决策，未动。
+
 | 项 | 内容 |
 |---|---|
-| 改哪里 | `.env`（`RERANK_ENABLED=false` → 跟随生产）；或在评测脚本里显式 `GATE_USE_RERANK=1` |
+| 改哪里 | `.env`（`RERANK_ENABLED=false` → 跟随生产）；或在评测脚本里显式 `GATE_RERANK_MODE=on` |
 | 前置 | 本机 TEI 需运行：`docker start tei-embedding tei-rerank`（端口 11435 / 11436，**用 `docker start` 不要 `docker run` 重建**），起完等约 50s，**用真实推理请求验证而非只看 `/health`** |
-| 验收 | `GATE_USE_RERANK=1 python -m evaluation.retrieval_gate` 跑通且与 `evals/retrieval_baseline_rerank.json` 对得上 |
+| 验收 | `GATE_RERANK_MODE=on python -m evaluation.retrieval_gate` 跑通且与 `evals/retrieval_baseline_rerank.json` 对得上；`GATE_RERANK_MODE=disabled`（生产关闭态）与 `retrieval_baseline_fake_disabled.json` 对得上 |
 | 风险 | 低。TEI 未起则检索类请求失败 |
 
 > ★ 在 T0.1 完成前，**本机任何「检索变准了」的结论都不该采信** —— 你验的是另一条链。
+> ★ 门禁已补 `GATE_RERANK_MODE=disabled` 路由（要求重排但部署关掉）—— 它在 **rerank 维度**
+> 复现了 `.env` 的 `RERANK_ENABLED=false` 口径。要连同 embedding 一起对齐，仍需
+> `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=disabled`。
 
 ### T0.2 清掉静默无效的配置键
+
+> **状态：✅ 已完成（2026-09-24）** —— 实测残留**只有 `DATABASE_TYPE` 一个**
+> （本表原先记的 `RERANK_MODE` / `CONTEXT_TOKEN_BUDGET_*` **已不在 `.env` 中**，清单过期）。
+> 已删除 `DATABASE_TYPE`；`.env` → `Settings` 前向差集 = 0。
 
 | 项 | 内容 |
 |---|---|
 | 问题 | `Settings` 用 `extra="ignore"`，不认识的键**静默无效**（会让人以为配了其实没有） |
-| 实测残留 | `.env` 里 `RERANK_MODE` / `CONTEXT_TOKEN_BUDGET_DEEP` / `CONTEXT_TOKEN_BUDGET_SHALLOW` / `DATABASE_TYPE` |
-| 改哪里 | `.env` 删除上述 4 键（删前先确认无消费者） |
-| 验收 | `Settings.model_fields` 与 `.env` 的双向差集为空 |
+| 实测残留 | `.env` 里 `DATABASE_TYPE`（另 3 键实测已不存在，勿再照抄本表旧清单） |
+| 改哪里 | `.env` 删除该键（删前已确认无消费者） |
+| 验收 | `Settings.model_fields` 与 `.env` 的**前向**差集为空（反向必然非空：`.env` 只放覆盖项） |
 
 ### T0.3 补齐 `.env.example`
+
+> **状态：✅ 已完成（2026-09-24）** —— 补了 `BM25_CANDIDATE_FACTOR` / `BM25_CANDIDATE_FLOOR`
+> （含 #34 的警告注释）；反向差集只剩 `AVAILABLE_MODELS`（白名单豁免：它是运行时派生字段，不是旋钮）。
 
 | 项 | 内容 |
 |---|---|
@@ -94,25 +112,45 @@ backlog #34 的四条路由对照实验：
 
 ### T0.4 跑第一次 RAGAS，存基线
 
+> **状态：❌ 未开始** —— 需真实 LLM（**会产生费用**），**等用户批准后再跑**。
+> 目前只有 `evals/results/` 下的 probe(n=1) 与 smoke(n=5)，全量 40 条未跑。
+> 冒烟数据已显示答案级有真实下降空间（`context_recall` 0.633 / `context_precision` 0.697）。
+
 | 项 | 内容 |
 |---|---|
-| 命令 | `uv sync --group eval` → `uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 20 --tag baseline` |
+| 命令 | `uv sync --group eval` → `PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 20 --tag baseline` |
 | 产出 | `evals/results/*.json` |
 | 验收 | `faithfulness` / `context_recall` / `context_precision` / `answer_relevancy` 四个数字落盘，并回填到本文件 §5 |
 | 风险 | 需要真实 LLM（**会产生费用**）→ 先用 `--limit 20` |
 
 ### T0.5 黄金集加「知识点」中间层
 
-**这是整条路线图最关键的一项。**
+> **状态：✅ 已完成（2026-09-24）** —— 验收达标且有 headroom。
+>
+> **实测**：`kp_hit@k` = **0.9250**（`off` 路由）/ **0.9000**（`disabled` 路由），
+> `kp_mrr` = 0.8229 / 0.8154，`kp_annotated` = 40。对比学科级仍饱和在 `1.0000` ——
+> **新指标能区分两条路由，学科级完全区分不出**。
+>
+> ★ **粒度载体与原计划不同**：原计划用 H1 标题，实测**H1 不均匀**
+> （大文件 H1=章、小文件 H1=具体主题如 `3.链栈`，还有 `1定义`/`3性质` 碎片；
+> 根因是**部分文件没有 H1**，splitter 便把最深标题当路径首段）。
+> 改用**知识库文件**作章单元（`05_树与二叉树` / `03_存储系统` / `05_传输层` …），
+> 由 `retrieval_gate.chapter_of_source()` 从证据的 `source` 派生 —— **零 tagger 改动、零重新入库**。
+>
+> ★ 顺带修了 3 个前置缺陷（详见 §9 或 git log）：
+> ① `knowledge_tagger` 写的字段名 `knowledge_point_names` **无消费方**，
+> 而 `evidence.py` 读的是 `knowledge_points` → `EvidenceDoc.knowledge_points` 恒为空；
+> ② `_parse_heading_path` 未剥 splitter 加的 `[]` 包装 → **77% 的知识点名被污染**；
+> ③ `stage_trace.py` 按 2 元组解包 `load_golden_queries`（后者已改 3 元组）。
 
 | 项 | 内容 |
 |---|---|
 | 为什么不做 chunk_id 级 | `retrieval_gate.py` 的取舍理由成立：chunk 级期望会在任何切分变更后大面积失效。**用「知识点标签」做中间层** —— 既不随切分失效，又比学科细一档 |
-| 改哪里 ① | `evals/sample_408.jsonl` 每条 `metadata` 加 `knowledge_points: [...]` |
-| 改哪里 ② | `src/evaluation/retrieval_gate.py` 加 `kp_hit@k` / `kp_mrr` 指标 |
-| ★ 陷阱 | `src/evaluation/dataset.py:57` 会把 list 值 **join 成逗号串** → 读取端必须按逗号切分 |
-| 验收 | `kp_hit@k` 基线 **< 1.0**（必须有下降空间，否则说明标注粒度还是太粗） |
-| 依赖 | 需要 408 领域标注。**先 40 条跑通，再扩到 150~200 条** |
+| 改哪里 ① | `evals/sample_408.jsonl` 每条 `metadata` 加 `knowledge_points: [...]` —— **已完成 40 条**（跨章条目给双标注，如 ARP → 网络层 + 数据链路层） |
+| 改哪里 ② | `src/evaluation/retrieval_gate.py` 加 `kp_hit@k` / `kp_mrr` 指标 —— **已完成**（另加 `kp_annotated` 守标注不被误删） |
+| ★ 陷阱 | `src/evaluation/dataset.py:57` 会把 list 值 **join 成逗号串** → 读取端必须按逗号切分。（门禁直读 JSONL 故不受影响；`_parse_expected_kps` 已**同时兼容两种形态**，RAGAS 侧要读也不会失真） |
+| 验收 | `kp_hit@k` 基线 **< 1.0**（必须有下降空间，否则说明标注粒度还是太粗）→ **0.9250 / 0.9000，达成** |
+| 依赖 | 需要 408 领域标注。**先 40 条跑通，再扩到 150~200 条** → 40 条已跑通，扩量待办 |
 
 ---
 
@@ -185,7 +223,7 @@ backlog #34 的四条路由对照实验：
 | 现状 | `src/rag/_metadata_spec.py` 有 **60+ 字段**（`section.path` / `depth` / `chunk_role` / `content_type` / `keywords` / `heading_slug`…），但**大部分没被用于检索** |
 | 判断 | 典型的「**数据已就绪、能力未开发**」 |
 | 改哪里 | `src/rag/recall.py` 的元数据路由：把 `section.path` / `content_type` 接进过滤与加权 |
-| 验收 | 三条路由门禁全不退化 + `kp_hit@k` 提升 |
+| 验收 | 各路由门禁全不退化 + `kp_hit@k` 提升 |
 
 ---
 
@@ -202,7 +240,7 @@ backlog #34 的四条路由对照实验：
 | 佐证 | CO 的知识文件**自己写着**「详见 操作系统 3.内存管理 七、虚拟内存管理」—— 连它都把权威解释指向 OS |
 | 改哪里 | `src/rag/postprocess.py` 的 RRF 融合 |
 | 方案二选一 | ① 按集合归一化后再融合；② 给「推断出的集合」加权 |
-| 验收 | **三条路由全跑**；`虚拟内存` 与 `段页式` 不再错排；其余 query 不退化 |
+| 验收 | **各路由全跑**；`虚拟内存` 与 `段页式` 不再错排；其余 query 不退化 |
 | 风险 | **高** —— 动核心排序算法。本仓库在该区域已有 3 次「看起来该修、实测有害」的先例（#13 / #25 / #34） |
 
 ### T3.2 路由分类层补测与度量
@@ -228,8 +266,85 @@ backlog #34 的四条路由对照实验：
 | 检索阈值微调 | #13 / #25 |
 | 放宽 `splitter` 标题正则 | #13：`precision` 稳定 -1.8pp |
 | 无条件保留短 section | #25：MRR 一致下降 |
+| **新增 `merged_qa_meta` 路由** | **两轮真实路由实测均净负**：一轮（问题 4 修复前）`cat@k` −0.039、`kp@k` **−0.064**；二轮（问题 4 修复后）`cat@k` 退化消失，但 **`kp@k` 仍 −0.0642 纹丝不动** —— 证明 `kp@*` 的损失是**真实的考点覆盖损失**，不是度量口径问题 |
+| 清理知识文件标题（1.1） | **2026-09-24 真实路由实测**：中性偏略负（`cat@1` −0.006、`kp_mrr` −0.004、空结果 3→4）；同类改动有 #13 负收益先例；且作用路径与门禁判据不重叠 |
+| **用启发式自动修复真题选项** | **2026-09-24 勘察后否决**：182 个含占位符的块里 **44 块源文件本身就缺选项**；「取末 N 行」这类启发式会在这些块上**静默错配**（已抓到反例 `2019_408_exam.md:146`），而**错配比显式占位符更危险** —— 批改会判错且看不出来。**需重新采集真题原文，不能靠猜** |
 
 **理由**：三次实证，真实口径零收益或有害；且假 embedding 会给出**真实环境里不存在**的假信号。
+
+### 6.1 两条「试过并否决」的补充记录（2026-09-24）
+
+上面两条新增项都是**先测量后否决**，记下来是为了不重复踩：
+
+**`merged_qa_meta` 路由** —— 它的恢复条件（「先修好生产端，再用门禁校准权重」）在 1.2 之后
+已经成立：merged_qa 从 0 增至 377 chunk、`qa.*` 字段完整。于是按约定重新引入并校准
+（触发 `exercise`/`answer`，权重 1.5）。路由**确实按预期工作** —— generate 类 top-5 中
+merged_qa 占比 65.4% → **79.4%**、grade 17.0% → **46.7%**；但全部门禁指标退化。
+
+**退化的根因是度量口径而非检索质量**：merged_qa 主要来自 `questions/`，而 `questions`
+不在 `SUBJECT_TO_CATEGORY` 里、其「章」是 `2019_408_exam` 这类不在黄金集期望章内的标签
+→ 推高 merged_qa 占比**必然**压低 `cat@k` 与 `kp_*`。而**当前没有尺子能证明它对
+出题/批改任务真有帮助**（「merged_qa 占比」只是代理指标，不是任务指标）。
+按原则 1「度量先行」：尺子说退化、收益又证明不了 → 不做。
+改动存为仓库外的 `edu-agent-merged_qa_route.patch`，**先解决 `questions` 的度量语义
+（即出题类的 `expected_category` 怎么定）再重新评估**。
+
+> ★ **前置已满足并已重测（2026-09-24 同日）**：`questions` 的度量语义已修 ——
+> `load_golden_queries` 现在给出题类返回**多值期望** `(对应学科, questions)`。
+> 于是把这条路由加回来**重测了一次**。
+
+**★ 第二次实验的价值：它纠正了第一次的诊断。**
+
+| 指标 | 一轮（度量口径未修） | 二轮（度量口径已修） | 基线（无路由） |
+|---|---|---|---|
+| `cat@k` | 0.8205 | **0.9359** ✓ 退化消失 | 0.9423 |
+| `cat@1` | 0.6731 | **0.8782** ✓ 退化消失 | 0.8846 |
+| **`kp@k`** | 0.7179 | **0.7179** ✗ **纹丝不动** | 0.7821 |
+| **`kp_mrr`** | 0.5661 | **0.5661** ✗ **纹丝不动** | 0.6107 |
+
+`cat@*` 的退化确实如预期随口径修复而消失（generate 的 `cat@1` 甚至达到 1.0000）——
+**验证了「上一轮 `cat@*` 的退化是度量口径导致」这一判断是对的。**
+但 **`kp@*` 一动不动**，说明它的退化**另有原因**：推高 merged_qa 占比，
+就是把**与考点直接对应的讲义章节挤出 top-5**（`grade` 的 `kp@k` 0.7812 → 0.5938，降幅最大）。
+这是**真实的考点覆盖损失，不是度量口径问题**。
+
+**为什么不能"再放宽一次指标"**：`questions` 作为*来源*是合法的（"返回真题"对出题类本就该算命中，
+这是问题 4 的修复）；但 `20XX_408_exam` 作为*知识点*说不出是哪个考点 ——
+若放宽它，等于让**任意真题命中任意考点**，指标将失去意义。两者性质不同，不能套用同一个修法。
+
+**定论：不加。** 收益本就边际（不加时 generate 已有 65.4% 是 merged_qa），代价是真实的考点覆盖损失。
+详见 `recall.py` 中 `build_metadata_routes` 末尾的完整记录。
+
+★ 顺带纠正一个**过期描述**：「merged_qa 无路由使用」在 1.2 之后**已不准确** ——
+不加这条路由，generate 类的 top-5 里**本来就有 65.4% 是 merged_qa**
+（经 `semantic` / `keyword_bm25` / `focus` 等基础路由召回）。
+
+**1.1 标题清理** —— 详见 `docs/RETRIEVAL_PLAN.md` §10.9：作用路径（标题文本）与门禁判据
+（`kp_*` 看文件名、`category_*` 看集合名）**不重叠**，没有尺子能测它；真路由实测中性偏略负。
+已回退，清理版本存于 `edu-agent-1.1-title-cleaned/`。
+
+**真题选项自动修复** —— 精确勘察结果（`docs/真题选项修复审阅表.html`）：
+
+| 类别 | 块数 | 说明 |
+|---|---|---|
+| 标记已有真实文本（无需修复） | 58 | — |
+| **提议修复**（守卫判定「末 N 行即选项」） | **126** | 占位符 504 处 |
+| 跳过：源文件缺选项 | **44** | 裸行数 < 标记数，**原文就缺选项** |
+| 跳过：末 N 行含题干样行 / 列举行 / 代码围栏 | 12 | 取末 N 行会错配 |
+
+**为什么不改**：修复的关键是判断「哪些裸行是选项」，而**源文件已证实有 44 块本身缺选项**
+—— 这类块的裸行里混着题干、Ⅰ/Ⅱ/Ⅲ 列举项、图表行。任何启发式都会在部分块上
+**静默错配**，而错配的后果是**批改判错且看不出来**，比保留显式 `（选项缺失）` 更糟
+（后者至少让人与模型都知道「这里缺东西」，且裸行顺序仍可推断映射）。
+
+**已抓到的反例**（`2019_408_exam.md:146`）：该题源文件只有 3 个选项，
+「取末 4 行」把题干里的列举行 `Ⅰ.数据的规模 Ⅱ.… Ⅲ.… Ⅳ.…` 当成了选项 A。
+加守卫（一行内 ≥2 个罗马标记即判非选项）可拦住这一类，但**无法证明其余 126 块都正确**
+—— 按原则 1「度量先行」，不可验证的改动不落地。
+
+**正确修法**：**重新采集真题原文**（属 1.3 知识库扩容/修复），而不是从损坏的文件里反推。
+审阅表 `docs/真题选项修复审阅表.html` 已生成：逐块列出裸行区、守卫结论与提议映射，
+可供人工核对——**若人工确认后要批量落地，改法已在表里写明**。
 
 ---
 
@@ -241,7 +356,7 @@ backlog #34 的四条路由对照实验：
 | 只在改动触达处还债 | 改了 `retriever.py` 就顺手拆函数 |
 | 圈复杂度棘轮只收紧不放松 | 改小 `max-complexity`（pyproject 的 ruff C90）后跑 `ruff check src/`；**数值变大 = 回退，应被质疑** |
 | 本地三条命令照跑 | `ruff check src/`、`ruff format --check src/`（**两条单独跑，check 通过 ≠ 格式通过**）、`pyrefly check` |
-| 改了检索链必须跑门禁 | `uv run python -m evaluation.retrieval_gate` |
+| 改了检索链必须跑门禁 | `PYTHONPATH=src uv run python -m evaluation.retrieval_gate` |
 
 ---
 
@@ -261,7 +376,7 @@ T0.5 知识点黄金集 ─┘        ↓
 
 | 任务 | 可判定验收标准 |
 |---|---|
-| T0.1 | `GATE_USE_RERANK=1` 门禁与 `retrieval_baseline_rerank.json` 对得上 |
+| T0.1 | `GATE_RERANK_MODE=on` 门禁与 `retrieval_baseline_rerank.json` 对得上 |
 | T0.2 | `Settings` ↔ `.env` 双向差集为空 |
 | T0.3 | `Settings` ↔ `.env.example` 双向差集只剩白名单 |
 | T0.4 | `evals/results/*.json` 存在且含 4 个指标数字 |
@@ -270,8 +385,8 @@ T0.5 知识点黄金集 ─┘        ↓
 | T1.2 | 点踩落库，可按 `chunk_id` 反查 |
 | T2.1 | 入库 chunk 数 / 覆盖考点数上升 |
 | T2.2 | `category_precision` 不降 **且** `kp_hit@k` 提升 **且** 真实路由复验通过 |
-| T2.3 | 三条路由门禁不退化 **且** `kp_hit@k` 提升 |
-| T3.1 | 三条路由全跑；两条错排病例修正；其余不退化 |
+| T2.3 | 各路由门禁不退化 **且** `kp_hit@k` 提升 |
+| T3.1 | 各路由全跑；两条错排病例修正；其余不退化 |
 | T3.2 | 人为改错分类能被测试抓住（反向验证变红） |
 
 ---

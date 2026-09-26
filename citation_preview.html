@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>T1.1 引用溯源 UI — 静态预览</title>
+<!--
+  这是**一次性预览**，不是产品文件，看完可删。
+  它加载真实的 static/style.css，并按 static/app.js 里 buildCitations() 产出的
+  DOM 结构手写了一份等价标记（app.js 有顶层副作用，无法在预览页里直接加载）。
+  结构已由 Node + DOM 打桩验证与 buildCitations() 一致。
+-->
+<link rel="stylesheet" href="static/style.css">
+<style>
+  body { padding: 24px; background: var(--bg); font-family: system-ui, -apple-system, sans-serif; }
+  .demo-note { max-width: 720px; margin: 0 auto 16px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<p class="demo-note">T1.1 引用溯源 UI 预览 —— 数据形态与 <code>EvidenceDoc</code> 一致（source / section_path / score / rerank_score / excerpt）。默认折叠，点「引用来源」展开。</p>
+
+<div class="msg-row ai" style="max-width:720px;margin:0 auto;">
+  <div class="msg-body">
+
+    <div class="msg ai">二叉搜索树（BST）是一种每个结点最多两个子树、且左子树所有结点值小于根、右子树所有结点值大于根的二叉树。查找、插入、删除的平均时间复杂度均为 O(log n)，最坏退化为 O(n)。</div>
+
+    <details class="citations">
+      <summary>引用来源（3）</summary>
+      <ol class="citation-list">
+        <li>
+          <div class="citation-source">05_树与二叉树.md</div>
+          <div class="citation-path">[树与二叉树 &gt; 二、二叉树Binary tree &gt; 1.【考点】二叉搜索树]</div>
+          <div class="citation-meta">得分 0.5123 · 重排 0.7000</div>
+          <div class="citation-excerpt">二叉搜索树（Binary Search Tree，BST）又称二叉排序树。若左子树不空，则左子树上所有结点的值均小于它的根结点的值；若右子树不空，则右子树上所有结点的值均大于它的根结点的值……</div>
+        </li>
+        <li>
+          <div class="citation-source">07_查找.md</div>
+          <div class="citation-path">[查找 &gt; 2.有序表查找 &gt; 2.1【考点】折半查找]</div>
+          <div class="citation-meta">得分 0.4310</div>
+          <div class="citation-excerpt">折半查找要求线性表必须采用顺序存储，且元素按关键字有序排列。每次比较后将查找区间缩小一半……</div>
+        </li>
+        <li>
+          <div class="citation-source">10_常考题型.md</div>
+          <div class="citation-path"></div>
+          <div class="citation-meta">得分 0.3877</div>
+          <div class="citation-excerpt">【2019 真题】在任意一棵非空二叉排序树中，删除某结点后又将其插入，若插入后二叉排序树与删除前相同，则被删除的结点是……</div>
+        </li>
+      </ol>
+    </details>
+
+    <div class="msg-actions">
+      <button type="button">复制</button>
+      <button type="button">重新生成</button>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

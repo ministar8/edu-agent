@@ -12,8 +12,8 @@
 ```
 用户提问 → Supervisor（langgraph-supervisor create_supervisor 路由）
   ├─ knowledge_agent   知识讲解（RAG 检索）
-  ├─ question_agent    出题（题库模板检索）
-  └─ grading_agent     批改（标准答案检索）
+  ├─ question_agent    出题（结构化真源 + 对话修饰）
+  └─ grading_agent     批改（结构化打分 + 对话修饰）
         │
    RAG 检索管线：查询归一 → 分类 → 多路召回(语义 + BM25 + 元数据 + 同义词)
                  → RRF 融合 → Reranker → HyDE → 语义缓存
@@ -34,9 +34,9 @@
 | `src/memory/` | 短期 checkpointer + 消息窗口 `window.trim_conversation` + 长期 Store（工厂/schema/topic/weak_topics/记忆卡） |
 | `src/db/` | SQLAlchemy User 表与建表逻辑 |
 | `src/tools/` | 离线数据清洗工具（**不参与运行时**） |
-| `static/` | 静态前端（login.html / index.html / app.js / auth.js / theme.js / style.css） |
+| `static/` | 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
-| `src/evaluation/` | RAGAS Layer-1 评测（dataset/adapters/ragas_eval/cli）+ `evals/` 样本 |
+| `src/evaluation/` | 评测：RAGAS Layer-1（dataset/adapters/ragas_eval/cli）+ 检索质量门禁（retrieval_gate）+ `evals/` 样本 |
 | `docs/` | **工程文档**（`ARCHITECTURE.md` 架构 / `DOCKER.md` 容器 / `RETRIEVAL_ROADMAP.md` 检索路线 / `ENGINEERING_COMPARISON.md` 与上游模板对比） |
 
 ## 常用命令
@@ -44,7 +44,7 @@
 ```bash
 uv sync                                  # 安装依赖
 uv sync --group eval                     # RAGAS 评测依赖（可选）
-uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 5
+PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 5
 uv run python src/run_service.py         # 启动服务 → http://127.0.0.1:8000
 uv run python -m rag.ingest              # 知识库增量入库
 uv run python -m rag.ingest --rebuild    # 知识库全量重建
@@ -87,7 +87,7 @@ docker compose up --build                # 容器化启动
 
 ## 注意事项
 
-- 检索依赖两个本地 TEI 服务：Embedding（`localhost:11435`）与 Reranker（`localhost:8080`），
+- 检索依赖两个本地 TEI 服务：Embedding（`localhost:11435`）与 Reranker（`localhost:11436`），
   用 `scripts/tei_deploy.ps1` 或 README 中的 docker 命令启动，否则检索类请求会失败。
 - **假 embedding 模式**：`pyproject.toml` 的 `[tool.pytest_env]` 设 `USE_FAKE_EMBEDDING=true` 后，
   `get_embeddings()` 返回本地确定性哈希实现（`rag.embeddings.HashingEmbeddings`）——
@@ -100,9 +100,9 @@ docker compose up --build                # 容器化启动
 - **`splitter.py` 的 Q&A 原子机制在真实语料上未激活**（已知缺陷，勿误判为"已实现"）：
   `_ANSWER_RE` 只识别 `答案：/解答：/正确答案：`，而 408 真题用的是「选项行尾 `✅` + `**解析**：`」，
   因此 `content_type` 永远不会成为 `merged_qa`，`qa.question/answer/answer_key` 字段恒为空，
-  `recall.py` 的 `merged_qa_meta` 路由恒返回空（该路由已按 backlog #8 删除）。
+  依赖它的 `recall.py` `merged_qa_meta` 路由已按 backlog #8 删除。
 - **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑
-  `uv run python -m evaluation.retrieval_gate`。
+  `PYTHONPATH=src uv run python -m evaluation.retrieval_gate`。
   它用确定性哈希 embedding + 临时索引跑 40 条黄金集 query，与 `evals/retrieval_baseline.json`
   对比，任一指标退化即失败。**它衡量的是检索管线是否退化，不是语义质量**（语义质量用
   `evals/cli.py` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，

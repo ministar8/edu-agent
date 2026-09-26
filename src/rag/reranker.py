@@ -131,6 +131,12 @@ def rerank(
         return []
 
     if not settings.RERANK_ENABLED:
+        # 防御网：调用方（retriever 的 _stage_rerank / HyDE 分支）已按同一个开关短路，
+        # 正常不会走到这里。走到即说明某处绕过了那道检查 —— 属异常，故用 warning。
+        logger.warning(
+            "rerank() 被调用但 settings.RERANK_ENABLED=false —— 调用方未按开关短路，"
+            "已返回原始顺序（不写 rerank_score）。请检查调用路径。"
+        )
         return documents[:top_k]
 
     start = time.perf_counter()

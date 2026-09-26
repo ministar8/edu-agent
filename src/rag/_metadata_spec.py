@@ -102,6 +102,10 @@ FIELDS: list[tuple[str, str, str, str]] = [
     ("has_placeholder", "bool", "是否含占位符", "imputer"),
     ("truncated", "bool", "是否截断", "imputer"),
     ("is_structured", "bool", "是否结构化内容", "enhancer"),
+    # 内容语义标志（splitter 写入）—— 供 recall 的 exercise_meta / answer_meta 路由过滤。
+    # 与 content_type 解耦：后者是**单值形状分类器**且决定 chunk 尺寸，不能承载语义。
+    ("is_exercise_content", "bool", "标题为习题/真题/例题（语义标志）", "splitter"),
+    ("has_answer_marker", "bool", "正文含「答案：/解答：/正确答案：」标记", "splitter"),
     ("line_count", "int", "行数", "enhancer"),
     ("estimated_tokens", "int", "估算 token 数", "enhancer"),
     ("char_count", "int", "chunk 字符数", "splitter/enhancer"),
@@ -128,6 +132,10 @@ FIELDS: list[tuple[str, str, str, str]] = [
     ("language_mixed", "bool", "语言混杂", "anomaly"),
     ("language_mix_ratio", "float", "语言混排度", "anomaly"),
     ("content_hash", "str", "内容哈希（去重用）", "vectorstore"),
+    # ── 知识点标签（knowledge_tagger 写入） ──
+    ("knowledge_points", "str", "知识点名列表(JSON 字符串，由细到粗)", "knowledge_tagger"),
+    ("difficulty", "float", "推断难度 1.0/1.3/1.6/2.0", "knowledge_tagger"),
+    ("difficulty_source", "str", "难度来源标记: auto", "knowledge_tagger"),
     # ── recall.* — 检索评分（运行时，不入库） ──
     ("recall_score", "float", "召回评分", "retriever"),
     ("recall_routes", "str", "召回路径", "retriever"),

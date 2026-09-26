@@ -141,7 +141,7 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 | 7 | `hyde` | `_stage_hyde` | HyDE：用假设性答案补召回 |
 | 8 | `expand` | `_stage_expand_windows` | 窗口扩展：补回被切碎的上下文 |
 
-阶段顺序在 `retriever.py:1444-1520` 由 `_emit_stage(...)` 显式标注，**可被 SSE 实时上报**
+阶段顺序在 `retriever.py:1503-1579` 由 `_emit_stage(...)` 显式标注，**可被 SSE 实时上报**
 （`StageSink`），所以前端能看到「正在重排」这类中间状态。
 
 ### 4.1 输出：`FusedEvidence`
@@ -156,7 +156,7 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 
 ### 4.2 检索链的规模问题（已知，诚实记录）
 
-`retriever.py` 有 **1,908 行 / 31 个顶层函数**，但真正属于「门面」的只有 4 个：
+`retriever.py` 有 **1,968 行 / 32 个顶层函数**，但真正属于「门面」的只有 4 个：
 `retrieve_documents` / `aretrieve_documents` / `aretrieve_evidence` / `aretrieve_evidence_with_retry`。
 其余是阶段函数与内部工具。
 
@@ -194,7 +194,7 @@ knowledge/*.md (41 篇)
 
 | 口径 | 模块 | 测什么 | 局限 |
 |---|---|---|---|
-| **检索门禁** | `retrieval_gate.py` | 检索本身的命中率/精度（**比基线**，容差 0.02） | 只测**学科类目**（4 选 1），且该指标已饱和在 1.0000 |
+| **检索门禁** | `retrieval_gate.py` | 检索本身的命中率/精度（**比基线**，容差 0.02） | 学科类目**已饱和**（1.0000）；章级 `kp_*` 仍有空间（0.90~0.925），但只到「章」、不到节/小节 |
 | **RAGAS** | `ragas_eval.py` | 端到端答案质量：faithfulness / context_precision / context_recall / answer_relevancy | 依赖 judge LLM，有成本与随机性 |
 
 **为什么要两套**：门禁是**回归防护**（改检索链不许退化），RAGAS 是**效果陈述**（给论文写数字）。
@@ -220,19 +220,51 @@ ragas 0.4.3 的 `aevaluate` 对 `embeddings is None` 的指标会**自动兜底*
 真实路由收益为零（连小数位都没变）。所以涉及语义质量的取舍**必须真实路由复验**。
 RAGAS 报告里会写入 `_meta.warnings` 标注这一点。
 
-### 6.3 门禁的三条路由
+### 6.3 门禁的路由
 
 ```bash
-# 默认（假模型 + 假 embedding）
-USE_FAKE_MODEL=true PYTHONPATH=src uv run python -m evaluation.retrieval_gate
-# 重排路由（生产是 use_rerank=True，默认那条漏掉重排路径）
-GATE_USE_RERANK=1 ...
+# 默认：假 embedding + 重排 off（调用方不要求重排）
+PYTHONPATH=src uv run python -m evaluation.retrieval_gate
+# 重排 on（走确定性假打分，无需 TEI）
+PYTHONPATH=src GATE_RERANK_MODE=on uv run python -m evaluation.retrieval_gate
+# 生产关闭态：要求重排、但部署关掉（复现 .env 的 RERANK_ENABLED=false）
+PYTHONPATH=src GATE_RERANK_MODE=disabled uv run python -m evaluation.retrieval_gate
 # 真实 embedding（唯一需要 TEI，用来回答「语义质量」）
-GATE_USE_REAL_EMBEDDING=1 ...
+PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.retrieval_gate
 ```
 
-三条路由**各有一份基线**，`load_baseline()` 拒绝跨口径比对（退出码 2）。
-★ 重排路由只证明**接线没坏**，不证明质量更好。
+路由按 `(embedding, rerank)` 组合区分，**已登记的组合各有一份基线**，
+`load_baseline()` 拒绝跨口径比对（退出码 2）；未登记的组合直接拒绝（`SUPPORTED_ROUTES`）。
+★ 重排 `on` 路由只证明**接线没坏**，不证明质量更好。
+★ `disabled` 与 `off` 的差别**不在最终结果，而在代码路径** —— 前者会进入重排阶段才被
+部署开关短路，候选池更大，故指标不可互比（实测 `disabled` 的 `category_precision`
+0.9874 显著高于 `off` 的 0.9561）。
+★ 各路由都跑「路由前提自检」（`_assert_route_preconditions`）：证明声称跑的那条路由
+**真的被执行了**，抓 rerank 静默回退与 `rerank_used` 自报失真。
+
+**九项指标**（`_METRIC_SPECS`）：
+
+| 指标 | 方向 | 说明 |
+|---|---|---|
+| `category_hit_at_1` / `category_hit_at_k` / `category_mrr` | higher | **学科类目**（4 选 1）—— 已饱和（`hit@k = 1.0000`） |
+| `category_precision` | higher | 返回证据中属目标学科的比例 |
+| `empty_result_rate` | lower | 返回空证据的查询比例（堵「静默返回空」盲区） |
+| `mean_evidence_count` | higher | 平均证据条数 |
+| **`kp_hit_at_k`** / **`kp_mrr`** | higher | **章级知识点**的命中率 / MRR（2026-09-24 新增） |
+| `kp_annotated` | higher | 被标注的查询条数（容差 0 ⇒ **标注被误删立刻失败**） |
+
+★ **为什么加 `kp_*`**：学科级已饱和（1.0000），**测不出任何检索改动**。章级有真实下降空间
+（实测 `off` = 0.9250、`disabled` = 0.9000），且能区分这两条路由 —— 学科级对两者都是 1.0，完全区分不出。
+
+★ **「章」的载体是知识库文件**（`chapter_of_source`），不是 H1 标题：实测 H1 不均匀 ——
+大文件 H1 = 章（`二、二叉树Binary tree`）、小文件 H1 = 具体主题（`3.链栈`），还有 `1定义`
+这类碎片（根因是部分文件**没有 H1**，splitter 便把最深标题当路径首段）。文件恰好是标准章单元
+（`05_树与二叉树` / `03_存储系统` / `05_传输层` …）。
+
+★ 黄金集侧用 `metadata.knowledge_points` 标注章名（可多个，跨章条目给双标注）。
+基线 `_meta.kp_granularity` 记录粒度载体，供 `load_baseline` 自证口径。
+
+★ **未标注的查询不进 `kp_hit@k` 分母**（`kp_annotated` 单列）—— 「未标注」不等于「未命中」。
 
 ---
 
@@ -243,7 +275,7 @@ GATE_USE_REAL_EMBEDDING=1 ...
 | 类型检查 | `pyrefly check` | **必须 0 错误**；可选依赖导入标 `# type: ignore[import-not-found]` |
 | 静态检查 | `ruff check src/` | 含 `S110`（拦静默吞异常）、`C90`（圈复杂度 ≤25） |
 | 格式 | `ruff format --check src/` | ★ **与 check 是两条命令，必须分别跑** |
-| 检索回归 | `evaluation.retrieval_gate` | 六项指标比基线，容差 0.02；三路由各一份基线 |
+| 检索回归 | `evaluation.retrieval_gate` | **九项指标**比基线，容差 0.02；按 `(embedding, rerank)` 组合分路由，各一份基线 |
 
 > ★ **命令范围**：本工作区不含 `tests/`，有效范围是 `src/`（带 `tests/` 会报 `E902`，
 > **不是代码问题**）。结构规模棘轮与覆盖率门槛**已随测试套件移出**，本工作区无自动门禁。
@@ -304,23 +336,124 @@ GATE_USE_REAL_EMBEDDING=1 ...
 
 1. **检索门禁的类目指标已饱和**（`category_hit_at_k = 1.0000`，40/40）。
    它能防回归，但**证明不了语义质量** —— 后者要靠 RAGAS 与真实 embedding 路由。
-2. **`retriever.py` 职责错位**（1,908 行 / 31 函数，门面只 4 个），可读性差，重构未做。
+2. **`retriever.py` 职责错位**（1,968 行 / 32 函数，门面只 4 个），可读性差，重构未做。
 3. **`verifier.py` 的 LLM 校验层实际未启用**（`use_llm_verify` 全为 False）。
    「有代码 ≠ 在用」，判据只能是调用链。
-4. **`did_rerank` 语义不准**（★ 2026-09-23 新发现）。
-   `_stage_rerank` 返回的 `did_rerank` 判的是「**调用了**重排」，不是「重排**生效**」。
+4. **~~`rerank_used` 语义不准~~ —— ✅ 已修（2026-09-24）**。
+   原问题：`_stage_rerank` 返回的 `rerank_used` 判的是「**调用了**重排」，不是「重排**生效**」。
    `reranker.rerank()` 在 `settings.RERANK_ENABLED` 为假时于 `reranker.py:133`
-   提前 `return documents[:top_k]`（一行重排都没跑），而 `did_rerank` 仍为 `True`。
+   提前 `return documents[:top_k]`（一行重排都没跑），而 `rerank_used` 仍为 `True`。
    本机 `.env` 正是 `RERANK_ENABLED=false` + `use_rerank` 默认 `True` 的组合
    → **报告会把「未重排」标成「已重排」**。
-   已处理：RAGAS 路径显式声明 `settings.RERANK_ENABLED = cfg.use_rerank`，
-   并在跑前用**真实推理请求**探活（不是只看 `/health`），不通即退出码 2；
-   报告写入 `_meta.run_config` 自描述实际生效口径。
-   **未处理**：`retriever.py` 本身未改（改检索链必须重跑门禁）。
+   修复：把部署开关的判定从「被调用者内部」**前移到 `_stage_rerank` 入口**
+   （`rerank_active = use_rerank and settings.RERANK_ENABLED`，**刻意不回写 `use_rerank`**
+   —— 后者还兼着候选池大小的职责）。关闭时整段短路，顺带消除了
+   「候选被 `_apply_rerank_threshold` 兜底截断到 2 条」这个**连带副作用**。
+   `reranker.py:133` 保留为防御网（触达即 warning）。
+   门禁新增 `GATE_RERANK_MODE=disabled` 路由 + `rerank_used` 断言防回归。
+   完整分析见 `docs/RERANK_SWITCH_ANALYSIS.md`。
+   另：RAGAS 路径仍显式声明 `settings.RERANK_ENABLED = cfg.use_rerank`，
+   跑前用**真实推理请求**探活（不是只看 `/health`），报告写入 `_meta.run_config`。
 5. **配置漂移**（`Settings` 用 `extra="ignore"`，`.env` 里它不认识的键**静默无效**）：
-   - `.env` 有 `RERANK_MODE`，但 `Settings` **没有这个字段** → 一直是无效残留；
+   - ✅ 已清（2026-09-24）：`.env` 的 `DATABASE_TYPE` 是唯一残留的孤儿键（已删）。
+     ★ 文档此前记录的 `RERANK_MODE` / `CONTEXT_TOKEN_BUDGET_DEEP` / `CONTEXT_TOKEN_BUDGET_SHALLOW`
+     **实测已不在 `.env` 中** —— 旧清单过期，勿再照抄。
    - `.env` **缺** `RERANK_EXPAND_FACTOR`（`.env.example` 有）→ 走默认值 5。
    核对法：`Settings.model_fields` 与 `.env.example` 的 `^[A-Z_]+=` 求**双向**差集。
+6. **~~real embedding 路由的空结果~~ —— ✅ 已修（2026-09-24）**。
+   原问题：`real+off` 路由 **3/156** 条 query 返回空（`empty_result_rate = 0.0192`），
+   而 fake 路由恒为 0 —— 因 real 路由此前一直跑不了（TEI 未起），**该问题从未暴露**。
+   **去重后本有 120+ 条候选，全部被阈值卡掉。**
+
+   **根因是两个独立缺陷叠加**（实测反推，非推断）：
+
+   | # | 缺陷 | 细节 |
+   |---|---|---|
+   | ① | **阈值校准的数学前提被违反** | `_resolve_retrieval_policy` 的校准公式基于 **k=20**（其注释里就是 `2.5/40` 的算例），但 `_dynamic_rrf_k` 在 13 条路由时给出 **k=36**，分数尺度随之缩小约 1.8× |
+   | ② | **HyDE 兜底恰好对这三类禁用** | `should_trigger_hyde` 对 `answer`/`exercise`/`code` 直接 `return False`，而这 3 条正是 answer×2 + code×1 |
+
+   数字链条（实测）：
+   ```
+   阈值 = 0.06 × (2.5/1.5) × 微调 = 0.12（answer/exercise）· 0.11（long/comparison）
+   RRF 可达上限（两条最高权重路由相加）= 2.5/37 + 1.5/37 = 0.1081
+   → 阈值 > 上限 → 只要 top 文档没命中 ≥3 条路由，必然返回空
+   ```
+
+   **修复**：`_stage_dedup_and_threshold` 末尾加「空结果保底」—— 过阈值后为空、
+   但去重后有候选时，返回 **top-1** 并打 warning。
+   **刻意不调阈值**：`RETRIEVAL_ROADMAP.md` 的「不做清单」明确列着「检索阈值微调」（#13/#25，
+   三次实证真实口径零收益或有害）。且该 bug 的本质是**「有候选却返回空」这个独立的降级缺陷** ——
+   LLM 拿不到任何上下文 → 必然答错，比返回低分候选更糟。取 top-1 而非 top-k：不假装这些文档
+   「合格」，并保留低召回信号（`docs_count<2`）给下游 HyDE。
+
+   **效果**：`real+off` 空结果 **0.0192 → 0.0000**；`cat@k` 0.8462 → **0.8590**、
+   `kp@k` 0.7756 → **0.7821**。连带发现 **`fake+disabled` 也会触发**（候选池更大、路径不同）
+   → 一并重录基线；`fake+off` / `fake+on` 逐位未变。**5 条路由的 `empty_result_rate` 现全为 0。**
+
+   **未做（需决策）**：缺陷 ① 的**阈值校准本身**没有修 —— 修它等价于调阈值（在「不做清单」内），
+   且会改变**全部** query 的阈值。若要修，应让阈值随 `_dynamic_rrf_k` 同比缩放
+   （`× (_RRF_K_BASE+1)/(rrf_k+1)`），并在**真实路由**上验证是否伤 precision。
+7. **~~`--update-baseline` 会把故障态写成基线~~ —— ✅ 已修（2026-09-24）**。
+   原问题：`--update-baseline` 只拒绝「有 query **抛异常**」的情况，而
+   **静默返回空不抛异常** —— 一次 Chroma 索引竞态让 16/156 条 query 返回空
+   （`empty` 0 → 0.1026、`cat@k` 0.7949 → 0.5705），门禁**照样把故障态写成了基线**，
+   复跑才发现。**录制侧的静默失败与判定侧的静默失败同样危险** ——
+   后者早有 `report_retrieval_anomalies` 防护，前者此前没有。
+
+   **修复**：新增 `check_baseline_sanity(metrics, baseline_path)`，写盘前与**现有基线**比对，
+   命中任一类可疑点即拒绝：
+
+   | 检查 | 阈值 | 依据 |
+   |---|---|---|
+   | 指标偏离旧基线 | > **0.10** | 正常的数据/代码改动远小于此（实测 1.2 改切分让 `cat@k` 动 0.013、`cat_prec` 动 0.031）；而该故障是 **Δ0.22**，量级差一个数量级 |
+   | **空结果率上升** | **任何上升** | 与 `_METRIC_SPECS` 里 `empty_result_rate` 的容差 0 一致。**只查上升** —— 下降是好事；且不能写成「>0 即拒」，`real` 路由修复前合法地处于 0.0192 |
+
+   旧基线不存在 / 读不出 / 口径不一致时**放行**（无可比对象，不该拦）。
+   拒绝时打印可疑点 + 两种处置建议（故障→复跑；预期内改动→`--force-baseline`），
+   逃生通道成功后注明「已跳过合理性校验」。
+
+   **反向验证**（守卫必须被证明**会拦**，不能只看它存在）：
+
+   | 场景 | 期望 | 实测 |
+   |---|---|---|
+   | 指标与旧基线一致 | 放行 | ✅ |
+   | `cat@k` 0.8462 → 0.5705（复现该故障） | 拦住 | ✅ |
+   | 空结果率 0 → 0.1026（复现该故障） | 拦住 | ✅ |
+   | 旧基线口径不一致 | 放行 | ✅ |
+   | 旧基线不存在 | 放行 | ✅ |
+
+   端到端：故意把基线 `cat@k` 改成 0.50 → `--update-baseline` **拒绝、退出码 2、
+   文件未被改写**；`--force-baseline` 则成功覆盖并注明跳过。正常路径不受影响。
+8. **~~出题类查询被判「学科未命中」~~ —— ✅ 已修（2026-09-24）**。
+   原问题：`category_hit_at_k` / `category_hit_at_1` 只认 `SUBJECT_TO_CATEGORY` 映射出的
+   **一个**学科类目，而 `questions`（历年真题）**不是学科**、不在映射表里。
+   于是对出题类查询「请出一道关于 X 的题」，**返回历年真题 —— 恰恰是正确行为 ——
+   被判成「学科未命中」**。实测 `generate` 类 `cat@1` 一度只有 **0.0312**（几乎全判错）：
+   32 条出题查询里有 17 条在报告里显示「期望 data_structure，实际 questions」。
+
+   **修复**：把「期望类目」从**单值**改为**多值**：
+
+   | 位置 | 改动 |
+   |---|---|
+   | `load_golden_queries` | 对 `query_type == "generate"` 返回 `(对应学科, "questions")` |
+   | `QueryOutcome` | `expected_category: str` → `expected_categories: tuple[str, ...]` |
+   | `first_correct_rank` / `category_precision` | 单值相等 → **成员判断**（命中任一即算命中） |
+
+   合法来源因此变成「**对应学科的讲义** 或 **历年真题**」二者之一 —— 这正是出题场景的真实语义。
+
+   **效果（real+off）**：`cat@1` 0.6987 → **0.8846**、`cat@k` 0.8590 → **0.9423**、
+   `cat_mrr` 0.7507 → **0.9092**、`cat_prec` 0.7939 → **0.8923**；
+   门禁的「首条未命中」列表从 **46 条降到 18 条**，**出题类条目全部消失**。
+   ★ 关键验证：**`kp_hit_at_k` / `kp_mrr` 逐位不变**（0.7821 / 0.6107）——
+   说明这次只修正了类目口径、没动知识点口径，**不是靠放宽指标刷分**。
+
+   **代价（诚实记录）**：出题类的 `cat@*` 变宽松了 —— 它现在只回答「是否命中了对应学科
+   **或**真题」，不再区分二者。若要单独看「真题召回得够不够」，应看 merged_qa 在证据里的
+   占比（门禁暂未提供该指标，见第 6 条的说明）。
+
+   **顺带解锁**：`recall.py` 里 `merged_qa_meta` 路由的恢复前置（「先解决 `questions` 的
+   度量语义」）由此满足 —— 该路由可以重新评估了（改动存于仓库外
+   `edu-agent-merged_qa_route.patch`）。
 6. **阈值在 import 期固化**（`retriever.py` 里 `SCORE_THRESHOLD = settings.XXX`），
    改 `.env` 后**必须重启服务**才生效。反例：`RERANK_ENABLED` 是**调用期**读取，
    所以命令行临时覆盖是有效的 —— **两类字段必须区分对待**。

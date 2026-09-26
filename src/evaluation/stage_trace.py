@@ -15,6 +15,24 @@
 这个性质也决定了它对重构友好：**拆分只改变调用点，不改变这些函数的契约**，
 因此同一份记录在拆分前后必须逐字匹配。
 
+追踪入口必须与生产一致（2026-09-24 修）
+--------------------------------------
+本工具原先从 `aretrieve_documents` 进入 —— 那是**文档层**；而 `afuse_documents` /
+`averify_evidence` 只在**证据层** `aretrieve_evidence` 里被调用。后果是
+`STAGE_TARGETS` 里补的这两个目标**恒为 0 次**：patch 机制正确、符号也确实存在，
+只是那段代码在追踪链路上**永远走不到**。
+
+更隐蔽的是它为什么没被发现：验证「机制生效」时用的是 `aretrieve_evidence` 路径
+（确能触发 1 次），而录基线用的是 `record_query`（走文档层）——
+**验机制的入口 ≠ 录基线的入口**，两边都「通过」，却什么都没覆盖到。
+这类缺陷比「补一个指标」更危险：它看着像「已覆盖」，实为新的盲区。
+
+现在统一从 `aretrieve_evidence_with_retry` 进入（**与检索门禁同一个入口**），
+链路 = 文档层 8 阶段 + 门面层 3 步（`aretrieve_evidence` → `afuse_documents` →
+`averify_evidence`），是原先的**真超集**：`_stage_decompose_query` 在拿到预计算子查询时
+会跳过 `decompose`，但 `aretrieve_evidence` 自己会直接调用模块级 `decompose`，
+故该阶段仍被追踪到（已实测，非推断）。
+
 刻意不追踪的东西
 ----------------
 - `_safe_to_thread`：它是"把调用挪到线程"的实现细节，不是行为契约。
@@ -51,12 +69,15 @@ import math
 import shutil
 import tempfile
 import time
+from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from langchain_core.documents import Document
+
+from rag.evidence import TextEvidence
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +90,28 @@ STAGE_TARGETS: tuple[tuple[str, str], ...] = (
     ("decompose", "decompose"),
     ("recall_multi_route", "_multi_route_search"),
     ("recall_multi_route_async", "_amulti_route_search"),
+    # RRF 融合有**两个入口**，此前只追踪了分解用的那个，导致主 RRF 成为观测盲区：
+    #   - `weighted_rrf_merge`  仅**查询分解**时走（原始查询 1.5 : 子查询 1.0 加权）
+    #   - `merge_route_results` **所有查询**都走（主 RRF，加权 RRF 公式）
+    # 后果：实测 `fuse_rrf` 只出现 9/40，看着像「RRF 大部分时候没跑」，
+    # 实际是主路径没被追踪（9 恰等于 decomposed 的条数）。补上 `fuse_rrf_main` 消除该误读。
     ("fuse_rrf", "weighted_rrf_merge"),
+    ("fuse_rrf_main", "merge_route_results"),
+    # ── 门面层三步（此前是观测盲区）────────────────────────────────
+    # `afuse_documents` / `averify_evidence` 在 `aretrieve_evidence` 里是**函数内局部导入**
+    # （`from rag.fusion import afuse_documents`），因此**不是** `rag.retriever` 的模块级属性，
+    # 用 `getattr(R, ...)` 取不到。故目标支持 `"module:attr"` 写法 → 直接 patch 源模块的属性；
+    # 局部导入每次调用都会重读源模块属性，所以 patch 生效。
+    # 这样不必为了可追踪而把局部导入提到模块级（不动运行时模块，零风险）。
+    #
+    # ⚠️ 但「patch 生效」≠「会被调用」：这三个目标只在**证据层**被走到，
+    # 而追踪入口曾经是文档层的 `aretrieve_documents` → 它们恒为 0 次。
+    # 故 `record_query` / `probe_query_stability` **必须**从
+    # `aretrieve_evidence_with_retry` 进入（见模块文档串）。
+    # 这条依赖靠 `_stage_trigger_report` 的触发率表兜住：0 次会显式标出来。
+    ("retrieve_evidence", "aretrieve_evidence"),
+    ("fuse_documents", "fusion:afuse_documents"),
+    ("verify", "verifier:averify_evidence"),
     ("dedup_section", "dedup_same_section"),
     ("rerank", "rerank"),
     ("apply_threshold", "_apply_rerank_threshold"),
@@ -91,6 +133,18 @@ def signature(value: Any) -> Any:
         return value
     if isinstance(value, float):
         return value
+    if isinstance(value, TextEvidence):
+        # 证据层的对应物：文档层比 `Document`，证据层比 `TextEvidence`。
+        # 字段与下面的 `Document` 分支**刻意同构**（src / sec / hash / score / rerank / routes），
+        # 这样「文档层→证据层」重构前后的最终签名仍可对照，不会因为换了载体就失去可比性。
+        return {
+            "src": value.source,
+            "sec": value.section_path or value.chunk_id,
+            "hash": hashlib.sha1(value.content.encode("utf-8")).hexdigest()[:12],
+            "score": float(value.recall_score or 0.0),
+            "routes": value.metadata.get("recall_routes") or "",
+            "rerank": float(value.rerank_score or 0.0),
+        }
     if isinstance(value, Document):
         meta = value.metadata or {}
         return {
@@ -148,18 +202,34 @@ class StageTrace:
 
 @contextmanager
 def trace_stages():
-    """在上下文内拦截 `rag.retriever` 的阶段函数，把调用记录进 yield 出的列表。"""
+    """在上下文内拦截检索链的阶段函数，把调用记录进 yield 出的列表。
+
+    目标写法见 ``STAGE_TARGETS``：裸名 → ``rag.retriever.<name>``；
+    ``"module:attr"`` → ``rag.<module>.<attr>``（用于函数内局部导入的依赖）。
+    """
+    import importlib
+
     import rag.retriever as R
 
     steps: list[StageStep] = []
-    originals: dict[str, Any] = {}
+    originals: list[tuple[Any, str, Any]] = []  # (所属模块, 属性名, 原函数)
 
-    for stage, attr in STAGE_TARGETS:
-        original = getattr(R, attr, None)
+    for stage, target in STAGE_TARGETS:
+        if ":" in target:
+            mod_name, attr = target.split(":", 1)
+            try:
+                module = importlib.import_module(f"rag.{mod_name}")
+            except ImportError:
+                logger.warning("模块不存在，跳过追踪: rag.%s", mod_name)
+                continue
+        else:
+            module, attr = R, target
+
+        original = getattr(module, attr, None)
         if original is None:
-            logger.warning("阶段函数不存在，跳过追踪: rag.retriever.%s", attr)
+            logger.warning("阶段函数不存在，跳过追踪: %s.%s", module.__name__, attr)
             continue
-        originals[attr] = original
+        originals.append((module, attr, original))
 
         if inspect.iscoroutinefunction(original):
 
@@ -177,22 +247,46 @@ def trace_stages():
                 steps.append(StageStep(_s, ins, signature(out)))
                 return out
 
-        setattr(R, attr, wrapper)
+        setattr(module, attr, wrapper)
 
     try:
         yield steps
     finally:
-        for attr, original in originals.items():
-            setattr(R, attr, original)
+        for module, attr, original in originals:
+            setattr(module, attr, original)
+
+
+async def _retrieve_fused(query: str, *, k: int, use_rerank: bool):
+    """从**证据层**入口检索 —— 与检索门禁（`retrieval_gate.run_gate`）**同一个入口**。
+
+    为什么不能从 `aretrieve_documents` 进入：那是文档层，`afuse_documents` /
+    `averify_evidence` 永远走不到，追踪里会出现两个恒为 0 的假指标
+    （见模块文档串「追踪入口必须与生产一致」）。
+
+    ``max_retries=0`` 是为了**可复现**：带重试时同一条 query 调用 `aretrieve_evidence`
+    的次数会随 verdict 变化，阶段序列长度不稳定，「逐阶段比对」就失去意义了。
+    """
+    import rag.retriever as R
+
+    fused, _verdict = await R.aretrieve_evidence_with_retry(
+        query=query,
+        k=k,
+        use_rerank=use_rerank,
+        max_retries=0,
+        use_llm_verify=False,
+    )
+    return fused
 
 
 async def record_query(query: str, *, k: int = 5, use_rerank: bool = False) -> StageTrace:
-    """跑一条 query，返回阶段级追踪。"""
-    import rag.retriever as R
+    """跑一条 query，返回阶段级追踪。
 
+    最终签名的载体是 ``fused.text_evidences`` —— 文档层的 ``list[Document]``
+    在证据层已不存在，故取证据列表作对应物（`signature` 两个分支刻意同构）。
+    """
     with trace_stages() as steps:
-        docs = await R.aretrieve_documents(query, k=k, use_rerank=use_rerank)
-    return StageTrace(query=query, steps=list(steps), final=signature(docs))
+        fused = await _retrieve_fused(query, k=k, use_rerank=use_rerank)
+    return StageTrace(query=query, steps=list(steps), final=signature(fused.text_evidences))
 
 
 async def probe_query_stability(
@@ -207,12 +301,11 @@ async def probe_query_stability(
     Returns:
         ``(是否稳定, 各次运行的最终签名)``。返回签名便于把不稳定项报给使用者。
     """
-    import rag.retriever as R
-
     finals: list[Any] = []
     for _ in range(max(1, repeats)):
-        docs = await R.aretrieve_documents(query, k=k, use_rerank=use_rerank)
-        finals.append(signature(docs))
+        # 必须与 `record_query` 走**同一个入口**，否则探测的稳定性与录基线的东西不是一回事
+        fused = await _retrieve_fused(query, k=k, use_rerank=use_rerank)
+        finals.append(signature(fused.text_evidences))
     stable = all(f == finals[0] for f in finals[1:])
     return stable, finals
 
@@ -453,7 +546,9 @@ async def record_all(
     """
     from evaluation.retrieval_gate import load_golden_queries
 
-    queries = [q for q, _ in load_golden_queries("evals/sample_408.jsonl", limit=limit)]
+    # `load_golden_queries` 返回 (query, category, knowledge_points) 三元组；
+    # 这里只要 query。
+    queries = [q for q, _cat, _kps in load_golden_queries("evals/sample_408.jsonl", limit=limit)]
     traces: list[StageTrace] = []
     excluded: list[str] = []
     for query in queries:
@@ -466,6 +561,30 @@ async def record_all(
                 continue
         traces.append(await record_query(query, k=k, use_rerank=use_rerank))
     return traces, excluded
+
+
+def _stage_trigger_report(traces: list[StageTrace]) -> str:
+    """阶段触发率表。
+
+    为什么工具本身必须打这张表：它此前只打印「比对结果」，而**触发率**才是发现
+    「某阶段恒为 0 次」的唯一途径 —— 补了追踪目标但入口走不到时，比对会一路通过，
+    因为基线与当前**双方都是 0**。0 次不一定是缺陷（如 `rerank` 在 `use_rerank=False`
+    下本就该为 0），所以这里只标出来、由人判断，不自动判失败。
+    """
+    n = len(traces)
+    counter: Counter[str] = Counter()
+    for trace in traces:
+        for step in trace.steps:
+            counter[step.stage] += 1
+
+    names = [stage for stage, _ in STAGE_TARGETS]
+    width = max((len(s) for s in names), default=10)
+    lines = [f"\n阶段触发率（{n} 条 query，共 {sum(counter.values())} 次阶段调用）："]
+    for stage in names:
+        got = counter.get(stage, 0)
+        note = "  ← 0 次：需确认是「本就该 0」还是「观测盲区」" if got == 0 else ""
+        lines.append(f"  {stage:<{width}} {got:>4}/{n}{note}")
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -535,6 +654,7 @@ def main(argv: list[str] | None = None) -> int:
             f"追踪 {len(traces)} 条 query（{time.perf_counter() - start:.1f}s），"
             f"平均每条约 {sum(len(t.steps) for t in traces) / max(len(traces), 1):.1f} 个阶段调用"
         )
+        print(_stage_trigger_report(traces))
         if excluded:
             print(
                 f"[已排除] {len(excluded)} 条 query 的最终结果不可复现"

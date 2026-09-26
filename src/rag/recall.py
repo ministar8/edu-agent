@@ -151,18 +151,23 @@ def build_metadata_routes(
             ("code_meta", focus_query, combine_filters(base_filter, {"content_type": "code_mixed"}))
         )
 
+    # ★ 这两条曾按 `content_type` 过滤，但那个字段**从不产出 exercise / answer**：
+    # `detect_content_type` 把这两条规则排在通用形状规则（# 标题 / 列表）之后，
+    # 被提前返回吃掉 —— 实测 406 个「题」候选全部落到 list/text/section，路由恒返回空。
+    # 现改用 splitter 写入的**语义标志**（`is_exercise_content` / `has_answer_marker`）：
+    # 与形状解耦，且**不改 content_type 的判定顺序** → chunk 尺寸与 chunk_id 都不变。
     if cat.is_exercise:
         metadata_routes.append(
             (
                 "exercise_meta",
                 normalized,
-                combine_filters(base_filter, {"content_type": "exercise"}),
+                combine_filters(base_filter, {"is_exercise_content": True}),
             )
         )
 
     if cat.is_answer:
         metadata_routes.append(
-            ("answer_meta", normalized, combine_filters(base_filter, {"content_type": "answer"}))
+            ("answer_meta", normalized, combine_filters(base_filter, {"has_answer_marker": True}))
         )
 
     # concept 查询走 section 路由；comparison 查询额外走 table 路由（对比表多为 table 类型）
@@ -212,15 +217,37 @@ def build_metadata_routes(
             ("table_meta", focus_query, combine_filters(base_filter, {"content_type": "table"}))
         )
 
-    # 注：这里曾有 `merged_qa_meta` 路由（对 exercise / answer / comparison 查询按
-    # `content_type=merged_qa` 过滤）。**实测该 content_type 恒不存在** ——
-    # splitter 的 Q&A 检测链断在三处（`_ANSWER_RE` 只认「答案：/解答：/正确答案：」，
-    # 而真题用「选项行尾 ✅ + **解析**：」，故 `content_type` 永不成为 `merged_qa`），
-    # 于是这条路由**永远返回空**，而它带的权重 2.0 从未被真实数据校准过。
-    # 已按 backlog #8 删除。
+    # ── `merged_qa_meta` 路由：两轮实测均为净负 → 不加（2026-09-24 定案）──
+    # 这条路由曾被删除（backlog #8），理由是「`content_type=merged_qa` 恒不存在 → 路由永远
+    # 返回空」：splitter 的 Q&A 检测链断在 `_ANSWER_RE` 认不出真题写法（选项行尾 ✅ +
+    # `**解析**：`），于是 `questions/` 一个 merged_qa chunk 都产不出来，旧路由带着一个
+    # **从未被校准过的 2.0**。当时留的恢复条件：**先修好生产端，再用门禁重新校准权重**。
     #
-    # 若将来要重新引入：**先修好生产端并让真题真的产出 merged_qa chunk，
-    # 再用门禁重新校准权重** —— 不要直接抄回一个没测过的 2.0。
+    # 【第一轮（问题 4 修复前）】按约定重新引入，触发 exercise/answer、权重 1.5，
+    # 用**真实 embedding 路由**校准。路由确实按预期工作（generate 的 merged_qa 占比
+    # 65.4% → 79.4%、grade 17.0% → 46.7%），但全部门禁指标退化：
+    #   `cat@k` 0.8590 → 0.8205、`kp@k` 0.7821 → **0.7179（−0.064，超容差 3 倍）**、
+    #   `kp_mrr` 0.6107 → 0.5661。
+    # 当时判定根因是度量口径：真题来自 `questions/`，它不是学科类目 → 「返回真题」被判
+    # 「学科未命中」。于是先去修了那个口径（见 `retrieval_gate.load_golden_queries`）。
+    #
+    # 【第二轮（问题 4 修复后）——**这次纠正了上一轮的诊断**】
+    #   `cat@k` 0.8205 → **0.9359**、`cat@1` 0.6731 → **0.8782**  ← 退化大幅缓解，
+    #     符合「上一轮 cat@* 的退化是度量口径导致」的预期（generate 的 `cat@1` 已达 1.0000）。
+    #   但 `kp@k` **0.7179 → 0.7179 纹丝不动**，仍退化 −0.0642。
+    #
+    # ★ **这说明 `kp@*` 的退化不是度量口径导致的，而是真实损失**：推高 merged_qa 占比，
+    # 就是把**与考点直接对应的讲义章节挤出 top-5**（`grade` 的 `kp@k` 0.7812 → 0.5938，
+    # 降幅最大）。而这与 `questions` 类目那种「合法替代来源」**性质不同** ——
+    # `20XX_408_exam` 作为「知识点」说不出是哪个考点，若放宽它等于让任意真题命中任意考点，
+    # 指标会失去意义。**故不能靠再放宽一次指标来让这条路由"好看"。**
+    #
+    # 结论：**不加**。收益本就边际（不加时 generate 已有 65.4% 是 merged_qa），
+    # 代价是真实的考点覆盖损失。
+    #
+    # ★ 另一个必须记住的事实：**不加这条路由，merged_qa 也已经被大量召回了** ——
+    # generate 类的 top-5 里本就有 65.4% 是 merged_qa（经 `semantic`/`keyword_bm25`/`focus`
+    # 等基础路由）。所以「merged_qa 无路由使用」这个描述在 1.2 之后**已不准确**。
 
     # 去重：同 query + 同 filter 只保留一条
     deduped: list[tuple[str, str, dict | None]] = []
@@ -270,6 +297,8 @@ _ROUTE_WEIGHTS: dict[tuple[str, str], float] = {
     ("formula_meta", "structured"): 1.8,
     ("table_meta", "concept"): 1.5,
     ("table_meta", "structured"): 1.5,
+    # 注：`merged_qa_meta` 的权重曾在此登记（1.5，2026-09-24 校准）。
+    # 该路由实测净负（见 `build_metadata_routes` 末尾的说明），已撤销，故此处一并移除。
 }
 
 # 查询类型优先级：精确匹配 > default 回退
@@ -524,16 +553,25 @@ def resolve_collection_routes(
         cat = classify_query(query, terms)
     collections = _infer_subject_collections(normalized) or list(SUBJECT_COLLECTIONS)
 
-    if cat.is_answer:
-        collections.append("answers")
     if cat.is_exercise:
         collections.append("questions")
-    if cat.is_structured and any(
-        marker in normalized for marker in ("路径", "路线", "怎么学", "学习计划", "学习路径")
-    ):
+    # ★ 原先这里要求 `cat.is_structured and 含路径类词` —— **条件过严**：
+    # 纯学习路径查询（如「408 应该怎么学」）`is_learning_path=True` 但 `is_structured=False`，
+    # 于是拿不到 `learning_paths` 集合（24 chunk 对这类查询**完全不可达**）。
+    # 正确的信号是 `cat.is_learning_path`（由 `_RULE_MARKERS["learning_path"]` 判定）；
+    # 额外保留「路径 / 路线 / 学习计划」三个标记，是为了覆盖规则表未收录的写法（不丢原有覆盖面）。
+    if cat.is_learning_path or any(marker in normalized for marker in ("路径", "路线", "学习计划")):
         collections.append("learning_paths")
-    if cat.is_code:
-        collections.append("answers")
+
+    # ⚠️ 这里曾有两条对 `answers` 集合的引用（`is_answer` 与 `is_code` 时追加），
+    # 但**该集合从未被创建**：`knowledge/` 下无 `answers/` 目录，
+    # `ingest.DEFAULT_CATEGORIES` 也不含它。实测每次命中都抛
+    # `Collection [answers] does not exist` —— 白花一次 Chroma 往返，
+    # 且这条 WARNING 与「真实集合故障」长得**一模一样**，会掩盖真信号。
+    # 2026-09-24 移除。若将来真要建 `answers` 集合（存标准答案供批改），
+    # 需连同入库配置一起加回，不要只改这里。
+    # 注：`is_code` 原本也指向 `answers` —— 语义上本就不通（代码内容在 4 科集合的
+    # `code_mixed` chunk 里），一并去掉。
 
     deduped: list[str] = []
     seen: set[str] = set()

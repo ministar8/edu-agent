@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -70,6 +71,15 @@ async def prepare_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> l
     return filled
 
 
+def _finite_score(value: Any) -> float | None:
+    """把 RAGAS 单条分数转成可序列化数值；失败/NaN 记为 None。"""
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(score) else round(score, 4)
+
+
 def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> dict[str, Any]:
     """对已填充 contexts/answer 的样本跑 RAGAS 指标。"""
     if not samples:
@@ -91,6 +101,7 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
             context_recall,
             faithfulness,
         )
+        from ragas.run_config import RunConfig  # type: ignore[import-not-found]
     except ImportError as e:
         return {"_meta": {"n": len(samples), "error": f"ragas/datasets 未安装: {e}"}}
 
@@ -104,7 +115,7 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
     if not metrics:
         return {"_meta": {"n": len(samples), "error": "no metrics"}}
 
-    judge = build_judge_llm()
+    judge = build_judge_llm(timeout=cfg.ragas_timeout)
     for m in metrics:
         if hasattr(m, "llm"):
             try:
@@ -155,13 +166,40 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
     _patch_ragas_json_fallback()
     records = [s.to_ragas_dict() for s in samples]
     dataset = Dataset.from_list(records)
+    run_config = RunConfig(
+        timeout=cfg.ragas_timeout,
+        max_retries=cfg.ragas_max_retries,
+        max_wait=cfg.ragas_max_wait,
+        max_workers=cfg.ragas_max_workers,
+        log_tenacity=True,
+        seed=42,
+    )
+    logger.info(
+        "RAGAS judge 运行参数：timeout=%ss retries=%d max_wait=%ss workers=%d batch=%d",
+        cfg.ragas_timeout,
+        cfg.ragas_max_retries,
+        cfg.ragas_max_wait,
+        cfg.ragas_max_workers,
+        cfg.ragas_batch_size,
+    )
 
     try:
         # ★ 必须显式收窄：`evaluate` 的注解是 `Union[EvaluationResult, Executor]`
         # （`return_executor=True` 才给 Executor），而 `__getitem__` 只定义在
         # `EvaluationResult` 上 → 静态检查器对 `result[name]` 报 bad-index。
         # 用 cast 而非 `# type: ignore`：这里不是「检查器误报」，是注解不够精确。
-        result = cast("EvaluationResult", evaluate(dataset, metrics=metrics))
+        # RunConfig 重点：RAGAS 默认 max_workers=16、max_retries=10；在云端 judge
+        # 上容易并发排队并触发请求超时。这里降低并发、缩短重试等待，并提高单次预算。
+        result = cast(
+            "EvaluationResult",
+            evaluate(
+                dataset,
+                metrics=metrics,
+                run_config=run_config,
+                batch_size=cfg.ragas_batch_size,
+                raise_exceptions=False,
+            ),
+        )
     except Exception as e:
         logger.error("ragas.evaluate 失败: %s", e, exc_info=True)
         return {"_meta": {"n": len(samples), "error": str(e)}}
@@ -188,7 +226,40 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
         except Exception:
             logger.warning("指标 %s 读取失败", name, exc_info=True)
             out[name] = {"mean": None, "n": 0}
+
+    if cfg.include_details:
+        score_rows = getattr(result, "scores", [])
+        details: list[dict[str, Any]] = []
+        for index, sample in enumerate(samples):
+            row_scores = score_rows[index] if index < len(score_rows) else {}
+            item: dict[str, Any] = {
+                "index": index + 1,
+                "query": sample.query,
+                "query_type": sample.metadata.get("query_type") or "concept",
+                "subject": sample.metadata.get("subject", ""),
+                "reference": sample.reference,
+                "answer": sample.answer,
+                "contexts": sample.contexts,
+                "retrieval": sample.retrieval_details,
+            }
+            for name in cfg.ragas_metrics:
+                item[name] = None if name in dropped else _finite_score(row_scores.get(name))
+            details.append(item)
+        out["details"] = details
     return out
+
+
+def _type_distribution(samples: list[EvalSample]) -> dict[str, int]:
+    """本次实际评测样本的 ``query_type`` 分布。
+
+    为什么写进报告：抽样跑子集时，`n=60` 说明不了任何事 —— 关键是**这 60 条覆盖了哪几类**。
+    缺了 `generate`/`grade`/`code` 的样本，等于又退回 0.1 之前「只有概念题」的盲区，
+    而报告本身看不出这一点。老样本无该字段 → 归入 ``concept``（它们是纯概念题）。
+    """
+    counter: Counter[str] = Counter()
+    for s in samples:
+        counter[s.metadata.get("query_type") or "concept"] += 1
+    return dict(sorted(counter.items()))
 
 
 async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
@@ -196,7 +267,11 @@ async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
     from core.settings import settings
     from evaluation.dataset import load_dataset
 
-    samples = load_dataset(cfg.dataset_path, limit=cfg.dataset_limit)
+    samples = load_dataset(
+        cfg.dataset_path,
+        limit=cfg.dataset_limit,
+        sample_per_type=cfg.sample_per_type,
+    )
     if not samples:
         return {"_meta": {"error": f"empty dataset: {cfg.dataset_path}"}}
 
@@ -205,19 +280,32 @@ async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
 
     # ★ 报告自描述：把「本次实际生效的口径」写进去。
     # 动机：`cfg.use_rerank=True` 与实际是否重排**不是一回事** ——
-    # `reranker.rerank()` 在 `settings.RERANK_ENABLED` 为假时提前返回原序，
-    # 而 `_stage_rerank` 的 `did_rerank` 仍为 True（它判「调用了」而非「生效了」）。
+    # `reranker.rerank()` 在 `settings.RERANK_ENABLED` 为假时提前返回原序。
+    # （2026-09-24 起 `_stage_rerank` 的 `rerank_used` 已如实反映这一点，
+    #  但报告仍要自描述：口径标签不该依赖下游字段的语义长期不变。）
     # 数字一旦离开运行现场，参数标签就只能靠报告里的这几行 —— 不能靠记忆。
     report.setdefault("_meta", {})
     report["_meta"]["run_config"] = {
         "dataset": cfg.dataset_path,
         "limit": cfg.dataset_limit,
+        # 抽样口径必须写进报告：只跑子集时，「n」不足以说明测的是哪一批。
+        # 类型分布是判断「这次抽样是否覆盖了 4 类查询」的唯一依据。
+        "sample_per_type": cfg.sample_per_type,
+        "query_type_distribution": _type_distribution(samples),
         "retrieval_k": cfg.retrieval_k,
         "requested_use_rerank": cfg.use_rerank,
         "effective_rerank_enabled": bool(settings.RERANK_ENABLED),
         "embedding_fake": bool(settings.USE_FAKE_EMBEDDING),
         "embedding_model": None if settings.USE_FAKE_EMBEDDING else settings.EMBEDDING_MODEL,
         "metrics_requested": list(cfg.ragas_metrics),
+        "ragas_run_config": {
+            "timeout": cfg.ragas_timeout,
+            "max_retries": cfg.ragas_max_retries,
+            "max_wait": cfg.ragas_max_wait,
+            "max_workers": cfg.ragas_max_workers,
+            "batch_size": cfg.ragas_batch_size,
+        },
+        "include_details": cfg.include_details,
         "n_filled": len(filled),
         "n_loaded": len(samples),
     }

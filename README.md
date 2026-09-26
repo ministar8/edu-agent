@@ -67,13 +67,15 @@ edu-agent/
 
 | 入口 | 用途 |
 |---|---|
-| `uv run python -m evaluation.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
-| `uv run python -m evaluation.retrieval_gate` | 检索质量门禁：六项指标对基线，**三条路由各一份基线** |
+| `PYTHONPATH=src uv run python -m evaluation.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
+| `PYTHONPATH=src uv run python -m evaluation.retrieval_gate` | 检索质量门禁：**九项指标**对基线（含章级 `kp_hit@k` / `kp_mrr`），**每条路由各一份基线** |
 | `scripts/tei_deploy.ps1` | 本机 TEI 容器部署（embedding + reranker） |
 
-> 检索门的真实口径需区分三条路由：默认（假 embedding / 重排关）、`GATE_USE_RERANK=1`（假重排）、
-> `GATE_USE_REAL_EMBEDDING=1`（真实 TEI，**只有这条能回答语义质量问题**）。
-> 跨口径比对会被拒绝（退出码 2）。细节见 `docs/ARCHITECTURE.md`。
+> 检索门的真实口径按 `(embedding, rerank)` 组合区分：默认（假 embedding / 重排 `off`）、
+> `GATE_RERANK_MODE=on`（假重排）、`GATE_RERANK_MODE=disabled`（**要求重排但部署关掉**
+> —— 生产 `RERANK_ENABLED=false` 的实际口径）、`GATE_USE_REAL_EMBEDDING=1`（真实 TEI，
+> **只有这条能回答语义质量问题**）。未登记的组合与跨口径比对都会被拒绝（退出码 2）。
+> `GATE_USE_RERANK=1` 是 `GATE_RERANK_MODE=on` 的兼容别名。细节见 `docs/ARCHITECTURE.md`。
 
 ## 快速开始
 
@@ -107,7 +109,7 @@ docker run -d --name tei-reranker --gpus all -p 11436:80 \
 Windows 下推荐用 `scripts/tei_deploy.ps1`（容器已存在时用 `docker start`，勿 `docker run` 重建）。
 
 > 启动后模型加载约需 50 秒。**校验请用真实推理请求**，`/health` 返回 200 不代表模型已就绪。
-> 端口须与 `.env` 的 `EMBEDDING_BASE_URL` / `RERANK_BASE_URL` 一致（默认 11435 / 11436）。
+> 端口须与 `.env` 的 `EMBEDDING_API_BASE` / `RERANK_LOCAL_URL` 一致（默认 11435 / 11436）。
 
 ### 4. 构建知识库
 
@@ -148,7 +150,7 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 ```bash
 uv sync --group eval
 # 需 TEI embedding + 知识库 + LLM 配置
-uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 40
+PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 40
 ```
 
 报告输出到 `evals/results/ragas_*.json`。

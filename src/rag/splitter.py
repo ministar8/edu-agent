@@ -236,9 +236,33 @@ _LIST_ITEM_RE = re.compile(r"^(?:[-*+]|\d+[.．])\s+", re.MULTILINE)
 # 例题模式：> 例题 / > 例N / > 例1：
 _EXAMPLE_Q_RE = re.compile(r"^>\s*(?:例[题\d]|例\d+[：:])", re.MULTILINE)
 # 答案模式：答案： / 正确答案： / 正确答案选择 X
-_ANSWER_RE = re.compile(r"(?:解答|答案|正确答案)[：:；;]", re.MULTILINE)
-# 答案字母提取：正确答案：D / 答案：B
-_ANSWER_KEY_RE = re.compile(r"(?:正确答案|答案)[：:；;]\s*([A-E](?:,[A-E])*)")
+# ── 答案标记 ──────────────────────────────────────────
+# 两种**书写形态**都要认，否则真题永远产不出 merged_qa（实测：questions/ 376 chunk
+# 全是 detail，merged_qa = 0）：
+#   1. 讲义形态 `解答：` / `答案：` / `正确答案：` —— 但真题写的是 `**参考解答**：`
+#      与 `**解析**：`，**加粗标记夹在词与冒号之间**，原正则 `(?:解答|答案)[：:]` 匹配不到；
+#   2. 真题形态 —— 正确选项用行尾 `✅` 标出（实测 2024 卷 43 处），且大量题目
+#      根本不写「答案：」，只有 `✅`。
+# 另：真题里还有 `所以答案选择 D。` / `正确答案是 6.72 G` 这类**无冒号**叙述，
+# 但它们所在的 section 必含 `✅`，故不单独加规则 —— 少一条规则少一处误伤。
+# ⚠️ `✅` 实测**只出现在 knowledge/questions/**（讲义 0 处），所以这条扩展对讲义
+#    的 `has_answer_marker` 是零影响；唯一新增命中是 computer_network/01_体系结构.md
+#    的一处 `解析：`，已由下面的回归守卫覆盖。
+_ANSWER_RE = re.compile(
+    r"(?:解答|答案|正确答案|解析)[ \t]*\**[ \t]*[：:；;]"
+    r"|✅",
+    re.MULTILINE,
+)
+# 答案字母提取，两种形态：
+#   1. 讲义形态：`正确答案：D` / `答案：B`
+#   2. 真题形态：正确选项**行尾的 ✅**（`- **A. xxx** ✅`）——
+#      真题不写「答案：」，若不认它，`qa.answer_key` 会全为空，
+#      而选择题的自动批改正是靠这个字母。
+_ANSWER_KEY_RE = re.compile(
+    r"(?:正确答案|答案)[：:；;]\s*([A-E](?:,[A-E])*)"
+    r"|^[ \t]*[-*+][ \t]*\*{0,2}([A-E])[.、)．][^\n]*✅",
+    re.MULTILINE,
+)
 # 真题模式：##### N (纯数字标题) 或 ### 第N题（学科·题型）(新格式)
 _EXAM_Q_HEADING_RE = re.compile(r"^(?:#{4,5}\s*\d+\s*$|#{2,4}\s*第\d+题)", re.MULTILINE)
 
@@ -342,7 +366,8 @@ def _extract_qa_fields(text: str) -> dict:
     # 提取答案标识：先尝试字母(A-E)，失败则提取答案:后到分号/行尾的内容
     key_match = _ANSWER_KEY_RE.search(text)
     if key_match:
-        answer_key = key_match.group(1)
+        # 两个分支各有一个捕获组，取非空的那个
+        answer_key = key_match.group(1) or key_match.group(2)
     else:
         # 非选择题：提取 答案:XXX 或 解答:XXX 中到 ; 或行尾的部分
         _non_letter_key_re = re.compile(r"(?:答案|解答)[：:；;]\s*(.+?)(?:[；;]|$)", re.MULTILINE)
@@ -1097,10 +1122,18 @@ def split_documents(documents: list[Document]) -> list[Document]:
 
             # 若 content_type 是 merged_qa 但 _split_section_text 未产出 is_qa 块
             # （真题模式：无 blockquote，整个 section 就是一个 Q&A 对），强制整体输出
-            has_qa_chunk = any(
-                (sc.get("is_qa", False) if isinstance(sc, dict) else False) for sc in section_chunks
+            # 判据用「有没有**可用**的 QA 块」，而不是「有没有 QA 块」。
+            # ★ 实测（2026-09-24）：真题 section 的首行 `### 第N题(…)` 会被切成一个
+            #   **17 字的 is_qa 块**，它随即被 `MIN_CHUNK_LENGTH=80` 过滤掉 ——
+            #   于是「有 QA 块」为真，本兜底分支不触发，正文落进 else 分支变成 `detail`，
+            #   `qa.question` / `qa.answer` 全为空。只看 is_qa 标志是**假信号**。
+            usable_qa_chunk = any(
+                isinstance(sc, dict)
+                and sc.get("is_qa", False)
+                and len(str(sc.get("text", "")).strip()) >= MIN_CHUNK_LENGTH
+                for sc in section_chunks
             )
-            if content_type == "merged_qa" and not has_qa_chunk and section_text.strip():
+            if content_type == "merged_qa" and not usable_qa_chunk and section_text.strip():
                 # 超长 merged_qa section：按题目边界拆分，但不拆单题内部题干/答案/解析
                 if len(section_text) > _QA_CHUNK_SOFT_LIMIT:
                     for sub in _split_qa_oversized(section_text, _QA_CHUNK_SOFT_LIMIT):
@@ -1163,6 +1196,13 @@ def split_documents(documents: list[Document]) -> list[Document]:
                 chunk.metadata["section.content_type"] = (
                     "merged_qa" if chunk_role == "merged_qa" else content_type
                 )
+                # ── 内容语义标志（供 recall 的 exercise_meta / answer_meta 路由过滤）──
+                # 为什么不复用 content_type：它是**单值形状分类器** —— 一个 chunk 可以既是
+                # 「列表」（形状）又是「习题」（语义），两者会互相挤掉（这正是那两条路由
+                # 恒返回空的根因）。且 content_type 还经 `_resolve_chunk_params` 决定 chunk
+                # 尺寸，改它的判定顺序会连带**重切索引**。语义标志独立成字段 → 零副作用。
+                chunk.metadata["is_exercise_content"] = heading_is_exercise or heading_is_exam
+                chunk.metadata["has_answer_marker"] = has_answer_marker
                 chunk.metadata["section.parent_id_index"] = sid
                 chunk.metadata["section.parent_text"] = parent_windows[ci]
                 chunk.metadata["section.parent_char_count"] = len(parent_windows[ci])

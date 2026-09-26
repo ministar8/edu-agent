@@ -1,0 +1,49 @@
+{
+  "_meta": {
+    "n": 1,
+    "run_config": {
+      "dataset": "evals/sample_408.jsonl",
+      "limit": 1,
+      "sample_per_type": null,
+      "query_type_distribution": {
+        "concept": 1
+      },
+      "retrieval_k": 5,
+      "requested_use_rerank": true,
+      "effective_rerank_enabled": true,
+      "embedding_fake": false,
+      "embedding_model": "BAAI/bge-m3",
+      "metrics_requested": [
+        "faithfulness",
+        "context_precision",
+        "context_recall",
+        "answer_relevancy"
+      ],
+      "ragas_run_config": {
+        "timeout": 120,
+        "max_retries": 1,
+        "max_wait": 3,
+        "max_workers": 2,
+        "batch_size": 2
+      },
+      "n_filled": 1,
+      "n_loaded": 1
+    }
+  },
+  "faithfulness": {
+    "mean": null,
+    "n": 0
+  },
+  "context_precision": {
+    "mean": null,
+    "n": 0
+  },
+  "context_recall": {
+    "mean": null,
+    "n": 0
+  },
+  "answer_relevancy": {
+    "mean": null,
+    "n": 0
+  }
+}

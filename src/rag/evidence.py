@@ -87,9 +87,10 @@ def text_evidence_from_document(doc: Document, fallback_score: float = 0.0) -> T
         section_path=str(meta.get("section.path") or meta.get("heading_path") or ""),
         chunk_id=chunk_id,
         parent_id=str(meta.get("section.parent_id_index") or meta.get("section.id") or ""),
-        knowledge_points=_parse_knowledge_points(
-            meta.get("knowledge_points") or meta.get("section.knowledge_points")
-        ),
+        # 唯一写入方是 `knowledge_tagger`（写扁平名 `knowledge_points`，JSON 字符串）。
+        # 此处曾回退读 `section.knowledge_points` —— 那是**幽灵字段**（无任何写入方），
+        # 2026-09-24 移除，避免"看起来有两条来源"的错觉。
+        knowledge_points=_parse_knowledge_points(meta.get("knowledge_points")),
         metadata=meta,
     )
 

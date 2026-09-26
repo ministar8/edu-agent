@@ -10,6 +10,16 @@
   - aretrieve_documents(): 异步底层检索
   - retrieve_documents():  同步底层检索，**仅供 ingest 后的缓存预热**（见 warmup_query_cache）
 
+**参数 `use_rerank` 的语义**（三个入口都有，最容易误读，先看这里）：
+  它**不是**「是否执行重排」的开关，而是「这条路径是否按重排口径准备候选」
+  —— 它同时决定**候选池大小**（`coarse_k`，见 `_resolve_retrieval_policy`）。
+  真正的重排判定是**链条式的三环**：
+    ① `_resolve_retrieval_policy`：SHALLOW 深度有意跳过 → 可能把 `use_rerank` 降为 False
+    ② `_stage_rerank` 入口：叠加部署开关 `settings.RERANK_ENABLED` → `rerank_active`
+    ③ `reranker.rerank()`：同一开关的防御网（正常不可达，触达即 warning）
+  所以 **`use_rerank=True` 不等于会重排** —— ②/③ 都可能否决它。
+  完整分析见 `docs/RERANK_SWITCH_ANALYSIS.md`。
+
 LLM 工厂在 `core.llm`；RAG 层统一的带超时调用入口见 `rag/llm_calls.py`。
 
 子模块职责划分：
@@ -836,6 +846,13 @@ def _stage_resolve_plan(
 
     if k == 5 and depth.k != 5:
         k = depth.k
+    # ── 重排判定链 · 第 1 环（共 3 环，跨 retriever / reranker 两个模块）──────
+    # ① 此处：SHALLOW 深度**有意**跳过重排（省延迟）→ 把 use_rerank 降为 False
+    # ② `_stage_rerank` 入口：叠加部署开关（`settings.RERANK_ENABLED`）→ `rerank_active`
+    # ③ `reranker.rerank()`：同一开关的防御网，正常不可达（触达即 warning）
+    # ⚠️ `use_rerank` 兼着「候选池大小」的职责（见 `_resolve_retrieval_policy`），
+    #    所以 ② 刻意**不回写**它 —— 否则一个部署开关会静默改变召回策略。
+    #    完整分析见 docs/RERANK_SWITCH_ANALYSIS.md。
     if depth.skip_rerank and use_rerank:
         use_rerank = False
 
@@ -903,6 +920,42 @@ async def _stage_dedup_and_threshold(
     )
 
     filtered = [doc for doc, score in deduped if score >= effective_threshold]
+
+    # ── 空结果保底（2026-09-24）────────────────────────────────────────
+    # 症状：real embedding 路由下 3/156 条 query 返回空，而**去重后本有 120+ 条候选**
+    # —— 全部被阈值卡掉。fake 路由从不出现，因为假 embedding 的相似度分布更平，
+    # 同一个文档更容易在多条路由里都排前 → 累加 RRF 分数更高 → 过得了阈值。
+    #
+    # 为什么阈值会高过可达上限（实测反推，非推断）：
+    #   `_resolve_retrieval_policy` 的校准公式基于 k=20（见其注释里 `2.5/40` 的算例），
+    #   但 `_dynamic_rrf_k` 在 13 条路由时给出 **k=36**，分数尺度随之缩小约 1.8×。
+    #   于是 answer/exercise 类阈值 = 0.06×1.667×1.2 = **0.12**、long/comparison = **0.11**，
+    #   而 RRF 可达上限（两条最高权重路由相加）= 2.5/37 + 1.5/37 = **0.1081**。
+    #   **阈值 > 上限 → 只要 top 文档没命中 ≥3 条路由，必然返回空。**
+    # 本该兜底的 HyDE 又恰好对 `answer`/`exercise`/`code` 三类显式禁用
+    # （`should_trigger_hyde`），而这 3 条正是 answer×2 + code×1 → 兜底也失效。
+    #
+    # 为什么只做保底、不调阈值：`docs/RETRIEVAL_ROADMAP.md` 的「不做清单」明确列着
+    # 「检索阈值微调 | #13 / #25」——三次实证真实口径零收益或有害。故此处**不动阈值**，
+    # 只补一个独立缺陷：**「有候选却返回空」本身是错误的降级**（LLM 拿不到任何上下文
+    # → 必然答错，比返回低分候选更糟）。阈值校准本身的修正另议。
+    #
+    # 为什么只取 top-1 而不是 top-k：取最小必要内容，**不假装这些文档"合格"**；
+    # 且保留「低召回」信号（docs_count<2）给下游的 HyDE 兜底。
+    if not filtered and deduped:
+        # 用 max() 而非 deduped[0]：后者依赖 `dedup_same_section` 末尾那个 sort，
+        # 一旦那个 sort 被改动，[0] 会**静默**选到非最高分的文档。
+        best_doc, best_score = max(deduped, key=lambda pair: pair[1])
+        filtered = [best_doc]
+        logger.warning(
+            "阈值过滤后为空，已保底返回 top-1：query=%s threshold=%.4f 最高分=%.4f "
+            "候选=%d（阈值高于 RRF 可达上限，见 retriever._stage_dedup_and_threshold 注释）",
+            query[:40],
+            effective_threshold,
+            best_score,
+            len(deduped),
+        )
+
     _log_final_retrieval_summary("async-post-threshold", query, filtered)
     return filtered, len(deduped), len(filtered)
 
@@ -1018,6 +1071,26 @@ async def _stage_recall_and_merge(req: _RecallRequest) -> list[tuple[Document, f
     return merged
 
 
+# ── 重排关闭的一次性告警（C4：关闭动作必须可观测）──────────────
+# `.env` 的 RERANK_ENABLED=false 是**稳态配置**而非异常，故每进程只告警一次，
+# 避免在每条 query 上刷屏（warmup_query_cache 一次会连打 N 条）。
+# ⚠️ 与 reranker.py 里闸 3 的告警区分：那个是「防御网被触发」，属异常，每次都要打。
+_rerank_disabled_warned = False
+
+
+def _warn_rerank_disabled_once(use_rerank: bool, filtered: list[Document]) -> None:
+    """重排被部署开关关闭时告警一次（仅当确有候选且调用方要求重排）。"""
+    global _rerank_disabled_warned
+    if _rerank_disabled_warned or not (use_rerank and filtered):
+        return
+    _rerank_disabled_warned = True
+    logger.warning(
+        "重排已按部署开关关闭（settings.RERANK_ENABLED=false）：调用方要求重排"
+        "（use_rerank=True）但本次不执行，候选按原始顺序截断返回。"
+        "如需开启请在 .env 设 RERANK_ENABLED=true 并确保 TEI reranker 可用。"
+    )
+
+
 async def _stage_rerank(
     filtered: list[Document],
     query: str,
@@ -1031,13 +1104,21 @@ async def _stage_rerank(
     仍按 k 截断会把原查询的证据挤掉。未启用重排时同样按这个倍数截断
     （``filtered[:k]`` vs ``filtered[:k*2]``），保持两条路径口径一致。
 
+    **重排判定链 · 第 2 环**（第 1 环见 `_resolve_retrieval_policy`，第 3 环见
+    `reranker.rerank()`）：部署开关（`.env` 的 ``RERANK_ENABLED``）在本函数入口生效，
+    且**只决定「是否执行重排」**——刻意**不写回** ``use_rerank``：后者还兼着候选池
+    大小（``coarse_k``）的职责，回写会让一个部署开关静默改变召回策略。
+    详见 ``docs/RERANK_SWITCH_ANALYSIS.md``。
+
     Returns:
         ``(重排后的文档, 是否真的执行了重排, 重排耗时毫秒)``。
         耗时由调用方写进 ``stage_ms`` —— 指标的所有权留在编排层。
     """
-    if not (use_rerank and filtered):
+    rerank_active = use_rerank and settings.RERANK_ENABLED
+    if not (rerank_active and filtered):
         # 未启用重排：仍要截断。注意这里**不**记录耗时（原本就没有计时窗口）
-        if not use_rerank:
+        if not rerank_active:
+            _warn_rerank_disabled_once(use_rerank, filtered)
             return filtered[: k * 2 if decomposed else k], False, 0.0
         return filtered, False, 0.0
 
@@ -1172,7 +1253,7 @@ async def _stage_hyde(
                 max_per_section=2,
             )
             hyde_docs = [doc for doc, score in hyde_results if score >= effective_threshold * 0.8]
-            if use_rerank and hyde_docs:
+            if use_rerank and settings.RERANK_ENABLED and hyde_docs:
                 hyde_docs = await _safe_to_thread(
                     "async_hyde_rerank",
                     rerank,
@@ -1195,12 +1276,32 @@ async def _stage_hyde(
                     merged_hyde_docs.append(doc)
                     existing_keys.add(key)
             if merged_hyde_docs:
+                _before = len(filtered)
+                _candidates = len(merged_hyde_docs)
+                # ⚠️ `added_count` 必须是**净增**，不是候选数：最终条数被
+                # `max(k, 原长度)` 封顶 —— 若记候选数，「候选 20 条但结果仍是 5 条」
+                # 会被记成 +20，语义失真（且日志里会算出负数，曾如此）。
                 filtered = (filtered + merged_hyde_docs)[: max(k, len(filtered))]
-                added_count = len(merged_hyde_docs)
+                added_count = len(filtered) - _before
+                # HyDE 是**低频兜底**路径（触发条件：召回 < 2 条）—— 触发必须留痕，
+                # 否则「它到底有没有在工作」无从判断（本会话反复修的「静默」类缺陷）。
+                # 用 info 而非 warning：这是正常兜底，不是异常。
+                logger.info(
+                    "HyDE 兜底触发：query=%s 候选 +%d 条，净增 %d 条（%d → %d 条）",
+                    query[:40],
+                    _candidates,
+                    added_count,
+                    _before,
+                    len(filtered),
+                )
                 _log_final_retrieval_summary("async-post-hyde", query, filtered)
         except Exception as e:
             error = e.__class__.__name__
             logger.warning("Async HyDE fallback retrieval failed: %s", e)
+    else:
+        # 判定要触发、但没拿到可用的假设文档（LLM 超时 / 返回空 / 与原文相同）——
+        # 同属「想兜底却没兜成」，也必须留痕，否则这条路径完全不可见。
+        logger.info("HyDE 判定触发但未生成可用假设文档，跳过（query=%s）", query[:40])
 
     return _HydeOutcome(
         filtered,
@@ -1345,6 +1446,9 @@ def _finalize_retrieval(
         doc.metadata["_route_type"] = ctx.route_type
         doc.metadata["_effective_k"] = ctx.k
         doc.metadata["_coarse_k"] = ctx.coarse_k
+        # 供上层（aretrieve_evidence → fused.metadata）与门禁断言读取：
+        # 「本次是否真的执行了重排」。传 doc metadata 是本文件既有模式（同 _coarse_k）。
+        doc.metadata["_rerank_used"] = ctx.rerank_used
 
     window_expanded_count = sum(1 for doc in filtered if doc.metadata.get("_window_expanded"))
     context_chars = sum(len(doc.page_content or "") for doc in filtered)
@@ -1412,6 +1516,7 @@ async def aretrieve_documents(
     precomputed_sub_queries: list[str] | None = None,
     on_stage: StageSink | None = None,
 ) -> list[Document]:
+    """异步底层检索。参数 ``use_rerank`` 的语义见模块文档串（**不是**「是否重排」的开关）。"""
     start = time.perf_counter()
     raw_results_count = 0
     post_dedup_count = 0
@@ -1591,19 +1696,28 @@ async def aretrieve_evidence(
     depth: RetrievalDepth | None = None,
     on_stage: StageSink | None = None,
 ) -> FusedEvidence:
+    """异步检索主实现。参数 ``use_rerank`` 的语义见模块文档串（**不是**「是否重排」的开关）。"""
     from rag.evidence import FusedEvidence
     from rag.fusion import afuse_documents
     from rag.verifier import averify_evidence
+
+    _filter_sig = json.dumps(filter, sort_keys=True) if filter else ""
+    # 检索结果取决于这些参数，必须全部进缓存 key，否则不同参数会互相污染。
+    # `ren`（RERANK_ENABLED）也要进：同一 query 在开关开/关时结果是两种证据。
+    _params_sig = (
+        f"rr={int(use_rerank)}|ren={int(settings.RERANK_ENABLED)}|k={k}|"
+        f"thr={score_threshold}|depth={depth.depth if depth else 'auto'}|mt={max_tokens}"
+    )
 
     try:
         from rag.semantic_cache import get_semantic_cache
 
         _sc = get_semantic_cache()
-        _filter_sig = json.dumps(filter, sort_keys=True) if filter else ""
         _cached_fused, _semantic_cache_sim = await _sc.alookup(
             query,
             collection_name=collection_name,
             filter_sig=_filter_sig,
+            params_sig=_params_sig,
         )
         if _cached_fused is not None:
             _cached_fused.metadata["semantic_cache_hit"] = True
@@ -1684,13 +1798,16 @@ async def aretrieve_evidence(
             docs[0].metadata.get("_effective_k", effective_k) if docs else effective_k
         )
         fused.metadata["use_rerank"] = use_rerank
+        # 「实际是否重排」与「调用方是否要求重排」是两件事（部署开关可能否决后者）。
+        # 门禁的 disabled 路由靠它断言 rerank_used 未被谎报。
+        fused.metadata["rerank_used"] = docs[0].metadata.get("_rerank_used") if docs else None
         fused.metadata["retrieval_depth"] = (
             docs[0].metadata.get("_retrieval_depth", _resolved_depth.depth)
             if docs
             else _resolved_depth.depth
         )
-        fused.metadata["retrieval_layer"] = retrieval_layer
-        fused.metadata["route_type"] = route_type
+        fused.metadata["retrieval_layer"] = docs[0].metadata.get("_retrieval_layer")
+        fused.metadata["route_type"] = docs[0].metadata.get("_route_type")
         fused.metadata["coarse_k"] = docs[0].metadata.get("_coarse_k") if docs else None
         fused.metadata["score_threshold"] = score_threshold
         fused.metadata["source_count"] = len(fused.sources)
@@ -1707,12 +1824,12 @@ async def aretrieve_evidence(
     try:
         from rag.semantic_cache import get_semantic_cache
 
-        _filter_sig = json.dumps(filter, sort_keys=True) if filter else ""
         await get_semantic_cache().astore(
             query,
             fused,
             collection_name=collection_name,
             filter_sig=_filter_sig,
+            params_sig=_params_sig,
         )
     except Exception as _sc_err:
         logger.debug("Async semantic cache store skipped: %s", _sc_err)
@@ -1740,6 +1857,7 @@ async def aretrieve_evidence_with_retry(
     max_retries: int = 2,
     use_llm_verify: bool = False,
 ) -> tuple[FusedEvidence, VerificationResult]:
+    """带重试的异步检索（对外入口）。参数 ``use_rerank`` 的语义见模块文档串。"""
     from rag.verifier import Verdict, VerificationResult, averify_evidence
 
     retry_metric_start = time.perf_counter()

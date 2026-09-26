@@ -38,14 +38,20 @@ _SIMILARITY_THRESHOLD = 0.88
 # ── Helpers ────────────────────────────────────────────────
 
 
-def _cache_key(query: str, collection_name: str = "", filter_sig: str = "") -> str:
-    """Deterministic key from normalized query + collection + filter signature.
+def _cache_key(
+    query: str,
+    collection_name: str = "",
+    filter_sig: str = "",
+    params_sig: str = "",
+) -> str:
+    """Deterministic key from normalized query + collection + filter + retrieval params.
 
-    Different collections or filters should NOT share cache entries,
-    even if queries are semantically similar.
+    Different collections、filters 或检索参数（use_rerank / RERANK_ENABLED /
+    k / score_threshold / depth / max_tokens）不得共享缓存条目，
+    即使 query 语义相似也不行。
     """
     normalized = query.strip().lower()
-    raw = f"{normalized}|{collection_name}|{filter_sig}"
+    raw = f"{normalized}|{collection_name}|{filter_sig}|{params_sig}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
@@ -300,7 +306,7 @@ class SemanticCache:
     # ── Public API ─────────────────────────────────────────
 
     def lookup(
-        self, query: str, collection_name: str = "", filter_sig: str = ""
+        self, query: str, collection_name: str = "", filter_sig: str = "", params_sig: str = ""
     ) -> tuple[FusedEvidence | None, float]:
         """Look up a semantically similar cached result.
 
@@ -350,7 +356,12 @@ class SemanticCache:
             # Verify collection + filter context matches (avoid cross-collection / cross-filter hits)
             match_collection = match_meta.get("collection_name", "")
             match_filter = match_meta.get("filter_sig", "")
-            if collection_name != match_collection or filter_sig != match_filter:
+            match_params = match_meta.get("params_sig", "")
+            if (
+                collection_name != match_collection
+                or filter_sig != match_filter
+                or params_sig != match_params
+            ):
                 self._misses += 1
                 return None, similarity
             with self._lock:
@@ -394,7 +405,7 @@ class SemanticCache:
             return None, 0.0
 
     async def alookup(
-        self, query: str, collection_name: str = "", filter_sig: str = ""
+        self, query: str, collection_name: str = "", filter_sig: str = "", params_sig: str = ""
     ) -> tuple[FusedEvidence | None, float]:
         """Async lookup wrapper that avoids blocking initialization on the event loop."""
         if not settings.SEMANTIC_CACHE_ENABLED:
@@ -402,10 +413,15 @@ class SemanticCache:
         await self._aensure_init()
         if self._collection is None:
             return None, 0.0
-        return await asyncio.to_thread(self.lookup, query, collection_name, filter_sig)
+        return await asyncio.to_thread(self.lookup, query, collection_name, filter_sig, params_sig)
 
     def store(
-        self, query: str, fused: FusedEvidence, collection_name: str = "", filter_sig: str = ""
+        self,
+        query: str,
+        fused: FusedEvidence,
+        collection_name: str = "",
+        filter_sig: str = "",
+        params_sig: str = "",
     ) -> None:
         """Store a retrieval result in the semantic cache."""
         if not settings.SEMANTIC_CACHE_ENABLED:
@@ -416,7 +432,7 @@ class SemanticCache:
             return
 
         try:
-            key = _cache_key(query, collection_name, filter_sig)
+            key = _cache_key(query, collection_name, filter_sig, params_sig)
             wall_now = time.time()
             query_embedding = self._embedding_fn.embed_query(query)
 
@@ -447,6 +463,7 @@ class SemanticCache:
                             "stored_at": wall_now,
                             "collection_name": collection_name,
                             "filter_sig": filter_sig,
+                            "params_sig": params_sig,
                         }
                     ],
                 )
@@ -460,7 +477,12 @@ class SemanticCache:
             logger.warning("Semantic cache store error: %s", e)
 
     async def astore(
-        self, query: str, fused: FusedEvidence, collection_name: str = "", filter_sig: str = ""
+        self,
+        query: str,
+        fused: FusedEvidence,
+        collection_name: str = "",
+        filter_sig: str = "",
+        params_sig: str = "",
     ) -> None:
         """Async store wrapper that avoids blocking initialization on the event loop."""
         if not settings.SEMANTIC_CACHE_ENABLED:
@@ -468,7 +490,7 @@ class SemanticCache:
         await self._aensure_init()
         if self._collection is None:
             return
-        await asyncio.to_thread(self.store, query, fused, collection_name, filter_sig)
+        await asyncio.to_thread(self.store, query, fused, collection_name, filter_sig, params_sig)
 
     def stats(self) -> dict[str, Any]:
         """Return cache statistics."""

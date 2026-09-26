@@ -259,6 +259,65 @@ function buildActions(rawText, question) {
 }
 
 /**
+ * 引用溯源块：可折叠的来源列表（文件名 + 章节路径 + 分数 + 摘录）。
+ *
+ * 数据来自后端 `custom` 事件的 `kind === "retrieval_docs"`
+ * （发端见 src/agents/tools.py 的 `_docs_sink`）。
+ * 用原生 <details> 做折叠 —— 不写 JS 就有可访问的展开/收起。
+ */
+function buildCitations(docs) {
+  const wrap = document.createElement("details");
+  wrap.className = "citations";
+
+  const summary = document.createElement("summary");
+  summary.textContent = `引用来源（${docs.length}）`;
+  wrap.appendChild(summary);
+
+  const list = document.createElement("ol");
+  list.className = "citation-list";
+
+  for (const d of docs) {
+    const li = document.createElement("li");
+
+    const source = document.createElement("div");
+    source.className = "citation-source";
+    source.textContent = d.source || "未知来源";
+    li.appendChild(source);
+
+    if (d.section_path) {
+      const path = document.createElement("div");
+      path.className = "citation-path";
+      path.textContent = d.section_path;
+      li.appendChild(path);
+    }
+
+    const meta = [];
+    if (typeof d.score === "number") meta.push(`得分 ${d.score.toFixed(4)}`);
+    if (typeof d.rerank_score === "number" && d.rerank_score > 0) {
+      meta.push(`重排 ${d.rerank_score.toFixed(4)}`);
+    }
+    if (meta.length) {
+      const m = document.createElement("div");
+      m.className = "citation-meta";
+      m.textContent = meta.join(" · ");
+      li.appendChild(m);
+    }
+
+    if (d.excerpt) {
+      const ex = document.createElement("div");
+      ex.className = "citation-excerpt";
+      ex.textContent = d.excerpt;
+      li.appendChild(ex);
+    }
+
+    list.appendChild(li);
+  }
+
+  wrap.appendChild(list);
+  return wrap;
+}
+
+/**
  * 创建一条消息行，返回 { row, bubble, body }。
  * opts.markdown 为真按 Markdown 渲染；opts.actions 为真在气泡下方挂操作行。
  * 工具消息不占头像位。
@@ -448,6 +507,10 @@ async function sendMessage(message) {
     expand: "扩展上下文",
   };
   let stageLabel = "";
+  // 引用溯源：后端在 custom 事件里下发本次检索到的来源文档
+  // （发端见 src/agents/tools.py 的 _docs_sink）。回答渲染完成后折叠展示。
+  const retrievalDocs = [];
+  const seenDocKeys = new Set();
   const t0 = Date.now();
   const renderThinking = () => {
     const s = ((Date.now() - t0) / 1000).toFixed(1);
@@ -500,11 +563,23 @@ async function sendMessage(message) {
         } else if (evt.type === "message" && evt.content) {
           const m = evt.content;
           if (m.type === "custom" && m.custom_data) {
-            // 阶段进度：只更新提示文字，**不 stopThinking**（还没到答案）
-            const label = STAGE_LABELS[m.custom_data.stage];
-            if (label) {
-              stageLabel = label;
-              renderThinking();
+            const cd = m.custom_data;
+            if (cd.kind === "retrieval_docs") {
+              // 引用来源：先收集，等回答渲染完再展示（避免打断流式输出）
+              // 按 chunk_id 去重 —— 同一 chunk 可能被多路召回同时命中
+              for (const d of cd.docs || []) {
+                const key = d.chunk_id || d.evidence_id;
+                if (key && seenDocKeys.has(key)) continue;
+                if (key) seenDocKeys.add(key);
+                retrievalDocs.push(d);
+              }
+            } else {
+              // 阶段进度：只更新提示文字，**不 stopThinking**（还没到答案）
+              const label = STAGE_LABELS[cd.stage];
+              if (label) {
+                stageLabel = label;
+                renderThinking();
+              }
             }
           } else if (m.type === "ai" && m.content) {
             expertRaw = m.content;
@@ -528,6 +603,8 @@ async function sendMessage(message) {
     const finalText = expertRaw || tokenRaw;
     if (finalText) {
       bubble.innerHTML = renderMarkdown(finalText);
+      // 引用来源排在回答下方、操作行之上（先看到出处，再看到操作）
+      if (retrievalDocs.length) body.appendChild(buildCitations(retrievalDocs));
       body.appendChild(buildActions(finalText, message));
     } else if (!failed) {
       bubble.textContent = "（没有收到回复，请重试）";

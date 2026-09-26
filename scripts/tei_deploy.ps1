@@ -55,7 +55,7 @@ function Get-EnvInt([string]$key, [int]$fallback) {
 }
 
 $embedUrl = Get-EnvUrl 'EMBEDDING_API_BASE' 'http://localhost:11435'
-$rerankUrl = Get-EnvUrl 'RERANK_LOCAL_URL' 'http://localhost:8080'
+$rerankUrl = Get-EnvUrl 'RERANK_LOCAL_URL' 'http://localhost:11436'
 $embedDim = Get-EnvInt 'EMBEDDING_DIM' 1024
 
 # 从 URL 反解端口，供 docker run -p 使用

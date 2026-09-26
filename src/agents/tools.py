@@ -8,6 +8,7 @@ chunk_id / 路径 / 分数。
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -107,6 +108,39 @@ def _stage_sink() -> StageSink | None:
     return emit
 
 
+def _docs_sink() -> Callable[[RetrievalResult], None] | None:
+    """把「检索到的来源文档」接到 SSE 的回调；拿不到 writer 时返回 None。
+
+    引用溯源 UI 的数据源：前端在 `custom` 流上按 ``kind == "retrieval_docs"`` 收集，
+    回答渲染完成后折叠展示（文件名 + 章节路径 + 分数 + 摘录）。
+    发端在这里、收端在 ``static/app.js``。
+
+    守卫理由与 ``_stage_sink`` 完全相同 —— 非流式调用（直接调工具、离线评测、脚本）
+    下 ``get_stream_writer()`` 会抛 ``RuntimeError``。拿不到 writer 就静默跳过，
+    **绝不影响检索本身**：引用 UI 是锦上添花，不该让检索为它崩掉。
+    """
+    try:
+        writer = get_stream_writer()
+    except Exception:
+        logger.debug("无 stream writer，跳过引用来源下发", exc_info=True)
+        return None
+
+    def emit(result: RetrievalResult) -> None:
+        # 没有 docs（empty / error）就不发 —— 前端据此不必处理空列表
+        if not result.docs:
+            return
+        CustomData(
+            data={
+                "kind": "retrieval_docs",
+                "query": result.query,
+                # mode="json" 保证可 JSON 序列化（前端按普通对象消费）
+                "docs": [doc.model_dump(mode="json") for doc in result.docs],
+            }
+        ).dispatch(writer)
+
+    return emit
+
+
 def _retrieval_error_payload(query: str, exc: BaseException) -> dict[str, Any]:
     """把检索异常映射为对外载荷，**按类别**决定日志级别与文案。
 
@@ -149,6 +183,8 @@ async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, 
         fused, verification = await aretrieve_evidence_with_retry(
             query=query,
             k=k,
+            # True = 「这条路径按重排口径准备候选池」，**不是**开关 ——
+            # 实际是否重排由 .env 的 RERANK_ENABLED 决定（见 retriever 模块的「重排判定链」）。
             use_rerank=True,
             depth=depth,
             max_retries=1,
@@ -158,9 +194,12 @@ async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, 
     except Exception as e:
         return _retrieval_error_payload(query, e)
 
-    return build_retrieval_result(
-        query=query, fused=fused, verification=verification
-    ).as_tool_payload()
+    result = build_retrieval_result(query=query, fused=fused, verification=verification)
+    # 引用溯源：把来源文档下发到前端（拿不到 stream writer 时是 no-op）
+    emit_docs = _docs_sink()
+    if emit_docs is not None:
+        emit_docs(result)
+    return result.as_tool_payload()
 
 
 # 检索工具共用契约说明（拼进各工具 docstring，供模型理解返回值）

@@ -75,7 +75,7 @@ cp .env.example .env     # 必填：DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY、JWT
 - Docker Desktop（Windows/macOS）：`host.docker.internal`
 - Linux：宿主机网桥 IP，或让容器使用 `network_mode: host`
 
-即 `.env` 里的 `EMBEDDING_BASE_URL` / `RERANK_BASE_URL` 要相应调整。这是容器化最常见的踩坑点。
+即 `.env` 里的 `EMBEDDING_API_BASE` / `RERANK_LOCAL_URL` 要相应调整。这是容器化最常见的踩坑点。
 
 ## 健康检查
 

@@ -1,0 +1,182 @@
+{
+  "_meta": {
+    "n": 1,
+    "run_config": {
+      "dataset": "evals/sample_408.jsonl",
+      "limit": 1,
+      "sample_per_type": null,
+      "query_type_distribution": {
+        "concept": 1
+      },
+      "retrieval_k": 5,
+      "requested_use_rerank": true,
+      "effective_rerank_enabled": true,
+      "embedding_fake": false,
+      "embedding_model": "BAAI/bge-m3",
+      "metrics_requested": [
+        "faithfulness",
+        "context_precision",
+        "context_recall",
+        "answer_relevancy"
+      ],
+      "ragas_run_config": {
+        "timeout": 120,
+        "max_retries": 1,
+        "max_wait": 3,
+        "max_workers": 2,
+        "batch_size": 2
+      },
+      "include_details": true,
+      "n_filled": 1,
+      "n_loaded": 1
+    }
+  },
+  "faithfulness": {
+    "mean": 1.0,
+    "n": 1
+  },
+  "context_precision": {
+    "mean": 1.0,
+    "n": 1
+  },
+  "context_recall": {
+    "mean": 1.0,
+    "n": 1
+  },
+  "answer_relevancy": {
+    "mean": 1.0,
+    "n": 1
+  },
+  "details": [
+    {
+      "index": 1,
+      "query": "什么是进程死锁？死锁的四个必要条件是什么？",
+      "query_type": "concept",
+      "subject": "os",
+      "reference": "死锁是多个进程互相等待对方持有的资源而都无法继续执行的状态。四个必要条件：互斥、占有并等待、不可抢占、循环等待。",
+      "answer": "根据提供的资料，回答如下：\n\n### 1. 什么是进程死锁？\n**定义**：在并发环境下（多道程序环境中），各进程因竞争有限的资源而造成的一种互相等待对方手里的资源，导致各进程都阻塞，都无法向前推进的现象，就是“死锁”。发生死锁后若无外力干涉，这些进程都将无法向前推进。\n\n**通俗理解**：资源在对方手中，它要的资源在我手中，谁也不给谁。至少有两个或以上的进程同时发生“死锁”。\n\n### 2. 死锁的四个必要条件是什么？\n产生死锁必须**同时满足**以下四个条件，只要其中任一条件不成立，死锁就不会发生：\n\n1.  **互斥条件**：只有对必须互斥使用的资源的争抢才会导致死锁（如哲学家的筷子、打印机设备）。像内存、扬声器这样可以同时让多个进程使用的资源是不会导致死锁的。\n2.  **请求和保持条件**：进程已经保持了至少一个资源，但又提出了新的资源请求，而该资源又被其他进程占有，此时请求进程被阻塞，但又对自己已有的资源保持不放。\n3.  **不可抢占条件**（不可剥夺）：进程所获得的资源在未使用完之前，不能由其他进程强行夺走，只能主动释放。\n4.  **循环等待条件**：存在一种进程资源的**循环等待链**，链中的每一个进程已获得的资源同时被下一个进程所请求。\n\n> **注意**：发生死锁时一定有循环等待，但是发生循环等待时未必死锁（循环等待是死锁的必要不充分条件）。",
+      "contexts": [
+        "### 1.2产生的**4个必要条件**\n\n产生死锁必须同时满足一下四个条件,只要其中任一条件不成立,死锁就不会发生。\n\n[1] **互斥条件**:只有对必须互斥使用的资源的争抢才会导致死锁(如哲学家的筷子、打印机设备)。像内存、扬声器这样可以同时让多个进程使用的资源是不会导致死锁的(因为进程不用阻塞等待这种资源)。\n[2] **请求和保持条件**:**进程已经保持了至少一个资源**,但又提出了新的资源请求,而该资源又被其他进程占有,此时请求进程被阻塞,但又对自己己有的资源保持不放。\n[3] **不可抢占条件**(不可剥夺):进程所获得的资源在未使用完之前,不能由其他进程强行夺走,只能主动释放。\n[4] **循环等待条件**:存在一种进程资源的**循环等待链**,链中的每一个进程已获得的资源同时被下一个进程所请求。\n\n> **⚠ 注意**:发生死锁时一定有循环等待,但是发生循环等待时未必死锁(循环等待是死锁的必要不充分条件)。",
+        "## 2.处理方式\n\n- 不允许发生死锁\n\n- 静态策略:**预防死锁**:破坏死锁产生的四个必要条件中的一个或几个。\n - 动态策略:**避免死锁**:用某种方法防止系统进入不安全状态,从而避免死锁(银行家算法)。\n\n- 允许发生死锁\n\n- **检测死锁**\n - **解除死锁**\n\n这4种处理方式中,从严到宽,即**并发性从小到大**排序:\n\n**预防** < **避免**(银行家)< **检测**(死锁定理、资源分配图)< **解除**",
+        "### 1.1产生情况\n\n对不可剥夺资源的不合理分配就可能导致死锁。\n\n- **独占资源分配不当**\n\n- **竞争不可抢占资源**。\n\n各进程对不可剥夺的资源(如打印机)的竞争可能引起死锁,对可剥夺的资源(中央处理器)的竞争是不会引起死锁的。\n\n- **竞争可消耗资源**。\n\n- **进程推进顺序不当**。\n\n请求和释放资源的顺序不当,也同样会导致死锁。\n\n> 例如:并发执行的进程P1、P2分别申请并占有了资源R1、R2,之后进程P1又紧接着申请资源R2,而进程P2又申请资源R1,两者会因为申请的资源被对方占有而阻塞,从而发生死锁。\n\n- **信号量使用不当**。\n\n> 例如:生产者-消费者问题中,如果实现互斥的P操作在实现同步的P操作之前,就有可能导致死锁。(可以把互斥信号量、同步信号量也看做是一种抽象的系统资源)。",
+        "## 五、死锁\n\n**死锁**:**资源在对方手中,它要的资源在我手中,谁也不给谁**。**至少有两个或以上的进程同时发“死锁”**。\n\n【规范】在并发环境下(多道程序环境中),各进程因竞争有限的资源而造成的一种互相等待对方手里的资源,导致各进程都阻塞,都无法向前推进的现象,就是“死锁”。发生死锁后若无外力干涉,这些进程都将无法向前推进。\n\n**饥饿**:**长期得不到想要的资源,这个资源不一定在哪里**。可能是只有一个进程“饥饿”。\n\n【规范】由于长期得不到想要的资源,某进程无法向前推进的现象。比如:在短进程优先(SPF)算法中,若有源源不断的短进程到来,则长进程将一直得不到处理机,从而发生长进程“饥饿”。\n\n**死循环**:某进程执行过程中一直跳不出某个循环的现象。有时是因为程序逻辑bug导致的,有时是程序员故意设计的。\n\n死锁、饥饿是操作系统分配资源不合理的问题,死循环是程序员代码逻辑错误的问题。",
+        "### ❗5.4 哲学家进餐\n\n[1] 关系分析。系统中有5个哲学家进程,5位哲学家与左右邻居对其中间筷子的访问是互斥关系。\n[2] 整理思路。这个问题中只有互斥关系,但与之前遇到的问题不同的事,每个哲学家进程需要同时持有两个临界资源才能开始吃饭。如何**避免**临界资源分配不当造成的**死锁现象**,是哲学家问题的精髓。\n[3] 信号量设置。定义互斥信号量数组chopstick[5]={1,1}用于实现对5个筷子的互斥访问。并对哲学家按0~4编号,哲学家i左边的筷子编号为i,右边的筷子编号为(i+1)%5。\n\n当5个哲学家进程并发执行时,某个时刻恰好每个哲学家进程都执行申请筷子,并且成功申请到第i支筷子(相当于5个哲学家同时拿起他左边的筷子), 接着他们又都执行申请右边筷子, 申请第i+1支筷子。此时每个哲学家仅拿到一支筷子, 另外一支只得无限等待下去, 引起死锁。在给出几种有效阻止死锁的方案之前,首先给出两个断言:\n\n(1)系统中有N个并发进程。 若规定每个进程需要申请2个某类资源, 则当系统提供N+1个同类资源时,无论采用何种方式申请资源, 一定不会发生死锁。分析:N+1个资源被N 个进程竞争, 由抽屉原理可知, 则至少存在一个进程获2个以上的同类资源。这就是前面提到的哲学家就餐问题中5个哲学家提供6支筷子时一定不会发生死锁的原因。\n\n(2)系统中有N个并发进程。 若规定每个进程需要申请R个某类资源, 则当系统提供K=N\\*(R-1)+1个同类资源时,无论采用何种方式申请使用,一定不会发生死锁。\n\n分析:在最坏的情况下,每个进程都申请到R-1个同类资源, 此时它们均阻塞。 试想若系统再追加一个同类资源, 则 N 个进程中必有一个进程获得R个资源,死锁解除。",
+        "分析:在最坏的情况下,每个进程都申请到R-1个同类资源, 此时它们均阻塞。 试想若系统再追加一个同类资源, 则 N 个进程中必有一个进程获得R个资源,死锁解除。\n\n结合以上分析,哲学家就餐问题可以被抽象描述为:系统中有5个并发进程, 规定每个进程需要申请2个某类资源。 若系统提供5个该类资源, 在保证一定不会产生死锁的前提下,最多允许多少个进程并发执行?假设允许N个进程, 将R=2,K=5带入上述公式, 有N\\*(2-1)+1=5所以 N=4。也就意味着,如果在任何时刻系统最多允许4个进程并发执行, 则一定不会发生死锁。 大多数哲学家就餐问题死锁阻止算法都是基于这个结论。\n\n解法:"
+      ],
+      "retrieval": [
+        {
+          "context_index": 0,
+          "source": "02_进程管理.md",
+          "section_path": "[二、进程与线程 > 五、死锁 > 1.2产生的**4个必要条件**]",
+          "chunk_id": "chk::02_进程管理.md::108::0",
+          "parent_id": "sec::02_进程管理.md::108",
+          "collection": "operating_system",
+          "score": 0.9977,
+          "recall_score": 0.251123,
+          "rerank_score": 0.9977,
+          "metadata": {
+            "category": "operating_system",
+            "content_type": "section",
+            "_retrieval_layer": "L2",
+            "_route_type": "l2_standard",
+            "recall_routes": "operating_system:concept_meta, operating_system:focus, operating_system:keyword_bm25, operating_system:semantic"
+          }
+        },
+        {
+          "context_index": 1,
+          "source": "02_进程管理.md",
+          "section_path": "[二、进程与线程 > 2.处理方式]",
+          "chunk_id": "chk::02_进程管理.md::109::0",
+          "parent_id": "sec::02_进程管理.md::109",
+          "collection": "operating_system",
+          "score": 0.8988,
+          "recall_score": 0.215892,
+          "rerank_score": 0.8988,
+          "metadata": {
+            "category": "operating_system",
+            "content_type": "section",
+            "_retrieval_layer": "L2",
+            "_route_type": "l2_standard",
+            "recall_routes": "operating_system:concept_meta, operating_system:focus, operating_system:keyword_bm25, operating_system:semantic"
+          }
+        },
+        {
+          "context_index": 2,
+          "source": "02_进程管理.md",
+          "section_path": "[二、进程与线程 > 五、死锁 > 1.1产生情况]",
+          "chunk_id": "chk::02_进程管理.md::107::0",
+          "parent_id": "sec::02_进程管理.md::107",
+          "collection": "operating_system",
+          "score": 0.7813,
+          "recall_score": 0.229167,
+          "rerank_score": 0.7813,
+          "metadata": {
+            "category": "operating_system",
+            "content_type": "section",
+            "_retrieval_layer": "L2",
+            "_route_type": "l2_standard",
+            "recall_routes": "operating_system:concept_meta, operating_system:focus, operating_system:keyword_bm25, operating_system:semantic"
+          }
+        },
+        {
+          "context_index": 3,
+          "source": "02_进程管理.md",
+          "section_path": "[二、进程与线程 > 五、死锁]",
+          "chunk_id": "chk::02_进程管理.md::106::0",
+          "parent_id": "sec::02_进程管理.md::106",
+          "collection": "operating_system",
+          "score": 0.7179,
+          "recall_score": 0.232175,
+          "rerank_score": 0.7179,
+          "metadata": {
+            "category": "operating_system",
+            "content_type": "section",
+            "_retrieval_layer": "L2",
+            "_route_type": "l2_standard",
+            "recall_routes": "operating_system:concept_meta, operating_system:focus, operating_system:keyword_bm25, operating_system:semantic"
+          }
+        },
+        {
+          "context_index": 4,
+          "source": "02_进程管理.md",
+          "section_path": "[二、进程与线程 > 4.管程机制 > ❗5.4 哲学家进餐]",
+          "chunk_id": "chk::02_进程管理.md::101::0",
+          "parent_id": "sec::02_进程管理.md::101",
+          "collection": "operating_system",
+          "score": 0.6414,
+          "recall_score": 0.197917,
+          "rerank_score": 0.6414,
+          "metadata": {
+            "category": "operating_system",
+            "content_type": "section",
+            "_retrieval_layer": "L2",
+            "_route_type": "l2_standard",
+            "recall_routes": "operating_system:concept_meta, operating_system:focus, operating_system:keyword_bm25, operating_system:semantic"
+          }
+        },
+        {
+          "context_index": 5,
+          "source": "02_进程管理.md",
+          "section_path": "[二、进程与线程 > 4.管程机制 > ❗5.4 哲学家进餐]",
+          "chunk_id": "chk::02_进程管理.md::101::1",
+          "parent_id": "sec::02_进程管理.md::101",
+          "collection": "",
+          "score": 0.0,
+          "recall_score": 0.0,
+          "rerank_score": 0.0,
+          "metadata": {
+            "category": "operating_system",
+            "content_type": "text",
+            "_retrieval_layer": "L2",
+            "_route_type": "l2_standard",
+            "_window_expanded": true
+          }
+        }
+      ],
+      "faithfulness": 1.0,
+      "context_precision": 1.0,
+      "context_recall": 1.0,
+      "answer_relevancy": 1.0
+    }
+  ]
+}

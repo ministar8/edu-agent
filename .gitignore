@@ -65,6 +65,11 @@ data/
 backend/data/
 logs/
 *.log
+# 阶段追踪基线：`python -m evaluation.stage_trace --record` 的产物。
+# **不进仓库**（理由见该模块文档串）：它绑定某一次**特定索引构建**，放进来只会变成
+# 一份会过期、偶尔变红的负债。★ 注意与 `evals/` 下的**门禁基线**区分 ——
+# 那几份 `retrieval_baseline*.json` 是**口径基准，必须入库**，只忽略这一个文件。
+/evals/stage_baseline.json
 
 # ── Local Knowledge / Thesis Materials ─────────────────
 # ★ `docs/` 已于 2026-09-22 **移出**忽略名单 —— 它现在放**工程文档**

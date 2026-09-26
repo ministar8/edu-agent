@@ -114,7 +114,7 @@ class Settings(BaseSettings):
 
     # ── Reranker（本地 TEI bge-reranker-v2-m3）──────
     RERANK_ENABLED: bool = True
-    RERANK_LOCAL_URL: Annotated[str, BeforeValidator(check_str_is_http)] = "http://localhost:8080"
+    RERANK_LOCAL_URL: Annotated[str, BeforeValidator(check_str_is_http)] = "http://localhost:11436"
     RERANK_MIN_SCORE: float = 0.3
     RERANK_ABSOLUTE_MIN_SCORE: float = 0.15
 
