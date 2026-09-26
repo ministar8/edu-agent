@@ -113,6 +113,15 @@ def build_recall_queries(
     keyword_terms = extract_query_terms(normalized)
     # BM25 路由传原始 query，让 _raw_search 用 jieba.cut_for_search 做多粒度分词
     # 避免双重处理（recall 预分词 → retriever 再分词）
+    #
+    # ⚠️ **已知缺陷（未修，见 docs/RETRIEVAL_PLAN_V2.md §5.12）**：
+    #   入库时 `cleaner.normalize_synonyms()` 把文档里的变体统一成标准词
+    #   （`CPU→中央处理器`、`折半查找→二分查找`…，全库 5191 处），而这里传的是**原始 query**，
+    #   BM25 又是 `$contains` **字面**匹配 ⇒ 凡落在 SYNONYM_MAP 的 124 类术语，
+    #   **BM25 路由对变体写法全部 0 命中**。实测：索引里 `CPU` 出现 0 次、
+    #   `中央处理器` 255 次，故 `bm25_search(['CPU'], ...)` → 0 条。
+    #   试过「与 rerank 一样把 query 归一」（见 §5.12 实测）：学科级指标上升、
+    #   知识点级指标下降，是**权衡而非净胜**，故未默认启用。
     if normalized:
         routes.append(("keyword_bm25", normalized))
     # focus 路由：按领域特异性排序后取最有区分度的 2-3 个核心词
