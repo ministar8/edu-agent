@@ -15,12 +15,21 @@
   内容随「跑了几次门禁」而变 ⇒ 拿它当带基线的门禁会引入一个**不稳定判据**。
 - 只读，不碰索引、不碰生产数据。
 
-★ 使用前必须知道的一件事：它**不是线上统计**
---------------------------------------------
-用 `tags.query_preview ∩ 黄金集` 可以判断一条记录是不是评测跑出来的。实测
-（2026-09-27）`retrieve_query` 里 **99.4% 是评测流量**，真实用户流量约等于 0。
-所以本报表回答的是「**管线各层在黄金集上的行为分布**」，
+★ 使用前必须知道的两件事
+------------------------
+**① 它大概率不是线上统计。** 用 `tags.query_preview ∩ 黄金集` 可以判断一条记录是不是
+评测跑出来的。实测（2026-09-27）`retrieve_query` 里 **99.4% 是评测流量**，真实用户流量
+约等于 0。所以本报表回答的是「**管线各层在黄金集上的行为分布**」，
 **不是**「线上检索准不准」。`traffic_split` 一节会把这件事量化出来。
+
+**② 它混了多个代码版本 ⇒ 必须按时间切开看。** 同一份日志里写着 Step 1~10 各轮实验的
+运行记录，**同一个指标在不同时间段是不同的代码跑出来的**。实测（2026-09-27）：
+`generate` 的过阈率在 09-27 07:00 UTC 前后从 **0.076 跳到 0.21**（Step 7/10 的
+`_rrf_scale` 阈值量纲修正上线）—— 不切开就会读到一个「0.10 左右」的**混合口径**值，
+既不是修前也不是修后。⇒ 用 `--since` / `--until` 把窗口钉在**单一代码版本**上：
+
+    ... --since 2026-09-27T15:00          # 本机时区；只算此后的记录
+    ... --since 6h                        # 最近 6 小时（锚点是日志最新一条事件，不是「现在」）
 
 它比 `candidate_trace` 强的地方
 --------------------------------
@@ -45,9 +54,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import re
 import sys
 import time
 from collections import Counter, defaultdict
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -155,15 +166,77 @@ def scan_log(log_path: Path) -> dict[str, Any]:
 
 
 def _slim(rec: dict[str, Any]) -> dict[str, Any]:
-    """只留 tags/values，丢掉整条原始记录（日志行含大量无关字段）。"""
+    """只留 tags/values/ts，丢掉整条原始记录（日志行含大量无关字段）。"""
     tags = rec.get("tags")
     values = rec.get("values")
     return {
+        "ts": str(rec.get("ts") or ""),
         "query_preview": str((tags or {}).get("query_preview") or ""),
         "file": str((tags or {}).get("file") or ""),
         "category": str((tags or {}).get("category") or ""),
         "values": values if isinstance(values, dict) else {},
     }
+
+
+def parse_when(value: str, anchor: datetime) -> datetime:
+    """解析时间边界：ISO-8601，或相对量 ``<N><s|m|h|d>``。
+
+    ★ 相对量的锚点是**日志里最新的一条事件**（不是「现在」）—— 日志常常落后于当前时间，
+    用「现在」做锚会让 ``--since 6h`` 落在日志之外、结果为空，看起来像「没数据」。
+    无时区的 ISO 输入按**本机时区**解释。
+    """
+    text = value.strip()
+    match = re.fullmatch(r"(\d+)\s*([smhd])", text)
+    if match:
+        amount, unit = int(match.group(1)), match.group(2)
+        seconds = {"s": 1, "m": 60, "h": 3600, "d": 86400}[unit] * amount
+        return anchor - timedelta(seconds=seconds)
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        parsed = parsed.astimezone()
+    return parsed.astimezone(UTC)
+
+
+def _latest_ts(scan: dict[str, Any]) -> datetime:
+    """日志里最新一条事件的时间；取不到就退回当前时间。
+
+    为什么需要它：相对时间量（`--since 6h`）要以**日志的最新记录**为锚点 ——
+    日志常常落后于当前时间，用「现在」做锚会让窗口落在日志之外、结果为空，
+    看起来像「这段时间没有数据」。
+    """
+    span = scan.get("time_span") or [None, None]
+    text = span[1] if len(span) > 1 else None
+    if isinstance(text, str):
+        try:
+            parsed = datetime.fromisoformat(text)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+        except ValueError:
+            logger.warning("无法解析日志最新时间戳 %r，改用当前时间做锚点", text)
+    return datetime.now(UTC)
+
+
+def filter_rows_by_time(
+    rows: list[dict[str, Any]], since: datetime | None, until: datetime | None
+) -> list[dict[str, Any]]:
+    """按事件时间过滤。无法解析时间的行**保守保留**（宁可多算，不静默丢）。"""
+    if since is None and until is None:
+        return rows
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            when = datetime.fromisoformat(row["ts"])
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=UTC)
+            when = when.astimezone(UTC)
+        except (ValueError, KeyError):
+            out.append(row)
+            continue
+        if since is not None and when < since:
+            continue
+        if until is not None and when > until:
+            continue
+        out.append(row)
+    return out
 
 
 def split_traffic(
@@ -252,7 +325,11 @@ def build_ingest_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def build_report(
-    scan: dict[str, Any], query_index: dict[str, dict[str, str]], log_path: Path, golden: list[str]
+    scan: dict[str, Any],
+    query_index: dict[str, dict[str, str]],
+    log_path: Path,
+    golden: list[str],
+    window: dict[str, str | None] | None = None,
 ) -> dict[str, Any]:
     """把扫描结果整理成报表字典（自描述：口径全部写进 `_meta`）。"""
     query_rows: list[dict[str, Any]] = scan["query_rows"]
@@ -296,10 +373,14 @@ def build_report(
             "golden_paths": golden,
             "golden_queries": len(query_index),
             "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            # 时间窗口：**必须**随报表一起落盘。日志混了多个代码版本，
+            # 离开窗口就无法判断这份数字是哪一版代码跑出来的。
+            "window": window or {"since": None, "until": None, "filtered": False},
             "note": (
-                "只读遥测日志。输入以**评测流量**为主（见 traffic_split）⇒ "
+                "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ "
                 "本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。"
-                "无基线、无判定 —— 它不是门禁。"
+                "② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 "
+                "不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
             ),
         },
         "event_counts": dict(Counter(scan["event_counts"]).most_common()),
@@ -359,6 +440,14 @@ def format_report(report: dict[str, Any]) -> str:
         f"  (坏行 {meta['bad_lines']})"
     )
     out.append(f"  时间跨度  {meta['time_span'][0]} → {meta['time_span'][1]}")
+    window = meta.get("window") or {}
+    if window.get("filtered"):
+        out.append(f"  时间窗口  since={window.get('since')}  until={window.get('until')}")
+    else:
+        out.append(
+            "  时间窗口  **未过滤** ⚠ 日志混了多个代码版本，此报表是混合口径"
+            "（用 --since/--until 钉到单一版本）"
+        )
 
     split = report["traffic_split"]["retrieve_query"]
     out.append("")
@@ -440,6 +529,13 @@ def main(argv: list[str] | None = None) -> int:
         help=f"黄金集 jsonl（可重复；默认 {DEFAULT_GOLDEN_PATH} 与 {DEFAULT_PAIRED_PATH}）",
     )
     parser.add_argument("--output", default=None, help="把 JSON 报表写到该路径（父目录会自动创建）")
+    parser.add_argument(
+        "--since",
+        default=None,
+        help="只统计该时刻之后的记录。ISO-8601（无时区按本机时区）或相对量如 6h / 3d；"
+        "相对量的锚点是日志最新一条事件，不是「现在」",
+    )
+    parser.add_argument("--until", default=None, help="只统计该时刻之前的记录（格式同 --since）")
     parser.add_argument("--json", action="store_true", help="打印 JSON 而不是表格")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
@@ -464,7 +560,26 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     scan = scan_log(log_path)
-    report = build_report(scan, query_index, log_path, golden)
+
+    # 相对时间量的锚点 = 日志里最新的一条事件（不是「现在」，见 `parse_when`）。
+    anchor = _latest_ts(scan)
+    try:
+        since = parse_when(args.since, anchor) if args.since else None
+        until = parse_when(args.until, anchor) if args.until else None
+    except ValueError as exc:
+        print(f"[错误] 无法解析时间参数: {exc}", file=sys.stderr)
+        return 2
+
+    window: dict[str, Any] = {
+        "since": since.isoformat() if since else None,
+        "until": until.isoformat() if until else None,
+        "filtered": bool(since or until),
+        "anchor": anchor.isoformat(),
+    }
+    for key in ("query_rows", "evidence_rows", "ingest_rows"):
+        scan[key] = filter_rows_by_time(scan[key], since, until)
+
+    report = build_report(scan, query_index, log_path, golden, window)
 
     if args.output:
         out_path = Path(args.output)

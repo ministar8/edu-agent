@@ -119,8 +119,11 @@ docker compose up --build                # 容器化启动
   它给 `data/metrics/rag_metrics.jsonl`（由 `rag.metrics` 写入、此前**无任何读方**）
   补上读方：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、入库交叉校验。
   **无基线、无判定**；`--output <path>` 落盘归档（建议 `evals/results/`）。
-  ★ 用 `query_preview ∩ 黄金集` 判定流量来源 —— 实测 **99.4% 是评测流量**
+  ★ 两条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源 —— 实测 **99.4% 是评测流量**
   ⇒ 它回答「管线各层在黄金集上的行为分布」，**不是**线上统计，别拿它推断生产表现。
+  ② **日志混了多个代码版本**（Step 1~10 各轮实验都写进同一份），必须用
+  `--since` / `--until`（ISO 或 `6h`/`3d`）把窗口钉到单一版本，否则读到的是**混合口径**
+  —— 实测 `generate` 过阈率在 09-27 15:00 前后为 0.075 → 0.187。
 - **门禁里的索引就绪屏障**：ChromaDB `add_documents` 之后立即查询会**间歇性**抛
   `Error creating hnsw segment reader: Nothing found on disk` —— 每次命中的集合不同，
   命中后该集合整轮不可查询（检索结果全错但不报错），会被误报成"检索退化"。

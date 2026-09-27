@@ -13,8 +13,14 @@
       "evals/ragas_paired20.jsonl"
     ],
     "golden_queries": 156,
-    "generated_at": "2026-09-27 20:55:17",
-    "note": "只读遥测日志。输入以**评测流量**为主（见 traffic_split）⇒ 本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。无基线、无判定 —— 它不是门禁。"
+    "generated_at": "2026-09-27 21:16:19",
+    "window": {
+      "since": null,
+      "until": null,
+      "filtered": false,
+      "anchor": "2026-09-27T12:53:57.622925+00:00"
+    },
+    "note": "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ 本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
   },
   "event_counts": {
     "chroma_query": 198080,
