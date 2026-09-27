@@ -35,6 +35,68 @@ def _dynamic_rrf_k(route_count: int) -> int:
     return max(10, min(60, int(_RRF_K_BASE * math.sqrt(route_count) / math.sqrt(4))))
 
 
+def _rrf_scale(k: int) -> float:
+    """把 RRF 分数归一到**标定参考 k**（`_RRF_K_BASE`），使分数尺度与路由数解耦。
+
+    ★ 为什么必须有（2026-09-27 实测）：阈值是按 **k = `_RRF_K_BASE`(=20)** 标定的
+    （见 `retriever._resolve_retrieval_policy` 注释里 `2.5/40` 的算例），
+    而 `_dynamic_rrf_k` 在 13 条路由时给出 **36** ⇒ 分数尺度随之缩小约 1.76×，
+    **阈值却没跟着缩**。后果是**量纲错配**，不是「宁严勿滥」：
+
+    | 查询类别 | 有效阈值 | 可达上限（两条最高权重路由都排第 1） |
+    |---|---|---|
+    | 短概念 | 0.0600 | 0.1027 |
+    | 一般 | 0.0600 | 0.0811 |
+    | 对比 | 0.0880 | 0.1081 |
+    | **练习 / 批改** | **0.1200** | **0.1081** ← 阈值高于上限 |
+    | 代码 | 0.1200 | 0.1351 |
+
+    ⇒ 练习/批改类（占黄金集 **41%**）只要文档没被 **≥3 条**路由命中，就**必然**被滤掉。
+
+    归一到参考 k 后：rank 1 处的分数与 `k == _RRF_K_BASE` 时**完全一致**；
+    `k == _RRF_K_BASE` 时该因子为 **1**，行为不变。
+    """
+    return (k + 1) / (_RRF_K_BASE + 1)
+
+
+def _rrf_scale_needed(cat: QueryCategory | None, k: int) -> bool:
+    """该类别当前的有效阈值**是否高于其 RRF 可达上限**（见 `_rrf_scale`）。
+
+    ★ **只在越界时启用** —— 那才是量纲错配真正造成危害的地方。
+    对本来就有余量的类别放大分数，只会让更多低分噪声越过阈值：
+    实测**全局**修正虽让 `kp@k` 6 条路由全升（最高 +0.0705），
+    却把 `category_precision` 在 2 条路由压破 0.02 容差（−0.0272 / −0.0324）；
+    **收窄**后代价降到 −0.0242 / −0.0296。用户于 2026-09-27 明确接受该权衡。
+
+    ⚠️ **不能按类别名判定** —— 实测「用信号量写出生产者—消费者问题的伪代码」
+    同时被标为 `is_exercise` **与** `is_code`，但它有 `code_meta` 与另一条同权重路由
+    （top2 = 5.0），可达上限 0.1351 **高于**阈值 0.12，**并不越界**。按类别名判会误伤它。
+
+    ⚠️ 这里的阈值公式与 `retriever._resolve_retrieval_policy` **同源**
+    （`0.06` / `1.5` / `1.2·0.75·1.1` 三个系数）。**两者是一对**：
+    那边改公式，这里必须同步，否则判定会静默失效（该修的没修、或不该修的乱修）。
+
+    完整分析见 `docs/RETRIEVAL_PLAN.md` §3⑦。
+    """
+    if cat is None:
+        return False
+
+    from rag.recall import ALL_ROUTES, get_route_weight
+
+    weights = sorted((get_route_weight(r, cat) for r in ALL_ROUTES), reverse=True)
+
+    # 与 `retriever._resolve_retrieval_policy` 同源的阈值（只用于**判定**，不改阈值）
+    threshold = 0.06 * (weights[0] / 1.5)
+    if cat.is_exercise or cat.is_answer:
+        threshold *= 1.2
+    elif cat.is_short:
+        threshold *= 0.75
+    elif cat.is_long or cat.is_comparison:
+        threshold *= 1.1
+
+    return threshold > (weights[0] + weights[1]) / (k + 1)
+
+
 def _base_route_name(route_name: str) -> str:
     return route_name.rsplit(":", 1)[-1].strip()
 
@@ -62,7 +124,9 @@ def merge_route_results(
     """RRF (Reciprocal Rank Fusion) 合并多路检索结果
 
     加权 RRF：不同路由按查询类型赋予不同权重。
-    公式：score(d) = Σ w(route, cat) / (k + rank_i(d))
+    公式：score(d) = Σ w(route, cat) / (k + rank_i(d)) × scale
+    其中 `scale` 只在**阈值高于可达上限**的类别上取 `_rrf_scale(k)`，否则为 1.0
+    —— 判定与理由见 `_rrf_scale_needed` 的文档串。
     优点：
     - 对异常高分不敏感（排名 1 和 2 的差距是 1/(k+1)-1/(k+2)）
     - 跨路由重复文档自然获得更高分数
@@ -72,6 +136,7 @@ def merge_route_results(
 
     # 动态 k：路由多时 k 更大，让多路融合更平滑
     k = _dynamic_rrf_k(len(route_results))
+    scale = _rrf_scale(k) if _rrf_scale_needed(cat, k) else 1.0
     merged: dict[str, tuple[Document, float, set[str], dict[str, float]]] = {}
     raw_count = sum(len(results) for _, results in route_results)
 
@@ -81,7 +146,7 @@ def merge_route_results(
             # 去重 key 加入集合来源，防止跨集合同名文档被误合并
             # 例如 "栈的定义" 在 data_structure 和 computer_organization 都出现
             key = _dedup_key(doc)
-            rrf_contribution = w / (k + rank)
+            rrf_contribution = w / (k + rank) * scale
 
             existing = merged.get(key)
             if existing is None:
@@ -134,8 +199,9 @@ def weighted_rrf_merge(
 ) -> list[tuple[Document, float]]:
     """加权 RRF 合并：不同来源（原始查询/子查询）可赋予不同权重
 
-    标准 RRF: score(d) = Σ 1/(k + rank_i(d))
-    加权 RRF: score(d) = Σ w_source × w_route / (k + rank_i(d))
+    标准 RRF: score(d) = Σ 1/(k + rank_i(d)) × scale
+    加权 RRF: score(d) = Σ w_source × w_route / (k + rank_i(d)) × scale
+    （`scale` 的取值见 `_rrf_scale_needed`）
 
     w_source: 原始查询 1.5，子查询 1.0，确保原始语境信号更强。
     w_route: 从 recall_routes metadata 提取路由名，按 get_route_weight 加权，
@@ -148,6 +214,7 @@ def weighted_rrf_merge(
     if k <= 0:
         total_routes = sum(len(results) for _, results in grouped_results)
         k = _dynamic_rrf_k(max(1, total_routes // max(1, len(grouped_results))))
+    scale = _rrf_scale(k) if _rrf_scale_needed(cat, k) else 1.0
     merged: dict[str, tuple[Document, float, set[str]]] = {}
     raw_count = sum(len(results) for _, results in grouped_results)
 
@@ -163,7 +230,7 @@ def weighted_rrf_merge(
                 w_route = 1.0
             # 去重 key 用 content_hash + collection，避免同 section 不同 chunk 前100字相同被误合并
             key = _dedup_key(doc)
-            rrf_contribution = w_source * w_route / (k + rank)
+            rrf_contribution = w_source * w_route / (k + rank) * scale
 
             existing = merged.get(key)
             if existing is None:

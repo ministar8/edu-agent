@@ -1,0 +1,22 @@
+Building prefix dict from the default dictionary ...
+DEBUG jieba: Building prefix dict from the default dictionary ...
+Loading model from cache C:\Users\26452\AppData\Local\Temp\jieba.cache
+DEBUG jieba: Loading model from cache C:\Users\26452\AppData\Local\Temp\jieba.cache
+Loading model cost 0.693 seconds.
+DEBUG jieba: Loading model cost 0.693 seconds.
+Prefix dict has been built successfully.
+DEBUG jieba: Prefix dict has been built successfully.
+WARNING evaluation.retrieval_gate: 集合 'computer_network' 索引不可查询，重建后重试：集合 'computer_network' 在 8 次重试后索引仍不可查询：InternalError: Error executing plan: Internal error: Error creating hnsw segment reader: Nothing found on disk。该集合的 HNSW 段文件未落盘，进程内无法恢复；请重建：ingest_category('computer_network', rebuild=True)
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+==============================================================================
+  探针门禁   embed=real rerank=on/real  k=5
+==============================================================================
+  probe  当前               基线               目标
+#4      survived         —                07_查找.md :: 二分查找
+#18     survived         —                06_代码实现.md :: 生产者进程
+#9      rerank_topn      —                04_文件管理.md :: 空闲
+#17     survived         —                02_数据表示与运算.md :: 浮点数
+#19     survived         —                04_文件管理.md :: 位示图
+
+基线已更新: evals\probe_baseline.json

@@ -90,7 +90,7 @@
       "id": 9,
       "query": "请出一道考查磁盘空闲空间管理的题。",
       "target": "04_文件管理.md :: 空闲",
-      "dropped_by": "rrf_threshold",
+      "dropped_by": "rerank_topn",
       "stages": [
         {
           "key": "recall",
@@ -104,8 +104,8 @@
         },
         {
           "key": "rrf_threshold",
-          "count": 10,
-          "rank": null
+          "count": 34,
+          "rank": 15
         },
         {
           "key": "rerank_topn",
@@ -172,12 +172,12 @@
       "stages": [
         {
           "key": "recall",
-          "count": 67,
+          "count": 66,
           "rank": 1
         },
         {
           "key": "section_dedup",
-          "count": 67,
+          "count": 66,
           "rank": 1
         },
         {
