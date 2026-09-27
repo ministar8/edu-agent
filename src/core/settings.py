@@ -117,15 +117,12 @@ class Settings(BaseSettings):
     RERANK_LOCAL_URL: Annotated[str, BeforeValidator(check_str_is_http)] = "http://localhost:11436"
     RERANK_MIN_SCORE: float = 0.3
     RERANK_ABSOLUTE_MIN_SCORE: float = 0.15
-    # 是否把 **rerank 的 query** 也做同义词归一（复用 cleaner 同一份 `normalize_synonyms`）。
-    # ★ 为什么必须有：文档在**入库时**已被 `cleaner.normalize_synonyms()` 改写
-    #   （「折半查找」→「二分查找」等），而 rerank 是**唯一**拿「原始 query × 索引文本」
-    #   做比较的地方 —— query 侧不归一就必然与文档错配。
-    #   实测（探针 #4）：未归一 rerank=0.0576（低于绝对阈值 0.15 被筛掉）；
-    #   归一后 rerank=0.9831。**17 倍差距**，且这是可复现的确定性差异。
-    #   注意只影响 rerank：检索（embedding / BM25）侧靠 `expand_query_with_synonyms`
-    #   做的是**追加**扩展、原词仍在，故不需要改。
-    RERANK_QUERY_NORMALIZE: bool = True
+    # ★ `RERANK_QUERY_NORMALIZE`（S4）已于 2026-09-27 **删除**。
+    #   它存在的唯一理由是「对齐入库时被改写过的文档」；而入库归一已撤销
+    #   （见下方 `INGEST_SYNONYM_NORMALIZE`），两侧都保持原文，reranker 直接比较
+    #   「原始 query × 原文」即可，不需要再归一。
+    #   ⚠️ 若将来恢复入库归一，必须同步恢复 rerank 侧归一，否则会重新引入
+    #   「文档被改写、query 未改写」的错配。详见 `docs/RETRIEVAL_PLAN.md`（Step 2）。
 
     # ── HyDE ──────────────────────────────────────
     HYDE_ENABLED: bool = True
@@ -213,15 +210,24 @@ class Settings(BaseSettings):
     INGEST_READY_DELAY: float = 0.5
     # 入库时是否用 `synonyms.normalize_synonyms()` 把文档里的变体统一成标准词
     # （`CPU→中央处理器`、`折半查找→二分查找`…，全库实测 **5191 处**）。
-    # ★ 这是**跨侧契约的文档侧**：一旦改写，query 侧的字面匹配消费者
-    #   （BM25 的 `$contains`、cross-encoder reranker）就必须同样归一，否则错配。
-    #   实测代价：BM25 对变体写法 0 命中（`bm25_search(['CPU'])` → 0 条）；
-    #   reranker 给同义词变体极低分（#4 折半查找 0.0576 vs 0.9739）；
-    #   且**索引文本 ≠ 源文件**，引用溯源展示的摘录与原文不符。
-    #   本开关存在的目的是**可对照**：关掉它即「文档保持原文」，
-    #   此时 query 侧**不应**再归一（`RERANK_QUERY_NORMALIZE` 需同步关），
-    #   两者是一对，见 `docs/RETRIEVAL_PLAN_V2.md` §5.12。
-    INGEST_SYNONYM_NORMALIZE: bool = True
+    #
+    # ★ **默认已改为 False（2026-09-27）** —— 归一曾造成跨侧契约断裂：
+    #   文档被改写、query 未被改写 ⇒ BM25 的 `$contains` 字面匹配对变体**恒 0 命中**
+    #   （实测索引里 `CPU`/`Cache`/`哈希表`/`迪杰斯特拉` 全为 0 次，而源文件分别有
+    #   572/169/10/7 次）；reranker 给变体极低分；且**索引文本 ≠ 源文件**，引用溯源
+    #   展示的摘录与用户点开的原文不符（产品正确性问题）。
+    #
+    # ★ 撤销后的实测收益（156 条黄金集门禁，6 条路由全部通过，索引 2107 → 2092 chunk）：
+    #   `real/off` kp@k **+0.0448**、kp_mrr **+0.0401**；
+    #   `real/disabled` kp@k +0.0256、kp_mrr +0.0428；fake 路由 kp@k 最高 +0.0705。
+    #   隔离实验证明收益来自**撤销归一本身**，与 `expand_query_with_synonyms` 无关
+    #   （关掉该扩展后 kp@k 逐位相同）。
+    #   代价：`real/off` 的 `cat@1`/`cat@k`/`cat_mrr` 各降约 0.006~0.008（门禁容差内）。
+    #   详见 `docs/RETRIEVAL_PLAN.md`（Step 2）。
+    #
+    # 保留本开关是为了**可对照**：设为 true 即恢复「文档被归一」的旧行为，
+    # 但必须**同步恢复 rerank 侧的 query 归一**（该分支已随 S4 删除）。
+    INGEST_SYNONYM_NORMALIZE: bool = False
     # 预热成功率低于此值即视为异常并告警。预热全落空通常意味着索引未就绪或检索链故障，
     # 但旧代码只打印一行 INFO，导致问题无声无息。
     WARMUP_MIN_SUCCESS_RATE: float = 0.8
