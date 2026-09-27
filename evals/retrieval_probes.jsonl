@@ -1,11 +1,20 @@
 # 检索探针（固定 probe 表）
 #
 # 每条 probe 声明「正确 chunk」的定位方式：source_file 精确匹配 + section.path 子串匹配。
-# ★ 匹配的是**索引里的文本**，不是知识库源文件 —— 因为入库链会做同义词归一
-#   （见 cleaner.normalize_synonyms），源文件里的「折半查找」在索引里是「二分查找」。
+# ★ 匹配的是**索引里的文本**，不是知识库源文件 —— 入库链会改写文本（标点归一、去噪、
+#   标题包装等），两者不逐字相同。
+# ⚠️ 以下是一句**已过期、勿再照抄**的旧注释：曾因入库同义词归一
+#   （`cleaner.normalize_synonyms`）使「折半查找」在索引里变成「二分查找」。
+#   该归一已于 2026-09-27 **撤销**（`settings.INGEST_SYNONYM_NORMALIZE=False`）：
+#   实测索引里 `折半查找` 43 次 / `二分查找` 3 次 ⇒ **原文保留，没有归一线了**。
+# ⚠️ `expect_section` 是**子串匹配**，与源文件标题文本耦合：标题一改，探针可能静默
+#   指向另一个 chunk（或匹配不到），而被误读成「检索退化」。改探针后必须验证它
+#   仍能定位到原目标 —— 做法见
+#   `evals/results/step9_probe_gate_2026-09-27/scripts/reverse_verify.py`（反向验证）。
 #
-# 用途：evaluation.candidate_trace 用它定位「正确 chunk 在哪一层从候选池消失」。
-{"id": 4, "query": "折半查找的适用条件是什么？", "expect_source": "07_查找.md", "expect_section": "二分查找", "note": "同义词：query 用「折半查找」，索引被归一成「二分查找」"}
+# 用途：evaluation.candidate_trace / evaluation.probe_gate 用它定位
+#   「正确 chunk 在哪一层从候选池消失」。
+{"id": 4, "query": "折半查找的适用条件是什么？", "expect_source": "07_查找.md", "expect_section": "二分查找", "note": "定位靠**子串**命中：源文件该小节标题是「### ❗2.1**【考点】折半查找(二分)折半查找**(Binary Search)…」，标题文本里**含**「二分查找」。⚠️ 这是脆弱耦合 —— 别误以为是「query 折半查找被归一成索引里的二分查找」，归一早于 2026-09-27 撤销"}
 {"id": 18, "query": "用信号量写出生产者—消费者问题的伪代码。", "expect_source": "06_代码实现.md", "expect_section": "生产者进程", "note": "纯代码 chunk"}
 {"id": 9, "query": "请出一道考查磁盘空闲空间管理的题。", "expect_source": "04_文件管理.md", "expect_section": "空闲", "note": "学科路由：OS 集合是否被检索"}
 {"id": 17, "query": "用 C 语言写一段程序打印 float 的 32 位二进制表示，并说明如何据此读出阶码与尾数。", "expect_source": "02_数据表示与运算.md", "expect_section": "浮点数", "note": "跨学科噪声"}

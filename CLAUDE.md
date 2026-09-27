@@ -115,6 +115,12 @@ docker compose up --build                # 容器化启动
   跑在**临时索引 + 就绪屏障**上；权威路由为
   `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1`。
   **不要**用 `candidate_trace` 当门禁 —— 它跑生产索引、无就绪屏障、无退出码。
+- **遥测报表（只读，不是门禁）**：`PYTHONPATH=src uv run python -m evaluation.telemetry_report`。
+  它给 `data/metrics/rag_metrics.jsonl`（由 `rag.metrics` 写入、此前**无任何读方**）
+  补上读方：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、入库交叉校验。
+  **无基线、无判定**；`--output <path>` 落盘归档（建议 `evals/results/`）。
+  ★ 用 `query_preview ∩ 黄金集` 判定流量来源 —— 实测 **99.4% 是评测流量**
+  ⇒ 它回答「管线各层在黄金集上的行为分布」，**不是**线上统计，别拿它推断生产表现。
 - **门禁里的索引就绪屏障**：ChromaDB `add_documents` 之后立即查询会**间歇性**抛
   `Error creating hnsw segment reader: Nothing found on disk` —— 每次命中的集合不同，
   命中后该集合整轮不可查询（检索结果全错但不报错），会被误报成"检索退化"。

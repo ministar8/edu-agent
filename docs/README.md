@@ -37,6 +37,12 @@
 | `python -m evaluation.probe_gate` | **小节级**：目标 chunk 在**哪一层**丢失，5 条探针 | 补上 `retrieval_gate` 的盲区（`kp_*` 只看文件名）。**拦「后退」、放行「前进」** |
 | `python -m evaluation.candidate_trace` | 逐层快照（诊断） | **不是门禁** —— 跑生产索引、无就绪屏障、无退出码 |
 
+## 遥测报表（不是门禁）
+
+| 命令 | 说明 |
+|---|---|
+| `python -m evaluation.telemetry_report` | 把 `data/metrics/rag_metrics.jsonl` 聚合成人可读报表：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、分层/路由分布、入库交叉校验。**只读、无基线、无判定** —— 退出码只用于「读不到日志」。★ 用 `query_preview ∩ 黄金集` 可以判定流量来源：实测 **99.4% 是评测流量** ⇒ 它回答的是「管线各层在黄金集上的行为分布」，**不是**线上统计。`--output <path>` 可把 JSON 落盘归档（建议 `evals/results/`） |
+
 ## 评测产物
 
 `evals/results/` 下有两类，都是**证据**，不要随意清理：

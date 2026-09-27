@@ -55,10 +55,17 @@ class MetricsTimer(AbstractContextManager):
         return False
 
 
+# 遥测日志的默认落盘位置。★ 这里是**唯一**的定义处 ——
+# `evaluation.telemetry_report` 把它当作默认输入。两份各写一遍这个表达式迟早漂移，
+# 而漂移的表现是「报表读到的是另一份日志」，**不报错、只是数字变了**。
+DEFAULT_METRICS_PATH = (
+    Path(__file__).resolve().parents[2] / "data" / "metrics" / "rag_metrics.jsonl"
+)
+
+
 class MetricsWriter:
     def __init__(self, output_path: Path | None = None) -> None:
-        base_dir = Path(__file__).resolve().parents[2] / "data" / "metrics"
-        self._output_path = output_path or (base_dir / "rag_metrics.jsonl")
+        self._output_path = output_path or DEFAULT_METRICS_PATH
         self._lock = threading.Lock()
         self._output_path.parent.mkdir(parents=True, exist_ok=True)
 
