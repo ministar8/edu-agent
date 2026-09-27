@@ -19,12 +19,20 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.21
     hooks:
+      # ★ `exclude: ^evals/` —— 与上面空白类钩子同理：`evals/` 下归档的是**验证证据**
+      #   （`results/step*_*/scripts/*.py` 是**产生那些日志的脚本原文**），
+      #   而 ruff 的两个钩子都会**改写文件**（`--fix` / format）。
+      #   让它们改写证据，会让「归档的脚本」与「实际跑出日志的脚本」不再一致。
+      #   实测代价：2026-09-27 归档 Step 4/6/7 的脚本时，首次 `git commit` 均因此中止。
+      #   注意 pre-commit 会把**暂存的文件名追加到 args 之后** —— 只写 `src/` 挡不住 `evals/`。
       - id: ruff
         # 范围是 `src/`：本工作区不含 `tests/`，带上它会报 E902（不是代码问题）；
         # `scripts/` 只有 tei_deploy.ps1，非 Python。
         args: [--fix, src/]
+        exclude: ^evals/
       - id: ruff-format
         args: [src/]
+        exclude: ^evals/
 
   - repo: local
     hooks:
