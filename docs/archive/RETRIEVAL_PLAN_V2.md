@@ -727,6 +727,17 @@ uv run python -c "from rag.semantic_cache import get_semantic_cache; get_semanti
 
 ### 5.12 ★★ 当前最主要的问题：入库归一是个**只做了一半的跨侧契约**
 
+> ## ✅ 已由 3-② 解决（2026-09-27，Step 2）
+>
+> 本节提出的问题**已修复**：`settings.INGEST_SYNONYM_NORMALIZE` 默认已改为 `False`
+> （文档保持原文），S4（`RERANK_QUERY_NORMALIZE`）的字段与分支已**删除**。
+> 索引已按未归一口径重建（2107 → 2092 chunk），6 条门禁路由全部通过；
+> `real/off` `kp@k` **+0.0448**、`kp_mrr` **+0.0401**。
+>
+> 代价：`real/off` 的 `cat@1`/`cat@k`/`cat_mrr` 各降约 0.006~0.008（容差内，已单列）。
+>
+> **本节以下内容保留为历史分析**，不代表当前状态。当前方案见 `docs/RETRIEVAL_PLAN.md`。
+
 `rag.synonyms` 的模块头写着它是「单一数据源」，供两个消费者复用：
 `recall.py`（查询扩展）与 `cleaner.py`（入库时归一）。
 **但"归一"本质上是一个跨两侧的契约 —— 文档侧归一了，query 侧必须同样归一，
