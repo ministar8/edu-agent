@@ -1,0 +1,17 @@
+情形                         期望集合在范围内            多余的集合（噪声）        
+                            改动前      改动后   改动前          改动后         
+#19 位示图（不含磁盘）                 ✗        ✓   ['data_structure'] []          
+位示图+磁盘（对照）                    ✓        ✓   ['data_structure', 'computer_organization'] ['computer_organization']
+黄金集·资源分配图                     ✓        ✓   ['data_structure'] []          
+黄金集·IPv4 字符串                  ✓        ✓   ['data_structure'] []          
+黄金集·KMP 主串                    ✓        ✓   []           []          
+黄金集·图的遍历                      ✓        ✓   []           []          
+黄金集·邻接表                       ✓        ✓   []           []          
+黄金集·邻接矩阵                      ✓        ✓   []           []          
+黄金集·二叉树                       ✓        ✓   []           []          
+黄金集·栈                         ✓        ✓   []           []          
+#9 磁盘空闲空间                     ✓        ✓   ['computer_organization'] ['computer_organization']
+#18 生产者-消费者                   ✓        ✓   []           []          
+
+两个判据：① 期望集合**是否在检索范围内**（✗→✓ = 修好可达性）；
+          ② 多余的集合是否被剔除（噪声↓ ⇒ category_precision↑）。

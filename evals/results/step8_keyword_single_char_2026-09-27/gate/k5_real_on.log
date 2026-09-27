@@ -1,0 +1,153 @@
+Building prefix dict from the default dictionary ...
+DEBUG jieba: Building prefix dict from the default dictionary ...
+Loading model from cache C:\Users\26452\AppData\Local\Temp\jieba.cache
+DEBUG jieba: Loading model from cache C:\Users\26452\AppData\Local\Temp\jieba.cache
+Loading model cost 0.898 seconds.
+DEBUG jieba: Loading model cost 0.898 seconds.
+Prefix dict has been built successfully.
+DEBUG jieba: Prefix dict has been built successfully.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.retriever: 阈值过滤后为空，已保底返回 top-1：query=请出一道考查奈氏准则与香农公式的题。 threshold=0.1200 最高分=0.1078 候选=270（阈值高于 RRF 可达上限，见 retriever._stage_dedup_and_threshold 注释）
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.retriever: 阈值过滤后为空，已保底返回 top-1：query=学生的答案是：一个文件可以有多个硬链接，删除其中任意一个链接，文件就被删除了。请 threshold=0.1200 最高分=0.1144 候选=314（阈值高于 RRF 可达上限，见 retriever._stage_dedup_and_threshold 注释）
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+索引就绪：2092 chunks（78.8s）  {'data_structure': 703, 'computer_organization': 415, 'operating_system': 358, 'computer_network': 314, 'questions': 278, 'learning_paths': 24}
+====================================================================
+  检索质量黄金集门禁
+  路由 embed=real  rerank=on (real)   k=5
+====================================================================
+指标                              当前        基线   判定
+category_hit_at_1           0.9231    0.9231   通过
+category_hit_at_k           0.9423    0.9423   通过
+category_mrr                0.9327    0.9327   通过
+category_precision          0.9607    0.9589   通过
+empty_result_rate           0.0000    0.0000   通过
+mean_evidence_count         3.7500    3.7436   通过
+kp_hit_at_k                 0.8526    0.8526   通过
+kp_mrr                      0.7565    0.7565   通过
+kp_annotated              156.0000  156.0000   通过
+
+首条未命中目标学科的查询（12 条）：
+  - 虚拟内存的作用是什么？                        期望 operating_system       实际 computer_organization
+  - 什么是段页式存储管理？                        期望 operating_system       实际 computer_organization
+  - NAT 解决了什么问题？有什么副作用？                期望 computer_network       实际 questions
+  - 请出一道考查奈氏准则与香农公式的题。                 期望 computer_network/questions 实际 operating_system
+  - 学生的答案是：一条指令的长度一定等于机器字长。请批改。        期望 computer_organization  实际 data_structure
+  - 学生的答案是：虚拟存储器就是外存的一部分。请批改。          期望 computer_organization  实际 operating_system
+  - 学生的答案是：P 操作和 V 操作执行过程中都可以被中断。请批改。  期望 operating_system       实际 computer_organization
+  - 学生的答案是：页面大小越大，缺页率一定越低。请批改。         期望 operating_system       实际 computer_organization
+  - 学生的答案是：一个文件可以有多个硬链接，删除其中任意一个链接，文件就 期望 operating_system       实际 data_structure
+  - 学生的答案是：设备驱动程序直接控制硬件，与中断处理无关。请批改。   期望 operating_system       实际 computer_organization
+  - 写一段 C 代码测量并输出数组顺序访问与随机访问的耗时差，并解释原因 期望 computer_organization  实际 data_structure
+  - 写一段 C 代码用位运算交换两个整数，并说明为什么它未必比使用临时变 期望 computer_organization  实际 operating_system
+
+路由贡献度（最终证据里各路由出现次数，合计 2175 次）：
+    169  data_structure:semantic
+    154  data_structure:keyword_bm25
+    147  data_structure:focus
+    118  computer_organization:semantic
+    113  computer_organization:keyword_bm25
+    112  operating_system:semantic
+    111  operating_system:keyword_bm25
+    107  computer_network:semantic
+    104  computer_network:keyword_bm25
+    102  operating_system:focus
+    102  computer_network:focus
+    101  computer_organization:focus
+     73  questions:exercise_meta
+     73  questions:keyword_bm25
+     73  questions:semantic
+     65  computer_network:expanded
+     65  questions:focus
+     45  data_structure:expanded
+     41  computer_organization:expanded
+     29  data_structure:section_meta
+     29  questions:expanded
+     28  operating_system:concept_meta
+     26  data_structure:concept_meta
+     26  computer_network:concept_meta
+     25  operating_system:section_meta
+     25  operating_system:expanded
+     24  computer_organization:section_meta
+     18  computer_organization:concept_meta
+     13  computer_network:section_meta
+     12  data_structure:code_meta
+      8  data_structure:answer_meta
+      8  operating_system:code_meta
+      6  computer_organization:structured_meta
+      5  operating_system:exercise_meta
+      3  computer_organization:comparison_meta
+      3  computer_network:answer_meta
+      2  computer_network:comparison_meta
+      2  computer_organization:exercise_meta
+      2  computer_organization:answer_meta
+      2  computer_network:structured_meta
+      1  data_structure:formula_meta
+      1  data_structure:comparison_meta
+      1  computer_network:code_meta
+      1  computer_organization:code_meta
+
+索引 78.8s / 检索 145.3s
+门禁通过：所有指标不低于基线。
