@@ -133,6 +133,12 @@ TEI 由**使用者另行启动**（不在 `compose.yaml` 里 —— 该文件只
 > from rag.embeddings import get_embeddings
 > print(len(get_embeddings().embed_query('探活')))"
 > ```
+>
+> ★ **这件事已有现成脚本**：`scripts/tei_ready.py`（TEI 就绪巡检）——
+>   它**复用项目自己的 `rag.embeddings` / `rag.reranker`** 发最小请求，**同时覆盖两个端点**
+>   （两个端点的请求体 schema 不同，见上文）。用法：
+>   `PYTHONPATH=src .venv/Scripts/python.exe scripts/tei_ready.py`
+>   ⇒ **不要**另外手写 curl、也不要再写一个探活脚本 —— 那会造出第二份写法，迟早漂移。
 
 ## 开发热同步
 
