@@ -1,0 +1,207 @@
+{
+  "_meta": {
+    "embedding_mode": "real",
+    "rerank_mode": "on",
+    "rerank_backend": "real",
+    "probe_path": "evals/retrieval_probes.jsonl",
+    "k": 5,
+    "recorded_at": "2026-09-27"
+  },
+  "probes": [
+    {
+      "id": 4,
+      "query": "折半查找的适用条件是什么？",
+      "target": "07_查找.md :: 二分查找",
+      "dropped_by": "survived",
+      "stages": [
+        {
+          "key": "recall",
+          "count": 55,
+          "rank": 1
+        },
+        {
+          "key": "section_dedup",
+          "count": 55,
+          "rank": 1
+        },
+        {
+          "key": "rrf_threshold",
+          "count": 20,
+          "rank": 1
+        },
+        {
+          "key": "rerank_topn",
+          "count": 5,
+          "rank": 1
+        },
+        {
+          "key": "rel_threshold",
+          "count": 5,
+          "rank": 1
+        },
+        {
+          "key": "final",
+          "count": 5,
+          "rank": 1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": 18,
+      "query": "用信号量写出生产者—消费者问题的伪代码。",
+      "target": "06_代码实现.md :: 生产者进程",
+      "dropped_by": "survived",
+      "stages": [
+        {
+          "key": "recall",
+          "count": 116,
+          "rank": 6
+        },
+        {
+          "key": "section_dedup",
+          "count": 116,
+          "rank": 6
+        },
+        {
+          "key": "rrf_threshold",
+          "count": 27,
+          "rank": 6
+        },
+        {
+          "key": "rerank_topn",
+          "count": 6,
+          "rank": 2
+        },
+        {
+          "key": "rel_threshold",
+          "count": 5,
+          "rank": 2
+        },
+        {
+          "key": "final",
+          "count": 5,
+          "rank": 2
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": 9,
+      "query": "请出一道考查磁盘空闲空间管理的题。",
+      "target": "04_文件管理.md :: 空闲",
+      "dropped_by": "rrf_threshold",
+      "stages": [
+        {
+          "key": "recall",
+          "count": 234,
+          "rank": 15
+        },
+        {
+          "key": "section_dedup",
+          "count": 234,
+          "rank": 15
+        },
+        {
+          "key": "rrf_threshold",
+          "count": 10,
+          "rank": null
+        },
+        {
+          "key": "rerank_topn",
+          "count": 5,
+          "rank": null
+        },
+        {
+          "key": "rel_threshold",
+          "count": 5,
+          "rank": null
+        },
+        {
+          "key": "final",
+          "count": 5,
+          "rank": null
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": 17,
+      "query": "用 C 语言写一段程序打印 float 的 32 位二进制表示，并说明如何据此读出阶码与尾数。",
+      "target": "02_数据表示与运算.md :: 浮点数",
+      "dropped_by": "survived",
+      "stages": [
+        {
+          "key": "recall",
+          "count": 83,
+          "rank": 2
+        },
+        {
+          "key": "section_dedup",
+          "count": 83,
+          "rank": 2
+        },
+        {
+          "key": "rrf_threshold",
+          "count": 18,
+          "rank": 2
+        },
+        {
+          "key": "rerank_topn",
+          "count": 6,
+          "rank": 1
+        },
+        {
+          "key": "rel_threshold",
+          "count": 3,
+          "rank": 1
+        },
+        {
+          "key": "final",
+          "count": 3,
+          "rank": 1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": 19,
+      "query": "位示图法是怎么工作的？",
+      "target": "04_文件管理.md :: 位示图",
+      "dropped_by": "survived",
+      "stages": [
+        {
+          "key": "recall",
+          "count": 67,
+          "rank": 1
+        },
+        {
+          "key": "section_dedup",
+          "count": 67,
+          "rank": 1
+        },
+        {
+          "key": "rrf_threshold",
+          "count": 16,
+          "rank": 1
+        },
+        {
+          "key": "rerank_topn",
+          "count": 5,
+          "rank": 1
+        },
+        {
+          "key": "rel_threshold",
+          "count": 2,
+          "rank": 1
+        },
+        {
+          "key": "final",
+          "count": 2,
+          "rank": 1
+        }
+      ],
+      "note": ""
+    }
+  ]
+}

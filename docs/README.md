@@ -29,7 +29,22 @@
 - `真题选项*.html`：真题选项修复任务的**审阅/补表产物**，由 `scripts/fix_question_options.py` 生成，
   `RETRIEVAL_ROADMAP.md` 有引用。
 
+## 门禁（改了检索链就跑）
+
+| 命令 | 粒度 | 说明 |
+|---|---|---|
+| `python -m evaluation.retrieval_gate` | 章级 `kp_*` + 学科级，156 条黄金集 | 改动检索链后**必须**跑；任一指标跌破基线即失败 |
+| `python -m evaluation.probe_gate` | **小节级**：目标 chunk 在**哪一层**丢失，5 条探针 | 补上 `retrieval_gate` 的盲区（`kp_*` 只看文件名）。**拦「后退」、放行「前进」** |
+| `python -m evaluation.candidate_trace` | 逐层快照（诊断） | **不是门禁** —— 跑生产索引、无就绪屏障、无退出码 |
+
 ## 评测产物
 
-`evals/results/` 下是 RAGAS 等**付费评测结果**。
-按项目纪律，它们**是证据**（含时间戳，可当基线用，避免为跑「before」再付费），不要随意清理。
+`evals/results/` 下有两类，都是**证据**，不要随意清理：
+
+1. `ragas_*.json` —— **付费**的 RAGAS 答案级评测结果（含时间戳，可当基线用，避免为跑「before」再付费）；
+2. `step*_*/` —— 各轮检索改动的**免费门禁验证证据**（门禁 / 探针 / 诊断日志 + 产生它们的脚本原文）。
+   每个目录有自己的 `README.md`，写明背景、关键数字与「读日志时要知道的事」。
+
+> ★ 这些目录里的 `*.log` 由 `.gitignore` 的**例外规则** `!evals/results/**/*.log` 放行
+> （`*.log` 会静默拦截它们）；`scripts/*.py` 则被 pre-commit 的 ruff 钩子 **排除**
+> （`exclude: ^evals/`）—— 归档脚本是证据，不该被会改写文件的钩子重排。

@@ -1,0 +1,23 @@
+Building prefix dict from the default dictionary ...
+Loading model from cache C:\Users\26452\AppData\Local\Temp\jieba.cache
+Loading model cost 0.623 seconds.
+Prefix dict has been built successfully.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+WARNING rag.parse_utils: Failed to parse LLM output as JSON: This is a test response from the fake model.
+[失败] 探针退化：
+  - probe #19 退化：survived → not_recalled（目标在**更早**的层丢失了；query=位示图法是怎么工作的？）
+[反向验证] 已把词表还原成「改动前」：
+  位示图 的推断 -> ['data_structure']
+
+==============================================================================
+  探针门禁   embed=real rerank=on/real  k=5
+==============================================================================
+  probe  当前               基线               目标
+#4      survived         survived         07_查找.md :: 二分查找
+#18     survived         survived         06_代码实现.md :: 生产者进程
+#9      rrf_threshold    rrf_threshold    04_文件管理.md :: 空闲
+#17     survived         survived         02_数据表示与运算.md :: 浮点数
+#19     not_recalled     survived         04_文件管理.md :: 位示图 退化
+
+
+[反向验证] 探针门禁退出码 = 1（期望 1 = 抓到退化）
