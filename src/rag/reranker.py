@@ -32,6 +32,33 @@ _rerank_cache: BoundedCache[str, list[Document]] = BoundedCache(
     max_size=_RERANK_CACHE_MAX, ttl=_RERANK_CACHE_TTL, name="rerank"
 )
 
+# 代码围栏：与 `splitter` 判断「是否给 chunk 加语义锚点」用的是**同一个条件**。
+_CODE_FENCE_RE = re.compile(r"```|~~~")
+# 历史遗留的 heading 前缀形态（`[A] > [B]\n`），只对**非代码** chunk 生效。
+_HEADING_PATH_RE = re.compile(r"^(?:\[[^\]]*\]\s*(?:>\s*)*)+\n")
+
+
+def _rerank_text(doc: Document) -> str:
+    """构造送进 reranker 的文本。
+
+    ★ **代码 chunk 的 `[考点名]` 前缀必须保留。** 它由 `splitter` 有意添加
+    （见 `splitter.py` 的「含代码围栏的 chunk」分支）：纯代码正文没有中文语义，
+    无论是 embedding 还是 cross-encoder 都无法把「用信号量写出生产者—消费者问题的
+    伪代码」这类 query 映射到一段 C 代码上。本函数原先无条件剥掉该前缀，
+    实测使目标 chunk 的 rerank 分从 **0.8645 掉到 0.0037**（低于绝对阈值 0.15，
+    直接被 `_apply_rerank_threshold` 筛掉）。
+
+    ★ **原则：reranker 必须与 embedding 看到同一段文本**（同一份 `page_content`），
+    否则两侧对「哪些词存在」的认知不一致。本函数只做截断，外加对**非代码** chunk
+    剥掉历史遗留的 heading 前缀 —— 当前索引里 296 个带前缀的 chunk **全部**含代码围栏
+    （非代码 chunk 一个都没有，`splitter` 的约定是「heading 不进 page_content」），
+    故该剥离目前是**守卫**：将来若恢复「heading 进正文」，它才起作用。
+    """
+    raw = doc.page_content
+    if _CODE_FENCE_RE.search(raw):
+        return raw[:_MAX_DOC_CHARS]
+    return _HEADING_PATH_RE.sub("", raw)[:_MAX_DOC_CHARS]
+
 
 def _copy_ranked(docs: list[Document]) -> list[Document]:
     """缓存命中时返回浅拷贝：新 list + 每篇 Document 复制一份 metadata。
@@ -172,11 +199,10 @@ def rerank(
         logger.debug("Rerank cache hit q=%s docs=%d top_k=%d", query[:30], len(documents), top_k)
         return _copy_ranked(cached_docs)
 
-    # ── 去噪：去掉 heading_path 前缀（如 "[进程管理] > [PV操作]\n"） ──
-    # heading_path 已存在于 metadata (section.path) 和 LLM 上下文 (format_text_evidence)，
-    # 保留在 page_content 中会干扰 reranker 对正文相关性的判断。
-    _HEADING_PATH_RE = re.compile(r"^(?:\[[^\]]*\]\s*(?:>\s*)*)+\n")
-    texts = [_HEADING_PATH_RE.sub("", doc.page_content)[:_MAX_DOC_CHARS] for doc in documents]
+    # ── 构造送进 reranker 的文本 ──
+    # ★ 为什么不再无条件剥 heading 前缀：见 `_rerank_text` 的文档串 —— 那个前缀在
+    #   代码 chunk 上是**语义锚点**，剥掉会让纯代码 chunk 对中文 query 恒低分。
+    texts = [_rerank_text(doc) for doc in documents]
 
     # ── 打分：默认打本地 TEI /rerank；USE_FAKE_RERANK 时走确定性本地实现 ──
     top_n = min(top_k, len(documents))

@@ -1,0 +1,45 @@
+找到目标 chunk 1 个
+
+==================================================================
+chunk_id  : 3c35a0d1-ac0f-4a26-8cca-29fe7733f041
+section   : [操作系统代码实现 > ❗【考点】信号量实现生产者-消费者问题 > 生产者进程]
+content_type: code_mixed | chunk_role: None
+--- page_content 原文（前 700 字）---
+[❗【考点】信号量实现生产者-消费者问题]
+### 生产者进程
+
+```c
+void Producer() {
+    while (1) {
+  Item item = produce_item();  // 生产产品
+  P(empty);    // 申请空缓冲区(必须先于 P(mutex))
+  P(mutex);    // 进入临界区
+  put_item(item);  // 放入产品
+  V(mutex);    // 离开临界区
+  V(full);     // 增加满缓冲区计数
+    }
+}
+```
+--- 现 rerank 实际送入的文本（剥掉 heading_path 后，前 300 字）---
+### 生产者进程
+
+```c
+void Producer() {
+    while (1) {
+  Item item = produce_item();  // 生产产品
+  P(empty);    // 申请空缓冲区(必须先于 P(mutex))
+  P(mutex);    // 进入临界区
+  put_item(item);  // 放入产品
+  V(mutex);    // 离开临界区
+  V(full);     // 增加满缓冲区计数
+    }
+}
+```
+
+==================================================================
+直测 rerank（当前实现：剥掉 heading_path）
+  score=0.0037  chunk=3c35a0d1-ac0f-4a26-8cca-29fe7733f041
+
+==================================================================
+对照：把 section.path 作为自然语言前缀附加
+  score=0.8645  chunk=3c35a0d1-ac0f-4a26-8cca-29fe7733f041
