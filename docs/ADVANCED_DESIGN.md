@@ -148,6 +148,7 @@ chunk_id      advanced-ds-tree-build_from_traversal-001
 | `doc_role` | **`method`** |
 | `topic_tags` | **检索辅助**（题型/形态，见 §5.1） |
 | `scope` | 可选：`single` / `cross`（是否跨考点） |
+| `related_exams` | 可选：`question:YYYY-QN` 列表（L2→L3，见 §5.3） |
 | `document_id` / `section_id` / `chunk_id` | 上图 |
 | `knowledge_points` / `primary_kp` | section 级 |
 
@@ -202,6 +203,29 @@ L3  ──assesses──→ KP
 | to | KP id |
 | 语义 | 针对该 KP 的**题型 / 方法 / 应用训练**，不是「做过题」的事实记录 |
 | 唯一 | `UNIQUE(from, type, to)` |
+
+### 5.3 `related_exams`（L2→L3 指针，非正文依赖）
+
+```markdown
+> related_exams:
+>   - question:2019-Q5
+>   - question:2022-Q12
+```
+
+| 含义 | **该方法与哪些真题的考查形态相关** |
+|---|---|
+| **不是** | 「L2 内容抄自这些真题」 |
+| 位置 | section **元数据**，不写叙述正文 |
+| 格式 | `asset_ref`：`question:YYYY-QN` |
+| 用法 | 先 L2 方法；用户再问「有真题吗？」→ 经此拉 L3 |
+
+```text
+L2 Method
+   ├── trains ──────────→ KP
+   └── related_exams ───→ L3 question
+```
+
+**禁止**：题号进正文当来源；L2 **不得依赖** `related_exams` 才讲得清方法。
 
 三元关系（总纲）：
 
