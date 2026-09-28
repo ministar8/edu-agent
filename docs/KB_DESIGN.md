@@ -249,6 +249,23 @@ knowledge/knowledge_points/
 └── links.jsonl
 ```
 
+- **`links.jsonl` 全库一个**：边是整张 Knowledge Graph 的集合；查询「KP → 全部真题/基础/王道」时单文件最方便。规模到几十万条再考虑按科拆。  
+- 节点按学科四文件，便于分科维护与 diff。
+
+### 4.5.1 首批叶节点构建策略
+
+**原则**：以**现有真题 + 已有讲义/王道材料反推**为主，**考纲作骨架约束**（只定 level1–2 域与命名边界）。
+
+| 步骤 | 做法 |
+|---|---|
+| 1 骨架 | 按考纲建 `subject` + `domain`（level 1–2），定 `parent_id` 树 |
+| 2 反推叶 | 从 `exams` 的 `assesses` 候选、`basic`/`advanced` 标题与 `knowledge_tagger` 抽 **topic/point** |
+| 3 收敛 | 同义合并进 `aliases`；id 用英文 slug 并冻结 |
+| 4 锚定 | 反写 `links.jsonl`（teaches/assesses/trains） |
+| 5 补缺 | 讲义有而真题未考的仍建 KP（标 `importance`），真题有而讲义无的标 `tags:["需补讲义"]`（可选） |
+
+**不做**：一次按考纲铺满全部细枝；优先覆盖**当前语料与 2009–2025 真题已出现**的考点。
+
 ### 4.6 用法
 
 | 场景 | 行为 |
