@@ -190,7 +190,7 @@ L1/L2/L3 由 `kb_depth` + learning_paths 决定。
   "node_kind": "point",
   "type": "method",
   "importance": "core",
-  "question_types": ["choice", "calculation"],
+  "typical_question_types": ["choice", "calculation"],
   "aliases": ["位示图", "空闲表", "空闲链表"],
   "tags": ["易错"],
   "status": "active"
