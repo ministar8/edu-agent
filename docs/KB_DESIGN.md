@@ -48,11 +48,12 @@
 
 ```text
 knowledge/
-├── knowledge_points/              # 统一知识点体系（按学科维护）
-│   ├── data_structure/
-│   ├── computer_organization/
-│   ├── operating_system/
-│   └── computer_network/
+├── knowledge_points/              # 统一知识点（关系层）
+│   ├── ds.jsonl                   # data_structure
+│   ├── co.jsonl                   # computer_organization
+│   ├── os.jsonl                   # operating_system
+│   ├── cn.jsonl                   # computer_network
+│   └── links.jsonl                # teaches / assesses / trains
 │
 ├── basic/                         # L1 基础知识
 │   ├── data_structure/
@@ -91,7 +92,7 @@ knowledge/
 | `papers-rebuild/YYYY.md` | `exams/YYYY/paper.md` |
 | `answers/YYYY-answer.md` | `exams/YYYY/answer.md` |
 | `learning_paths/**` | `learning_paths/`（再拆 l1/l2/l3） |
-| （新建）考点表 | `knowledge_points/<subject>/*.md` 或 `.jsonl` |
+| （新建）考点表 | `knowledge_points/{ds,co,os,cn}.jsonl` + `links.jsonl` |
 
 ---
 
@@ -99,39 +100,114 @@ knowledge/
 
 ### 4.1 定位
 
-- **存储**：`knowledge_points/<subject>/`，文件或 JSONL。  
+- **存储**：`knowledge_points/<subject_code>/*.jsonl` + 全局 `links.jsonl`。  
 - **不是**第四向量主库，不参与 `weighted_rrf_merge` 主池。  
-- **id 全局唯一**：`<subject>.<path>`，如 `data_structure.tree.binary_search`。
+- **id 全局唯一**：`<subject_code>.<path>`，如 `os.file.disk_free_space`。
 
-### 4.2 节点与边
+**subject_code**：`ds` / `co` / `os` / `cn`。
+
+### 4.2 `level` 语义（禁止误读）
+
+| level | 含义 | 例 |
+|---|---|---|
+| 1 | 学科根 | `os` |
+| 2 | 一级知识域 | `os.file` |
+| 3 | 二级域 / 主要考点 | `os.file.physical` |
+| 4 | 细粒度考点 | `os.file.disk_free_space` |
+
+**`level` = 分类树结构深度，不是难度、重要度、考试频率。**  
+（`co.cpu.pipeline` 可以 level=3 但比多数 level=4 更难。）  
+难度若需要，另字段 `difficulty`（与 level 正交）；L1/L2/L3 由 `kb_depth` + learning_paths 决定。
+
+### 4.3 节点 Schema
+
+| 字段 | 类型 | 必填 | 取值 / 规则 |
+|---|---|---|---|
+| `id` | string | ✓ | `^(ds\|co\|os\|cn)\.[a-z0-9_]+(\.[a-z0-9_]+)*$` |
+| `name` | string | ✓ | 规范名，≤40 字 |
+| `subject` | enum | ✓ | `ds`/`co`/`os`/`cn`，与 id 前缀一致 |
+| `parent` | string\|null | ✓ | 同 subject；根为 null |
+| `level` | int | ✓ | 1–4，**仅树深** |
+| `node_kind` | enum | ✓ | `subject` / `domain` / `topic` / `point` |
+| `type` | enum | ✓ | `concept` / `principle` / `algorithm` / `structure` / `protocol` / `method` / `term` |
+| `importance` | enum | ✓ | `core` / `major` / `minor` |
+| `question_types` | string[] | ✓ | `choice` / `fill` / `calculation` / `comprehensive` / `code` / `design` |
+| `aliases` | string[] | | 别名、英文、俗称 |
+| `tags` | string[] | | **仅**非结构化：`易错` / `易混` / `陷阱`…**禁止**核心/高频/大题 |
+| `status` | enum | ✓ | `active` / `deprecated` |
+| `replaced_by` | string | | 仅 deprecated |
+
+**约束**：
+
+- `node_kind=subject` ⇒ `level=1`；`domain` 的 parent 必须是 `subject|domain`。  
+- 检索/出题/路径默认只落在 `node_kind ∈ {topic, point}`。  
+- `importance` / `question_types` **不得**写入 `tags`。
+
+示例：
 
 ```json
 {
-  "id": "operating_system.file.disk_free_space",
+  "id": "os.file.disk_free_space",
   "name": "磁盘空闲空间管理",
-  "subject": "operating_system",
-  "parent": "operating_system.file.storage",
-  "aliases": ["位示图", "空闲表", "空闲链表", "空闲块"],
-  "level": 3
+  "subject": "os",
+  "parent": "os.file.physical",
+  "level": 3,
+  "node_kind": "point",
+  "type": "method",
+  "importance": "core",
+  "question_types": ["choice", "calculation"],
+  "aliases": ["位示图", "空闲表", "空闲链表"],
+  "tags": ["易错"],
+  "status": "active"
 }
 ```
 
-锚定边（`links.jsonl`）：
+### 4.4 边（`links.jsonl`）
 
-| type | 含义 |
-|---|---|
-| `teaches` | basic/advanced chunk → KP |
-| `assesses` | exam_id → KP |
-| `practices` | learning_path 节点 → KP |
+| type | 语义 | from | to |
+|---|---|---|---|
+| **`teaches`** | 讲解该考点 | `basic:…` / `advanced:…` | KP |
+| **`assesses`** | 考查该考点 | `exam:YYYY-QN` | KP |
+| **`trains`** | 强化/训练该考点 | `practice:…`（王道题、专项题） | KP |
 
-### 4.3 用法
+```text
+基础教材    ──teaches──→  KP
+真题       ──assesses──→ KP
+王道/专项题 ──trains──→  KP
+```
+
+**学习路径不进 links**；路径节点用 `kp_ids[]` 表达「经过/覆盖」：
+
+```json
+{
+  "id": "path.l2.os.memory",
+  "title": "内存管理强化",
+  "level": "L2",
+  "kp_ids": ["os.mem.page", "os.mem.segment", "os.mem.virtual"],
+  "materials": ["advanced:os/内存强化.md", "exams:2021-Q28"]
+}
+```
+
+### 4.5 文件布局
+
+```text
+knowledge/knowledge_points/
+├── ds.jsonl
+├── co.jsonl
+├── os.jsonl
+├── cn.jsonl
+└── links.jsonl
+```
+
+### 4.6 用法
 
 | 场景 | 行为 |
 |---|---|
-| L1 概念 | 命中 KP → 定位 basic 章节 |
-| L2 题型 | KP → advanced 讲解/技巧 |
-| L3 练习/批改 | KP → 真题与解析；错题回链 KP |
-| 学习路径 | 路径阶段 → KP 集合 → 推荐材料 |
+| L1 概念 | KP → `teaches` → basic 章节 |
+| L2 题型 | KP → `trains` + advanced |
+| L3 练习/批改 | `assesses` 真题；错题 → KP → `teaches` 回 basic |
+| 学习路径 | `path.kp_ids` → 拉 material |
+| 门禁 | 黄金集 `knowledge_points` 对齐 KP **id** |
 
 ---
 
