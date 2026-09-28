@@ -145,12 +145,15 @@ L1/L2/L3 由 `kb_depth` + learning_paths 决定。
 | `node_kind` | enum | ✓ | `subject` / `domain` / `topic` / `point` |
 | `type` | enum | ✓ | `concept` / `principle` / `algorithm` / `structure` / `protocol` / `method` / `term` |
 | `importance` | enum | ✓ | `core` / `major` / `minor` |
-| `question_types` | string[] | ✓ | **允许/典型考法**（见下），非历史统计 |
+| `typical_question_types` | string[] | ✓ | **典型/允许考法**（非历史统计） |
 
-**`question_types` 枚举**：`choice` / `fill` / `calculation` / `comprehensive` / `code` / `design`。
+**`typical_question_types` 枚举**：`choice` / `fill` / `calculation` / `comprehensive` / `code` / `design`。
 
-**`question_types` 语义**：该 KP **可以通过哪些题型考查**（产品/教学标签）。  
-**不是**「历史上出现过哪些题型」——历史分布由 `question ──assesses──→ KP` **动态统计**（例：Cache 被选择题考过 23 次、计算 8 次）。两者禁止混用。
+**`typical_question_types` 语义**：该 KP **典型/允许的考法**（课程与考纲视角）。  
+**不是**历史统计——历史分布由 `question ──assesses──→ KP` **动态计算**。V1 不必追绝对精确。
+
+**`importance` 语义**：知识体系中的地位（core/major/minor），**不是**真题频次。  
+「近 N 年考过几次 / 最近出现年份」一律从 `assesses` 边统计，禁止写回 `importance`。
 | `aliases` | string[] | | 曾用名、别名、英文（**中文改名时旧名迁入此处**） |
 | `tags` | string[] | | **仅**非结构化：`易错` / `易混` / `陷阱`…**禁止**核心/高频/大题 |
 | `status` | enum | ✓ | `active` / `deprecated` |
@@ -161,8 +164,9 @@ L1/L2/L3 由 `kb_depth` + learning_paths 决定。
 - **`node_kind` ↔ `level`**：`subject=1`，`domain=2`，`topic=3`，`point=3|4`（见 §4.2）。  
 - `domain` 的 `parent_id` 必须是 `subject|domain`。  
 - 检索/出题/路径默认只落在 `node_kind ∈ {topic, point}`。  
-- `importance` / `question_types` **不得**写入 `tags`。  
-- **id 冻结**：slug 用英文（`binary_search` 不用 `折半查找`）；中文规范名变更只改 `name`，旧名进 `aliases`。
+- `importance` / `typical_question_types` **不得**写入 `tags`。  
+- **id 冻结**：slug 用英文（`binary_search` 不用 `折半查找`）；中文规范名变更只改 `name`，旧名进 `aliases`。  
+- **粒度原则**：一个 KP = 真题可**单独考查**的语义单元。若子节点必须与父节点一起考才成立，则应合并；若子节点可被单题独立指向（如 TCP vs tcp_handshake），则拆分。`aliases` 只放同义名，不放「关联但不同的知识」（生产者消费者 ≠ PV，可另建 `classic_sync`）。
 
 **废弃（含 1 拆 N）**：
 
@@ -227,6 +231,36 @@ L1/L2/L3 由 `kb_depth` + learning_paths 决定。
 **解析规则**：按**第一个** `:` 切成 `asset_type` + `asset_id`；`asset_type` 为封闭枚举，**禁止**各数据源自造前缀。
 
 **完整性约束**：`UNIQUE(from, type, to)` —— 同一资产、同一关系、同一考点**至多一条边**，否则「KP 被多少真题考过」等统计会被重复边污染。
+
+**一对多**：一道真题 **必须允许** 连多个 KP（综合题）：
+
+```json
+{"from": "question:2022-Q25", "to": "os.process.sync", "type": "assesses"}
+{"from": "question:2022-Q25", "to": "os.process.pv", "type": "assesses"}
+{"from": "question:2022-Q25", "to": "os.memory.paging", "type": "assesses"}
+```
+
+禁止「一题只锚一个 KP」。
+
+### 4.4.1 KP Coverage Test（反向检查）
+
+骨架上线后必须用 **2009–2025 真题** 做覆盖测试：
+
+```text
+question → 能否落到现有 KP？
+  ✅ 有明确 KP     → 写 assesses 边
+  ❌ KP GAP       → 先记 gap，禁止硬贴最近节点
+```
+
+对每个 GAP 三选一：
+
+| 判断 | 动作 |
+|---|---|
+| 现有 KP 太粗 | **拆分** |
+| 考纲有但树里没有 | **新增 KP** |
+| 一题综合多点 | **多条 assesses**（合法） |
+
+产出：`knowledge_points/coverage_report.md`（gap 清单 + 处置）。
 
 | type | 语义 | from（asset_type） | to |
 |---|---|---|---|

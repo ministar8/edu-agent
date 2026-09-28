@@ -1,9 +1,10 @@
-"""生成四科 Knowledge Point 骨架（level 1–3）到 knowledge_points/*.jsonl。
+"""生成四科 Knowledge Point 骨架（level 1–3）。
 
-原则：
-- 考纲/讲义章节 → level 2 domain
-- 主要考点 → level 3 topic/point
-- id 英文 slug 冻结；name 中文
+粒度原则：一个 KP = 一道真题可**单独考查**的语义单元。
+- pipeline 与 pipeline_hazard 分开
+- ARP 与 ICMP 分开
+- importance = 知识体系中的地位，不是真题频次
+- question_types = typical_question_types（典型考法，非历史统计）
 """
 
 from __future__ import annotations
@@ -13,8 +14,6 @@ from pathlib import Path
 
 OUT = Path(r"C:\Users\26452\Desktop\edu-agent\knowledge\knowledge_points")
 OUT.mkdir(parents=True, exist_ok=True)
-
-# (id, name, parent, level, node_kind, type, importance, question_types, aliases, tags)
 
 
 def n(
@@ -38,32 +37,40 @@ def n(
         "node_kind": kind,
         "type": typ,
         "importance": imp,
-        "question_types": qtypes or ["choice"],
+        "typical_question_types": qtypes or ["choice"],
         "aliases": aliases or [],
         "tags": tags or [],
         "status": "active",
     }
 
 
-CHOICE_CALC = ["choice", "calculation"]
 CHOICE = ["choice"]
+CHOICE_CALC = ["choice", "calculation"]
 CHOICE_CODE = ["choice", "code"]
 ALL = ["choice", "calculation", "comprehensive", "code"]
 
 ds = [
-    n("ds", "数据结构", None, 1, "subject", "concept", "core", ["choice"]),
+    n("ds", "数据结构", None, 1, "subject", "concept", "core", CHOICE),
     # 线性表
     n("ds.linear", "线性表", "ds", 2, "domain", "structure"),
-    n("ds.linear.list", "线性表", "ds.linear", 3, "topic", "structure"),
+    n("ds.linear.list", "线性表概念", "ds.linear", 3, "topic", "structure"),
     n("ds.linear.seq_list", "顺序表", "ds.linear", 3, "point", "structure", qtypes=CHOICE_CODE),
     n("ds.linear.linked_list", "链表", "ds.linear", 3, "point", "structure", qtypes=CHOICE_CODE),
     n("ds.linear.doubly_linked", "双链表", "ds.linear.linked_list", 4, "point", "structure"),
     n("ds.linear.circular_linked", "循环链表", "ds.linear.linked_list", 4, "point", "structure"),
-    # 栈和队列
+    # 栈队列
     n("ds.stack_queue", "栈和队列", "ds", 2, "domain", "structure"),
-    n("ds.stack_queue.stack", "栈", "ds.stack_queue", 3, "topic", "structure"),
-    n("ds.stack_queue.queue", "队列", "ds.stack_queue", 3, "topic", "structure"),
-    n("ds.stack_queue.circular_queue", "循环队列", "ds.stack_queue.queue", 4, "point", "structure"),
+    n("ds.stack_queue.stack", "栈", "ds.stack_queue", 3, "topic", "structure", qtypes=ALL),
+    n("ds.stack_queue.queue", "队列", "ds.stack_queue", 3, "topic", "structure", qtypes=ALL),
+    n(
+        "ds.stack_queue.circular_queue",
+        "循环队列",
+        "ds.stack_queue.queue",
+        4,
+        "point",
+        "structure",
+        qtypes=ALL,
+    ),
     n(
         "ds.stack_queue.match",
         "括号匹配",
@@ -73,7 +80,7 @@ ds = [
         "method",
         qtypes=CHOICE_CODE,
     ),
-    # 特殊矩阵
+    # 矩阵
     n("ds.array", "数组与特殊矩阵", "ds", 2, "domain", "structure"),
     n("ds.array.compressed", "压缩存储", "ds.array", 3, "topic", "structure", qtypes=CHOICE_CALC),
     n("ds.array.symmetric", "对称矩阵", "ds.array.compressed", 4, "point", "structure"),
@@ -93,7 +100,7 @@ ds = [
         ALL,
         ["KMP"],
     ),
-    # 树
+    # 树 — 细粒度与 graph 对齐
     n("ds.tree", "树与二叉树", "ds", 2, "domain", "structure"),
     n("ds.tree.binary_tree", "二叉树", "ds.tree", 3, "topic", "structure"),
     n(
@@ -108,14 +115,25 @@ ds = [
     ),
     n("ds.tree.threaded", "线索二叉树", "ds.tree.binary_tree", 4, "point", "structure"),
     n(
+        "ds.tree.bst",
+        "二叉排序树",
+        "ds.tree",
+        3,
+        "point",
+        "structure",
+        "core",
+        ALL,
+        ["BST", "二叉查找树"],
+    ),
+    n("ds.tree.avl", "平衡二叉树", "ds.tree", 3, "point", "structure", "core", ALL, ["AVL"]),
+    n(
         "ds.tree.forest_convert",
         "树与森林转换",
         "ds.tree",
         3,
         "point",
         "method",
-        "major",
-        CHOICE_CALC,
+        qtypes=CHOICE_CALC,
     ),
     n(
         "ds.tree.huffman",
@@ -129,21 +147,28 @@ ds = [
         ["哈夫曼树"],
     ),
     n(
-        "ds.tree.bst",
-        "二叉排序树 BST",
-        "ds.tree",
-        3,
+        "ds.tree.complete",
+        "完全二叉树",
+        "ds.tree.binary_tree",
+        4,
         "point",
         "structure",
-        "core",
-        ALL,
-        ["二叉查找树"],
+        qtypes=CHOICE_CALC,
     ),
-    n("ds.tree.avl", "平衡二叉树 AVL", "ds.tree", 3, "point", "structure", "core", ALL),
     # 图
     n("ds.graph", "图", "ds", 2, "domain", "structure"),
     n("ds.graph.storage", "图的存储", "ds.graph", 3, "topic", "structure"),
-    n("ds.graph.traversal", "图的遍历", "ds.graph", 3, "point", "algorithm", "core", ALL),
+    n(
+        "ds.graph.traversal",
+        "图的遍历",
+        "ds.graph",
+        3,
+        "point",
+        "algorithm",
+        "core",
+        ALL,
+        ["DFS", "BFS"],
+    ),
     n(
         "ds.graph.mst",
         "最小生成树",
@@ -167,9 +192,20 @@ ds = [
         ["Dijkstra", "Floyd"],
     ),
     n("ds.graph.topo", "拓扑排序", "ds.graph", 3, "point", "algorithm", "core", ALL),
-    n("ds.graph.aoe", "AOE 关键路径", "ds.graph", 3, "point", "algorithm", "major", CHOICE_CALC),
+    n(
+        "ds.graph.aoe",
+        "关键路径",
+        "ds.graph",
+        3,
+        "point",
+        "algorithm",
+        "major",
+        CHOICE_CALC,
+        ["AOE"],
+    ),
     # 查找
     n("ds.search", "查找", "ds", 2, "domain", "algorithm"),
+    n("ds.search.seq", "顺序查找", "ds.search", 3, "point", "algorithm", "minor", CHOICE),
     n(
         "ds.search.binary_search",
         "折半查找",
@@ -179,25 +215,46 @@ ds = [
         "algorithm",
         "core",
         ALL,
-        ["二分查找", "Binary Search"],
+        ["二分查找"],
     ),
-    n("ds.search.b_tree", "B 树", "ds.search", 3, "point", "structure", "core", ALL, ["B树"]),
+    n("ds.search.block", "分块查找", "ds.search", 3, "point", "algorithm", "major", CHOICE_CALC),
+    n("ds.search.b_tree", "B 树", "ds.search", 3, "point", "structure", "core", ALL),
     n("ds.search.b_plus_tree", "B+ 树", "ds.search", 3, "point", "structure", "major", ALL),
-    n("ds.search.hash", "散列表", "ds.search", 3, "point", "structure", "core", ALL, ["哈希表"]),
-    # 排序
+    n(
+        "ds.search.hash",
+        "散列表",
+        "ds.search",
+        3,
+        "point",
+        "structure",
+        "core",
+        ALL,
+        ["哈希表"],
+        ["易错"],
+    ),
+    # 排序 — 每个算法独立可考
     n("ds.sort", "排序", "ds", 2, "domain", "algorithm"),
-    n("ds.sort.insertion", "插入排序", "ds.sort", 3, "point", "algorithm"),
-    n("ds.sort.shell", "希尔排序", "ds.sort", 3, "point", "algorithm"),
-    n("ds.sort.bubble", "冒泡排序", "ds.sort", 3, "point", "algorithm"),
+    n(
+        "ds.sort.insertion",
+        "直接插入排序",
+        "ds.sort",
+        3,
+        "point",
+        "algorithm",
+        "major",
+        CHOICE_CALC,
+    ),
+    n("ds.sort.shell", "希尔排序", "ds.sort", 3, "point", "algorithm", "major", CHOICE),
+    n("ds.sort.bubble", "冒泡排序", "ds.sort", 3, "point", "algorithm", "major", CHOICE),
     n("ds.sort.quick_sort", "快速排序", "ds.sort", 3, "point", "algorithm", "core", ALL),
-    n("ds.sort.select", "简单选择排序", "ds.sort", 3, "point", "algorithm"),
+    n("ds.sort.select", "简单选择排序", "ds.sort", 3, "point", "algorithm", "major", CHOICE_CALC),
     n("ds.sort.heap", "堆排序", "ds.sort", 3, "point", "algorithm", "core", ALL),
     n("ds.sort.merge", "归并排序", "ds.sort", 3, "point", "algorithm", "core", ALL),
-    n("ds.sort.radix", "基数排序", "ds.sort", 3, "point", "algorithm"),
+    n("ds.sort.radix", "基数排序", "ds.sort", 3, "point", "algorithm", "major", CHOICE),
 ]
 
 co = [
-    n("co", "计算机组成原理", None, 1, "subject", "concept", "core", ["choice"]),
+    n("co", "计算机组成原理", None, 1, "subject", "concept", "core", CHOICE),
     n("co.overview", "计算机系统概述", "co", 2, "domain", "concept"),
     n(
         "co.overview.performance",
@@ -210,31 +267,23 @@ co = [
         CHOICE_CALC,
         ["CPI", "CPU 时间"],
     ),
-    n("co.overview.von_neumann", "冯·诺依曼结构", "co.overview", 3, "point", "concept"),
-    # 数据表示
-    n("co.representation", "数据表示与运算", "co", 2, "domain", "concept"),
     n(
-        "co.representation.integer",
-        "整数表示",
-        "co.representation",
+        "co.overview.von_neumann",
+        "冯·诺依曼结构",
+        "co.overview",
         3,
-        "topic",
-        "concept",
-        "core",
-        CHOICE_CALC,
-    ),
-    n(
-        "co.representation.fixed_point",
-        "定点数",
-        "co.representation.integer",
-        4,
         "point",
         "concept",
+        "major",
+        CHOICE,
     ),
+    # 数据表示 — 拆开可独立考
+    n("co.representation", "数据表示与运算", "co", 2, "domain", "concept"),
+    n("co.representation.fixed_point", "定点数表示", "co.representation", 3, "topic", "concept"),
     n(
         "co.representation.complement",
         "补码",
-        "co.representation.integer",
+        "co.representation.fixed_point",
         4,
         "point",
         "concept",
@@ -243,25 +292,36 @@ co = [
         ["原码", "反码"],
     ),
     n(
-        "co.representation.ieee754",
-        "IEEE 浮点数",
-        "co.representation",
-        3,
-        "point",
-        "concept",
-        "core",
-        ALL,
-        ["浮点数", "阶码", "尾数"],
-    ),
-    n(
-        "co.representation.alu",
-        "定点运算",
+        "co.representation.integer_op",
+        "整数运算",
         "co.representation",
         3,
         "point",
         "algorithm",
         "major",
         CHOICE_CALC,
+    ),
+    n(
+        "co.representation.ieee754",
+        "浮点数 IEEE754",
+        "co.representation",
+        3,
+        "point",
+        "concept",
+        "core",
+        ALL,
+        ["阶码", "尾数"],
+    ),
+    n(
+        "co.representation.overflow",
+        "溢出判断",
+        "co.representation",
+        3,
+        "point",
+        "concept",
+        "major",
+        CHOICE_CALC,
+        ["OF"],
     ),
     # 存储
     n("co.storage", "存储系统", "co", 2, "domain", "structure"),
@@ -279,18 +339,39 @@ co = [
     ),
     n(
         "co.storage.cache_mapping",
-        "Cache 映射",
+        "Cache 映射方式",
         "co.storage.cache",
         4,
         "point",
         "method",
         "core",
         ALL,
+        ["全相联", "组相联"],
     ),
-    n("co.storage.cache_replace", "替换算法", "co.storage.cache", 4, "point", "algorithm"),
+    n(
+        "co.storage.cache_replace",
+        "Cache 替换算法",
+        "co.storage.cache",
+        4,
+        "point",
+        "algorithm",
+        "major",
+        ALL,
+    ),
+    n(
+        "co.storage.cache_write",
+        "Cache 写策略",
+        "co.storage.cache",
+        4,
+        "point",
+        "method",
+        "major",
+        ALL,
+        ["写直达", "写回"],
+    ),
     n(
         "co.storage.main_memory",
-        "主存",
+        "主存储器",
         "co.storage",
         3,
         "point",
@@ -298,10 +379,10 @@ co = [
         "major",
         CHOICE_CALC,
     ),
-    n("co.storage.virtual_memory", "虚拟存储器", "co.storage", 3, "point", "concept", "major", ALL),
+    n("co.storage.virtual_memory", "虚拟存储器", "co.storage", 3, "point", "concept", "core", ALL),
     # 指令
     n("co.instruction", "指令系统", "co", 2, "domain", "concept"),
-    n("co.instruction.format", "指令格式", "co.instruction", 3, "topic", "concept"),
+    n("co.instruction.format", "指令格式", "co.instruction", 3, "topic", "concept", "major", ALL),
     n(
         "co.instruction.addressing",
         "寻址方式",
@@ -332,7 +413,7 @@ co = [
         "major",
         CHOICE,
     ),
-    # CPU
+    # CPU — pipeline 与 hazard 拆开（可独立考）
     n("co.cpu", "中央处理器", "co", 2, "domain", "structure"),
     n("co.cpu.datapath", "数据通路", "co.cpu", 3, "topic", "structure"),
     n(
@@ -346,17 +427,7 @@ co = [
         ALL,
         ["微程序", "硬布线"],
     ),
-    n(
-        "co.cpu.pipeline",
-        "指令流水线",
-        "co.cpu",
-        3,
-        "point",
-        "concept",
-        "core",
-        ALL,
-        ["流水线", "冒险"],
-    ),
+    n("co.cpu.pipeline", "指令流水线", "co.cpu", 3, "point", "concept", "core", ALL, ["流水线"]),
     n(
         "co.cpu.pipeline_hazard",
         "流水线冒险",
@@ -366,26 +437,40 @@ co = [
         "concept",
         "core",
         ALL,
+        ["冒险", "冲突"],
     ),
-    n("co.cpu.exception", "中断与异常", "co.cpu", 3, "point", "concept", "core", ALL),
+    n(
+        "co.cpu.pipeline_stall",
+        "流水线停顿与转发",
+        "co.cpu.pipeline",
+        4,
+        "point",
+        "method",
+        "major",
+        ALL,
+        [" forwarding "],
+    ),
+    n("co.cpu.exception", "中断与异常", "co.cpu", 3, "point", "concept", "core", ALL, ["中断"]),
     # 总线
     n("co.bus", "总线", "co", 2, "domain", "structure"),
     n("co.bus.bandwidth", "总线带宽", "co.bus", 3, "point", "concept", "core", CHOICE_CALC),
-    n("co.bus.arbitration", "总线仲裁", "co.bus", 3, "point", "concept"),
+    n("co.bus.arbitration", "总线仲裁", "co.bus", 3, "point", "concept", "major", CHOICE),
+    n("co.bus.timing", "总线定时", "co.bus", 3, "point", "concept", "minor", CHOICE),
     # IO
     n("co.io", "输入输出系统", "co", 2, "domain", "structure"),
     n("co.io.interface", "I/O 接口", "co.io", 3, "topic", "structure"),
-    n("co.io.mode", "I/O 方式", "co.io", 3, "point", "concept", "core", ALL, ["程序中断", "DMA"]),
-    n("co.io.dma", "DMA", "co.io.mode", 4, "point", "concept", "core", ALL),
+    n("co.io.interrupt_io", "程序中断方式", "co.io", 3, "point", "concept", "core", ALL),
+    n("co.io.dma", "DMA 方式", "co.io", 3, "point", "concept", "core", ALL),
+    n("co.io.channel", "通道方式", "co.io", 3, "point", "concept", "minor", CHOICE),
 ]
 
 os = [
-    n("os", "操作系统", None, 1, "subject", "concept", "core", ["choice"]),
+    n("os", "操作系统", None, 1, "subject", "concept", "core", CHOICE),
     n("os.overview", "操作系统概述", "os", 2, "domain", "concept"),
-    n("os.overview.feature", "基本特征", "os.overview", 3, "point", "concept"),
+    n("os.overview.feature", "基本特征", "os.overview", 3, "point", "concept", "major", CHOICE),
     n("os.overview.syscall", "系统调用", "os.overview", 3, "point", "concept", "core", ALL),
     n("os.overview.mode", "内核态与用户态", "os.overview", 3, "point", "concept", "core", ALL),
-    # 进程
+    # 进程 — sync 下拆 semaphore/pv/monitor
     n("os.process", "进程管理", "os", 2, "domain", "concept"),
     n("os.process.thread", "进程与线程", "os.process", 3, "topic", "concept", "core", ALL),
     n("os.process.state", "进程状态与转换", "os.process", 3, "point", "concept", "core", ALL),
@@ -401,18 +486,31 @@ os = [
         ["CPU 调度"],
     ),
     n("os.process.sync", "进程同步", "os.process", 3, "topic", "concept", "core", ALL),
-    n("os.process.deadlock", "死锁", "os.process", 3, "point", "concept", "core", ALL),
     n(
-        "os.process.pv",
-        "信号量与 PV",
+        "os.process.semaphore",
+        "信号量机制",
+        "os.process.sync",
+        4,
+        "point",
+        "concept",
+        "core",
+        ALL,
+        ["信号量"],
+    ),
+    n("os.process.pv", "PV 操作", "os.process.sync", 4, "point", "method", "core", ALL),
+    n("os.process.monitor", "管程", "os.process.sync", 4, "point", "concept", "major", ALL),
+    n(
+        "os.process.classic_sync",
+        "经典同步问题",
         "os.process.sync",
         4,
         "point",
         "method",
         "core",
         ALL,
-        ["生产者消费者"],
+        ["生产者消费者", "哲学家进餐", "读者写者"],
     ),
+    n("os.process.deadlock", "死锁", "os.process", 3, "point", "concept", "core", ALL),
     n(
         "os.process.bankers",
         "银行家算法",
@@ -438,6 +536,7 @@ os = [
         ["动态分区"],
     ),
     n("os.memory.paging", "分页管理", "os.memory", 3, "point", "concept", "core", ALL),
+    n("os.memory.tlb", "TLB 快表", "os.memory.paging", 4, "point", "structure", "major", ALL),
     n("os.memory.segmentation", "分段管理", "os.memory", 3, "point", "concept", "core", ALL),
     n("os.memory.virtual", "虚拟内存", "os.memory", 3, "point", "concept", "core", ALL),
     n("os.memory.page_fault", "缺页异常", "os.memory.virtual", 4, "point", "concept", "core", ALL),
@@ -451,7 +550,6 @@ os = [
         "core",
         ALL,
     ),
-    n("os.memory.tlb", "TLB 快表", "os.memory.paging", 4, "point", "structure", "major", ALL),
     # 文件
     n("os.file", "文件管理", "os", 2, "domain", "concept"),
     n("os.file.logical", "文件逻辑结构", "os.file", 3, "topic", "concept"),
@@ -467,12 +565,12 @@ os = [
         ALL,
         ["连续分配", "链接分配", "索引分配"],
     ),
-    n("os.file.dir", "目录", "os.file", 3, "point", "structure"),
+    n("os.file.dir", "目录管理", "os.file", 3, "point", "structure", "major", ALL),
     n(
         "os.file.disk_free_space",
         "磁盘空闲空间管理",
         "os.file.physical",
-        3,
+        4,
         "point",
         "method",
         "core",
@@ -489,7 +587,7 @@ os = [
 ]
 
 cn = [
-    n("cn", "计算机网络", None, 1, "subject", "concept", "core", ["choice"]),
+    n("cn", "计算机网络", None, 1, "subject", "concept", "core", CHOICE),
     n("cn.arch", "体系结构", "cn", 2, "domain", "concept"),
     n(
         "cn.arch.model",
@@ -512,10 +610,9 @@ cn = [
         "major",
         CHOICE_CALC,
     ),
-    # 物理层
     n("cn.physical", "物理层", "cn", 2, "domain", "concept"),
     n("cn.physical.channel", "信道与传输", "cn.physical", 3, "topic", "concept"),
-    n("cn.physical.medium", "传输介质", "cn.physical", 3, "point", "concept"),
+    n("cn.physical.medium", "传输介质", "cn.physical", 3, "point", "concept", "major", CHOICE),
     n(
         "cn.physical.bandwidth",
         "信道容量",
@@ -523,11 +620,10 @@ cn = [
         3,
         "point",
         "concept",
-        "major",
+        "core",
         CHOICE_CALC,
         ["奈氏", "香农"],
     ),
-    # 数据链路层
     n("cn.datalink", "数据链路层", "cn", 2, "domain", "concept"),
     n("cn.datalink.framing", "成帧", "cn.datalink", 3, "topic", "concept"),
     n(
@@ -564,8 +660,8 @@ cn = [
         ["CSMA/CD"],
     ),
     n("cn.datalink.ethernet", "以太网", "cn.datalink", 3, "point", "structure", "core", ALL),
-    n("cn.datalink.vlan", "VLAN", "cn.datalink", 3, "point", "concept", "major"),
-    # 网络层
+    n("cn.datalink.vlan", "VLAN", "cn.datalink", 3, "point", "concept", "major", CHOICE),
+    # 网络层 — ARP / ICMP 拆开
     n("cn.network", "网络层", "cn", 2, "domain", "concept"),
     n("cn.network.ip", "IP 协议", "cn.network", 3, "topic", "protocol", "core", ALL),
     n(
@@ -580,6 +676,18 @@ cn = [
         ["子网划分", "CIDR"],
     ),
     n(
+        "cn.network.ip_forward",
+        "IP 转发与分片",
+        "cn.network.ip",
+        4,
+        "point",
+        "concept",
+        "major",
+        ALL,
+    ),
+    n("cn.network.arp", "ARP", "cn.network", 3, "point", "protocol", "core", ALL),
+    n("cn.network.icmp", "ICMP", "cn.network", 3, "point", "protocol", "core", ALL),
+    n(
         "cn.network.routing",
         "路由算法",
         "cn.network",
@@ -590,9 +698,8 @@ cn = [
         ALL,
         ["RIP", "OSPF"],
     ),
-    n("cn.network.arp", "ARP / ICMP", "cn.network", 3, "point", "protocol", "major", ALL),
-    n("cn.network.nat", "NAT", "cn.network", 3, "point", "concept", "major"),
-    n("cn.network.ipv6", "IPv6", "cn.network", 3, "point", "protocol", "minor"),
+    n("cn.network.nat", "NAT", "cn.network", 3, "point", "concept", "major", CHOICE),
+    n("cn.network.ipv6", "IPv6", "cn.network", 3, "point", "protocol", "minor", CHOICE),
     # 传输层
     n("cn.transport", "传输层", "cn", 2, "domain", "protocol"),
     n("cn.transport.udp", "UDP", "cn.transport", 3, "point", "protocol", "major", ALL),
@@ -610,7 +717,7 @@ cn = [
     ),
     n(
         "cn.transport.tcp_flow",
-        "TCP 流量与拥塞控制",
+        "TCP 流量控制",
         "cn.transport.tcp",
         4,
         "point",
@@ -618,10 +725,21 @@ cn = [
         "core",
         ALL,
     ),
+    n(
+        "cn.transport.tcp_congestion",
+        "TCP 拥塞控制",
+        "cn.transport.tcp",
+        4,
+        "point",
+        "algorithm",
+        "core",
+        ALL,
+    ),
     # 应用层
     n("cn.application", "应用层", "cn", 2, "domain", "protocol"),
     n("cn.application.dns", "DNS", "cn.application", 3, "point", "protocol", "core", ALL),
-    n("cn.application.http", "HTTP", "cn.application", 3, "point", "protocol", "major", ALL),
+    n("cn.application.http", "HTTP", "cn.application", 3, "point", "protocol", "core", ALL),
+    n("cn.application.ftp", "FTP", "cn.application", 3, "point", "protocol", "minor", CHOICE),
     n(
         "cn.application.email",
         "电子邮件",
@@ -630,10 +748,9 @@ cn = [
         "point",
         "protocol",
         "minor",
-        ["choice"],
+        CHOICE,
         ["SMTP", "POP3"],
     ),
-    n("cn.application.ftp", "FTP", "cn.application", 3, "point", "protocol", "minor"),
 ]
 
 
@@ -650,11 +767,9 @@ def main() -> int:
     write_subject("co", co)
     write_subject("os", os)
     write_subject("cn", cn)
-    # links 空文件占位
     links = OUT / "links.jsonl"
     if not links.exists():
         links.write_text("", encoding="utf-8")
-    print("links.jsonl ready")
     print("TOTAL", sum(map(len, [ds, co, os, cn])))
     return 0
 
