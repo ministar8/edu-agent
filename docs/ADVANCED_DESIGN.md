@@ -173,6 +173,12 @@ scope       = single | cross     ← 「综合」走这里，不进 topic_tags
 importance  = 只在 KP，不在 section
 ```
 
+**`scope` 约束**：
+
+- `scope=cross` ⇒ **`kp_ids` 必须 ≥ 2**（跨考点才有意义）  
+- 禁止：`scope=cross` + 仅 1 个 `kp_ids`  
+- `scope=single` 或省略 ⇒ 可 1 个或多个 kp（多 kp 表示「主+旁及」，非强制 cross）
+
 防止 `topic_tags` 长成第二套知识分类。
 
 **禁止**字段：`publisher` / `book` / `page` / 书名主键。
