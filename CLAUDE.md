@@ -98,10 +98,10 @@ docker compose up --build                # 容器化启动
   临时重定向须用 `monkeypatch` 指向临时目录，否则会写坏真实的 `chroma_db/semantic_cache/`。
 - Windows 下 `run_service.py` 会把事件循环切到 `WindowsSelectorEventLoopPolicy`（异步 DB 驱动不兼容 Proactor）。
 - `src/rag/` 与 `src/tools/` 的类型注解尚不严格，`pyproject.toml` 中对这两个目录放宽了 pyrefly 检查（技术债）。
-- **`splitter.py` 的 Q&A 原子机制在真实语料上未激活**（已知缺陷，勿误判为"已实现"）：
-  `_ANSWER_RE` 只识别 `答案：/解答：/正确答案：`，而 408 真题用的是「选项行尾 `✅` + `**解析**：`」，
-  因此 `content_type` 永远不会成为 `merged_qa`，`qa.question/answer/answer_key` 字段恒为空，
-  依赖它的 `recall.py` `merged_qa_meta` 路由已按 backlog #8 删除。
+- **Q&A 原子机制**：真题/例题会产出 `merged_qa` chunk（`section.chunk_role`），
+  并填 `qa.question/answer/answer_key`。`_ANSWER_RE` 同时认讲义「答案：」与真题
+  「选项行尾 ✅ + **解析**：」。`merged_qa_meta` **专用召回路由已否决**（两轮净负），
+  但 merged_qa 仍会经基础路由被大量召回。
 - **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑
   `PYTHONPATH=src uv run python -m evaluation.retrieval_gate`。
   它用确定性哈希 embedding + 临时索引跑 156 条黄金集 query，与 `evals/retrieval_baseline.json`

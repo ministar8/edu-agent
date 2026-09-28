@@ -10,6 +10,36 @@ logger = logging.getLogger(__name__)
 
 MIN_CHUNK_LENGTH = 80
 
+# 无围栏代码碎片的行首特征（讲义里大量 C/C++ 实例不写 ``` 围栏）
+_CODE_FRAGMENT_START_RE = re.compile(
+    r"^(?://|/\*|\*|#include\b|#define\b|using\s+namespace\b"
+    r"|void\s+\w+\s*\(|int\s+\w+\s*\(|bool\s+\w+\s*\(|char\s+\w+"
+    r"|float\s+\w+|double\s+\w+|struct\s+\w+|class\s+\w+|template\s*<"
+    r"|public:|private:|printf\s*\(|cout\s*<<|for\s*\(|while\s*\(|if\s*\()",
+    re.MULTILINE,
+)
+
+
+def _looks_like_code_chunk(text: str, *, is_code_unit: bool = False) -> bool:
+    """判断 chunk 是否应加语义锚点。
+
+    判据不能只看 chunk 内是否残留 ``` —— 围栏块被切开后，中间碎片
+    可能一个围栏标记都没有，却仍是纯代码（实测：讲义 `//…` 碎片、
+    content_type=text 但正文是 C 函数）。这类 chunk 与 #18 同病：
+    缺中文语义 ⇒ embedding/reranker 对中文 query 几乎无分。
+    """
+    if is_code_unit or "```" in text or "~~~" in text:
+        return True
+    stripped = text.lstrip()
+    if _CODE_FRAGMENT_START_RE.search(stripped):
+        return True
+    # 极少中文且含典型代码符号 → 按代码对待
+    han = len(re.findall(r"[一-鿿]", stripped))
+    if han <= 2 and re.search(r"[{};]|->|::|\w+\s*\(", stripped):
+        return True
+    return False
+
+
 # ── Adaptive chunk_size 映射 ──
 # 根据 content_type 选择 chunk_size，0 表示不拆分（整块保留）
 _ADAPTIVE_CHUNK_SIZE: dict[str, int] = {
@@ -1159,14 +1189,18 @@ def split_documents(documents: list[Document]) -> list[Document]:
                         continue
                     is_qa = sc.get("is_qa", False) if isinstance(sc, dict) else False
                     qa_fields = sc.get("qa_fields") if isinstance(sc, dict) else None
-                    # 含代码围栏的 chunk：把 heading_path 拼回 page_content 作为语义锚点。
+                    # 含代码的 chunk：把 heading_path 拼回 page_content 作为语义锚点。
                     # 纯代码 chunk 的 page_content 缺少中文语义，bge-m3 无法把
                     # 「用信号量写出生产者—消费者问题的伪代码」这类 query 映射到纯 C 代码上，
-                    # 导致 code 类检索召回失败。这里按 **chunk 级**是否含代码围栏判断，
-                    # 而非 section 级 content_type —— 后者由 section 前 200 字推断，会漏掉
-                    # 「section 开头是长文字、代码在后面」的讲义嵌代码 chunk。
+                    # 导致 code 类检索召回失败。判据用 `_looks_like_code_chunk`（围栏、
+                    # `is_code` 单元、或无围栏代码碎片），不能只看 chunk 内是否残留 ```。
                     # 其余类型仍保持「heading 不进 page_content」的约定。
-                    if ("```" in chunk_text or "~~~" in chunk_text) and section.get("heading_path"):
+                    # merged_qa（真题）本身是中文题干，不需要锚点，加了反而稀释。
+                    _is_code_like = (not is_qa) and _looks_like_code_chunk(
+                        chunk_text,
+                        is_code_unit=bool(sc.get("is_code")) if isinstance(sc, dict) else False,
+                    )
+                    if _is_code_like and section.get("heading_path"):
                         # 只保留考点级父标题（去掉文件级标题与当前标题）作为锚点，
                         # 避免「操作系统代码实现」这类文件级泛词稀释 embedding 区分度。
                         _hp = section["heading_path"].strip("[]")
