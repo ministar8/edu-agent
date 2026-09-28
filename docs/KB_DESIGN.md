@@ -117,7 +117,21 @@ knowledge/
 
 **`level` = 分类树结构深度，不是难度、重要度、考试频率。**  
 （`co.cpu.pipeline` 可以 level=3 但比多数 level=4 更难。）  
-难度若需要，另字段 `difficulty`（与 level 正交）；L1/L2/L3 由 `kb_depth` + learning_paths 决定。
+**V1 不提供 `difficulty`**：难度挂在 Question / Content Chunk 上，不挂在 KP 上（KP 是「知识是什么」；`2019-Q11` 才可以是难题）。  
+L1/L2/L3 由 `kb_depth` + learning_paths 决定。
+
+**`node_kind` ↔ `level`（相关但非严格 1:1）**：
+
+| node_kind | level |
+|---|---|
+| `subject` | **1** |
+| `domain` | **2** |
+| `topic` | **3** |
+| `point` | **3 或 4** |
+
+- 禁止：`subject≠1`、`domain≠2`、`topic≠3`。  
+- 允许：`co.cpu.pipeline` 为 `node_kind=point` 且 `level=3`（可直接学/考，不必为「叶子」硬拆 level 4）。  
+- `point` 在 4 表示更细的拆分子项。
 
 ### 4.3 节点 Schema
 
@@ -131,7 +145,12 @@ knowledge/
 | `node_kind` | enum | ✓ | `subject` / `domain` / `topic` / `point` |
 | `type` | enum | ✓ | `concept` / `principle` / `algorithm` / `structure` / `protocol` / `method` / `term` |
 | `importance` | enum | ✓ | `core` / `major` / `minor` |
-| `question_types` | string[] | ✓ | `choice` / `fill` / `calculation` / `comprehensive` / `code` / `design` |
+| `question_types` | string[] | ✓ | **允许/典型考法**（见下），非历史统计 |
+
+**`question_types` 枚举**：`choice` / `fill` / `calculation` / `comprehensive` / `code` / `design`。
+
+**`question_types` 语义**：该 KP **可以通过哪些题型考查**（产品/教学标签）。  
+**不是**「历史上出现过哪些题型」——历史分布由 `question ──assesses──→ KP` **动态统计**（例：Cache 被选择题考过 23 次、计算 8 次）。两者禁止混用。
 | `aliases` | string[] | | 曾用名、别名、英文（**中文改名时旧名迁入此处**） |
 | `tags` | string[] | | **仅**非结构化：`易错` / `易混` / `陷阱`…**禁止**核心/高频/大题 |
 | `status` | enum | ✓ | `active` / `deprecated` |
@@ -139,7 +158,8 @@ knowledge/
 
 **约束**：
 
-- `node_kind=subject` ⇒ `level=1`；`domain` 的 `parent_id` 必须是 `subject|domain`。  
+- **`node_kind` ↔ `level`**：`subject=1`，`domain=2`，`topic=3`，`point=3|4`（见 §4.2）。  
+- `domain` 的 `parent_id` 必须是 `subject|domain`。  
 - 检索/出题/路径默认只落在 `node_kind ∈ {topic, point}`。  
 - `importance` / `question_types` **不得**写入 `tags`。  
 - **id 冻结**：slug 用英文（`binary_search` 不用 `折半查找`）；中文规范名变更只改 `name`，旧名进 `aliases`。
@@ -205,6 +225,8 @@ knowledge/
 | `learning_path` | 路径节点 id | `learning_path:path.l2.os.memory` |
 
 **解析规则**：按**第一个** `:` 切成 `asset_type` + `asset_id`；`asset_type` 为封闭枚举，**禁止**各数据源自造前缀。
+
+**完整性约束**：`UNIQUE(from, type, to)` —— 同一资产、同一关系、同一考点**至多一条边**，否则「KP 被多少真题考过」等统计会被重复边污染。
 
 | type | 语义 | from（asset_type） | to |
 |---|---|---|---|
