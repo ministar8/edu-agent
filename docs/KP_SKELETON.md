@@ -71,7 +71,7 @@
     - `co.cpu.controller` 控制器 `[point/L3/structure]` * choice,calculation,comprehensive,code  ← 微程序、硬布线
     - `co.cpu.datapath` 数据通路 `[topic/L3/structure]` + choice
     - `co.cpu.exception` 中断与异常 `[point/L3/concept]` * choice,calculation,comprehensive,code  ← 中断
-    - `co.cpu.pipeline` 指令流水线 `[point/L3/concept]` * choice,calculation,comprehensive,code  ← 流水线技术
+    - `co.cpu.pipeline` 指令流水线 `[point/L3/concept]` * choice,calculation,comprehensive,code  ← 流水线、流水线技术
       - `co.cpu.pipeline_hazard` 流水线冒险 `[point/L4/concept]` * choice,calculation,comprehensive,code  ← 冒险、冲突
       - `co.cpu.pipeline_stall` 流水线停顿与转发 `[point/L4/method]` + choice,calculation,comprehensive,code  ← forwarding、旁路
   - `co.instruction` 指令系统 `[domain/L2/concept]` + choice

@@ -436,7 +436,7 @@ co = [
         "concept",
         "core",
         ALL,
-        ["流水线技术"],
+        ["流水线", "流水线技术"],
     ),
     n(
         "co.cpu.pipeline_hazard",
@@ -447,7 +447,7 @@ co = [
         "concept",
         "core",
         ALL,
-        ["冒险", "冲突"],
+        ["冒险", "冲突", "数据冒险", "控制冒险", "结构冒险"],
     ),
     n(
         "co.cpu.pipeline_stall",
