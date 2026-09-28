@@ -39,7 +39,7 @@ KP = 统一知识点体系（关系层，不进 RRF 主池）
 
 ### 2.3 元数据
 
-`kb_depth` / `doc_role` / `subject` / `exam_year` / `exam_id` / `credibility` / `knowledge_points`。
+`kb_depth` / `doc_role` / `subject` / `exam_year` / `question_id` / `credibility` / `knowledge_points`。
 
 ### 2.4 L1–L3
 
