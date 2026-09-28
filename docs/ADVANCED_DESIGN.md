@@ -211,6 +211,8 @@ importance  = 只在 KP，不在 section
 
 防止 `topic_tags` 长成第二套知识分类。
 
+**★ 标签体系冻结**：只保留 **`kp_ids` + `primary_kp` + `topic_tags`**，**不再增加** `ability_tags` / `skill_tags` / `method_tags` 等平行标签层，避免标签泛滥、无人维护。
+
 **禁止**字段：`publisher` / `book` / `page` / 书名主键。
 
 links：
