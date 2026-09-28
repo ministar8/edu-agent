@@ -7,7 +7,8 @@
 | 文件 | 作用 |
 |---|---|
 | `docker/Dockerfile.service` | 后端镜像（FastAPI + Agent + RAG） |
-| `compose.yaml` | 服务编排：端口、env、volume、健康检查、开发热同步 |
+| `compose.yaml` | **只编排 `agent_service`**：端口、env、volume、健康检查、开发热同步 |
+| `scripts/tei_deploy.ps1` | **TEI 唯一部署入口**（`tei-embedding` + `tei-rerank`，见下文 TEI 节） |
 | `.dockerignore` | 构建上下文裁剪（排除 `.venv` / `chroma_db` / `*.db` / `tests` 等） |
 
 ## 快速开始
@@ -96,9 +97,38 @@ healthcheck:
 > 注意：`/health` 会检查外部依赖（TEI / LLM）。**依赖未就绪时健康检查会持续失败**，
 > 但服务本身可能已能响应请求。排查时不要只看健康状态。
 
-## TEI 端点契约（**探活时不要凭记忆写 curl**）
+## TEI（Embedding + Reranker）
 
-TEI 由**使用者另行启动**（不在 `compose.yaml` 里 —— 该文件只有 `agent_service`）。
+TEI **不在 `compose.yaml`** 里 —— 它是独立外部依赖，与 `agent_service` 分开管。
+**唯一部署入口**是 `scripts/tei_deploy.ps1`；日常启停用 `docker start/stop`，**不要**反复 `docker run` 重建。
+
+### 部署
+
+```powershell
+.\scripts\tei_deploy.ps1     # 首次创建 / 日常启动 + 就绪巡检
+.\scripts\tei_deploy.ps1 -Stop
+```
+
+现网容器口径（与脚本一致，改脚本前先对齐这里）：
+
+| 容器 | 端口 | 模型 | 启动参数要点 |
+|---|---|---|---|
+| `tei-embedding` | **11435→80** | `BAAI/bge-m3` | `--model-id /data/bge-m3`，挂载本地权重目录 |
+| `tei-rerank` | **11436→80** | `BAAI/bge-reranker-v2-m3` | `--model-id /data/bge-reranker-v2-m3 --dtype float16 --max-batch-tokens 2048` |
+
+- 镜像：`ghcr.io/huggingface/text-embeddings-inference:89-1.7`，`--gpus all`。
+- 本地权重：`D:\models\Embedding\bge-m3` → `/data/bge-m3`，`D:\models\Reranker\bge-reranker-v2-m3` → `/data/bge-reranker-v2-m3`（可用脚本参数覆盖）；无本地目录时回退 HuggingFace 模型 ID。
+- 容器名是 **`tei-rerank`**，不是 `tei-reranker`。`restart=unless-stopped`。
+- 端口必须与 `.env` 的 `EMBEDDING_API_BASE` / `RERANK_LOCAL_URL` 一致（默认 `http://localhost:11435` / `http://localhost:11436`）。
+
+启动后模型加载约 **30~60s**。**`/health` 返回 200 ≠ 模型已就绪**，以 `scripts/tei_ready.py` 为准。
+
+```powershell
+PYTHONPATH=src uv run python scripts/tei_ready.py
+```
+
+### 端点契约（**探活时不要凭记忆写 curl**）
+
 两个端口都在 `.env` 里配置，且**它们的请求体 schema 并不相同**：
 
 | 端口（`.env` 键） | 路由 | 请求体 | 响应 |
@@ -120,7 +150,7 @@ TEI 由**使用者另行启动**（不在 `compose.yaml` 里 —— 该文件只
 |---|---|---|
 | `rag/embeddings.py`（`_embed_single` / `_embed_batch` / 异步版） | `{EMBEDDING_API_BASE}/embeddings` | `{"model": self.model, "input": [文本]}` |
 | `rag/reranker.py`（`rerank()`） | `{RERANK_LOCAL_URL}/rerank` | `{"query", "texts", "top_n"}` |
-| `service/health.py` | `{EMBEDDING_API_BASE}/health` | — |
+| `service/health.py` | `{EMBEDDING_API_BASE}/health`、`{RERANK_LOCAL_URL}/health` | — |
 
 > ⚠️ **422 不是「服务没起来」。** 2026-09-27 踩过一次：手写 curl 用 TEI 原生格式
 > 打 `/embeddings` 得到 422，误判为服务故障；而同一时刻 `/rerank` 返回 200。
@@ -156,7 +186,7 @@ docker compose watch        # 源码改动 → 同步进容器 → 自动重启
 |---|---|
 | `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker 守护进程未运行。`docker --version` 只报客户端版本，不代表守护进程在跑；用 `docker ps` 或 `tasklist \| grep -i docker` 确认 |
 | 构建时找不到依赖 | `uv.lock` 与 `pyproject.toml` 不一致。本地先跑 `uv lock` 再构建 |
-| 容器起但检索报错 | TEI 地址问题，见上文「环境变量」小节 |
+| 容器起但检索报错 | 先跑 `scripts/tei_ready.py`；容器是否在跑（`tei-embedding` / `tei-rerank`）、地址是否需 `host.docker.internal`，见「TEI」与「环境变量」 |
 | 改了代码没生效 | 未用 `compose watch`，或该包不在 `develop.watch` 列表内 |
 | 数据丢失 | SQLite 库未挂载 volume，`down` 后随之删除 |
 

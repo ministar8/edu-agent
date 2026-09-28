@@ -1,4 +1,4 @@
-﻿# EDU-Agent · 408 考研智能教学辅导多 Agent 系统
+# EDU-Agent · 408 考研智能教学辅导多 Agent 系统
 
 基于 **LangGraph v1.0 + FastAPI + RAG** 的 408 考研辅导系统，支持知识问答、智能出题与答案批改。
 工程骨架对齐 [agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit)。
@@ -59,8 +59,8 @@ edu-agent/
 ├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile.service
-├── scripts/              # tei_deploy.ps1（本机 TEI 容器部署）
-└── docs/                 # 工程文档（ARCHITECTURE / RETRIEVAL_ROADMAP / DOCKER / ENGINEERING_COMPARISON）
+├── scripts/              # 运维/诊断脚本（tei_ready / check_live_models / compare_indexes）
+└── docs/                 # 工程文档（ARCHITECTURE / RETRIEVAL_PLAN / RETRIEVAL_ROADMAP / DOCKER 等）
 ```
 
 ### 评测与门禁入口
@@ -94,22 +94,13 @@ cp .env.example .env          # 必填：DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY�
 
 ### 3. 启动外部服务（Embedding / Reranker）
 
-```bash
-# Embedding (bge-m3) → 端口 11435
-docker run -d --name tei-embedding --gpus all -p 11435:80 \
-  ghcr.io/huggingface/text-embeddings-inference:89-1.7 \
-  --model-id BAAI/bge-m3 --dtype float16 --pooling mean
-
-# Reranker (bge-reranker-v2-m3) → 端口 11436
-docker run -d --name tei-reranker --gpus all -p 11436:80 \
-  ghcr.io/huggingface/text-embeddings-inference:89-1.7 \
-  --model-id BAAI/bge-reranker-v2-m3 --dtype float16 --pooling cls
+```powershell
+.\scripts\tei_deploy.ps1    # 创建/启动 tei-embedding + tei-rerank，并做就绪巡检
 ```
 
-Windows 下推荐用 `scripts/tei_deploy.ps1`（容器已存在时用 `docker start`，勿 `docker run` 重建）。
-
-> 启动后模型加载约需 50 秒。**校验请用真实推理请求**，`/health` 返回 200 不代表模型已就绪。
-> 端口须与 `.env` 的 `EMBEDDING_API_BASE` / `RERANK_LOCAL_URL` 一致（默认 11435 / 11436）。
+- 容器名：`tei-embedding`（**11435**）+ `tei-rerank`（**11436**）；日常用 `docker start tei-embedding tei-rerank`。
+- 校验用 `PYTHONPATH=src uv run python scripts/tei_ready.py`（走项目调用路径；`/health` 200 ≠ 模型就绪）。
+- 端口、镜像、启动参数与端点契约的**唯一说明**见 **[docs/DOCKER.md](docs/DOCKER.md)**「TEI」一节。
 
 ### 4. 构建知识库
 

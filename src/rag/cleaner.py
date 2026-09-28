@@ -605,7 +605,7 @@ def clean_documents(
     # ★ 这是**跨侧契约的文档侧**：一旦改写原文，query 侧做字面匹配的消费者
     #   （BM25 的 `$contains`、cross-encoder reranker）就必须同样归一，否则错配。
     #   实测代价见 `settings.INGEST_SYNONYM_NORMALIZE` 的注释与
-    #   `docs/RETRIEVAL_PLAN_V2.md` §5.12。开关默认开（保持既有行为），
+    #   `docs/RETRIEVAL_PLAN.md` / `docs/RETRIEVAL_ROADMAP.md`。开关默认开（保持既有行为），
     #   关掉即「文档保持原文」，用于与「query 侧归一」做对照。
     from core.settings import settings
 

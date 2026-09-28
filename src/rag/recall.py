@@ -114,7 +114,7 @@ def build_recall_queries(
     # BM25 路由传原始 query，让 _raw_search 用 jieba.cut_for_search 做多粒度分词
     # 避免双重处理（recall 预分词 → retriever 再分词）
     #
-    # ⚠️ **已知缺陷（未修，见 docs/RETRIEVAL_PLAN_V2.md §5.12）**：
+    # ⚠️ **已知缺陷（未修，权衡记录见 docs/RETRIEVAL_PLAN.md / RETRIEVAL_ROADMAP.md）**：
     #   入库时 `cleaner.normalize_synonyms()` 把文档里的变体统一成标准词
     #   （`CPU→中央处理器`、`折半查找→二分查找`…，全库 5191 处），而这里传的是**原始 query**，
     #   BM25 又是 `$contains` **字面**匹配 ⇒ 凡落在 SYNONYM_MAP 的 124 类术语，

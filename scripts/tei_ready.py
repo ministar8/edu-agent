@@ -96,7 +96,9 @@ def main() -> int:
 
     print("\n⇒ 未就绪。你只需要做一件事：**启动 Docker 里的 embedding 与 rerank 容器**。")
     print("  端口取自 .env（EMBEDDING_API_BASE / RERANK_LOCAL_URL），别写死。")
-    print("  首次部署用：scripts/tei_deploy.ps1（含部署后验证）；日常用 docker start。")
+    print(
+        r"  首次部署：.\scripts\tei_deploy.ps1（含就绪巡检）；日常：docker start tei-embedding tei-rerank。"
+    )
     print("  bge-m3 加载约需 30~60s，启动后请等待再重跑本脚本。")
     return 1
 

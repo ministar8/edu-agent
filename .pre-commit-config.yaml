@@ -27,7 +27,7 @@ repos:
       #   注意 pre-commit 会把**暂存的文件名追加到 args 之后** —— 只写 `src/` 挡不住 `evals/`。
       - id: ruff
         # 范围是 `src/`：本工作区不含 `tests/`，带上它会报 E902（不是代码问题）；
-        # `scripts/` 只有 tei_deploy.ps1，非 Python。
+        # `scripts/` 是运维/诊断脚本，不纳入自动改写。
         args: [--fix, src/]
         exclude: ^evals/
       - id: ruff-format

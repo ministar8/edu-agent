@@ -37,7 +37,7 @@
 | `static/` | 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
 | `src/evaluation/` | 评测：RAGAS Layer-1（dataset/adapters/ragas_eval/cli）+ 检索质量门禁（retrieval_gate）+ `evals/` 样本 |
-| `docs/` | **工程文档**（见 `docs/README.md` 索引）。现行：`ARCHITECTURE.md` 架构 / `DOCKER.md` 容器 + TEI 端点契约 / **`RETRIEVAL_PLAN.md` 当前执行方案** / `RETRIEVAL_ROADMAP.md` 路线与**「不做清单」** / `L1L2L3_RETRIEVAL_REVIEW.md` 分级评审 / `RERANK_SWITCH_ANALYSIS.md` 重排开关分析。历史版本在 `docs/archive/` |
+| `docs/` | **工程文档**（见 `docs/README.md` 索引）。现行：`ARCHITECTURE.md` 架构 / `DOCKER.md` 容器 + TEI 端点契约 / **`RETRIEVAL_PLAN.md` 当前执行方案** / `RETRIEVAL_ROADMAP.md` 路线与**「不做清单」** / `L1L2L3_RETRIEVAL_REVIEW.md` 分级评审 / `RERANK_SWITCH_ANALYSIS.md` 重排开关分析 |
 
 ## 常用命令
 
@@ -87,8 +87,9 @@ docker compose up --build                # 容器化启动
 
 ## 注意事项
 
-- 检索依赖两个本地 TEI 服务：Embedding（`localhost:11435`）与 Reranker（`localhost:11436`），
-  用 `scripts/tei_deploy.ps1` 或 README 中的 docker 命令启动，否则检索类请求会失败。
+- 检索依赖两个本地 TEI 容器：`tei-embedding`（`localhost:11435`）与 `tei-rerank`（`localhost:11436`）。
+  部署入口只有 `scripts/tei_deploy.ps1`；日常 `docker start tei-embedding tei-rerank`。
+  就绪以 `scripts/tei_ready.py` 为准（`/health` 200 ≠ 模型加载完成）。细节见 `docs/DOCKER.md`「TEI」。
 - **假 embedding 模式**：`pyproject.toml` 的 `[tool.pytest_env]` 设 `USE_FAKE_EMBEDDING=true` 后，
   `get_embeddings()` 返回本地确定性哈希实现（`rag.embeddings.HashingEmbeddings`）——
   **检索质量门禁靠它在无 TEI 时做确定性比对**。该实现**只保留词汇重叠信号、
