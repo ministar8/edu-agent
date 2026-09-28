@@ -175,11 +175,42 @@ knowledge/
 
 ### 4.4 边（`links.jsonl`）
 
-| type | 语义 | from | to |
+```json
+{
+  "from": "question:2019-Q11",
+  "to": "os.file.disk_free_space",
+  "type": "assesses"
+}
+```
+
+| 端 | 含义 |
+|---|---|
+| **`from`** | **资产引用** `asset_type:asset_id` —— 必须能定位到具体资产 |
+| **`to`** | **KP id** —— 必须存在于 `*.jsonl` 节点表 |
+| **`type`** | `teaches` / `assesses` / `trains` |
+
+#### asset_ref 统一格式
+
+```text
+<asset_type>:<asset_id>
+```
+
+| asset_type | asset_id 形态 | 例 |
+|---|---|---|
+| `paper` | 年份 | `paper:2019` |
+| `question` | `YYYY-QN` | `question:2019-Q11` |
+| `basic` | `<relpath>#<section>` | `basic:os/file.md#磁盘空闲` |
+| `advanced` | `<relpath>#<section>` | `advanced:os/文件大题.md#位示图` |
+| `practice` | 题目稳定 id | `practice:wangdao-os-023` |
+| `learning_path` | 路径节点 id | `learning_path:path.l2.os.memory` |
+
+**解析规则**：按**第一个** `:` 切成 `asset_type` + `asset_id`；`asset_type` 为封闭枚举，**禁止**各数据源自造前缀。
+
+| type | 语义 | from（asset_type） | to |
 |---|---|---|---|
-| **`teaches`** | 讲解该考点 | `basic:…` / `advanced:…` | KP |
-| **`assesses`** | 考查该考点 | `question:YYYY-QN` | KP |
-| **`trains`** | 强化/训练该考点 | `practice:…`（王道题、专项题） | KP |
+| **`teaches`** | 讲解该考点 | `basic` / `advanced` | KP |
+| **`assesses`** | 考查该考点 | `question` | KP |
+| **`trains`** | 强化/训练该考点 | `practice` | KP |
 
 ```text
 基础教材  ──teaches──→  KP
@@ -187,16 +218,15 @@ knowledge/
 王道/专项 ──trains──→   KP
 ```
 
-**真题层级命名**（避免 Exam/Question 混用）：
+**真题层级**：
 
 ```text
-paper:2019              整套试卷
-  └── question:2019-Q11   一道题
-            │
+paper:2019
+  └── question:2019-Q11
             └── assesses → KP
 ```
 
-**学习路径不进 links**；路径节点用 `kp_ids[]` 表达「经过/覆盖」：
+**学习路径不进 links**；路径节点用 `kp_ids[]`（`from` 侧如需反查可用 `learning_path:path.l2.os.memory` 作工具索引，但**不作 teaches/assesses/trains 边**）：
 
 ```json
 {
