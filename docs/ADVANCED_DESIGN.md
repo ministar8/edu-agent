@@ -46,39 +46,52 @@ doc_role: method
 
 ---
 
-## 3. 目录
+## 3. 目录（能力域命名，与 L1 对齐）
 
 ```text
 knowledge/advanced/
 ├── data_structure/
-│   ├── 01_linear_list_methods.md
-│   ├── 02_stack_queue_methods.md
-│   ├── 03_tree_methods.md
-│   ├── 04_graph_methods.md
-│   ├── 05_search_methods.md
-│   ├── 06_sort_methods.md
-│   └── 07_ds_comprehensive.md
+│   ├── 01_linear_list.md
+│   ├── 02_stack_queue.md
+│   ├── 03_tree.md
+│   ├── 04_graph.md
+│   ├── 05_search.md
+│   ├── 06_sort.md
+│   └── 07_comprehensive.md
 ├── computer_organization/
-│   ├── 01_representation_calc.md
-│   ├── 02_storage_cache_calc.md
-│   ├── 03_pipeline_analysis.md
-│   ├── 04_bus_io_calc.md
-│   └── 05_co_comprehensive.md
+│   ├── 01_representation.md
+│   ├── 02_storage_cache.md
+│   ├── 03_pipeline.md
+│   ├── 04_bus_io.md
+│   └── 05_comprehensive.md
 ├── operating_system/
-│   ├── 01_process_sync_methods.md
-│   ├── 02_memory_calc.md
-│   ├── 03_file_disk_calc.md
-│   └── 04_os_comprehensive.md
+│   ├── 01_process_sync.md
+│   ├── 02_memory.md
+│   ├── 03_file_disk.md
+│   └── 04_comprehensive.md
 └── computer_network/
-    ├── 01_link_calc.md
-    ├── 02_network_ip_calc.md
-    ├── 03_transport_analysis.md
-    └── 04_cn_comprehensive.md
+    ├── 01_link.md
+    ├── 02_network_ip.md
+    ├── 03_transport.md
+    └── 04_comprehensive.md
 ```
 
-- 默认一方法域一文；过大再拆  
-- `*_comprehensive.md`：跨考点综合拆解  
-- **无**「王道章节」镜像结构  
+### 3.1 三层职责（禁止混入文件名）
+
+| 层 | 回答 | 例 |
+|---|---|---|
+| **文件名 / 目录** | **讲哪一块（能力域）** | `03_tree.md` |
+| **`doc_role`** | **什么层次的内容** | `method`（L2 进阶） |
+| **`topic_tags`** | **具体类型** | `计算` / `综合` / `代码` / `易错` |
+
+**禁止**在文件名堆 `_methods` / `_calc` / `_analysis` 等类型后缀——  
+那会把「能力域」与「内容类型」混进路径，导致 `tree_methods` 里既有计算又有综合，语义不稳。
+
+| 原则 | 说明 |
+|---|---|
+| 默认一能力域一文 | 与 Basic domain 对齐 |
+| `*_comprehensive.md` | 仅表示跨域综合，允许作为独立能力域 |
+| 无书商结构 | 不做「王道章节」镜像 |  
 
 ---
 
