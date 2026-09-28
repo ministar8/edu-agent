@@ -1,0 +1,10 @@
+{"from": "basic:basic-ds-tree-binary_tree", "to": "ds.tree.binary_tree", "type": "teaches"}
+{"from": "basic:basic-ds-tree-binary_props", "to": "ds.tree.binary_tree", "type": "teaches"}
+{"from": "basic:basic-ds-tree-binary_props", "to": "ds.tree.complete", "type": "teaches"}
+{"from": "basic:basic-ds-tree-traversal", "to": "ds.tree.traversal", "type": "teaches"}
+{"from": "basic:basic-ds-tree-traversal", "to": "ds.tree.binary_tree", "type": "teaches"}
+{"from": "basic:basic-ds-tree-threaded", "to": "ds.tree.threaded", "type": "teaches"}
+{"from": "basic:basic-ds-tree-forest_convert", "to": "ds.tree.forest_convert", "type": "teaches"}
+{"from": "basic:basic-ds-tree-bst", "to": "ds.tree.bst", "type": "teaches"}
+{"from": "basic:basic-ds-tree-avl", "to": "ds.tree.avl", "type": "teaches"}
+{"from": "basic:basic-ds-tree-huffman", "to": "ds.tree.huffman", "type": "teaches"}
