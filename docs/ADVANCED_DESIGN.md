@@ -82,7 +82,7 @@ knowledge/advanced/
 |---|---|---|
 | **文件名 / 目录** | **讲哪一块（能力域）** | `03_tree.md` |
 | **`doc_role`** | **什么层次的内容** | `method`（L2 进阶） |
-| **`topic_tags`** | **具体类型** | `计算` / `综合` / `代码` / `易错` |
+| **`topic_tags`** | **检索辅助（题型/形态）** | `计算` / `选择` / `代码`…（不含「综合」） |
 
 **禁止**在文件名堆 `_methods` / `_calc` / `_analysis` 等类型后缀——  
 那会把「能力域」与「内容类型」混进路径，导致 `tree_methods` 里既有计算又有综合，语义不稳。
@@ -112,7 +112,8 @@ knowledge/advanced/
 > section_id: advanced-ds-tree-build_from_traversal
 > kp_ids: [ds.tree.traversal, ds.tree.binary_tree]
 > primary_kp: ds.tree.traversal
-> topic_tags: [综合, 计算]
+> topic_tags: [计算, 选择]
+> scope: cross
 
 **识别信号** …
 **方法步骤** …
@@ -145,9 +146,24 @@ chunk_id      advanced-ds-tree-build_from_traversal-001
 |---|---|
 | `kb_depth` | `advanced` |
 | `doc_role` | **`method`** |
-| `topic_tags` | 可选：`计算` / `选择` / `综合` / `代码`… |
+| `topic_tags` | **检索辅助**（题型/形态，见 §5.1） |
+| `scope` | 可选：`single` / `cross`（是否跨考点） |
 | `document_id` / `section_id` / `chunk_id` | 上图 |
 | `knowledge_points` / `primary_kp` | section 级 |
+
+### 5.1 `topic_tags`（仅检索辅助，不参与层级判断）
+
+| 允许（题型/形态） | 禁止 |
+|---|---|
+| `选择` `计算` `代码` `填空` `分析` | `L1/L2/L3`、`核心/高频/必考`、`综合/简单/困难` |
+
+```text
+topic_tags  = 检索辅助标签
+scope       = single | cross     ← 「综合」走这里，不进 topic_tags
+importance  = 只在 KP，不在 section
+```
+
+防止 `topic_tags` 长成第二套知识分类。
 
 **禁止**字段：`publisher` / `book` / `page` / 书名主键。
 
