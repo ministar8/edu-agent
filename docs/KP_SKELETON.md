@@ -1,8 +1,9 @@
 # 四科 Knowledge Point 骨架（可修改稿）
 
 > 图例：`*` core · `+` major · `.` minor
-> 标注：`[node_kind/L{level}/{type}] question_types`
-> 改完可直接改 `knowledge_points/*.jsonl`，或改 `scripts/gen_kp_skeleton.py` 后重生成。
+> 标注：`[node_kind/L{level}/{type}] typical_question_types`
+> 粒度：一个 KP = 真题可单独考查的语义单元；aliases 只放同义名
+> 改完可改 `knowledge_points/*.jsonl`，或改 `scripts/gen_kp_skeleton.py` 重生成。
 
 ## 数据结构 `ds` — 52 节点
 
@@ -70,9 +71,9 @@
     - `co.cpu.controller` 控制器 `[point/L3/structure]` * choice,calculation,comprehensive,code  ← 微程序、硬布线
     - `co.cpu.datapath` 数据通路 `[topic/L3/structure]` + choice
     - `co.cpu.exception` 中断与异常 `[point/L3/concept]` * choice,calculation,comprehensive,code  ← 中断
-    - `co.cpu.pipeline` 指令流水线 `[point/L3/concept]` * choice,calculation,comprehensive,code  ← 流水线
+    - `co.cpu.pipeline` 指令流水线 `[point/L3/concept]` * choice,calculation,comprehensive,code  ← 流水线技术
       - `co.cpu.pipeline_hazard` 流水线冒险 `[point/L4/concept]` * choice,calculation,comprehensive,code  ← 冒险、冲突
-      - `co.cpu.pipeline_stall` 流水线停顿与转发 `[point/L4/method]` + choice,calculation,comprehensive,code  ←  forwarding
+      - `co.cpu.pipeline_stall` 流水线停顿与转发 `[point/L4/method]` + choice,calculation,comprehensive,code  ← forwarding、旁路
   - `co.instruction` 指令系统 `[domain/L2/concept]` + choice
     - `co.instruction.addressing` 寻址方式 `[point/L3/concept]` * choice,calculation,comprehensive,code
     - `co.instruction.format` 指令格式 `[topic/L3/concept]` + choice,calculation,comprehensive,code
@@ -159,8 +160,8 @@
     - `cn.datalink.mac` 介质访问控制 MAC `[point/L3/concept]` * choice,calculation,comprehensive,code  ← CSMA/CD
     - `cn.datalink.vlan` VLAN `[point/L3/concept]` + choice
   - `cn.network` 网络层 `[domain/L2/concept]` + choice
-    - `cn.network.arp` ARP `[point/L3/protocol]` * choice,calculation,comprehensive,code
-    - `cn.network.icmp` ICMP `[point/L3/protocol]` * choice,calculation,comprehensive,code
+    - `cn.network.arp` ARP `[point/L3/protocol]` * choice,calculation,comprehensive,code  ← 地址解析
+    - `cn.network.icmp` ICMP `[point/L3/protocol]` * choice,calculation,comprehensive,code  ← 网际控制报文、差错报告
     - `cn.network.ip` IP 协议 `[topic/L3/protocol]` * choice,calculation,comprehensive,code
       - `cn.network.ip_address` IP 地址与子网 `[point/L4/concept]` * choice,calculation,comprehensive,code  ← 子网划分、CIDR
       - `cn.network.ip_forward` IP 转发与分片 `[point/L4/concept]` + choice,calculation,comprehensive,code
