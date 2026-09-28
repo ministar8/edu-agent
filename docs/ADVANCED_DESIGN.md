@@ -158,6 +158,7 @@ chunk_id      advanced-ds-tree-build_from_traversal-001
 | `topic_tags` | **检索辅助**（题型/形态，见 §5.1） |
 | `scope` | 可选：`single` / `cross`（是否跨考点） |
 | `related_exams` | 可选：`question:YYYY-QN` 列表（L2→L3，见 §5.3） |
+| **`difficulty`** | **可选**：`1`–`5`（V1 **不强制**；服务学习路径/规划，见 §5.4） |
 | `document_id` / `section_id` / `chunk_id` | 上图 |
 | `knowledge_points` / `primary_kp` | section 级 |
 
@@ -241,6 +242,20 @@ L2 Method
 ```
 
 **禁止**：题号进正文当来源；L2 **不得依赖** `related_exams` 才讲得清方法。
+
+### 5.4 `difficulty`（可选，V1 不强制）
+
+| 项 | |
+|---|---|
+| 取值 | `1`–`5` |
+| 必填 | **否**（V1 可省略，不拖生产） |
+| 用途 | 学习路径 / Agent 规划：如「遍历 → BST → AVL → 综合」的递进 |
+| 位置 | section 元数据 |
+| 禁止 | 用 KP `level` 代替难度；禁止写入 `topic_tags` |
+
+```markdown
+> difficulty: 2
+```
 
 三元关系（总纲）：
 
