@@ -123,25 +123,36 @@ knowledge/
 
 | 字段 | 类型 | 必填 | 取值 / 规则 |
 |---|---|---|---|
-| `id` | string | ✓ | `^(ds\|co\|os\|cn)\.[a-z0-9_]+(\.[a-z0-9_]+)*$` |
-| `name` | string | ✓ | 规范名，≤40 字 |
+| `id` | string | ✓ | `^(ds\|co\|os\|cn)\.[a-z0-9_]+(\.[a-z0-9_]+)*$`；**slug 英文，一经发布不改** |
+| `name` | string | ✓ | 规范中文名，≤40 字；可改名，**不改 id** |
 | `subject` | enum | ✓ | `ds`/`co`/`os`/`cn`，与 id 前缀一致 |
-| `parent` | string\|null | ✓ | 同 subject；根为 null |
+| `parent_id` | string\|null | ✓ | 引用父 KP 的 `id`；根为 null |
 | `level` | int | ✓ | 1–4，**仅树深** |
 | `node_kind` | enum | ✓ | `subject` / `domain` / `topic` / `point` |
 | `type` | enum | ✓ | `concept` / `principle` / `algorithm` / `structure` / `protocol` / `method` / `term` |
 | `importance` | enum | ✓ | `core` / `major` / `minor` |
 | `question_types` | string[] | ✓ | `choice` / `fill` / `calculation` / `comprehensive` / `code` / `design` |
-| `aliases` | string[] | | 别名、英文、俗称 |
+| `aliases` | string[] | | 曾用名、别名、英文（**中文改名时旧名迁入此处**） |
 | `tags` | string[] | | **仅**非结构化：`易错` / `易混` / `陷阱`…**禁止**核心/高频/大题 |
 | `status` | enum | ✓ | `active` / `deprecated` |
-| `replaced_by` | string | | 仅 deprecated |
+| `replaced_by` | string[] | | **数组**；仅 `status=deprecated` 时必填 |
 
 **约束**：
 
-- `node_kind=subject` ⇒ `level=1`；`domain` 的 parent 必须是 `subject|domain`。  
+- `node_kind=subject` ⇒ `level=1`；`domain` 的 `parent_id` 必须是 `subject|domain`。  
 - 检索/出题/路径默认只落在 `node_kind ∈ {topic, point}`。  
-- `importance` / `question_types` **不得**写入 `tags`。
+- `importance` / `question_types` **不得**写入 `tags`。  
+- **id 冻结**：slug 用英文（`binary_search` 不用 `折半查找`）；中文规范名变更只改 `name`，旧名进 `aliases`。
+
+**废弃（含 1 拆 N）**：
+
+```json
+{
+  "id": "os.mem.legacy_memory",
+  "status": "deprecated",
+  "replaced_by": ["os.mem.virtual_memory", "os.mem.page_replacement"]
+}
+```
 
 示例：
 
@@ -150,7 +161,7 @@ knowledge/
   "id": "os.file.disk_free_space",
   "name": "磁盘空闲空间管理",
   "subject": "os",
-  "parent": "os.file.physical",
+  "parent_id": "os.file.physical",
   "level": 3,
   "node_kind": "point",
   "type": "method",
@@ -167,13 +178,22 @@ knowledge/
 | type | 语义 | from | to |
 |---|---|---|---|
 | **`teaches`** | 讲解该考点 | `basic:…` / `advanced:…` | KP |
-| **`assesses`** | 考查该考点 | `exam:YYYY-QN` | KP |
+| **`assesses`** | 考查该考点 | `question:YYYY-QN` | KP |
 | **`trains`** | 强化/训练该考点 | `practice:…`（王道题、专项题） | KP |
 
 ```text
-基础教材    ──teaches──→  KP
-真题       ──assesses──→ KP
-王道/专项题 ──trains──→  KP
+基础教材  ──teaches──→  KP
+真题题   ──assesses──→ KP
+王道/专项 ──trains──→   KP
+```
+
+**真题层级命名**（避免 Exam/Question 混用）：
+
+```text
+paper:2019              整套试卷
+  └── question:2019-Q11   一道题
+            │
+            └── assesses → KP
 ```
 
 **学习路径不进 links**；路径节点用 `kp_ids[]` 表达「经过/覆盖」：
@@ -184,7 +204,7 @@ knowledge/
   "title": "内存管理强化",
   "level": "L2",
   "kp_ids": ["os.mem.page", "os.mem.segment", "os.mem.virtual"],
-  "materials": ["advanced:os/内存强化.md", "exams:2021-Q28"]
+  "materials": ["advanced:os/内存强化.md", "question:2021-Q28"]
 }
 ```
 
@@ -219,7 +239,7 @@ knowledge/knowledge_points/
 | `doc_role` | `textbook` / `wangdao` / `tactic` / `exam_paper` / `exam_item` / `exam_answer` / `plan` | 细类 |
 | `subject` | 四科或 `mixed` | |
 | `exam_year` | 2009–2025 | 仅真题 |
-| `exam_id` | `YYYY-QN` | 按题 |
+| `question_id` | `YYYY-QN` | 按题；链上用 `question:YYYY-QN` |
 | `credibility` | `syllabus` / `third_party` / `recall` | 真题可信度 |
 | `knowledge_points` | JSON 列表 | 指向 KP id |
 
@@ -293,6 +313,6 @@ learning_paths
 ## 10. 成功判据（实现后）
 
 1. 概念题证据以 `basic` 为主，强化题以 `advanced` 为主，练习批改以 `exams` 为主  
-2. 真题带 `exam_id` + `credibility`  
+2. 真题带 `question_id`（`question:YYYY-QN`）+ `credibility`  
 3. KP 可支撑 扩展/回链/路径取材  
 4. 门禁 6 路由 + 探针 5 条可回归  
