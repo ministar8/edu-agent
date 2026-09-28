@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "edu-agent/chunk.schema.json",
+  "title": "Chunk (retrieval carrier)",
+  "description": "检索载体。不生成独立 teaches 边；继承 Section 的 KP 元数据。",
+  "type": "object",
+  "required": ["chunk_id", "document_id", "section_id", "kb_depth", "doc_role"],
+  "properties": {
+    "chunk_id": {
+      "type": "string",
+      "pattern": "^basic-[a-z0-9_]+-[a-z0-9_]+(-[a-z0-9_]+)*-\\d{3}$",
+      "description": "<section_id>-<NNN>"
+    },
+    "document_id": { "type": "string" },
+    "section_id": {
+      "type": "string",
+      "description": "语义关系主体；teaches 用它，不用 chunk_id"
+    },
+    "kb_depth": {
+      "enum": ["basic", "advanced", "exams", "learning_path"]
+    },
+    "doc_role": {
+      "enum": [
+        "textbook",
+        "wangdao",
+        "tactic",
+        "exam_paper",
+        "exam_item",
+        "exam_answer",
+        "plan"
+      ]
+    },
+    "subject": { "enum": ["ds", "co", "os", "cn", "mixed"] },
+    "domain_kp": { "type": "string" },
+    "knowledge_points": {
+      "description": "JSON 字符串数组，来自 section.kp_ids",
+      "type": "string"
+    },
+    "primary_kp": { "type": "string" },
+    "content_hash": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "edu-agent/knowledge_point.schema.json",
+  "title": "Knowledge Point",
+  "description": "统一知识锚点。不进 RRF 主池；用于 teaches/assesses/trains 与扩展召回。",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "subject",
+    "parent_id",
+    "level",
+    "node_kind",
+    "type",
+    "importance",
+    "typical_question_types",
+    "status"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^(ds|co|os|cn)(\\.[a-z0-9_]+)*$",
+      "description": "英文 slug，一经发布冻结；中文改名只动 name"
+    },
+    "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+    "subject": { "enum": ["ds", "co", "os", "cn"] },
+    "parent_id": {
+      "type": ["string", "null"],
+      "description": "父 KP id；学科根为 null"
+    },
+    "level": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4,
+      "description": "分类树深度，不是难度"
+    },
+    "node_kind": { "enum": ["subject", "domain", "topic", "point"] },
+    "type": {
+      "enum": [
+        "concept",
+        "principle",
+        "algorithm",
+        "structure",
+        "protocol",
+        "method",
+        "term"
+      ]
+    },
+    "importance": {
+      "enum": ["core", "major", "minor"],
+      "description": "知识体系地位，不是真题频次"
+    },
+    "typical_question_types": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "choice",
+          "fill",
+          "calculation",
+          "comprehensive",
+          "code",
+          "design"
+        ]
+      },
+      "description": "典型/允许考法（先验）；历史考次从 assesses 统计"
+    },
+    "aliases": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "同义名；禁止跨节点专有词"
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "仅非结构化：易错/易混/陷阱…"
+    },
+    "status": { "enum": ["active", "deprecated"] },
+    "replaced_by": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "deprecated 时必填，可 1→N"
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "node_kind": { "const": "subject" } } },
+      "then": { "properties": { "level": { "const": 1 } } }
+    },
+    {
+      "if": { "properties": { "node_kind": { "const": "domain" } } },
+      "then": { "properties": { "level": { "const": 2 } } }
+    },
+    {
+      "if": { "properties": { "node_kind": { "const": "topic" } } },
+      "then": { "properties": { "level": { "const": 3 } } }
+    },
+    {
+      "if": { "properties": { "node_kind": { "const": "point" } } },
+      "then": { "properties": { "level": { "enum": [3, 4] } } }
+    },
+    {
+      "if": { "properties": { "status": { "const": "deprecated" } } },
+      "then": { "required": ["replaced_by"] }
+    }
+  ],
+  "additionalProperties": true
+}

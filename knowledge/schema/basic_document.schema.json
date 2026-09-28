@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "edu-agent/basic_document.schema.json",
+  "title": "Basic Document (L1)",
+  "description": "L1 概念知识文档的逻辑结构（对应 Markdown 约定，非 JSON 运行时实体）。",
+  "type": "object",
+  "required": ["document_id", "domain_kp", "title", "sections"],
+  "properties": {
+    "document_id": {
+      "type": "string",
+      "pattern": "^basic-(ds|co|os|cn)-[a-z0-9_]+$",
+      "description": "basic-<subject>-<domain_slug>"
+    },
+    "title": { "type": "string" },
+    "domain_kp": {
+      "type": "string",
+      "pattern": "^(ds|co|os|cn)(\\.[a-z0-9_]+)*$",
+      "description": "Document 级；必须是 node_kind=domain 的 KP"
+    },
+    "kb_depth": { "const": "basic" },
+    "doc_role": { "const": "textbook" },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/section" }
+    }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "required": ["section_id", "title"],
+      "properties": {
+        "section_id": {
+          "type": "string",
+          "pattern": "^basic-(ds|co|os|cn)-[a-z0-9_]+(-[a-z0-9_]+)+$",
+          "description": "<document_id>-<section_slug>"
+        },
+        "title": { "type": "string" },
+        "kp_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "本节正文实际讲到的 KP；可为空（导论）"
+        },
+        "primary_kp": {
+          "type": "string",
+          "description": "可选主考点，必须 ∈ kp_ids"
+        },
+        "learning_objectives": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "章级学习目标；禁止应试表述"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["primary_kp"],
+            "properties": { "primary_kp": { "type": "string", "minLength": 1 } }
+          },
+          "then": {
+            "properties": {
+              "kp_ids": {
+                "type": "array",
+                "contains": { "type": "string" }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

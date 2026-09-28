@@ -1,10 +1,20 @@
-# Knowledge base
+# Knowledge 规范包
 
-Tracked Markdown source material for 408 exam concepts and question data.
+| 目录 | 内容 |
+|---|---|
+| `schema/` | KP / Basic 文档 / Chunk 的 JSON Schema |
+| `rules/` | Basic 写作、切分、元数据、门禁规则 |
+| `knowledge_points/` | KP 数据与 `schema.md` |
+| `basic/` | L1 概念知识 |
 
-## Contents
+## 核心分工
 
-- Subject knowledge notes used by the RAG ingestion pipeline.
-- Question/answer material under `questions/` that should remain versioned.
-
-Local derived indexes, vector stores, and generated runtime data should stay outside this directory or be ignored by `.gitignore`.
+```text
+Basic     →  是什么 / 为什么 / 怎么工作
+Advanced  →  怎么做题
+Exams     →  真题 / 答案 / 题目语境
+KP        →  统一知识锚点
+Section   →  语义关系主体
+Chunk     →  检索载体
+teaches   →  Basic Section → KP
+```
