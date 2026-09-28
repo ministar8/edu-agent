@@ -251,7 +251,7 @@ L3  ──assesses──→ KP
 | 语义 | 针对该 KP 的**题型 / 方法 / 应用训练**，不是「做过题」的事实记录 |
 | 唯一 | `UNIQUE(from, type, to)` |
 
-### 5.3 `related_exams`（L2→L3 指针，非正文依赖）
+### 5.3 `related_exams`（L2→L3 **弱关联**，非正文依赖）
 
 ```markdown
 > related_exams:
@@ -259,17 +259,17 @@ L3  ──assesses──→ KP
 >   - question:2022-Q12
 ```
 
-| 含义 | **该方法与哪些真题的考查形态相关** |
+| 含义 | **相似考查形态**（该方法适用于哪类真题形态） |
 |---|---|
-| **不是** | 「L2 内容抄自这些真题」 |
+| **不是** | 来源 /「L2 来自 2019 真题」 |
+| 关系 | **弱关联**，可缺省；不表示引用、版权、编写依据 |
 | 位置 | section **元数据**，不写叙述正文 |
 | 格式 | `asset_ref`：`question:YYYY-QN` |
-| 用法 | 先 L2 方法；用户再问「有真题吗？」→ 经此拉 L3 |
+| 用法 | 先 L2 方法；用户再问「有真题吗？」→ 经此拉形态相近的 L3 |
 
 ```text
-L2 Method
-   ├── trains ──────────→ KP
-   └── related_exams ───→ L3 question
+正确   L2 method ──related_exams（弱）──→ L3 question
+错误   「L2 来自 2019 真题」（破坏去来源化）
 ```
 
 **禁止**：题号进正文当来源；L2 **不得依赖** `related_exams` 才讲得清方法。
