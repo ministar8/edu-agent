@@ -9,7 +9,7 @@ KB 元数据与 links 契约。
 | 字段 | 说明 |
 |---|---|
 | `kb_depth` | `basic` / `advanced` / `exams` / `learning_path` |
-| `doc_role` | `textbook` / `wangdao` / `tactic` / `exam_paper` / `exam_item` / `exam_answer` / `plan` |
+| `doc_role` | `textbook` / `method`（L2） / `tactic` / `exam_paper` / `exam_item` / `exam_answer` / `plan` |
 | `subject` | `ds` / `co` / `os` / `cn` / `mixed` |
 | `document_id` / `section_id` / `chunk_id` | 见 chunking.md |
 | `knowledge_points` | JSON 数组字符串（section.kp_ids） |
@@ -48,9 +48,9 @@ KB 元数据与 links 契约。
 
 | type | from 侧 | 语义 |
 |---|---|---|
-| `teaches` | `basic` / `advanced` | 讲解 |
+| `teaches` | `basic` / `advanced` | 讲解（advanced 主用 trains） |
 | `assesses` | `question` | 考查 |
-| `trains` | `practice` | 强化训练 |
+| `trains` | `advanced` / `practice` | 解题能力强化 |
 
 ```text
 basic section  ──teaches──→  KP
