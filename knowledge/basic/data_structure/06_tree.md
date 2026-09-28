@@ -235,6 +235,10 @@
 
 ## 本章对照（便于锚定）
 
+> section_id: basic-ds-tree-index
+> kp_ids: []
+> note: 锚定表，非正文；不生成 teaches
+
 | 主题 | primary_kp |
 |---|---|
 | 二叉树 | `ds.tree.binary_tree` |
