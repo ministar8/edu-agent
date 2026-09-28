@@ -211,6 +211,30 @@ kp_ids / primary_kp
 
 `teaches` 边：`from = basic:<section_id>` → `to = kp_id`。
 
+### 8.1 边的语义主体（定稿）
+
+**`teaches` 的语义主体 = Section；Chunk 只是检索载体。**
+
+```text
+Section (basic-ds-tree-traversal)
+   │ teaches
+   │
+   ├── Chunk 001   ← 不各自生成 teaches
+   ├── Chunk 002
+   └── Chunk 003
+         │
+         ▼
+        KP (ds.tree.traversal)
+```
+
+| 允许 | 禁止 |
+|---|---|
+| 一个 Section 一条（或对多个 KP 多条）`teaches` | 每个 Chunk 各生成一条 `teaches` |
+| Chunk 继承 section 的 KP 元数据（检索用） | 用 chunk_id 充当 `from` 去建边 |
+
+**原因**：一节切成 N 个 chunk 时，若 per-chunk 建边会重复 N 条同一关系，污染统计与图。  
+检索需要粒度时读 **chunk + 其 `section_id`/`knowledge_points`**，不读 `links`。
+
 ---
 
 ## 9. 不做
