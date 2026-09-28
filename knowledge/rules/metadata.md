@@ -48,9 +48,9 @@ KB 元数据与 links 契约。
 
 | type | from 侧 | 语义 |
 |---|---|---|
-| `teaches` | `basic` / `advanced` | 讲解（advanced 主用 trains） |
+| `teaches` | `basic` | 讲解 |
+| **`trains`** | `advanced` | L2 针对 KP 的题型/方法/应用训练（**名称冻结**，不用 practices） |
 | `assesses` | `question` | 考查 |
-| `trains` | `advanced` / `practice` | 解题能力强化 |
 
 ```text
 basic section  ──teaches──→  KP

@@ -183,6 +183,34 @@ links：
 | **`trains`** | **L2 → KP** |
 | `assesses` | L3 question → KP |
 
+### 5.2 `trains` 语义（冻结，不再改名）
+
+```text
+trains = L2 内容针对某 Knowledge Point 提供题型、方法或应用训练
+```
+
+```text
+L1  ──teaches──→  KP
+L2  ──trains──→   KP
+L3  ──assesses──→ KP
+```
+
+| 规则 | |
+|---|---|
+| 名称 | **冻结为 `trains`**；弃用 `practices`，禁止再改回 |
+| from | `advanced:<section_id>`（L2 section） |
+| to | KP id |
+| 语义 | 针对该 KP 的**题型 / 方法 / 应用训练**，不是「做过题」的事实记录 |
+| 唯一 | `UNIQUE(from, type, to)` |
+
+三元关系（总纲）：
+
+| 从 | 边 | 到 |
+|---|---|---|
+| L1 section | `teaches` | KP |
+| L2 section | `trains` | KP |
+| L3 question | `assesses` | KP |
+
 ---
 
 ## 6. 边界对照
