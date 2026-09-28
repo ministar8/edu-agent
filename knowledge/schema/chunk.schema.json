@@ -37,6 +37,26 @@
       "type": "string"
     },
     "primary_kp": { "type": "string" },
+    "topic_tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "检索辅助标签（题型/形态）；非层级判断"
+    },
+    "scope": {
+      "enum": ["single", "cross"],
+      "description": "cross 时 section 的 kp_ids 须 ≥ 2"
+    },
+    "related_exams": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^question:[0-9]{4}-Q[0-9]+$" },
+      "description": "L2→L3 指针；非正文依赖"
+    },
+    "difficulty": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "可选难度 1-5；V1 非必填；服务学习路径/规划"
+    },
     "content_hash": { "type": "string" }
   },
   "additionalProperties": true
