@@ -259,17 +259,28 @@ L3  ──assesses──→ KP
 >   - question:2022-Q12
 ```
 
-| 含义 | **相似考查形态**（该方法适用于哪类真题形态） |
-|---|---|
-| **不是** | 来源 /「L2 来自 2019 真题」 |
-| 关系 | **弱关联**，可缺省；不表示引用、版权、编写依据 |
-| 位置 | section **元数据**，不写叙述正文 |
-| 格式 | `asset_ref`：`question:YYYY-QN` |
-| 用法 | 先 L2 方法；用户再问「有真题吗？」→ 经此拉形态相近的 L3 |
+**语义冻结**：
 
 ```text
-正确   L2 method ──related_exams（弱）──→ L3 question
-错误   「L2 来自 2019 真题」（破坏去来源化）
+related_exams ≠ 引用
+related_exams ≠ 来源
+related_exams = 推荐关联的真题案例
+```
+
+| 含义 | **推荐关联的真题案例**（相似考查形态） |
+|---|---|
+| **不是** | 来源 / 引用 /「L2 来自 2019 真题」 |
+| 关系 | **弱关联**，可缺省 |
+| 位置 | section **元数据**，不写叙述正文 |
+| 格式 | `asset_ref`：`question:YYYY-QN` |
+| 用法 | L2 先答方法；Agent 判断用户需真题验证时，再 `related_exams` → L3 |
+
+```text
+用户：BST 删除怎么做？
+  → L2 先给方法
+  → 需要真题验证时：L2 ──related_exams──→ L3 question
+
+禁止把 L3 内容塞回 L2 chunk
 ```
 
 **禁止**：题号进正文当来源；L2 **不得依赖** `related_exams` 才讲得清方法。
