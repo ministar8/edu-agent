@@ -26,8 +26,16 @@ ExplanationPolicy = Literal["hidden", "released", "verified_only"]
 RelatedExamPolicy = Literal["off", "weak", "strong"]
 ExpansionToggle = Literal["enabled", "disabled"]
 GraphExpansion = Literal["disabled"]
-LegacyWeightClass = Literal["default", "downrank", "drop"]
+# legacy 是**资产质量/迁移状态**，不是第四知识层：
+#   exclude  = 不进证据包（learn/method/practice/verify）
+#   fallback = 主池不足时才补入（grade/explain，需要旧题库对照）
+#   include  = 与主池同等入池（调试/特殊场景）
+# 不做 downrank —— 调权重治不了数据治理问题。
+LegacyPoolPolicy = Literal["exclude", "fallback", "include"]
 RetrievalDepthName = Literal["shallow", "standard", "deep", "code", "text_only"]
+
+# 语义知识层全集（L1/L2/L3）。legacy **不在**此列。
+SEMANTIC_LAYERS: tuple[str, ...] = ("basic", "advanced", "exams")
 
 POLICY_VERSION = "1.0"
 CACHE_SCOPE = "policy_v1"
@@ -56,10 +64,11 @@ class RetrievalPolicy(BaseModel):
     policy_version: str = POLICY_VERSION
     layer_policy_id: str = "default"
 
-    # —— 知识层（soft 偏好）——
+    # —— 知识层（soft 偏好；只含 L1/L2/L3）——
     preferred_layers: list[LayerName] = Field(default_factory=_default_preferred_layers)
     excluded_layers: list[LayerName] = Field(default_factory=list)
-    legacy_weight_class: LegacyWeightClass = "default"
+    # 资产质量/迁移状态（fallback 池策略），**不是**层权重
+    legacy_pool_policy: LegacyPoolPolicy = "fallback"
 
     # —— L3 资源资格 ——
     exam_resources: ExamResources = Field(default_factory=ExamResources)
@@ -204,11 +213,13 @@ class LayerWeightProfile(BaseModel):
     """排序权重 profile（layer_policy_id 指向的实验表）。
 
     ★ 白名单：只允许排序/计算相关字段；安全字段出现即拒绝。
+    ★ layer_weights 的键**只能是语义层**（basic/advanced/exams）——
+      legacy 是资产质量/迁移状态，用 `legacy_pool_policy` 管，不进权重表。
     """
 
     name: str = "default"
     layer_weights: dict[str, float] = Field(
-        default_factory=lambda: {"basic": 1.0, "advanced": 1.0, "exams": 1.0, "legacy": 1.0}
+        default_factory=lambda: {"basic": 1.0, "advanced": 1.0, "exams": 1.0}
     )
     rerank_coefficient: float = 1.0
     top_k: int | None = None
@@ -229,6 +240,16 @@ class LayerWeightProfile(BaseModel):
         # model_fields_set 只含本模型字段；用 dump 检查未知键由 extra=forbid 保证
         if extra:
             raise ValueError(f"layer_policy profile 不得包含安全字段: {sorted(extra)}")
+        return self
+
+    @model_validator(mode="after")
+    def _reject_legacy_as_layer(self) -> LayerWeightProfile:
+        bad = set(self.layer_weights) - set(SEMANTIC_LAYERS)
+        if bad:
+            raise ValueError(
+                f"layer_weights 只含语义层 {SEMANTIC_LAYERS}，不得包含 {sorted(bad)}"
+                "（legacy 是资产质量，用 legacy_pool_policy 管）"
+            )
         return self
 
     model_config = {"extra": "forbid"}

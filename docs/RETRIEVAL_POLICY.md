@@ -38,10 +38,11 @@ retrieval_policy:
   policy_version: "1.0"
   layer_policy_id: "default" | "experiment.v1" | ...
 
-  # —— 知识层 ——
+  # —— 知识层（语义层 L1/L2/L3）——
   preferred_layers: [basic | advanced | exams]   # 有序偏好，soft
   excluded_layers: []                            # 尽量空；硬排除见 eligibility
-  legacy_weight_class: default | downrank | drop
+  # —— 资产质量/迁移状态（不是第四层）——
+  legacy_pool_policy: exclude | fallback | include
 
   # —— 披露 ——
   answer_policy: hidden | released
@@ -136,7 +137,7 @@ release      answer_policy 等   → Pack 字段/题号
 | `exam_resources.question` | forbidden | forbidden | **forbidden** | allowed | allowed | **allowed** |
 | `exam_resources.answer` | forbidden | forbidden | **forbidden** | allowed | allowed | **forbidden** |
 | `exam_resources.paper` | forbidden | forbidden | **forbidden** | forbidden | **allowed** | forbidden |
-| `legacy_weight_class` | downrank | downrank | drop | default | default | downrank |
+| `legacy_pool_policy` | exclude | exclude | exclude | fallback | fallback | exclude |
 | `answer_policy` | hidden | hidden | **hidden** | released | released | hidden |
 | `explanation_policy` | hidden | hidden | **hidden** | verified_only | released | hidden |
 | `related_exam_policy` | off | off | **off** | weak | strong | weak |
@@ -415,10 +416,13 @@ experiment.v1 / v2 …  只能动「排序与计算」
 
 | **可以改** | 说明 |
 |---|---|
-| `layer_weight`（basic/advanced/exams/legacy） | soft 加权系数 |
+| `layer_weight`（**仅** basic/advanced/exams） | 语义层 soft 加权系数 |
 | rerank 系数 / 轻量重排参数 | 排序 |
 | `top_k` / `k` 默认值 | 计算预算 |
 | KP 单跳加权强度 | 排序 |
+
+> ★ `legacy` **不是知识层**，不得进 `layer_weight`。它是资产质量/迁移状态，
+> 由 `legacy_pool_policy`（exclude/fallback/include）管入池，见 §2。
 
 | **不能改** | 说明 |
 |---|---|

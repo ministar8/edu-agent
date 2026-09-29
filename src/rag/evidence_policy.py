@@ -85,6 +85,24 @@ def _body_has_answer(text: str) -> bool:
     return bool(_ANSWER_BODY_RE.search(text or ""))
 
 
+# 语义知识层（L1/L2/L3）。legacy 是**资产质量/迁移状态**，不在其中。
+_SEMANTIC_LAYERS = ("basic", "advanced", "exams")
+
+
+def semantic_layer(ev: TextEvidence) -> str:
+    """返回 L1/L2/L3 语义层名；无 kb_depth（legacy 资产）返回空串。
+
+    ★ 不要把空串/legacy 当第四层 —— 那是资产状态，用 `is_legacy_asset`。
+    """
+    v = str((ev.metadata or {}).get("kb_depth") or "")
+    return v if v in _SEMANTIC_LAYERS else ""
+
+
+def is_legacy_asset(ev: TextEvidence) -> bool:
+    """资产质量：无有效 kb_depth = 迁移未完成的 legacy 资产。"""
+    return semantic_layer(ev) == ""
+
+
 def apply_layer_ranking(
     fused: FusedEvidence,
     policy: RetrievalPolicy,
@@ -93,21 +111,16 @@ def apply_layer_ranking(
 ) -> FusedEvidence:
     """ranking：preferred_layers 软加权（不改安全字段；系数可调）。
 
-    仅影响顺序；无分数时按 preferred 集合稳定排序。
+    只做语义层偏好排序；**legacy 入池策略**（exclude/fallback/include）
+    在 `finalize_with_layer_ranking`，不在这里。
     """
     preferred = list(policy.preferred_layers)
-    legacy = policy.legacy_weight_class
 
     def _key(item: tuple[int, TextEvidence]) -> tuple[float, float, int]:
         idx, ev = item
-        layer = str((ev.metadata or {}).get("kb_depth") or "legacy")
+        layer = semantic_layer(ev)
         score = float((ev.metadata or {}).get("score") or ev.score or 0.0)
         w = boost if layer in preferred else 1.0
-        if layer == "legacy" or layer not in ("basic", "advanced", "exams"):
-            if legacy == "drop":
-                w = 0.0
-            elif legacy == "downrank":
-                w *= 0.7
         return (-score * w, -w, idx)
 
     ranked = [ev for _, ev in sorted(enumerate(fused.text_evidences or []), key=_key)]
@@ -123,16 +136,68 @@ def finalize_with_layer_ranking(
     keep: int = 5,
     boost: float = 1.35,
 ) -> FusedEvidence:
-    """ranking + 截断：先软加权 preferred_layers，再取 top-keep。
+    """ranking + 截断 + **legacy 池策略**。
+
+    主检索池 = L1/L2/L3（semantic_layer 非空）；legacy 是 fallback 池：
+
+    - `exclude`  ：legacy 不进证据包；不足 keep 显式降级，不回填
+    - `fallback` ：先主池，不足 keep 才按 score 补入 legacy；仍不足才降级
+    - `include`  ：legacy 与主池同等入池（仅调试/特殊场景）
 
     必须在**扩大候选**之后调用，否则 preferred 层进不了池就无法提权。
     """
-    ranked = apply_layer_ranking(fused, policy, boost=boost)
-    if keep > 0 and len(ranked.text_evidences or []) > keep:
-        out = ranked.model_copy(deep=True)
-        out.text_evidences = list(ranked.text_evidences)[:keep]
-        return out
-    return ranked
+    pool_policy = policy.legacy_pool_policy
+    items = list(fused.text_evidences or [])
+    main_items = [ev for ev in items if not is_legacy_asset(ev)]
+    legacy_items = [ev for ev in items if is_legacy_asset(ev)]
+    dropped_legacy = 0
+    if pool_policy == "exclude":
+        dropped_legacy = len(legacy_items)
+        legacy_items = []
+    elif pool_policy == "include":
+        # 与主池混排，后续统一 ranking
+        main_items = items
+        legacy_items = []
+
+    def _score(ev: TextEvidence) -> float:
+        return float((ev.metadata or {}).get("score") or ev.score or 0.0)
+
+    filtered = fused.model_copy(deep=True)
+    filtered.text_evidences = main_items
+    ranked = apply_layer_ranking(filtered, policy, boost=boost)
+    pack = list(ranked.text_evidences or [])
+    if keep > 0 and len(pack) > keep:
+        pack = pack[:keep]
+
+    used_fallback = 0
+    if pool_policy == "fallback" and keep > 0 and len(pack) < keep and legacy_items:
+        # 主池不足：按 score 从 fallback 池补入（显式记录，不静默）
+        reserve = sorted(legacy_items, key=_score, reverse=True)
+        need = keep - len(pack)
+        filled = reserve[:need]
+        pack.extend(filled)
+        used_fallback = len(filled)
+
+    out = fused.model_copy(deep=True)
+    out.text_evidences = pack
+    # final_context 与 pack 对齐，避免策略裁剪后残留已剔除正文
+    out.final_context = "\n\n".join((e.content or "") for e in pack)
+
+    insufficient = keep > 0 and len(pack) < keep
+    out.metadata = {
+        **(out.metadata or {}),
+        "layer_pack": {
+            "legacy_pool_policy": pool_policy,
+            "n_main": len(main_items),
+            "n_legacy_reserve": len(legacy_items),
+            "dropped_legacy": dropped_legacy,
+            "used_fallback": used_fallback,
+            "n_pack": len(pack),
+            "keep": keep,
+            "degraded": insufficient,
+        },
+    }
+    return out
 
 
 def apply_evidence_policy(
@@ -199,11 +264,17 @@ def apply_evidence_policy(
         new_ev.content = content
         kept.append(new_ev)
 
+    layer_pack = (fused.metadata or {}).get("layer_pack") or {}
     flags = {
         "task_mode": policy.task_mode,
         "answer_released": policy.answer_released,
         "explanation_released": policy.explanation_released,
         "layer_policy_id": policy.layer_policy_id,
+        # legacy 池策略结果（fallback 补入 / exclude 剔除后的包体状态）
+        "legacy_pool_policy": policy.legacy_pool_policy,
+        "layer_degraded": bool(layer_pack.get("degraded")),
+        "dropped_legacy": int(layer_pack.get("dropped_legacy") or 0),
+        "used_fallback": int(layer_pack.get("used_fallback") or 0),
     }
 
     rebuilt = fused.model_copy(deep=True)

@@ -10,7 +10,7 @@ import re
 
 from schema.retrieval_policy import (
     ExamResources,
-    LegacyWeightClass,
+    LegacyPoolPolicy,
     RetrievalDepthName,
     RetrievalPolicy,
     TaskMode,
@@ -70,13 +70,19 @@ _PREFERRED: dict[TaskMode, list[str]] = {
     "verify": ["exams", "advanced"],
 }
 
-_LEGACY: dict[TaskMode, LegacyWeightClass] = {
-    "learn": "downrank",
-    "method": "downrank",
-    "practice": "drop",
-    "grade": "default",
-    "explain": "default",
-    "verify": "downrank",
+# legacy（无 kb_depth 旧讲义/题库）= **资产质量/迁移状态**，不是第四知识层。
+# 入池策略（legacy_pool_policy）：
+#   exclude  = 不进证据包 —— learn/method/practice/verify（主池只认 L1/L2/L3）
+#   fallback = 主池不足才补入 —— grade/explain（需要旧题库对照/讲解）
+# 实验（evals/results/legacy_runtime）显示真删后层精度 0.38~0.50 → 1.00。
+# 不做 downrank：调权重治不了数据治理问题。
+_LEGACY_POOL: dict[TaskMode, LegacyPoolPolicy] = {
+    "learn": "exclude",
+    "method": "exclude",
+    "practice": "exclude",
+    "grade": "fallback",
+    "explain": "fallback",
+    "verify": "exclude",
 }
 
 
@@ -185,7 +191,7 @@ def policy_for_mode(
         k=k,
         use_rerank=use_rerank,
         allow_question_id_leak=(mode in ("grade", "explain", "verify")),
-        legacy_weight_class=_LEGACY[mode],
+        legacy_pool_policy=_LEGACY_POOL[mode],
         layer_policy_id=layer_policy_id,
     )
 

@@ -63,8 +63,11 @@ async def topup_preferred_layers(
     if not preferred:
         return fused
 
+    # 语义层集合（空串 = legacy 资产，不是层）
     pool_layers = {
-        str((e.metadata or {}).get("kb_depth") or "legacy") for e in (fused.text_evidences or [])
+        str((e.metadata or {}).get("kb_depth") or "")
+        for e in (fused.text_evidences or [])
+        if str((e.metadata or {}).get("kb_depth") or "") in ("basic", "advanced", "exams")
     }
     missing = [ly for ly in preferred if ly not in pool_layers]
     if not missing:

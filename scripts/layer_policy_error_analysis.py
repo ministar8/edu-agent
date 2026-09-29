@@ -53,7 +53,8 @@ TARGETS = [
 
 V1 = LayerWeightProfile(
     name="v1",
-    layer_weights={"basic": 1.0, "advanced": 1.4, "exams": 1.0, "legacy": 0.7},
+    # 只动语义层系数；legacy 是资产状态，不在权重表里
+    layer_weights={"basic": 1.0, "advanced": 1.4, "exams": 1.0},
 )
 
 

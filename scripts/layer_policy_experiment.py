@@ -71,26 +71,27 @@ FIXED_PROBES = [
     },
 ]
 
-# ★ 固定 profile：只动排序系数（安全字段见 schema 校验，禁止写入）
+# ★ 固定 profile：只动**语义层**排序系数（legacy 是资产状态，不进权重表）
+#   安全字段见 schema 校验，禁止写入；legacy 池策略由 legacy_pool_policy 管
 PROFILES: dict[str, LayerWeightProfile] = {
     "v0": LayerWeightProfile(
         name="v0",
-        layer_weights={"basic": 1.0, "advanced": 1.0, "exams": 1.0, "legacy": 1.0},
+        layer_weights={"basic": 1.0, "advanced": 1.0, "exams": 1.0},
     ),
     "v1": LayerWeightProfile(
         name="v1",
         # 偏 L2：method/practice 应多出 advanced
-        layer_weights={"basic": 1.0, "advanced": 1.4, "exams": 1.0, "legacy": 0.7},
+        layer_weights={"basic": 1.0, "advanced": 1.4, "exams": 1.0},
     ),
     "v2": LayerWeightProfile(
         name="v2",
         # 偏 L1：概念课多出 basic
-        layer_weights={"basic": 1.4, "advanced": 1.1, "exams": 1.0, "legacy": 0.7},
+        layer_weights={"basic": 1.4, "advanced": 1.1, "exams": 1.0},
     ),
     "v3": LayerWeightProfile(
         name="v3",
         # 偏 L3：explain 多出 exams
-        layer_weights={"basic": 1.0, "advanced": 1.1, "exams": 1.5, "legacy": 0.6},
+        layer_weights={"basic": 1.0, "advanced": 1.1, "exams": 1.5},
     ),
 }
 

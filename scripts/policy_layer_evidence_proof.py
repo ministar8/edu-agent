@@ -81,7 +81,9 @@ _ANS_FIELD_RE = re.compile(r"answer_key|reference_answer|qa\.answer", re.I)
 
 
 def _layer(m: dict) -> str:
-    return str(m.get("kb_depth") or "legacy")
+    """语义层名；无 kb_depth 的 legacy 资产显示为 'legacy'（仅展示用）。"""
+    v = str(m.get("kb_depth") or "")
+    return v if v in ("basic", "advanced", "exams") else "legacy"
 
 
 def _role(m: dict) -> str:
@@ -107,11 +109,12 @@ async def probe_one(p: dict) -> dict:
     pool_layers = [_layer(e.metadata or {}) for e in (fused_raw.text_evidences or [])]
 
     packed = finalize_with_layer_ranking(fused_raw, policy, keep=8)
-    out, _flags = apply_evidence_policy(packed, policy)
+    out, flags = apply_evidence_policy(packed, policy)
     pack_layers = [_layer(e.metadata or {}) for e in (out.text_evidences or [])]
     pack_roles = [_role(e.metadata or {}) for e in (out.text_evidences or [])]
     pack_blob = str([e.metadata for e in (out.text_evidences or [])])
     pack_text = "\n".join(e.content or "" for e in (out.text_evidences or []))
+    layer_pack = (out.metadata or {}).get("layer_pack") or {}
 
     checks: dict[str, bool] = {}
     # 1) 分类
@@ -124,6 +127,22 @@ async def probe_one(p: dict) -> dict:
     checks["layer_in_pack"] = (
         any(x in p["want_layers"] for x in pack_layers) or len(out.text_evidences or []) < 3
     )
+    # 5) legacy 是资产状态不是层：
+    #    exclude 模式 pack 内不得有 legacy；fallback 补入必须显式可查
+    if policy.legacy_pool_policy == "exclude":
+        checks["exclude_no_legacy"] = "legacy" not in pack_layers
+    if policy.legacy_pool_policy == "fallback":
+        used_fb = int(layer_pack.get("used_fallback") or 0)
+        n_legacy_in_pack = pack_layers.count("legacy")
+        checks["fallback_count_consistent"] = used_fb == n_legacy_in_pack or used_fb == 0
+    lp_n = int(layer_pack.get("n_pack") or 0)
+    lp_keep = int(layer_pack.get("keep") or 0)
+    if lp_keep > 0 and lp_n < lp_keep:
+        checks["degraded_flag_when_short"] = bool(layer_pack.get("degraded")) and bool(
+            flags.get("layer_degraded")
+        )
+    else:
+        checks["degraded_flag_when_short"] = True
     # 4) 披露
     if policy.answer_policy == "hidden":
         checks["no_answer_fields"] = not _ANS_FIELD_RE.search(pack_blob)
@@ -150,6 +169,8 @@ async def probe_one(p: dict) -> dict:
         "pack_roles": pack_roles,
         "n_pool": len(pool_layers),
         "n_pack": len(pack_layers),
+        "legacy_pool_policy": policy.legacy_pool_policy,
+        "layer_pack": layer_pack,
     }
 
 
@@ -190,8 +211,17 @@ async def main() -> int:
     print("==== Policy → Layer → Evidence proof ====")
     for r in payload["results"]:
         bad = [k for k, v in r["checks"].items() if not v]
+        lp = r.get("layer_pack") or {}
+        note = ""
+        if r.get("legacy_pool_policy") == "exclude":
+            note = f" dropped={lp.get('dropped_legacy', 0)}"
+        elif lp.get("used_fallback"):
+            note = f" fallback={lp.get('used_fallback')}"
+        if lp.get("degraded"):
+            note += f" DEGRADED({lp.get('n_pack')}/{lp.get('keep')})"
         print(
-            f"  [{r['mode']}] ok={r['ok']} pool={r['n_pool']} pack={r['n_pack']} layers={r['pack_layers']}"
+            f"  [{r['mode']}] ok={r['ok']} pool={r['n_pool']} pack={r['n_pack']} "
+            f"layers={r['pack_layers']}{note}"
         )
         print(f"       where={r['policy']['where']}")
         if bad:

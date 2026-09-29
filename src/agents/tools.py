@@ -60,11 +60,35 @@ def build_retrieval_result(
     verdict = str(verification.verdict.value) if verification else ""
     reasons = [str(r) for r in (verification.reasons if verification else [])]
 
+    # legacy 池策略结果显式告知，避免模型误判「库里没有」或不知 fallback 来源
+    layer_pack = (fused.metadata or {}).get("layer_pack") or {}
+    degraded_note = ""
+    if layer_pack:
+        dropped = int(layer_pack.get("dropped_legacy") or 0)
+        used_fb = int(layer_pack.get("used_fallback") or 0)
+        n_pack = int(layer_pack.get("n_pack") or 0)
+        keep_n = int(layer_pack.get("keep") or 0)
+        if layer_pack.get("degraded"):
+            if dropped:
+                degraded_note = (
+                    f"证据包降级：已按策略剔除 legacy {dropped} 条，"
+                    f"主池候选不足（保留 {n_pack}/{keep_n}）"
+                )
+            else:
+                degraded_note = f"证据包降级：候选不足（保留 {n_pack}/{keep_n}）"
+        elif used_fb:
+            degraded_note = (
+                f"主池候选不足，已从 fallback 池补入 legacy {used_fb} 条（保留 {n_pack}/{keep_n}）"
+            )
+
     if not fused.final_context.strip():
+        context = "知识库中未找到相关内容。"
+        if degraded_note:
+            context += f"\n\n{degraded_note}"
         return RetrievalResult(
             status="empty",
             query=query,
-            context="知识库中未找到相关内容。",
+            context=context,
             sources=sources,
             docs=docs,
             verification=verdict,
@@ -76,6 +100,8 @@ def build_retrieval_result(
         context += f"\n\n来源: {', '.join(sources[:5])}"
     if verification and verification.verdict.value != "pass" and reasons:
         context += f"\n\n证据质量: {verdict}; {'; '.join(reasons[:2])}"
+    if degraded_note:
+        context += f"\n\n{degraded_note}"
 
     return RetrievalResult(
         status="ok",
