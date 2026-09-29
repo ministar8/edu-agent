@@ -1,0 +1,350 @@
+{
+  "total": {
+    "data_structure": 779,
+    "computer_organization": 460,
+    "operating_system": 397,
+    "computer_network": 349,
+    "questions": 2050,
+    "learning_paths": 24
+  },
+  "by_collection": {
+    "data_structure": {
+      "total": 779,
+      "legacy": 703,
+      "legacy_ratio": 0.902,
+      "tagged_kb_depth": {
+        "basic": 44,
+        "advanced": 32
+      },
+      "doc_roles": {
+        "": 703,
+        "textbook": 44,
+        "method": 32
+      }
+    },
+    "computer_organization": {
+      "total": 460,
+      "legacy": 415,
+      "legacy_ratio": 0.902,
+      "tagged_kb_depth": {
+        "basic": 29,
+        "advanced": 16
+      },
+      "doc_roles": {
+        "": 415,
+        "textbook": 29,
+        "method": 16
+      }
+    },
+    "operating_system": {
+      "total": 397,
+      "legacy": 358,
+      "legacy_ratio": 0.902,
+      "tagged_kb_depth": {
+        "basic": 26,
+        "advanced": 13
+      },
+      "doc_roles": {
+        "": 358,
+        "textbook": 26,
+        "method": 13
+      }
+    },
+    "computer_network": {
+      "total": 349,
+      "legacy": 314,
+      "legacy_ratio": 0.9,
+      "tagged_kb_depth": {
+        "basic": 24,
+        "advanced": 11
+      },
+      "doc_roles": {
+        "": 314,
+        "textbook": 24,
+        "method": 11
+      }
+    },
+    "questions": {
+      "total": 2050,
+      "legacy": 691,
+      "legacy_ratio": 0.337,
+      "tagged_kb_depth": {
+        "exams": 1359
+      },
+      "doc_roles": {
+        "": 691,
+        "exam_item": 674,
+        "exam_answer": 685
+      }
+    },
+    "learning_paths": {
+      "total": 24,
+      "legacy": 24,
+      "legacy_ratio": 1.0,
+      "tagged_kb_depth": {},
+      "doc_roles": {
+        "": 24
+      }
+    }
+  },
+  "legacy_sources": {
+    "data_structure": [
+      [
+        "05_树与二叉树.md",
+        152
+      ],
+      [
+        "06_图.md",
+        108
+      ],
+      [
+        "02_线性表.md",
+        97
+      ],
+      [
+        "03_栈和队列.md",
+        83
+      ],
+      [
+        "07_查找.md",
+        82
+      ],
+      [
+        "08_排序.md",
+        55
+      ],
+      [
+        "10_常考题型.md",
+        35
+      ],
+      [
+        "04_串.md",
+        34
+      ],
+      [
+        "03_特殊矩阵压缩存储.md",
+        24
+      ],
+      [
+        "01_绪论.md",
+        19
+      ],
+      [
+        "09_代码实现.md",
+        14
+      ]
+    ],
+    "computer_organization": [
+      [
+        "03_存储系统.md",
+        88
+      ],
+      [
+        "02_数据表示与运算.md",
+        71
+      ],
+      [
+        "05_中央处理器.md",
+        58
+      ],
+      [
+        "08_常考题型.md",
+        57
+      ],
+      [
+        "01_计算机系统概述.md",
+        41
+      ],
+      [
+        "04_指令系统.md",
+        41
+      ],
+      [
+        "07_输入输出系统.md",
+        31
+      ],
+      [
+        "06_总线.md",
+        28
+      ]
+    ],
+    "operating_system": [
+      [
+        "02_进程管理.md",
+        128
+      ],
+      [
+        "04_文件管理.md",
+        85
+      ],
+      [
+        "03_内存管理.md",
+        68
+      ],
+      [
+        "05_输入输出管理.md",
+        33
+      ],
+      [
+        "01_操作系统概述.md",
+        27
+      ],
+      [
+        "06_代码实现.md",
+        11
+      ],
+      [
+        "07_常考题型.md",
+        6
+      ]
+    ],
+    "computer_network": [
+      [
+        "03_数据链路层.md",
+        83
+      ],
+      [
+        "04_网络层.md",
+        66
+      ],
+      [
+        "05_传输层.md",
+        47
+      ],
+      [
+        "06_应用层.md",
+        40
+      ],
+      [
+        "01_体系结构.md",
+        35
+      ],
+      [
+        "07_常考题型.md",
+        22
+      ],
+      [
+        "02_物理层.md",
+        21
+      ]
+    ],
+    "questions": [
+      [
+        "2012_408_exam.md",
+        42
+      ],
+      [
+        "2011_408_exam.md",
+        41
+      ],
+      [
+        "2014_408_exam.md",
+        41
+      ],
+      [
+        "2016_408_exam.md",
+        41
+      ],
+      [
+        "2019_408_exam.md",
+        41
+      ],
+      [
+        "2020_408_exam.md",
+        41
+      ],
+      [
+        "2021_408_exam.md",
+        41
+      ],
+      [
+        "2022_408_exam.md",
+        41
+      ],
+      [
+        "2023_408_exam.md",
+        41
+      ],
+      [
+        "2024_408_exam.md",
+        41
+      ],
+      [
+        "2025_408_exam.md",
+        41
+      ],
+      [
+        "2009_408_exam.md",
+        40
+      ],
+      [
+        "2010_408_exam.md",
+        40
+      ],
+      [
+        "2013_408_exam.md",
+        40
+      ],
+      [
+        "2017_408_exam.md",
+        40
+      ]
+    ],
+    "learning_paths": [
+      [
+        "学习路线与重点章节.md",
+        24
+      ]
+    ]
+  },
+  "legacy_ids_sample": {
+    "data_structure": [
+      "chk::01_绪论.md::2::0",
+      "chk::01_绪论.md::3::0",
+      "chk::01_绪论.md::4::0",
+      "chk::01_绪论.md::5::0",
+      "chk::01_绪论.md::6::0"
+    ],
+    "computer_organization": [
+      "chk::01_计算机系统概述.md::2::0",
+      "chk::01_计算机系统概述.md::3::0",
+      "chk::01_计算机系统概述.md::4::0",
+      "chk::01_计算机系统概述.md::6::0",
+      "chk::01_计算机系统概述.md::8::0"
+    ],
+    "operating_system": [
+      "chk::01_操作系统概述.md::1::0",
+      "chk::01_操作系统概述.md::2::0",
+      "chk::01_操作系统概述.md::4::0",
+      "chk::01_操作系统概述.md::5::0",
+      "chk::01_操作系统概述.md::6::0"
+    ],
+    "computer_network": [
+      "chk::01_体系结构.md::1::0",
+      "chk::01_体系结构.md::2::0",
+      "chk::01_体系结构.md::3::0",
+      "chk::01_体系结构.md::4::0",
+      "chk::01_体系结构.md::5::0"
+    ],
+    "questions": [
+      "chk::2009_408_exam.md::1::0",
+      "chk::2009_408_exam.md::3::0",
+      "chk::2009_408_exam.md::4::0",
+      "chk::2009_408_exam.md::5::0",
+      "chk::2009_408_exam.md::6::0"
+    ],
+    "learning_paths": [
+      "chk::学习路线与重点章节.md::2::0",
+      "chk::学习路线与重点章节.md::3::0",
+      "chk::学习路线与重点章节.md::5::0",
+      "chk::学习路线与重点章节.md::6::0",
+      "chk::学习路线与重点章节.md::7::0"
+    ]
+  },
+  "_meta": {
+    "note": "只盘点，不改权重；legacy = 无 kb_depth",
+    "sum_total": 4059,
+    "sum_legacy": 2505,
+    "legacy_ratio": 0.617
+  }
+}

@@ -1,0 +1,1172 @@
+# 2021 年 408 真题 · items
+
+> document_id: exam-2021-items
+> exam_year: 2021
+> kb_depth: exams
+> doc_role: exam_item
+> source_type: third_party
+> credibility: high
+> explanation_status: none
+
+答案只在 metadata（answer_key），正文不印答案。
+
+## 2021-Q1
+
+> question_id: 2021-Q1
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.linear.linked_list]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：已知头指针 h 指向一个带头结点的非空单循环链表，结点结构为 data next ，其中 next 是指向 直接后继结点的指针，p 是尾指针，q 是临时指针。现要删除该链表的第一个元素，正确的语句 序列是 。
+
+- A. h->next = h->next->next; q=h->next; free(q);
+- B. q=h->next; h->next = h->next->next; free(q);
+- C. q=h->next; h->next = q->next; if(p!=q)p=h; free(q);
+- D. q=h->next; h->next = q->next; if(p==q)p=h; free(q);
+
+---
+
+## 2021-Q2
+
+> question_id: 2021-Q2
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.queue]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：已知初始为空的队列 Q 的一端仅能进行入队操作，另外一端既能进行入队操作又能进行出队操 作。若 Q 的入队序列是 1, 2, 3, 4, 5, 则不能得到的出队序列是 。
+
+- A. 5, 4, 3, 1, 2
+- B. 5, 3, 1, 2, 4
+- C. 4, 2, 1, 3, 5
+- D. 4, 1, 3, 2, 5
+
+---
+
+## 2021-Q3
+
+> question_id: 2021-Q3
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.array.compressed]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：已知二维数组 A 按行优先方式存储，每个元素占用 1 个存储单元。若元素 A[0][0]的存储地址是 100，A[3][3]的存储地址是 220，则元素 A[5][5]的存储地址是 。
+
+- A. 295
+- B. 300
+- C. 301
+- D. 306
+
+---
+
+## 2021-Q4
+
+> question_id: 2021-Q4
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.forest_convert]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某森林 F 对应的二叉树为 T，若 T 的先序遍历序列是 a, b, d, c, e, g, f，中序遍历序列是 b, d, a, e, g, c, f，则 F 中树的棵树是 。
+
+- A. 1
+- B. 2
+- C. 3
+- D. 4
+
+---
+
+## 2021-Q5
+
+> question_id: 2021-Q5
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.huffman]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若某二叉树有 5 个叶结点，其权值分别为 10 , 12, 16, 21, 30，则其最小的带权路径长度（WPL） 是 。
+
+- A. 89
+- B. 200
+- C. 208
+- D. 289
+
+---
+
+## 2021-Q6
+
+> question_id: 2021-Q6
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.avl]
+> answer_key: B
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：给定平衡二叉树如下图所示，插入关键字 23 后，根中的关键字是 。
+
+- A. 16
+- B. 20
+- C. 23
+- D. 25
+
+---
+
+## 2021-Q7
+
+> question_id: 2021-Q7
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.graph.topo]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：给定如下有向图，该图的拓扑有序序列的个数是 。
+
+- A. 1
+- B. 2
+- C. 3
+- D. 4
+
+---
+
+## 2021-Q8
+
+> question_id: 2021-Q8
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.graph.shortest_path]
+> answer_key: A
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：使用 Dijkstra 算法求下图中从顶点 1 到其余各顶点的最短路径，将当前找到的从顶点 1 到顶点 2 , 3, 4, 5 的最短路径长度保存在数组 dist 中，求出第二条最短路径后，dist 中的内容更新 为 。 --- page 2 --- 2021 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 2 页（共 11 页）
+
+- A. 26, 3, 14, 6
+- B. 25, 3, 14, 6
+- C. 21, 3, 14, 6
+- D. 15, 3, 14, 6
+
+---
+
+## 2021-Q9
+
+> question_id: 2021-Q9
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.search.b_tree]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在一棵高度为 3 的 3 阶 B 树中，根为第 1 层，若第 2 层中有 4 个关键字，则该树的结点个数最 多是 。
+
+- A. 11
+- B. 10
+- C. 9
+- D. 8
+
+---
+
+## 2021-Q10
+
+> question_id: 2021-Q10
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.radix]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：设数组 S[]={93, 946, 372, 9, 146, 151, 301, 485, 236, 327, 43, 892}，采用最低位优先（LSD）基数 排序将 S 排列成升序序列。第 1 趟分配、收集后，元素 372 之前、之后紧邻的元素分别 是 。
+
+- A. 43, 892
+- B. 236, 301
+- C. 301, 892
+- D. 485, 301
+
+---
+
+## 2021-Q11
+
+> question_id: 2021-Q11
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.heap]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：将关键字 6, 9, 1, 5, 8, 4, 7 依次插入到初始为空的大根堆 H 中，得到的 H 是 。
+
+- A. 9, 8, 7, 6, 5, 4, 1
+- B. 9, 8, 7, 5, 6, 1, 4
+- C. 9, 8, 7, 5, 6, 4, 1
+- D. 9, 6, 7, 5, 8, 4, 1
+
+---
+
+## 2021-Q12
+
+> question_id: 2021-Q12
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.representation.ieee754]
+> answer_key: null
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: partial
+> gap_status: partial
+> gap_fields: [answer]
+
+**题干**：2017 年公布的全球超级计算机 TOP 500 排名中，我国“神威•太湖之光”超级计算机蝉联第一， 其浮点运算速度为 93.0146PFLOPS,说明该计算机每秒钟内完成的浮点操作次数约为 。
+
+- A. 9.3×10 13 次
+- B. 9.3×10 15 次
+- C. 9.3 千万亿次
+- D. 9.3 亿亿次
+
+---
+
+## 2021-Q13
+
+> question_id: 2021-Q13
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.representation.complement]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：已知带符号整数用补码表示，变量 x, y, z 的机器数分别为 FFFDH, FFDFH, 7FFCH，下列结论 中，正确的是 。
+
+- A. 若 x, y 和 z 为无符号整数，则 z＜x＜y
+- B. 若 x, y 和 z 为无符号整数，则 x＜y＜z
+- C. 若 x, y 和 z 为带符号整数，则 x＜y＜z
+- D. 若 x, y 和 z 为带符号整数，则 y＜x＜z
+
+---
+
+## 2021-Q14
+
+> question_id: 2021-Q14
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.representation.ieee754]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列数值中，不能用 IEEE 754 浮点格式精确表示的 。
+
+- A. 1.2
+- B. 1.25
+- C. 2.0
+- D. 2.5
+
+---
+
+## 2021-Q15
+
+> question_id: 2021-Q15
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.bus.bandwidth]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某计算机的存储器总线中有 24 位地址线和 32 位数据线，按字编址，字长为 32 位。如果 00 0000H～3F FFFFH 为 RAM 区，那么需要 512K×8 位的 RAM 芯片数为 。
+
+- A. 8
+- B. 16
+- C. 32
+- D. 64
+
+---
+
+## 2021-Q16
+
+> question_id: 2021-Q16
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.storage.cache]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若计算机主存地址为 32 位，按字节编址，Cache 数据区大小为 32KB，主存块大小为 32B，采用 直接映射方式和回写（Write Back）策略，则 Cache 行的位数至少是 。
+
+- A. 275
+- B. 274
+- C. 258
+- D. 257
+
+---
+
+## 2021-Q17
+
+> question_id: 2021-Q17
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.datapath]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列寄存器中，汇编语言程序员可见的 。 I. 指令寄存器 II. 微指令寄存器 III. 基址寄存器 IV . 标志/状态寄存器
+
+- A. 仅 I、II
+- B. 仅 I、IV
+- C. 仅 II、IV
+- D. 仅 III、IV
+
+---
+
+## 2021-Q18
+
+> question_id: 2021-Q18
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于数据通路的叙述中，错误的是 。
+
+- A. 数据通路包含 ALU 等组合逻辑（操作）元件
+- B. 数据通路包含寄存器等时序逻辑（状态）元件
+- C. 数据通路不包含用于异常事件检测及响应的电路
+- D. 数据通路中的数据流动路径由控制信号进行控制
+
+---
+
+## 2021-Q19
+
+> question_id: 2021-Q19
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.bus.bandwidth]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于总线的叙述中，错误的是 。
+
+- A. 总线是在两个或多个部件之间进行数据交换的传输介质
+- B. 同步总线由时钟信号定时，时钟频率不一定等于工作频率
+- C. 异步总线由握手信号定时，一次握手过程完成一位数据交换
+- D. 突发（Burst）传送总线事务可以在总线上连续传送多个数据
+
+---
+
+## 2021-Q20
+
+> question_id: 2021-Q20
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列选项中，不属于 I/O 接口的是 。
+
+- A. 磁盘驱动器
+- B. 打印机适配器
+- C. 网络控制器
+- D. 可编程中断控制器 --- page 3 --- 2021 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 3 页（共 11 页）
+
+---
+
+## 2021-Q21
+
+> question_id: 2021-Q21
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：异常事件在当前指令执行过程中进行检测，中断请求则在当前指令执行后进行检测。下列事件 中，相应处理程序执行后，必须回到当前指令重新执行的是 。
+
+- A. 系统调用
+- B. 页缺失
+- C. DMA 传送结束
+- D. 打印机缺纸
+
+---
+
+## 2021-Q22
+
+> question_id: 2021-Q22
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列是关于多重中断系统中 CPU 响应中断的叙述，其中错误的是 。
+
+- A. 仅在用户态（执行用户程序）下，CPU 才能检测和响应中断
+- B. CPU 只有在检测到中断请求信号后，才会进入中断响应周期
+- C. 进入中断响应周期时，CPU 一定处于中断允许（开中断）状态
+- D. 若 CPU 检测到中断请求信号，则一定存在未被屏蔽的中断源请求信号
+
+---
+
+## 2021-Q23
+
+> question_id: 2021-Q23
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列指令中，只能在内核态执行的是 。
+
+- A. trap 指令
+- B. I/O 指令
+- C. 数据传送指令
+- D. 设置断点指令
+
+---
+
+## 2021-Q24
+
+> question_id: 2021-Q24
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列操作中，操作系统在创建新进程时，必须完成的是 。 I. 申请空白的进程控制块 II. 初始化进程控制块 III. 设置进程状态为执行态
+
+- A. 仅 I
+- B. 仅 I、II
+- C. 仅 I、III
+- D. 仅 II、III
+
+---
+
+## 2021-Q25
+
+> question_id: 2021-Q25
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.queue]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列内核的数据结构或程序中，分时系统实现时间片轮转调度需要使用的是 。 I. 进程控制块 II. 时钟中断处理程序 III. 进程就绪队列 IV . 进程阻塞队列
+
+- A. 仅 II、III
+- B. 仅 I、IV
+- C. 仅 I、II、III
+- D. 仅 I、II、IV
+
+---
+
+## 2021-Q26
+
+> question_id: 2021-Q26
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.schedule]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某系统中磁盘的磁道数为 200（0～199） ，磁头当前在 184 号磁道上。用户进程提出的磁盘访问 请求对应的磁道号依次为 184, 187, 176, 182, 199。若采用最短寻道时间优先调度算法（SSTF）完 成磁盘访问，则磁头移动的距离（磁道数）是 。
+
+- A. 37
+- B. 38
+- C. 41
+- D. 42
+
+---
+
+## 2021-Q27
+
+> question_id: 2021-Q27
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列事件中，可能引起进程调度程序执行的是 。 I. 中断处理结束 II. 进程阻塞 III. 进程执行结束 IV . 进程的时间片用完
+
+- A. 仅 I、III
+- B. 仅 II、IV
+- C. 仅 III、IV
+- D. I 、II、III 和 IV
+
+---
+
+## 2021-Q28
+
+> question_id: 2021-Q28
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.memory.paging]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某请求分页存储系统的页大小为 4KB，按字节编址。系统给进程 P 分配 2 个固定的页框，并采 用改进型 Clock 置换算法，进程 P 页表的部分内容如下表所示。 页号 页框号 存在位 1：存在，0：不存在 访问位 1：访问，0：未访问 修改位 1：修改，0：未修改 … … … … … 2 20H 0 0 0 3 60H 1 1 0 4 80H 1 1 1 … … … … … 若 P 访问虚拟地址为 02A01H 的存储单元，则经地址变换后得到的物理地址是 。
+
+- A. 00A01H
+- B. 20A01H
+- C. 60A01H
+- D. 80A01H
+
+---
+
+## 2021-Q29
+
+> question_id: 2021-Q29
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.memory.paging]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在采用二级页表的分页系统中，CPU 页表基址寄存器中的内容是 。
+
+- A. 当前进程的一级页表的起始虚拟地址
+- B. 当前进程的一级页表的起始物理地址
+- C. 当前进程的二级页表的起始虚拟地址
+- D. 当前进程的二级页表的起始物理地址
+
+---
+
+## 2021-Q30
+
+> question_id: 2021-Q30
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.file.dir]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若目录 dir 下有文件 file1，则为删除该文件内核不必完成的工作是 。
+
+- A. 删除 file1 的快捷方式
+- B. 释放 file1 的文件控制块
+- C. 释放 file1 占用的磁盘空间
+- D. 删除目录 dir 中与 file1 对应的目录项
+
+---
+
+## 2021-Q31
+
+> question_id: 2021-Q31
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.deadlock]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若系统中有 n（n≥2）个进程，每个进程均需要使用某类临界资源 2 个，则系统不会发生死锁所 需的该类资源总数至少是 。
+
+- A. 2
+- B. n
+- C. n + 1
+- D. 2n
+
+---
+
+## 2021-Q32
+
+> question_id: 2021-Q32
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.schedule]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列选项中，通过系统调用完成的操作是 。 --- page 4 --- 2021 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 4 页（共 11 页）
+
+- A. 页置换
+- B. 进程调度
+- C. 创建新进程
+- D. 生成随机整数
+
+---
+
+## 2021-Q33
+
+> question_id: 2021-Q33
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.network.routing]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在 TCP/IP 参考模型中，由传输层相邻的下一层实现的主要功能 。
+
+- A. 对话管理
+- B. 路由选择
+- C. 端到端报文段传输
+- D. 结点到结点流量控制
+
+---
+
+## 2021-Q34
+
+> question_id: 2021-Q34
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.physical.channel]
+> answer_key: B
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：若下图为一段差分曼彻斯特编码信号波形，则其编码的二进制位串是 。
+
+- A. 1011 1001
+- B. 1101 0001
+- C. 0010 1110
+- D. 1011 0110
+
+---
+
+## 2021-Q35
+
+> question_id: 2021-Q35
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.network.ip_address]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：现将一个 IP 网络划分为 3 个子网，若其中一个子网是 192 .168.9.128/26，则下列网络中，不可能 是另外两个子网之一的是 。
+
+- A. 192.168.9.0/25
+- B. 192.168.9.0/26
+- C. 192.168.9.192/26
+- D. 192.168.9.192/27
+
+---
+
+## 2021-Q36
+
+> question_id: 2021-Q36
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.pipeline]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若路由器向 MTU = 800B 的链路转发一个总长度为 1580B 的 IP 数据报（首部长度为 20B）时， 进行了分片，且每个分片尽可能大，则第 2 个分片的总长度字段和 MF 标志位的值分别 是 。
+
+- A. 796, 0
+- B. 796, 1
+- C. 800, 0
+- D. 800, 1
+
+---
+
+## 2021-Q37
+
+> question_id: 2021-Q37
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.network.routing]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某网络中的所有路由器均采用距离向量路由算法计算路由。若路由器 E 与邻居路由器 A, B, C 和 D 之间的直接链路距离分别是 8, 10, 12 和 6, 且 E 收到邻居路由器的距离向量如下表所示，则路 由器 E 更新后的到达目的网络 Net1～Net4 的距离分别是 。 目的网络 A 的距离向量 B 的距离向量 C 的距离向量 D 的距离向量 Net1 1 23 20 22 Net2 12 35 30 28 Net3 24 18 16 36 Net4 36 30 8 24
+
+- A. 9, 10, 12, 6
+- B. 9, 10, 28, 20
+- C. 9, 20, 12, 20
+- D. 9, 20, 28, 20
+
+---
+
+## 2021-Q38
+
+> question_id: 2021-Q38
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.transport.tcp]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若客户首先向服务器发送 FIN 段请求断开 TCP 连接，则当客户收到服务器发送的 FIN 段并向服 务器发送了 ACK 段后，客户的 TCP 状态转换为 。
+
+- A. CLOSE_WAIT
+- B. TIME_WAIT
+- C. FIN_WAIT_1
+- D. FIN_WAIT_2
+
+---
+
+## 2021-Q39
+
+> question_id: 2021-Q39
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.network.ip]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若大小为 12B 的应用层数据分别通过 1 个 UDP 数据报和 1 个 TCP 段传输，则该 UDP 数据报和 TCP 段实现的有效载荷（应用层数据）最大传输效率分别是 。
+
+- A. 37.5%, 16.7%
+- B. 37.5%, 37.5%
+- C. 60.0%, 16.7%
+- D. 60.0%, 37.5%
+
+---
+
+## 2021-Q40
+
+> question_id: 2021-Q40
+> exam_year: 2021
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.transport.tcp]
+> answer_key: D
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：设主机甲通过 TCP 向主机乙发送数据，部分过程如下图所示。甲在 t0 时刻发送一个序号 seq = 501、封装 200B 数据的段，在 t1 时刻收到乙发送的序号 seq = 601、确认序号 ack_seq = 501、接 收窗口 rcvwnd = 500B 的段，则甲在未收到新的确认段之前，可以继续向乙发送的数据序号范围 是 。
+
+- A. 501～1000
+- B. 601～1100
+- C. 701～1000
+- D. 801～1100 --- page 5 --- 2021 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 5 页（共 11 页）
+
+---
+

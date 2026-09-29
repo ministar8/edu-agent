@@ -1,0 +1,204 @@
+{
+  "_meta": {
+    "recorded_at": "2026-09-29T11:12:36.238434+00:00",
+    "policy_version": "1.0",
+    "note": "Retrieval Policy 安全门基线；改策略/分类器/裁剪后须 --update 并说明原因",
+    "commands": [
+      "scripts/leakage_gate.py",
+      "scripts/e2e_ds_tree_modes.py",
+      "scripts/mode_layer_gate.py"
+    ]
+  },
+  "classify": {
+    "什么是死锁？": "learn",
+    "BST 删除怎么做？": "method",
+    "给我一道死锁练习题": "practice",
+    "学生答案是 A，请批改": "grade",
+    "2019 年第 11 题为什么选 B？": "explain",
+    "BST 删除考过哪些真题？": "verify"
+  },
+  "where_snapshot": {
+    "learn": {
+      "task_mode": "learn",
+      "where": {
+        "$and": [
+          {
+            "doc_role": {
+              "$ne": "exam_answer"
+            }
+          },
+          {
+            "doc_role": {
+              "$ne": "exam_item"
+            }
+          },
+          {
+            "doc_role": {
+              "$ne": "exam_paper"
+            }
+          },
+          {
+            "kb_depth": {
+              "$ne": "exams"
+            }
+          }
+        ]
+      },
+      "answer_policy": "hidden",
+      "exam_resources": {
+        "question": "forbidden",
+        "answer": "forbidden",
+        "paper": "forbidden"
+      },
+      "allow_question_id_leak": false
+    },
+    "method": {
+      "task_mode": "method",
+      "where": {
+        "$and": [
+          {
+            "doc_role": {
+              "$ne": "exam_answer"
+            }
+          },
+          {
+            "doc_role": {
+              "$ne": "exam_item"
+            }
+          },
+          {
+            "doc_role": {
+              "$ne": "exam_paper"
+            }
+          },
+          {
+            "kb_depth": {
+              "$ne": "exams"
+            }
+          }
+        ]
+      },
+      "answer_policy": "hidden",
+      "exam_resources": {
+        "question": "forbidden",
+        "answer": "forbidden",
+        "paper": "forbidden"
+      },
+      "allow_question_id_leak": false
+    },
+    "practice": {
+      "task_mode": "practice",
+      "where": {
+        "$and": [
+          {
+            "doc_role": {
+              "$ne": "exam_answer"
+            }
+          },
+          {
+            "doc_role": {
+              "$ne": "exam_item"
+            }
+          },
+          {
+            "doc_role": {
+              "$ne": "exam_paper"
+            }
+          },
+          {
+            "kb_depth": {
+              "$ne": "exams"
+            }
+          }
+        ]
+      },
+      "answer_policy": "hidden",
+      "exam_resources": {
+        "question": "forbidden",
+        "answer": "forbidden",
+        "paper": "forbidden"
+      },
+      "allow_question_id_leak": false
+    },
+    "grade": {
+      "task_mode": "grade",
+      "where": {
+        "doc_role": {
+          "$ne": "exam_paper"
+        }
+      },
+      "answer_policy": "released",
+      "exam_resources": {
+        "question": "allowed",
+        "answer": "allowed",
+        "paper": "forbidden"
+      },
+      "allow_question_id_leak": true
+    },
+    "explain": {
+      "task_mode": "explain",
+      "where": null,
+      "answer_policy": "released",
+      "exam_resources": {
+        "question": "allowed",
+        "answer": "allowed",
+        "paper": "allowed"
+      },
+      "allow_question_id_leak": true
+    },
+    "verify": {
+      "task_mode": "verify",
+      "where": {
+        "$and": [
+          {
+            "doc_role": {
+              "$ne": "exam_answer"
+            }
+          },
+          {
+            "doc_role": {
+              "$ne": "exam_paper"
+            }
+          }
+        ]
+      },
+      "answer_policy": "hidden",
+      "exam_resources": {
+        "question": "allowed",
+        "answer": "forbidden",
+        "paper": "forbidden"
+      },
+      "allow_question_id_leak": true
+    }
+  },
+  "gates": {
+    "leakage_gate": "PASS",
+    "e2e_ds_tree": "PASS",
+    "mode_layer_gate": "PASS"
+  },
+  "e2e": {
+    "modes_seen": [
+      "explain",
+      "grade",
+      "learn",
+      "method",
+      "practice",
+      "verify"
+    ],
+    "layer_hit_count": 6,
+    "expected_modes": [
+      "learn",
+      "method",
+      "practice",
+      "grade",
+      "explain",
+      "verify"
+    ]
+  },
+  "practice_leak_must_be_zero": [
+    "answer_key",
+    "reference_answer",
+    "question_id",
+    "exam_answer"
+  ]
+}

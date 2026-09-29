@@ -1,0 +1,253 @@
+[
+  {
+    "id": "practice-bst",
+    "mode": "practice",
+    "query": "给我一道 BST 删除的练习题",
+    "n_pool": 16,
+    "n_pack": 8,
+    "pool_layers": [
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "advanced",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "basic"
+    ],
+    "pack_layers": [
+      "basic",
+      "advanced",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy"
+    ],
+    "want_in_pool": 2,
+    "want_in_pack": 2,
+    "want_ranks_in_full": [
+      0,
+      1
+    ],
+    "non_target_pack_counts": {
+      "legacy": 6
+    },
+    "diagnosis": [
+      "A3 目标层在 pack 但非目标占位多（prec 低）：{'legacy': 6}",
+      "B1 legacy 占比高 —— 压 legacy 比抬 L3 更关键"
+    ],
+    "pack_brief": [
+      "layer=basic role=textbook id=basic-ds-tree-bst-001 | [二叉排序树] ## 二叉排序树  **定义**：二叉排序树（BST）为空，或满足：左子树所有关键字 < 根；右子树所有关键字 > 根；左右",
+      "layer=advanced role=method id=advanced-ds-tree-bst_ops-001 | [BST 判定与操作] ## BST 判定与操作  **识别信号**：按关键字插入/删除；判断序列是否为 BST 查找过程；求 ASL。  ",
+      "layer=legacy role=None id=chk::2023_408_exam.md::11::0 | ### 第9题  现有长度为 5、初始为空的散列表 HT,散列表函数 H(k)=(k+4)%5,用线性探查再散列法解决冲 突。若将关键字序列",
+      "layer=legacy role=None id=chk::2012_408_exam.md::15::0 | ### 第9题  已知一棵 3 阶B-树,如下图所示。删除关键字 78 得到一棵新B-树,其最右叶结点中的关键字 是 。  - A. 60 ",
+      "layer=legacy role=None id=chk::2024_408_exam.md::11::0 | ### 第9题  已知关键字序列 28, 22, 20, 19, 8, 12, 15, 5 是大根堆(最大堆) ,对该堆进行两次删除操作后,",
+      "layer=legacy role=None id=chk::2016_408_exam.md::4::0 | ### 第2题  已知一个带有表头结点的双向循环链表 L,结点结构为 prev data next ,其中,prev 和 next 分别是指",
+      "layer=legacy role=None id=chk::2015_408_exam.md::11::0 | ### 第10题  已知小根堆为 8, 15, 10, 21, 34, 16, 12,删除关键字 8 之后需重建堆,在此过程中,关键字之间的",
+      "layer=legacy role=None id=chk::2021_408_exam.md::3::0 | ### 第1题  已知头指针 h 指向一个带头结点的非空单循环链表,结点结构为 data next ,其中 next 是指向 直接后继结点的"
+    ],
+    "pool_target_brief": [
+      "layer=advanced role=method id=advanced-ds-tree-bst_ops-001 | [BST 判定与操作] ## BST 判定与操作  **识别信号**：按关键字插入/删除；判断序列是否为 BST 查找过程；求 ASL。  ",
+      "layer=basic role=textbook id=basic-ds-tree-bst-001 | [二叉排序树] ## 二叉排序树  **定义**：二叉排序树（BST）为空，或满足：左子树所有关键字 < 根；右子树所有关键字 > 根；左右"
+    ]
+  },
+  {
+    "id": "practice-huffman",
+    "mode": "practice",
+    "query": "出一道哈夫曼编码的计算题",
+    "n_pool": 14,
+    "n_pack": 8,
+    "pool_layers": [
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "basic",
+      "advanced",
+      "basic"
+    ],
+    "pack_layers": [
+      "advanced",
+      "basic",
+      "basic",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy"
+    ],
+    "want_in_pool": 3,
+    "want_in_pack": 3,
+    "want_ranks_in_full": [
+      0,
+      1,
+      2
+    ],
+    "non_target_pack_counts": {
+      "legacy": 5
+    },
+    "diagnosis": [
+      "A3 目标层在 pack 但非目标占位多（prec 低）：{'legacy': 5}",
+      "B1 legacy 占比高 —— 压 legacy 比抬 L3 更关键"
+    ],
+    "pack_brief": [
+      "layer=advanced role=method id=advanced-ds-tree-huffman_calc-001 | [哈夫曼编码与 WPL] ## 哈夫曼编码与 WPL  **识别信号**：给频次/权值，求 WPL、编码长度、带权路径或判断是否哈夫曼树。 ",
+      "layer=basic role=textbook id=basic-co-representation-ieee754-001 | [浮点数 IEEE754] ## 浮点数 IEEE754  **定义**：浮点数拆为符号、阶码（指数）、尾数，形如 N = (−1)^S ×",
+      "layer=basic role=textbook id=basic-ds-tree-huffman-001 | [哈夫曼编码] ## 哈夫曼编码  **定义**：哈夫曼树是带权路径长度 WPL 最小的二叉树（最优二叉树）。哈夫曼编码由此构造，用于不等长",
+      "layer=legacy role=None id=chk::2017_408_exam.md::8::0 | ### 第6题  已知字符集{a, b, c, d, e, f, g, h},若各字符的哈夫曼编码依次是 0100, 10, 0000, 0",
+      "layer=legacy role=None id=chk::2018_408_exam.md::7::0 | ### 第5题  已知字符集{a, b, c, d, e, f},若各字符出现的次数分别为 6, 3, 8, 2, 10, 4,则对应字符集",
+      "layer=legacy role=None id=chk::2023_408_exam.md::6::0 | ### 第4题  在由 6 个字符组成的字符集 S 中,各字符出现的频次分别为 3, 4, 5, 6, 8, 10,为 S 构造的哈夫曼 编",
+      "layer=legacy role=None id=chk::2025_408_exam.md::7::0 | ### 第5题  设字符集 S包含 7 个字符,各字符出现的频次分别为 2, 3, 4, 6, 8, 10, 11。现为 S中的各字符构造 ",
+      "layer=legacy role=None id=chk::2019_408_exam.md::5::0 | ### 第3题  对 n 个互不相同的符号进行哈夫曼编码。若生成的哈夫曼树共有 115 个结点,则 n 的值 是 。  - A. 56 - "
+    ],
+    "pool_target_brief": [
+      "layer=basic role=textbook id=basic-ds-tree-huffman-001 | [哈夫曼编码] ## 哈夫曼编码  **定义**：哈夫曼树是带权路径长度 WPL 最小的二叉树（最优二叉树）。哈夫曼编码由此构造，用于不等长",
+      "layer=advanced role=method id=advanced-ds-tree-huffman_calc-001 | [哈夫曼编码与 WPL] ## 哈夫曼编码与 WPL  **识别信号**：给频次/权值，求 WPL、编码长度、带权路径或判断是否哈夫曼树。 ",
+      "layer=basic role=textbook id=basic-co-representation-ieee754-001 | [浮点数 IEEE754] ## 浮点数 IEEE754  **定义**：浮点数拆为符号、阶码（指数）、尾数，形如 N = (−1)^S ×"
+    ]
+  },
+  {
+    "id": "explain-q2",
+    "mode": "explain",
+    "query": "2019-Q2 为什么树的后根遍历对应二叉树中序？",
+    "n_pool": 17,
+    "n_pack": 8,
+    "pool_layers": [
+      "legacy",
+      "legacy",
+      "legacy",
+      "basic",
+      "basic",
+      "legacy",
+      "basic",
+      "advanced",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "exams",
+      "exams"
+    ],
+    "pack_layers": [
+      "exams",
+      "exams",
+      "advanced",
+      "legacy",
+      "basic",
+      "basic",
+      "basic",
+      "legacy"
+    ],
+    "want_in_pool": 6,
+    "want_in_pack": 6,
+    "want_ranks_in_full": [
+      0,
+      1,
+      2,
+      4,
+      5,
+      6
+    ],
+    "non_target_pack_counts": {
+      "legacy": 2
+    },
+    "diagnosis": [
+      "A3 目标层在 pack 但非目标占位多（prec 低）：{'legacy': 2}"
+    ],
+    "pack_brief": [
+      "layer=exams role=exam_item id=exam-2020-Q4-items-001 | **题干**：已知森林 F 及与之对应的二叉树 T，若 F 的先根遍历序列是 a, b, c, d, e, f，中根遍历序列是 b, a, ",
+      "layer=exams role=exam_item id=exam-2019-Q2-items-001 | **题干**：若将一棵树 T 转化为对应的二叉树 BT，则下列对 BT 的遍历中，其遍历序列与 T 的后根遍历序 列相同的是 。  - A.",
+      "layer=advanced role=method id=advanced-ds-tree-forest_convert-001 | [树、森林与二叉树转换] ## 树、森林与二叉树转换  **识别信号**：树/森林的遍历序与对应二叉树遍历序关系；给树求对应二叉树的某遍历。",
+      "layer=legacy role=None id=chk::05_树与二叉树.md::36::0 | ## 1.原理&作用  遍历二叉树是以一定的规则将二叉树(**树型**)中的结点排列成一个**线型序列**,从而得到几种遍历序列,使得该序列",
+      "layer=basic role=textbook id=basic-ds-tree-binary_tree-001 | [二叉树] ## 二叉树  **定义**：每个结点至多有两棵子树（左、右），且子树有左右之分，次序不可颠倒。  **为什么用二叉树**：结构",
+      "layer=basic role=textbook id=basic-ds-tree-traversal-003 | [二叉树遍历] **机制**：  - **递归**：三种深度优先遍历的递归式几乎相同，只交换「根」的位置 - **非递归**：用栈模拟递归；",
+      "layer=basic role=textbook id=basic-ds-tree-forest_convert-001 | [树、森林与二叉树] ## 树、森林与二叉树  **定义**：树或森林可以与二叉树**一一对应**（兄弟-孩子表示法 / 左孩子右兄弟）。 ",
+      "layer=legacy role=None id=chk::05_树与二叉树.md::34::0 | ### 4.6 【考点】由两个遍历序列构造二叉树  若只给出一棵二叉树的前/中/后/层序遍历序列中的一种,不能唯一确定一棵二叉树。  同一个"
+    ],
+    "pool_target_brief": [
+      "layer=basic role=textbook id=basic-ds-tree-binary_tree-001 | [二叉树] ## 二叉树  **定义**：每个结点至多有两棵子树（左、右），且子树有左右之分，次序不可颠倒。  **为什么用二叉树**：结构",
+      "layer=basic role=textbook id=basic-ds-tree-traversal-003 | [二叉树遍历] **机制**：  - **递归**：三种深度优先遍历的递归式几乎相同，只交换「根」的位置 - **非递归**：用栈模拟递归；",
+      "layer=basic role=textbook id=basic-ds-tree-forest_convert-001 | [树、森林与二叉树] ## 树、森林与二叉树  **定义**：树或森林可以与二叉树**一一对应**（兄弟-孩子表示法 / 左孩子右兄弟）。 ",
+      "layer=advanced role=method id=advanced-ds-tree-forest_convert-001 | [树、森林与二叉树转换] ## 树、森林与二叉树转换  **识别信号**：树/森林的遍历序与对应二叉树遍历序关系；给树求对应二叉树的某遍历。",
+      "layer=exams role=exam_item id=exam-2019-Q2-items-001 | **题干**：若将一棵树 T 转化为对应的二叉树 BT，则下列对 BT 的遍历中，其遍历序列与 T 的后根遍历序 列相同的是 。  - A."
+    ]
+  },
+  {
+    "id": "method-bst-delete",
+    "mode": "method",
+    "query": "BST 删除怎么做？双支结点如何处理？",
+    "n_pool": 12,
+    "n_pack": 8,
+    "pool_layers": [
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "advanced",
+      "legacy",
+      "legacy",
+      "basic",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy"
+    ],
+    "pack_layers": [
+      "advanced",
+      "legacy",
+      "basic",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy",
+      "legacy"
+    ],
+    "want_in_pool": 2,
+    "want_in_pack": 2,
+    "want_ranks_in_full": [
+      0,
+      2
+    ],
+    "non_target_pack_counts": {
+      "legacy": 6
+    },
+    "diagnosis": [
+      "A3 目标层在 pack 但非目标占位多（prec 低）：{'legacy': 6}",
+      "B1 legacy 占比高 —— 压 legacy 比抬 L3 更关键"
+    ],
+    "pack_brief": [
+      "layer=advanced role=method id=advanced-ds-tree-bst_ops-001 | [BST 判定与操作] ## BST 判定与操作  **识别信号**：按关键字插入/删除；判断序列是否为 BST 查找过程；求 ASL。  ",
+      "layer=legacy role=None id=chk::05_树与二叉树.md::67::1 | [1.**【考点】二叉排序树BST**] 时间复杂度为 **O(log n)**,其中 n 是树中节点的个数。  ```c BiTree D",
+      "layer=basic role=textbook id=basic-ds-tree-bst-001 | [二叉排序树] ## 二叉排序树  **定义**：二叉排序树（BST）为空，或满足：左子树所有关键字 < 根；右子树所有关键字 > 根；左右",
+      "layer=legacy role=None id=chk::05_树与二叉树.md::60::0 | #### **【考点】BST树结点删增后的变化**  [1] 如果删去的**是叶结点**,那么增加回来就与原来的树**相同**。 [2] 如",
+      "layer=legacy role=None id=chk::05_树与二叉树.md::62::1 | [1.**【考点】二叉排序树BST**] 由于非递归函数的执行效率高,可将“尾递归”函数改为迭代函数。  递归的时间复杂度:**O(h)**",
+      "layer=legacy role=None id=chk::07_查找.md::60::0 | #### 4.1.5 删除  B树中的删除操作与插入操作类似,但要更复杂一些,即要使得删除后的结点中的 **关键字个数 ≥ ⌈ m / 2 ",
+      "layer=legacy role=None id=chk::06_图.md::55::0 | #### 2.3.2基本过程  [1] 首先将所有点视为各自独立的集合,初始化一个空的MST; [2] 当子集个数大于1的时候,对各个子集和",
+      "layer=legacy role=None id=chk::09_代码实现.md::11::0 | [❗【考点】二叉搜索树(BST)的插入与查找] ```c // BST查找 BiTree BST_Search(BiTree T, KeyT"
+    ],
+    "pool_target_brief": [
+      "layer=advanced role=method id=advanced-ds-tree-bst_ops-001 | [BST 判定与操作] ## BST 判定与操作  **识别信号**：按关键字插入/删除；判断序列是否为 BST 查找过程；求 ASL。  ",
+      "layer=basic role=textbook id=basic-ds-tree-bst-001 | [二叉排序树] ## 二叉排序树  **定义**：二叉排序树（BST）为空，或满足：左子树所有关键字 < 根；右子树所有关键字 > 根；左右"
+    ]
+  }
+]

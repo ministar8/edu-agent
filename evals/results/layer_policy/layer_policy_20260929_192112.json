@@ -1,0 +1,660 @@
+{
+  "_meta": {
+    "recorded_at": "2026-09-29T11:21:02.244440+00:00",
+    "fixed_probes": [
+      "method-tree-build",
+      "method-bst-delete",
+      "practice-bst",
+      "practice-huffman",
+      "explain-q2",
+      "learn-traversal"
+    ],
+    "note": "只改 layer_weights；指标分列 recall@pool / recall@pack / precision@pack"
+  },
+  "profiles": [
+    {
+      "profile": "v0",
+      "layer_weights": {
+        "basic": 1.0,
+        "advanced": 1.0,
+        "exams": 1.0,
+        "legacy": 1.0
+      },
+      "probes": [
+        {
+          "id": "method-tree-build",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "advanced",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "method-bst-delete",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "advanced",
+            "legacy",
+            "legacy",
+            "basic",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-bst",
+          "mode": "practice",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 0.0,
+          "layer_precision_pack": 0.0,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-huffman",
+          "mode": "practice",
+          "n_pool": 11,
+          "n_pack": 8,
+          "layer_recall_pool": 0.0,
+          "layer_recall_pack": 0.0,
+          "layer_precision_pack": 0.0,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "explain-q2",
+          "mode": "explain",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "basic",
+            "basic",
+            "basic",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "learn-traversal",
+          "mode": "learn",
+          "n_pool": 13,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 0.0,
+          "layer_precision_pack": 0.0,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        }
+      ],
+      "by_mode": {
+        "method": {
+          "n": 2,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.25,
+          "safety_fail": 0
+        },
+        "practice": {
+          "n": 2,
+          "layer_recall@pool": 0.5,
+          "layer_recall@pack": 0.0,
+          "layer_precision@pack": 0.0,
+          "safety_fail": 0
+        },
+        "explain": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.375,
+          "safety_fail": 0
+        },
+        "learn": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 0.0,
+          "layer_precision@pack": 0.0,
+          "safety_fail": 0
+        }
+      }
+    },
+    {
+      "profile": "v1",
+      "layer_weights": {
+        "basic": 1.0,
+        "advanced": 1.4,
+        "exams": 1.0,
+        "legacy": 0.7
+      },
+      "probes": [
+        {
+          "id": "method-tree-build",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "pack_layers": [
+            "advanced",
+            "legacy",
+            "basic",
+            "legacy",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "method-bst-delete",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "advanced",
+            "legacy",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-bst",
+          "mode": "practice",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.125,
+          "pack_layers": [
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-huffman",
+          "mode": "practice",
+          "n_pool": 11,
+          "n_pack": 8,
+          "layer_recall_pool": 0.0,
+          "layer_recall_pack": 0.0,
+          "layer_precision_pack": 0.0,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "explain-q2",
+          "mode": "explain",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.5,
+          "pack_layers": [
+            "advanced",
+            "legacy",
+            "basic",
+            "basic",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "learn-traversal",
+          "mode": "learn",
+          "n_pool": 13,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "basic",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        }
+      ],
+      "by_mode": {
+        "method": {
+          "n": 2,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.312,
+          "safety_fail": 0
+        },
+        "practice": {
+          "n": 2,
+          "layer_recall@pool": 0.5,
+          "layer_recall@pack": 0.5,
+          "layer_precision@pack": 0.062,
+          "safety_fail": 0
+        },
+        "explain": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.5,
+          "safety_fail": 0
+        },
+        "learn": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.25,
+          "safety_fail": 0
+        }
+      }
+    },
+    {
+      "profile": "v2",
+      "layer_weights": {
+        "basic": 1.4,
+        "advanced": 1.1,
+        "exams": 1.0,
+        "legacy": 0.7
+      },
+      "probes": [
+        {
+          "id": "method-tree-build",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "pack_layers": [
+            "basic",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "advanced",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "method-bst-delete",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "basic",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-bst",
+          "mode": "practice",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.125,
+          "pack_layers": [
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-huffman",
+          "mode": "practice",
+          "n_pool": 11,
+          "n_pack": 8,
+          "layer_recall_pool": 0.0,
+          "layer_recall_pack": 0.0,
+          "layer_precision_pack": 0.0,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "explain-q2",
+          "mode": "explain",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.5,
+          "pack_layers": [
+            "basic",
+            "basic",
+            "basic",
+            "legacy",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "learn-traversal",
+          "mode": "learn",
+          "n_pool": 13,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "basic",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        }
+      ],
+      "by_mode": {
+        "method": {
+          "n": 2,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.312,
+          "safety_fail": 0
+        },
+        "practice": {
+          "n": 2,
+          "layer_recall@pool": 0.5,
+          "layer_recall@pack": 0.5,
+          "layer_precision@pack": 0.062,
+          "safety_fail": 0
+        },
+        "explain": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.5,
+          "safety_fail": 0
+        },
+        "learn": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.25,
+          "safety_fail": 0
+        }
+      }
+    },
+    {
+      "profile": "v3",
+      "layer_weights": {
+        "basic": 1.0,
+        "advanced": 1.1,
+        "exams": 1.5,
+        "legacy": 0.6
+      },
+      "probes": [
+        {
+          "id": "method-tree-build",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "pack_layers": [
+            "advanced",
+            "basic",
+            "legacy",
+            "legacy",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "method-bst-delete",
+          "mode": "method",
+          "n_pool": 12,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "advanced",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-bst",
+          "mode": "practice",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.125,
+          "pack_layers": [
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "practice-huffman",
+          "mode": "practice",
+          "n_pool": 11,
+          "n_pack": 8,
+          "layer_recall_pool": 0.0,
+          "layer_recall_pack": 0.0,
+          "layer_precision_pack": 0.0,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "explain-q2",
+          "mode": "explain",
+          "n_pool": 15,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.5,
+          "pack_layers": [
+            "basic",
+            "advanced",
+            "basic",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        },
+        {
+          "id": "learn-traversal",
+          "mode": "learn",
+          "n_pool": 13,
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "pack_layers": [
+            "basic",
+            "legacy",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ],
+          "ok_safety": true
+        }
+      ],
+      "by_mode": {
+        "method": {
+          "n": 2,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.312,
+          "safety_fail": 0
+        },
+        "practice": {
+          "n": 2,
+          "layer_recall@pool": 0.5,
+          "layer_recall@pack": 0.5,
+          "layer_precision@pack": 0.062,
+          "safety_fail": 0
+        },
+        "explain": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.5,
+          "safety_fail": 0
+        },
+        "learn": {
+          "n": 1,
+          "layer_recall@pool": 1.0,
+          "layer_recall@pack": 1.0,
+          "layer_precision@pack": 0.25,
+          "safety_fail": 0
+        }
+      }
+    }
+  ]
+}

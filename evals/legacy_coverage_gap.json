@@ -1,0 +1,393 @@
+{
+  "_meta": {
+    "note": "Legacy Coverage Gap：知识主题对照，非纯 chunk 计数",
+    "legacy_chunks": 2481,
+    "new_chunks": {
+      "basic": 123,
+      "advanced": 98,
+      "exams": 1359
+    }
+  },
+  "topics_only_in_legacy": [],
+  "topics_only_in_new_layers": [],
+  "topics_in_both": [
+    "BST/AVL",
+    "中断/DMA",
+    "串/KMP",
+    "传输层",
+    "体系结构",
+    "内存管理",
+    "同步/死锁",
+    "哈夫曼",
+    "图",
+    "存储/Cache",
+    "应用层",
+    "总线/IO",
+    "指令/寻址",
+    "排序",
+    "数据链路",
+    "数组矩阵",
+    "文件系统",
+    "查找",
+    "栈队列",
+    "树/二叉树",
+    "流水线",
+    "物理层",
+    "线性表/链表",
+    "网络层/IP",
+    "表示与运算",
+    "设备/IO",
+    "调度",
+    "进程/线程"
+  ],
+  "topic_thickness": [
+    {
+      "topic": "文件系统",
+      "legacy_chunks": 483,
+      "basic_chunks": 20,
+      "advanced_chunks": 12,
+      "exams_chunks": 177,
+      "new_total": 209
+    },
+    {
+      "topic": "图",
+      "legacy_chunks": 462,
+      "basic_chunks": 23,
+      "advanced_chunks": 21,
+      "exams_chunks": 163,
+      "new_total": 207
+    },
+    {
+      "topic": "进程/线程",
+      "legacy_chunks": 427,
+      "basic_chunks": 16,
+      "advanced_chunks": 13,
+      "exams_chunks": 182,
+      "new_total": 211
+    },
+    {
+      "topic": "树/二叉树",
+      "legacy_chunks": 412,
+      "basic_chunks": 22,
+      "advanced_chunks": 19,
+      "exams_chunks": 131,
+      "new_total": 172
+    },
+    {
+      "topic": "存储/Cache",
+      "legacy_chunks": 309,
+      "basic_chunks": 18,
+      "advanced_chunks": 10,
+      "exams_chunks": 113,
+      "new_total": 141
+    },
+    {
+      "topic": "指令/寻址",
+      "legacy_chunks": 301,
+      "basic_chunks": 14,
+      "advanced_chunks": 9,
+      "exams_chunks": 142,
+      "new_total": 165
+    },
+    {
+      "topic": "总线/IO",
+      "legacy_chunks": 296,
+      "basic_chunks": 21,
+      "advanced_chunks": 16,
+      "exams_chunks": 113,
+      "new_total": 150
+    },
+    {
+      "topic": "查找",
+      "legacy_chunks": 230,
+      "basic_chunks": 17,
+      "advanced_chunks": 9,
+      "exams_chunks": 59,
+      "new_total": 85
+    },
+    {
+      "topic": "栈队列",
+      "legacy_chunks": 214,
+      "basic_chunks": 11,
+      "advanced_chunks": 11,
+      "exams_chunks": 67,
+      "new_total": 89
+    },
+    {
+      "topic": "设备/IO",
+      "legacy_chunks": 214,
+      "basic_chunks": 10,
+      "advanced_chunks": 7,
+      "exams_chunks": 97,
+      "new_total": 114
+    },
+    {
+      "topic": "网络层/IP",
+      "legacy_chunks": 211,
+      "basic_chunks": 12,
+      "advanced_chunks": 11,
+      "exams_chunks": 84,
+      "new_total": 107
+    },
+    {
+      "topic": "串/KMP",
+      "legacy_chunks": 204,
+      "basic_chunks": 7,
+      "advanced_chunks": 13,
+      "exams_chunks": 27,
+      "new_total": 47
+    },
+    {
+      "topic": "体系结构",
+      "legacy_chunks": 197,
+      "basic_chunks": 10,
+      "advanced_chunks": 7,
+      "exams_chunks": 77,
+      "new_total": 94
+    },
+    {
+      "topic": "线性表/链表",
+      "legacy_chunks": 196,
+      "basic_chunks": 14,
+      "advanced_chunks": 9,
+      "exams_chunks": 27,
+      "new_total": 50
+    },
+    {
+      "topic": "排序",
+      "legacy_chunks": 191,
+      "basic_chunks": 9,
+      "advanced_chunks": 10,
+      "exams_chunks": 69,
+      "new_total": 88
+    },
+    {
+      "topic": "数组矩阵",
+      "legacy_chunks": 189,
+      "basic_chunks": 8,
+      "advanced_chunks": 10,
+      "exams_chunks": 55,
+      "new_total": 73
+    },
+    {
+      "topic": "数据链路",
+      "legacy_chunks": 179,
+      "basic_chunks": 7,
+      "advanced_chunks": 6,
+      "exams_chunks": 67,
+      "new_total": 80
+    },
+    {
+      "topic": "传输层",
+      "legacy_chunks": 174,
+      "basic_chunks": 7,
+      "advanced_chunks": 12,
+      "exams_chunks": 87,
+      "new_total": 106
+    },
+    {
+      "topic": "中断/DMA",
+      "legacy_chunks": 163,
+      "basic_chunks": 9,
+      "advanced_chunks": 9,
+      "exams_chunks": 116,
+      "new_total": 134
+    },
+    {
+      "topic": "同步/死锁",
+      "legacy_chunks": 158,
+      "basic_chunks": 11,
+      "advanced_chunks": 8,
+      "exams_chunks": 57,
+      "new_total": 76
+    },
+    {
+      "topic": "物理层",
+      "legacy_chunks": 153,
+      "basic_chunks": 8,
+      "advanced_chunks": 8,
+      "exams_chunks": 63,
+      "new_total": 79
+    },
+    {
+      "topic": "调度",
+      "legacy_chunks": 141,
+      "basic_chunks": 6,
+      "advanced_chunks": 6,
+      "exams_chunks": 72,
+      "new_total": 84
+    },
+    {
+      "topic": "表示与运算",
+      "legacy_chunks": 123,
+      "basic_chunks": 5,
+      "advanced_chunks": 7,
+      "exams_chunks": 63,
+      "new_total": 75
+    },
+    {
+      "topic": "内存管理",
+      "legacy_chunks": 120,
+      "basic_chunks": 7,
+      "advanced_chunks": 6,
+      "exams_chunks": 78,
+      "new_total": 91
+    },
+    {
+      "topic": "流水线",
+      "legacy_chunks": 117,
+      "basic_chunks": 9,
+      "advanced_chunks": 8,
+      "exams_chunks": 61,
+      "new_total": 78
+    },
+    {
+      "topic": "应用层",
+      "legacy_chunks": 94,
+      "basic_chunks": 5,
+      "advanced_chunks": 5,
+      "exams_chunks": 38,
+      "new_total": 48
+    },
+    {
+      "topic": "BST/AVL",
+      "legacy_chunks": 76,
+      "basic_chunks": 3,
+      "advanced_chunks": 5,
+      "exams_chunks": 19,
+      "new_total": 27
+    },
+    {
+      "topic": "哈夫曼",
+      "legacy_chunks": 32,
+      "basic_chunks": 1,
+      "advanced_chunks": 2,
+      "exams_chunks": 17,
+      "new_total": 20
+    }
+  ],
+  "thin_coverage": [],
+  "legacy_unanchored_chunks": 154,
+  "legacy_unanchored_top_tokens": [
+    [
+      "时间",
+      23
+    ],
+    [
+      "需要",
+      22
+    ],
+    [
+      "答案",
+      21
+    ],
+    [
+      "解析",
+      21
+    ],
+    [
+      "数据",
+      18
+    ],
+    [
+      "执行",
+      17
+    ],
+    [
+      "那么",
+      17
+    ],
+    [
+      "复杂度",
+      16
+    ],
+    [
+      "就是",
+      16
+    ],
+    [
+      "地址",
+      16
+    ],
+    [
+      "所以",
+      15
+    ],
+    [
+      "如果",
+      14
+    ],
+    [
+      "int",
+      14
+    ],
+    [
+      "10",
+      14
+    ],
+    [
+      "例题",
+      13
+    ],
+    [
+      "二进制",
+      13
+    ],
+    [
+      "程序",
+      13
+    ],
+    [
+      "采用",
+      12
+    ],
+    [
+      "选项",
+      12
+    ],
+    [
+      "整数",
+      11
+    ],
+    [
+      "表达式",
+      11
+    ],
+    [
+      "计算机",
+      11
+    ],
+    [
+      "文字",
+      11
+    ],
+    [
+      "两个",
+      10
+    ],
+    [
+      "考点",
+      10
+    ],
+    [
+      "代码",
+      10
+    ],
+    [
+      "运算",
+      10
+    ],
+    [
+      "12",
+      10
+    ],
+    [
+      "内存",
+      9
+    ],
+    [
+      "所有",
+      9
+    ]
+  ]
+}

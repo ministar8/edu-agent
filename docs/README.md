@@ -1,12 +1,18 @@
 # docs/ 索引
 
-**先读哪个**：改检索相关代码前 → `RETRIEVAL_PLAN.md`（当前方案）+ `RETRIEVAL_ROADMAP.md`（**「不做清单」在这里，改动前必看**）。
+**先读哪个**：动知识库 → `KB_MASTER_DESIGN.md`（总册）。动检索路由/策略 → `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md`。改检索相关代码前 → `RETRIEVAL_PLAN.md` + `RETRIEVAL_ROADMAP.md`（**「不做清单」在这里，改动前必看**）。
 
 ## 现行文档
 
 | 文件 | 作用 | 何时读 |
 |---|---|---|
-| **`KB_DESIGN.md`** | **知识库四块设计**（基础知识 / 进阶王道 / 真题 / 学习路径 + Relation）与迁移清单 | **动知识库/入库前** |
+| **`KB_MASTER_DESIGN.md`** | **知识库总册**（L1/KP/L2/L3 + 边 + gap + ID + 现状） | **动知识库/入库前** |
+| **`RETRIEVAL_LAYER_DESIGN.md`** | **检索层设计（定稿）**（task_mode / eligibility / ranking / release） | **动检索路由前** |
+| **`RETRIEVAL_POLICY.md`** | **策略契约**（retrieval_policy 字段、默认表、LangGraph 落点） | 实现 Classifier/Policy 前 |
+| `BASIC_DESIGN.md` | L1 细节 | 写/改 Basic |
+| `ADVANCED_DESIGN.md` | L2 细节 | 写/改 Advanced |
+| `EXAMS_DESIGN.md` | L3 细节（D0–D6 决策） | 写/改 Exams |
+| `KB_DESIGN.md` | 早期总图（与总册冲突以总册为准） | 历史对照 |
 | `ARCHITECTURE.md` | 分层与调用链（L0~L3 分层、检索/生成/护栏） | 理解系统结构 |
 | **`RETRIEVAL_PLAN.md`** | **当前执行方案**（Step 1~6 + 实测数据 + 已否决项） | **动手改检索前** |
 | `RETRIEVAL_ROADMAP.md` | 效果路线图；**含「不做清单」（同类改动有负收益先例）** | **动手改检索前** |

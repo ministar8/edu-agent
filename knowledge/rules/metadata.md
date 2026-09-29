@@ -53,9 +53,9 @@ KB 元数据与 links 契约。
 | `assesses` | `question` | 考查 |
 
 ```text
-basic section  ──teaches──→  KP
-question       ──assesses──→ KP
-practice       ──trains──→   KP
+basic section     ──teaches──→  KP
+advanced section  ──trains──→   KP
+question          ──assesses──→ KP
 ```
 
 - 学习路径 **不进** 三条边；用 `path.kp_ids`  

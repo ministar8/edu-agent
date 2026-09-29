@@ -16,6 +16,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState
 
 from agents.supervisor import inner_supervisor
+from agents.task_context import load_thread_context, remember_query_mode
 from core import settings
 from memory.runtime import get_store
 from memory.safe import safe_remember
@@ -59,6 +60,22 @@ async def load_memory(state: MessagesState, config=None) -> dict:
         ]
     elif removes:
         updates["messages"] = removes
+
+    # 多轮 task_mode：载入线程上下文，并记住本轮用户 query 的 mode
+    try:
+        conf = dict((config or {}).get("configurable") or {})
+        tid = str(conf.get("thread_id") or "")
+        load_thread_context(tid, config)
+        last_user = ""
+        for m in reversed(state.get("messages") or []):
+            if getattr(m, "type", "") == "human" or m.__class__.__name__ == "HumanMessage":
+                last_user = str(getattr(m, "content", "") or "")
+                break
+        if last_user:
+            remember_query_mode(last_user, thread_id=tid, config=config)
+    except Exception:
+        logger.debug("task_context track failed", exc_info=True)
+
     return updates
 
 

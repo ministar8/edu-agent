@@ -1808,9 +1808,26 @@ async def aretrieve_evidence_with_retry(
     *,
     max_retries: int = 2,
     use_llm_verify: bool = False,
+    preferred_layers: list[str] | None = None,
 ) -> tuple[FusedEvidence, VerificationResult]:
-    """带重试的异步检索（对外入口）。参数 ``use_rerank`` 的语义见模块文档串。"""
+    """带重试的异步检索（对外入口）。参数 ``use_rerank`` 的语义见模块文档串。
+
+    ``preferred_layers``：候选池 top-up（Candidate Pool Recall），保证目标层进池。
+    """
     from rag.verifier import Verdict, VerificationResult, averify_evidence
+
+    async def _with_topup(fused: FusedEvidence) -> FusedEvidence:
+        layers = list(preferred_layers or [])
+        if not layers:
+            return fused
+        from rag.layer_recall import topup_preferred_layers
+
+        class _P:
+            pass
+
+        obj = _P()
+        obj.preferred_layers = layers
+        return await topup_preferred_layers(query, obj, fused)  # type: ignore[arg-type]
 
     retry_metric_start = time.perf_counter()
     retry_count = 0
@@ -1826,7 +1843,7 @@ async def aretrieve_evidence_with_retry(
         "on_stage": on_stage,
     }
 
-    fused = await aretrieve_evidence(**current_kwargs)
+    fused = await _with_topup(await aretrieve_evidence(**current_kwargs))
     existing_verdict = fused.metadata.get("evidence_verdict")
     if existing_verdict:
         try:
@@ -1867,7 +1884,7 @@ async def aretrieve_evidence_with_retry(
         )
 
         retry_count = attempt + 1
-        fused = await aretrieve_evidence(**current_kwargs)
+        fused = await _with_topup(await aretrieve_evidence(**current_kwargs))
         result = await averify_evidence(fused, query=query, use_llm=use_llm_verify)
         fused.metadata["evidence_verdict"] = result.model_dump(mode="json")
 

@@ -18,7 +18,12 @@ from langgraph.config import get_stream_writer
 from agents.utils import CustomData
 from rag.errors import RetrievalUnavailable, classify_retrieval_error
 from rag.evidence import FusedEvidence
+from rag.evidence_policy import (
+    apply_evidence_policy,
+    finalize_with_layer_ranking,
+)
 from rag.query_classifier import TEXT_ONLY_DEPTH
+from rag.retrieval_policy import resolve_retrieval_policy
 from rag.retriever import StageSink, aretrieve_evidence_with_retry
 from rag.verifier import VerificationResult
 from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
@@ -173,27 +178,62 @@ def _retrieval_error_payload(query: str, exc: BaseException) -> dict[str, Any]:
     ).as_tool_payload()
 
 
-async def _retrieve_payload(query: str, *, depth=None, k: int = 5) -> dict[str, Any]:
-    """统一的「检索 → 对外载荷」封装。
+async def _retrieve_payload(
+    query: str,
+    *,
+    depth=None,
+    k: int = 5,
+    task_mode: str | None = None,
+    agent_prior: str = "",
+    context_mode: str | None = None,
+) -> dict[str, Any]:
+    """统一的「检索 → Evidence Policy → 对外载荷」封装。
 
     catch-all 只允许出现在这类**最外层边界**（见 §2.2 规范 2），
     且必须分级处理 —— 具体分级见 `_retrieval_error_payload`。
+
+    策略解析（RETRIEVAL_POLICY §4）：
+      conversation context → explicit query signal → agent_prior → default learn
+    工具一般传 `agent_prior` 而不是硬绑 task_mode，让 query 信号可覆盖。
     """
+    # 多轮上下文（LangGraph / Store / ContextVar）
+    if context_mode is None:
+        try:
+            from agents.task_context import get_context_mode
+
+            context_mode = get_context_mode()
+        except Exception:
+            context_mode = None
+
+    policy = resolve_retrieval_policy(
+        query,
+        task_mode=task_mode,  # type: ignore[arg-type]
+        context_mode=context_mode,  # type: ignore[arg-type]
+        agent_prior=agent_prior,
+    )
+    # eligibility：召回阶段 where 前置（安全），与 Evidence Policy 双保险
+    from schema.retrieval_policy import merge_where_filters
+
+    recall_filter = merge_where_filters(None, policy.eligibility_where())
+    # 多取候选 → layer 软加权 → 再截 top-k（否则 preferred 层进不了池）
+    candidate_k = max(k * 3, 15)
     try:
         fused, verification = await aretrieve_evidence_with_retry(
             query=query,
-            k=k,
-            # True = 「这条路径按重排口径准备候选池」，**不是**开关 ——
-            # 实际是否重排由 .env 的 RERANK_ENABLED 决定（见 retriever 模块的「重排判定链」）。
+            k=candidate_k,
             use_rerank=True,
             depth=depth,
+            filter=recall_filter,
             max_retries=1,
             use_llm_verify=False,
             on_stage=_stage_sink(),
+            preferred_layers=list(policy.preferred_layers),
         )
     except Exception as e:
         return _retrieval_error_payload(query, e)
 
+    fused = finalize_with_layer_ranking(fused, policy, keep=k)
+    fused, _flags = apply_evidence_policy(fused, policy)
     result = build_retrieval_result(query=query, fused=fused, verification=verification)
     # 引用溯源：把来源文档下发到前端（拿不到 stream writer 时是 no-op）
     emit_docs = _docs_sink()
@@ -210,12 +250,28 @@ _EVIDENCE_PAYLOAD_NOTE = (
 )
 
 
-def _make_search_tool(name: str, doc: str, *, depth: Any = None):
-    """生成检索类 @tool（同一 _retrieve_payload 封装）。"""
+def _make_search_tool(
+    name: str,
+    doc: str,
+    *,
+    depth: Any = None,
+    agent_prior: str = "",
+    task_mode: str | None = None,
+):
+    """生成检索类 @tool（同一 _retrieve_payload 封装）。
+
+    `agent_prior`：专家默认倾向（knowledge→learn, question→practice, grading→grade），
+    真正 mode 仍由 Classifier 按 query/context 修正。
+    """
     full_doc = doc + _EVIDENCE_PAYLOAD_NOTE
 
     async def _search(query: str) -> dict[str, Any]:
-        return await _retrieve_payload(query, depth=depth)
+        return await _retrieve_payload(
+            query,
+            depth=depth,
+            task_mode=task_mode,
+            agent_prior=agent_prior,
+        )
 
     # 先写 __doc__ 再包 @tool，否则 description 在装饰时已被捕获
     _search.__doc__ = full_doc
@@ -226,19 +282,23 @@ def _make_search_tool(name: str, doc: str, *, depth: Any = None):
 aknowledge_search = _make_search_tool(
     "knowledge_search",
     "知识库综合检索（多路召回+BM25+Reranker）。适合大多数概念讲解与原理理解问题。",
+    agent_prior="learn",
 )
 atext_search = _make_search_tool(
     "text_search",
     "纯教材文本检索（更快的浅层检索）。适合快速查询概念定义、原理说明。",
     depth=TEXT_ONLY_DEPTH,
+    agent_prior="learn",
 )
 asearch_standard_answer = _make_search_tool(
     "search_standard_answer",
     "检索教材知识库中的标准答案与评分依据。批改学生答案时使用。",
+    agent_prior="grade",
 )
 asearch_question_templates = _make_search_tool(
     "search_question_templates",
     "检索题库与教材中与知识点相关的题目模板、例题与知识依据。出题时使用。",
+    agent_prior="practice",
 )
 
 

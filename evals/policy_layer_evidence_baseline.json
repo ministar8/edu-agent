@@ -1,0 +1,459 @@
+{
+  "_meta": {
+    "recorded_at": "2026-09-29T11:16:52.074397+00:00",
+    "layer_policy_id": "default",
+    "note": "Policy→层→证据链路证明；仅用默认权重，不调 layer_policy 实验"
+  },
+  "results": [
+    {
+      "mode": "learn",
+      "query": "二叉树的遍历方式有哪些？为什么要有中序遍历？",
+      "ok": true,
+      "checks": {
+        "classify": true,
+        "block_exam_item_pack": true,
+        "block_exam_answer_pack": true,
+        "block_exam_paper_pack": true,
+        "layer_in_pool": true,
+        "layer_in_pack": true,
+        "no_answer_fields": true,
+        "no_qid": true
+      },
+      "policy": {
+        "answer_policy": "hidden",
+        "exam_resources": {
+          "question": "forbidden",
+          "answer": "forbidden",
+          "paper": "forbidden"
+        },
+        "preferred_layers": [
+          "basic",
+          "advanced"
+        ],
+        "allow_question_id_leak": false,
+        "where": {
+          "$and": [
+            {
+              "doc_role": {
+                "$ne": "exam_answer"
+              }
+            },
+            {
+              "doc_role": {
+                "$ne": "exam_item"
+              }
+            },
+            {
+              "doc_role": {
+                "$ne": "exam_paper"
+              }
+            },
+            {
+              "kb_depth": {
+                "$ne": "exams"
+              }
+            }
+          ]
+        }
+      },
+      "pool_layers": [
+        "legacy",
+        "legacy",
+        "legacy",
+        "basic",
+        "basic",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy"
+      ],
+      "pack_layers": [
+        "basic",
+        "legacy",
+        "basic",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy"
+      ],
+      "pack_roles": [
+        "textbook",
+        "",
+        "textbook",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "n_pool": 13,
+      "n_pack": 8
+    },
+    {
+      "mode": "method",
+      "query": "已知先序和中序遍历，如何还原二叉树？步骤是什么？",
+      "ok": true,
+      "checks": {
+        "classify": true,
+        "block_exam_item_pack": true,
+        "block_exam_answer_pack": true,
+        "block_exam_paper_pack": true,
+        "layer_in_pool": true,
+        "layer_in_pack": true,
+        "no_answer_fields": true,
+        "no_qid": true
+      },
+      "policy": {
+        "answer_policy": "hidden",
+        "exam_resources": {
+          "question": "forbidden",
+          "answer": "forbidden",
+          "paper": "forbidden"
+        },
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "allow_question_id_leak": false,
+        "where": {
+          "$and": [
+            {
+              "doc_role": {
+                "$ne": "exam_answer"
+              }
+            },
+            {
+              "doc_role": {
+                "$ne": "exam_item"
+              }
+            },
+            {
+              "doc_role": {
+                "$ne": "exam_paper"
+              }
+            },
+            {
+              "kb_depth": {
+                "$ne": "exams"
+              }
+            }
+          ]
+        }
+      },
+      "pool_layers": [
+        "legacy",
+        "legacy",
+        "legacy",
+        "advanced",
+        "basic",
+        "legacy",
+        "advanced",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy"
+      ],
+      "pack_layers": [
+        "advanced",
+        "basic",
+        "legacy",
+        "legacy",
+        "advanced",
+        "legacy",
+        "legacy",
+        "legacy"
+      ],
+      "pack_roles": [
+        "method",
+        "textbook",
+        "",
+        "",
+        "method",
+        "",
+        "",
+        ""
+      ],
+      "n_pool": 12,
+      "n_pack": 8
+    },
+    {
+      "mode": "practice",
+      "query": "给我一道 BST 删除的练习题",
+      "ok": true,
+      "checks": {
+        "classify": true,
+        "block_exam_item_pack": true,
+        "block_exam_answer_pack": true,
+        "block_exam_paper_pack": true,
+        "layer_in_pool": true,
+        "layer_in_pack": true,
+        "no_answer_fields": true,
+        "no_qid": true
+      },
+      "policy": {
+        "answer_policy": "hidden",
+        "exam_resources": {
+          "question": "forbidden",
+          "answer": "forbidden",
+          "paper": "forbidden"
+        },
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "allow_question_id_leak": false,
+        "where": {
+          "$and": [
+            {
+              "doc_role": {
+                "$ne": "exam_answer"
+              }
+            },
+            {
+              "doc_role": {
+                "$ne": "exam_item"
+              }
+            },
+            {
+              "doc_role": {
+                "$ne": "exam_paper"
+              }
+            },
+            {
+              "kb_depth": {
+                "$ne": "exams"
+              }
+            }
+          ]
+        }
+      },
+      "pool_layers": [
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "advanced",
+        "legacy",
+        "legacy"
+      ],
+      "pack_layers": [
+        "advanced",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy"
+      ],
+      "pack_roles": [
+        "method",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
+      "n_pool": 15,
+      "n_pack": 8
+    },
+    {
+      "mode": "grade",
+      "query": "2019-Q2 我选 B，树转二叉树后根遍历等于中序，对吗？请批改",
+      "ok": true,
+      "checks": {
+        "classify": true,
+        "block_exam_paper_pack": true,
+        "layer_in_pool": true,
+        "layer_in_pack": true,
+        "answer_allowed": true
+      },
+      "policy": {
+        "answer_policy": "released",
+        "exam_resources": {
+          "question": "allowed",
+          "answer": "allowed",
+          "paper": "forbidden"
+        },
+        "preferred_layers": [
+          "exams",
+          "advanced",
+          "basic"
+        ],
+        "allow_question_id_leak": true,
+        "where": {
+          "doc_role": {
+            "$ne": "exam_paper"
+          }
+        }
+      },
+      "pool_layers": [
+        "advanced",
+        "legacy"
+      ],
+      "pack_layers": [
+        "advanced",
+        "legacy"
+      ],
+      "pack_roles": [
+        "method",
+        ""
+      ],
+      "n_pool": 2,
+      "n_pack": 2
+    },
+    {
+      "mode": "explain",
+      "query": "2019-Q2 为什么树的后根遍历对应二叉树中序？",
+      "ok": true,
+      "checks": {
+        "classify": true,
+        "block_exam_paper_pack": true,
+        "layer_in_pool": true,
+        "layer_in_pack": true,
+        "answer_allowed": true
+      },
+      "policy": {
+        "answer_policy": "released",
+        "exam_resources": {
+          "question": "allowed",
+          "answer": "allowed",
+          "paper": "allowed"
+        },
+        "preferred_layers": [
+          "exams",
+          "advanced",
+          "basic"
+        ],
+        "allow_question_id_leak": true,
+        "where": null
+      },
+      "pool_layers": [
+        "legacy",
+        "legacy",
+        "legacy",
+        "basic",
+        "basic",
+        "legacy",
+        "basic",
+        "advanced",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy"
+      ],
+      "pack_layers": [
+        "legacy",
+        "legacy",
+        "basic",
+        "legacy",
+        "basic",
+        "basic",
+        "advanced",
+        "legacy"
+      ],
+      "pack_roles": [
+        "",
+        "",
+        "textbook",
+        "",
+        "textbook",
+        "textbook",
+        "method",
+        ""
+      ],
+      "n_pool": 15,
+      "n_pack": 8
+    },
+    {
+      "mode": "verify",
+      "query": "BST 删除考过哪些真题？",
+      "ok": true,
+      "checks": {
+        "classify": true,
+        "block_exam_answer_pack": true,
+        "block_exam_paper_pack": true,
+        "layer_in_pool": true,
+        "layer_in_pack": true,
+        "no_answer_fields": true,
+        "no_qid": true
+      },
+      "policy": {
+        "answer_policy": "hidden",
+        "exam_resources": {
+          "question": "allowed",
+          "answer": "forbidden",
+          "paper": "forbidden"
+        },
+        "preferred_layers": [
+          "exams",
+          "advanced"
+        ],
+        "allow_question_id_leak": true,
+        "where": {
+          "$and": [
+            {
+              "doc_role": {
+                "$ne": "exam_answer"
+              }
+            },
+            {
+              "doc_role": {
+                "$ne": "exam_paper"
+              }
+            }
+          ]
+        }
+      },
+      "pool_layers": [
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "advanced",
+        "legacy",
+        "legacy",
+        "legacy"
+      ],
+      "pack_layers": [
+        "advanced",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "legacy",
+        "basic",
+        "legacy"
+      ],
+      "pack_roles": [
+        "method",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "textbook",
+        ""
+      ],
+      "n_pool": 15,
+      "n_pack": 8
+    }
+  ],
+  "all_ok": true
+}

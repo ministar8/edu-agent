@@ -1,0 +1,1172 @@
+# 2022 年 408 真题 · items
+
+> document_id: exam-2022-items
+> exam_year: 2022
+> kb_depth: exams
+> doc_role: exam_item
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+
+答案只在 metadata（answer_key），正文不印答案。
+
+## 2022-Q1
+
+> question_id: 2022-Q1
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: []
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列程序段的时间复杂度是 。 int sum = 0; for (int i = 1;i < n;i*=2) for(int j = 0;j < i;j++) sum++;
+
+- A. O(log n)
+- B. O(n)
+- C. O(n log n)
+- D. O(n 2 )
+
+---
+
+## 2022-Q2
+
+> question_id: 2022-Q2
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.stack]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：给定有限符号集 S，in 和 out 均为 S 中所有元素的任意排列。对于初始为空的栈 ST，下列叙述 中，正确的是 。
+
+- A. 若 in 是 ST 的入栈序列，则不能判断 out 是否为其可能的出栈序列
+- B. 若 out 是 ST 的出栈序列，则不能判断 in 是否为其可能的入栈序列
+- C. 若 in 是 ST 的入栈序列，out 是对应 in 的出栈序列，则 in 与 out 一定不同
+- D. 若 in 是 ST 的入栈序列，out 是对应的出栈序列，则 in 与 out 可能互为倒序
+
+---
+
+## 2022-Q3
+
+> question_id: 2022-Q3
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.traversal]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若结点 p 与 q 在二叉树 T 的中序遍历序列中相邻，且 p 在 q 之前，则下列 p 与 q 的关系中，不． 可能的是 。 I. q 是 p 的双亲 II. q 是 p 的右孩子 III. q 是 p 的右兄弟 IV . q是 p 的双亲的双亲
+
+- A. 仅 I
+- B. 仅 III
+- C. 仅 II、III
+- D. 仅 II、IV
+
+---
+
+## 2022-Q4
+
+> question_id: 2022-Q4
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.binary_tree]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若三叉树 T 中有 244 个结点（叶结点的高度为 1） ，则T 的高度至少是 。
+
+- A. 8
+- B. 7
+- C. 6
+- D. 5
+
+---
+
+## 2022-Q5
+
+> question_id: 2022-Q5
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.huffman]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：对任意给定的含 n（n > 2）个字符的有限集 S，用二叉树表示 S 的哈夫曼编码集和定长编码集， 分别得到二叉树 T1 和 T2。下列叙述中，正确的是 。
+
+- A. T1 与 T2 的结点数相同
+- B. T1 的高度大于 T2 的高度
+- C. 出现频次不同的字符在 T1 中处于不同的层
+- D. 出现频次不同的字符在 T2 中处于相同的层
+
+---
+
+## 2022-Q6
+
+> question_id: 2022-Q6
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.graph]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：对于无向图 G = (V , E)，下列选项中，正确的 是 。
+
+- A. 当| V | > | E |时，G 一定是连通的
+- B. 当| V | < | E |时，G 一定是连通的
+- C. 当| V | = | E | – 1 时，G 一定是不连通的
+- D. 当| V | > | E | + 1 时，G 一定是不连通的
+
+---
+
+## 2022-Q7
+
+> question_id: 2022-Q7
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.graph.aoe]
+> answer_key: B
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：下图是一个有 10 个活动的 AOE 网，时间余量最大的活动是 。
+
+- A. c
+- B. g
+- C. h
+- D. j
+
+---
+
+## 2022-Q8
+
+> question_id: 2022-Q8
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.search.b_tree]
+> answer_key: D
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：在下图所示的 5 阶 B 树 T 中，删除关键字 260 之后需要进行必要的调整，得到新的 B 树 T1。下 列选项中，不．可能是 T1 根结点中关键字序列的是 。
+
+- A. 60, 90, 280
+- B. 60, 90, 350
+- C. 60, 85, 110, 350
+- D. 60, 90, 110, 350
+
+---
+
+## 2022-Q9
+
+> question_id: 2022-Q9
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.search.hash]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列因素中，影响散列（哈希）方法平均查找长度的是 。 I. 装填因子 II. 散列函数 III. 冲突解决策略
+
+- A. 仅 I、II
+- B. 仅 I、III
+- C. 仅 II、III
+- D. I、II、III --- page 2 --- 2022 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 2 页（共 11 页）
+
+---
+
+## 2022-Q10
+
+> question_id: 2022-Q10
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.merge]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：使用二路归并排序对含 n 个元素的数组 M 进行排序时，二路归并操作的功能是 。
+
+- A. 将两个有序表合并为一个新的有序表
+- B. 将 M 划分为两部分，两部分的元素个数大致相等
+- C. 将 M 划分为 n 个部分，每个部分中仅含有一个元素
+- D. 将 M 划分为两部分，一部分元素的值均小于另一部分元素的值
+
+---
+
+## 2022-Q11
+
+> question_id: 2022-Q11
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.quick_sort]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：对数据进行排序时，若采用直接插入排序而不采用快速排序，则可能的原因是 。 I. 大部分元素己有序 II. 待排序元素数量很少 III. 要求空间复杂度为 O(1) IV . 要求排序算法是稳定的
+
+- A. 仅 I、II
+- B. 仅 III、IV
+- C. 仅 I、II、IV
+- D. I 、II、III、IV
+
+---
+
+## 2022-Q12
+
+> question_id: 2022-Q12
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.pipeline]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某计算机主频为 1GHz，程序 p 运行过程中，共执行了 10000 条指令，其中，80%的指令执行平 均需 1 个时钟周期，20%的指令执行平均需 10 个时钟周期。程序 P 的平均 CPI 和 CPU 执行时间 分别是 。
+
+- A. 2.8，28μs
+- B. 28, 28μs
+- C. 2.8, 28ms
+- D. 28, 28ms
+
+---
+
+## 2022-Q13
+
+> question_id: 2022-Q13
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.representation.complement]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：32 位补码所能表示的整数范围是 。
+
+- A. －2 32 ～2 31 – 1
+- B. －2 31 ～2 31 – 1
+- C. －2 32 ～2 32 – 1
+- D. －2 31 ～2 32 – 1
+
+---
+
+## 2022-Q14
+
+> question_id: 2022-Q14
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.representation.ieee754]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：－0.4375 的 IEEE 754 单精度浮点数表示为 。
+
+- A. BEE0 0000H
+- B. BF 60 0000H
+- C. BF 70 0000H
+- D. C 0E0 0000H
+
+---
+
+## 2022-Q15
+
+> question_id: 2022-Q15
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某计算机主存地址为 24 位，采用分页虚拟存储管理方式，虚拟地址空间大小为 4 GB，页大小为 4KB，按字节编址。某进程的页表部分内容如下表所示。 虚页号 实页号（页框号） 存在位 82 024H 0 … … … 129 180H 1 130 018H 1 当 CPU 访问虚拟地址 0008 2840H 时，虚–实地址转换的结果是 。
+
+- A. 得到主存地址 02 4840H
+- B. 得到主存地址 18 0840H
+- C. 得到主存地址 01 8840H
+- D. 检测到缺页异常
+
+---
+
+## 2022-Q16
+
+> question_id: 2022-Q16
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.storage.cache]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若计算机主存地址为 32 位，按字节编址，某 Cache 的数据区容量为 32KB，主存块大小为 64B， 采用 8 路组相联映射方式，该 Cache 中比较器的个数和位数分别为 。
+
+- A. 8, 20
+- B. 8, 23
+- C. 64, 20
+- D. 64, 23
+
+---
+
+## 2022-Q17
+
+> question_id: 2022-Q17
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.bus.bandwidth]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某内存条包含 8 个 8192×8192×8 位的 DRAM 芯片，按字节编址，支持突发（burst）传送方 式，对应存储器总线宽度为 64 位，每个 DRAM 芯片内有一个行缓冲区（row buffer） 。下列关于 该内存条的叙述中，不．正确的是 。
+
+- A. 内存条的容量为 512MB
+- B. 采用多模块交叉编址方式
+- C. 芯片的地址引脚为 26 位
+- D. 芯片内行缓冲有 8192×8 位
+
+---
+
+## 2022-Q18
+
+> question_id: 2022-Q18
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.datapath]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列选项中，属于指令集体系结构（ISA）规定的内容是 。 I. 指令字格式和指令类型 II. CPU 的时钟周期 III. 通用寄存器个数和位数 IV . 加法器的进位方式
+
+- A. 仅 I、II
+- B. 仅 I、III
+- C. 仅 II、IV
+- D. 仅 I、III、IV
+
+---
+
+## 2022-Q19
+
+> question_id: 2022-Q19
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.instruction.format]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：设计某指令系统时，假设采用 16 位定长指令字格式，操作码使用扩展编码方式，地址码为 6 位，包含零地址、一地址和二地址 3 种格式的指令。若二地址指令有 12 条，一地址指令有 254 条，则零地址指令的条数最多为 。
+
+- A. 0
+- B. 2
+- C. 64
+- D. 128
+
+---
+
+## 2022-Q20
+
+> question_id: 2022-Q20
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：将高级语言源程序转换为可执行目标文件的主要过程是 。
+
+- A. 预处理→编译→汇编→链接
+- B. 预处理→汇编→编译→链接
+- C. 预处理→编译→链接→汇编
+- D. 预处理→汇编→链接→编译 --- page 3 --- 2022 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 3 页（共 11 页）
+
+---
+
+## 2022-Q21
+
+> question_id: 2022-Q21
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于中断 I/O 方式的叙述中，不．正确的是 。
+
+- A. 适用于键盘、针式打印机等字符型设备
+- B. 外设和主机之间的数据传送通过软件完成
+- C. 外设准备数据的时间应小于中断处理时间
+- D. 外设为某进程准备数据时 CPU 可运行其他进程
+
+---
+
+## 2022-Q22
+
+> question_id: 2022-Q22
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.thread]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于并行处理技术的叙述中，不．正确的是 。
+
+- A. 多核处理器属于 MIMD 结构
+- B. 向量处理器属于 SIMD 结构
+- C. 硬件多线程技术只可用于多核处理器
+- D. SMP 中所有处理器共享单一物理地址空间
+
+---
+
+## 2022-Q23
+
+> question_id: 2022-Q23
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于多道程序系统的叙述中，不．正确的是 。
+
+- A. 支持进程的并发执行
+- B. 不必支持虚拟存储管理
+- C. 需要实现对共享资源的管理
+- D. 进程数越多 CPU 利用率越高
+
+---
+
+## 2022-Q24
+
+> question_id: 2022-Q24
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列选项中，需要在操作系统进行初始化过程中创建的是 。
+
+- A. 中断向量表
+- B. 文件系统的根目录
+- C. 硬盘分区表
+- D. 文件系统的索引结点表
+
+---
+
+## 2022-Q25
+
+> question_id: 2022-Q25
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.queue]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：进程 P0、P1、P2 和 P3 进入就绪队列的时刻、优先级（值越小优先权越高）及 CPU 执行时间如 下表所示。 进程 进入就绪队列的时刻 优先级 CPU 执行时间 P0 0ms 15 100ms P1 10ms 20 60ms P2 10ms 10 20ms P3 15ms 6 10ms 若系统采用基于优先权的抢占式进程调度算法，则从 0ms 时刻开始调度，到 4 个进程都运 行结束为止，发生进程调度的总次数为 。
+
+- A. 4
+- B. 5
+- C. 6
+- D. 7
+
+---
+
+## 2022-Q26
+
+> question_id: 2022-Q26
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.deadlock]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：系统中有三个进程 P0、P1、P2 及三类资源 A、B、C。若某时刻系统分配资源的情况如下表所 示，则此时系统中存在的安全序列的个数为 。 进程 已分配资源数 尚需资源数 可用资源数 A B C A B C A B C P0 2 0 1 0 2 1 1 3 2 P1 0 2 0 1 2 3 P2 1 0 1 0 1 3
+
+- A. 1
+- B. 2
+- C. 3
+- D. 4
+
+---
+
+## 2022-Q27
+
+> question_id: 2022-Q27
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于 CPU 模式的叙述中，正确的是 。
+
+- A. CPU 处于用户态时只能执行特权指令
+- B. CPU 处于内核态时只能执行特权指令
+- C. CPU 处于用户态时只能执行非特权指令
+- D. CPU 处于内核态时只能执行非特权指令
+
+---
+
+## 2022-Q28
+
+> question_id: 2022-Q28
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.schedule]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列事件或操作中，可能导致进程 P 由执行态变为阻塞态的是 。 I. 进程 P 读文件 II. 进程 P 的时间片用完 III. 进程 P 申请外设 IV . 进程 P 执行信号量的 wait()操作
+
+- A. 仅 I、IV
+- B. 仅 II、III
+- C. 仅 III、IV
+- D. 仅 I、III、IV
+
+---
+
+## 2022-Q29
+
+> question_id: 2022-Q29
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某进程访问的页 b 不在内存中，导致产生缺页异常，该缺页异常处理过程中不一定包含的操作 是 。
+
+- A. 淘汰内存中的页
+- B. 建立页号与页框号的对应关系
+- C. 将页 b 从外存读入内存
+- D. 修改页表中页 b 对应的存在位
+
+---
+
+## 2022-Q30
+
+> question_id: 2022-Q30
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.queue]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列选项中，不．会影响系统缺页率的是 。
+
+- A. 页置换算法
+- B. 工作集的大小
+- C. 进程的数量
+- D. 页缓冲队列的长度 --- page 4 --- 2022 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 4 页（共 11 页）
+
+---
+
+## 2022-Q31
+
+> question_id: 2022-Q31
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.datapath]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：执行系统调用的过程涉及下列操作，其中由操作系统完成的是 。 I. 保存断点和程序状态字 II. 保存通用寄存器的内容 III. 执行系统调用服务例程 IV . 将 CPU 模式改为内核态
+
+- A. 仅 I、III
+- B. 仅 II、III
+- C. 仅 II、IV
+- D. 仅 II、III、IV
+
+---
+
+## 2022-Q32
+
+> question_id: 2022-Q32
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于驱动程序的叙述中，不．正确的是 。
+
+- A. 驱动程序与 I/O 控制方式无关
+- B. 初始化设备是由驱动程序控制完成的
+- C. 进程在执行驱动程序时可能进入阻塞态
+- D. 读/写设备的操作是由驱动程序控制完成的
+
+---
+
+## 2022-Q33
+
+> question_id: 2022-Q33
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.arch.model]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在 ISO/OSI 参考模型中，实现两个相邻结点间流量控制功能的是 。
+
+- A. 物理层
+- B. 数据链路层
+- C. 网络层
+- D. 传输层
+
+---
+
+## 2022-Q34
+
+> question_id: 2022-Q34
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.bus.bandwidth]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在一条带宽为 200 kHz 的无噪声信道上，若采用 4 个幅值的 ASK 调制，则该信道的最大数据传 输速率是 。
+
+- A. 200kbps
+- B. 400kbps
+- C. 800kbps
+- D. 1600kbps
+
+---
+
+## 2022-Q35
+
+> question_id: 2022-Q35
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.network.ip_address]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若某主机的 IP 地址是 183.80.72.48，子网掩码是 255.255.192.0，则该主机所在网络的网络地址 是 。
+
+- A. 183.80.0.0
+- B. 183.80.64.0
+- C. 183.80.72.0
+- D. 183.80.192.0
+
+---
+
+## 2022-Q36
+
+> question_id: 2022-Q36
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.network.ip_address]
+> answer_key: D
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：下图所示网络中的主机 H 的子网掩码与默认网关分别是 。
+
+- A. 255.255.255.192, 192.168.1.1
+- B. 255.255.255.192, 192.168.1.62
+- C. 255.255.255.224, 192.168.1.1
+- D. 255.255.255.224, 192.168.1.62
+
+---
+
+## 2022-Q37
+
+> question_id: 2022-Q37
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.arch.model]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在 SDN 网络体系结构中，SDN 控制器向数据平面的 SDN 交换机下发流表时所使用的接口 是 .
+
+- A. 东向接口
+- B. 南向接口
+- C. 西向接口
+- D. 北向接口
+
+---
+
+## 2022-Q38
+
+> question_id: 2022-Q38
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.transport.tcp]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：假设主机甲和主机乙已建立一个 TCP 连接，最大段长 MSS = 1KB,甲一直有数据向乙发送，当甲 的拥塞窗口为 16KB 时，计时器发生了超时，则甲的拥塞窗口再次增长到 16KB 所需要的时间至 少是 。
+
+- A. 4RTT
+- B. 5RTT
+- C. 11RTT
+- D. 16RTT
+
+---
+
+## 2022-Q39
+
+> question_id: 2022-Q39
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.transport.tcp]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：假设客户 C 和服务器 S 已建立一个 TCP 连接，通信往返时间 RTT=50ms，最长报文段寿命 MSL = 800ms，数据传输结束后，C 主动请求断开连接。若从 C 主动向 S 发出 FIN 段时刻算起，则 C 和 S 进入 CLOSED 状态所需的时间至少分别是 。
+
+- A. 850ms，50ms
+- B. 1650ms, 50ms
+- C. 850ms, 75ms
+- D. 1650ms, 75ms
+
+---
+
+## 2022-Q40
+
+> question_id: 2022-Q40
+> exam_year: 2022
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.file.dir]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：假设主机 H 通过 HTTP/1.1 请求浏览某 Web 服务器 S 上的 Web 页 news408.html，news408 引用 了同目录下的 1 幅图像，news408.html 文件大小为 1MSS（最大段长） ，图像文件大小为 3MSS， H 访问 S 的往返时间 RTT=10ms，忽略 HTTP 响应报文的首部开销和 TCP 段传输时延。若 H 已 完成域名解析，则从 H 请求与 S 建立 TCP 连接时刻起，到接收到全部内容止，所需的时间至少 是 。
+
+- A. 30ms
+- B. 40ms
+- C. 50ms
+- D. 60ms --- page 5 --- 2022 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 5 页（共 11 页）
+
+---
+

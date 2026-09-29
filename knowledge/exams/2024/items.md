@@ -1,0 +1,1172 @@
+# 2024 年 408 真题 · items
+
+> document_id: exam-2024-items
+> exam_year: 2024
+> kb_depth: exams
+> doc_role: exam_item
+> source_type: third_party
+> credibility: high
+> explanation_status: none
+
+答案只在 metadata（answer_key），正文不印答案。
+
+## 2024-Q1
+
+> question_id: 2024-Q1
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.linear.linked_list]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：已知带头结点的非空单链表 L 的头指针为 h，结点结构为 data next ，其中 next 是指向直接后继 结点的指针。现有指针 p 和 q，若 p 指向 L 中非首且非尾的任意 一个结点。则执行语句序列 “q=p->next; p->next=q->next; q->next=h->next; h->next=q;”的结果是 。
+
+- A. 在 p 所指结点后插入 q 所指结点
+- B. 在 q 所指结点后插入 p 所指结点
+- C. 将 p 所指结点移动到 L 的头结点之后
+- D. 将 q 所指结点移动到 L 的头结点之后
+
+---
+
+## 2024-Q2
+
+> question_id: 2024-Q2
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.stack]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：表达式 x + y * (z – u)/v 的等价后缀表达式是 。
+
+- A. xyzu-*v/+
+- B. xyzu-v/*+
+- C. +x/*y-zuv
+- D. +x*y/-zuv
+
+---
+
+## 2024-Q3
+
+> question_id: 2024-Q3
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.traversal]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：p、q 和 v 都是二叉树 T 中的结点，v 有两个孩子结点，T 的中序遍历序列形如： “…, p, v, q, …”， 则下列叙述中，正确的是 。
+
+- A. p 没有右孩子，q 没有左孩子
+- B. p 没有右孩子，q 有左孩子
+- C. p 有右孩子，q 没有左孩子
+- D. p 有右孩子，q 有左孩子
+
+---
+
+## 2024-Q4
+
+> question_id: 2024-Q4
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.graph.storage]
+> answer_key: A
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：给定无向图 G = (V, E)的邻接多重表如下图所示，则 G 中顶点 b 与 d 的度分别是 题 4 图
+
+- A. 0, 2
+- B. 2, 4
+- C. 2, 5
+- D. 3, 4
+
+---
+
+## 2024-Q5
+
+> question_id: 2024-Q5
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.search.binary_search]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列数据结构中，不适合．．．直接使用折半查找的是 。 I. 有序链表 II. 无序数组 III. 有序静态链表 IV. 无序静态链表
+
+- A. 仅 I、III
+- B. 仅 II、IV
+- C. 仅 II、III、IV
+- D. I、II、III、IV
+
+---
+
+## 2024-Q6
+
+> question_id: 2024-Q6
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.string.kmp]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：KMP 算法使用修正后的 next 数组进行模式匹配，模式串 S=““aabaab” ，当主串中某字符与S 中某 字符失配时，S 将向右滑动的最长距离是 。
+
+- A. 5
+- B. 4
+- C. 3
+- D. 2
+
+---
+
+## 2024-Q7
+
+> question_id: 2024-Q7
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.tree.bst]
+> answer_key: A
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：一棵二叉搜索树如题 7 图所示，k1、k2、k3 分别是对应结点中保存的关键字。子树 T 的任一结点 中保存的关键字 x 满足的是 。 题 7 图 --- page 2 --- 2024 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 2 页（共 12 页）
+
+- A. x < k1
+- B. x > k2
+- C. k1 < x < k3
+- D. k3 < x < k2
+
+---
+
+## 2024-Q8
+
+> question_id: 2024-Q8
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.quick_sort]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：使用快速排序算法对含 n“（n≥3）个元素的数组 M 进行排序， 若第一趟排序将M 中除枢轴外的 n– 1 个元素划分为均不为空的 P 和 Q 两块，则下列叙述中，正确的是 。
+
+- A. P 和 Q 块间有序
+- B. P 和 Q 均块内有序
+- C. P 和 Q 的元素个数大致相等
+- D. P 中和 Q 中均不存在相等的元素
+
+---
+
+## 2024-Q9
+
+> question_id: 2024-Q9
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.heap]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：已知关键字序列 28, 22, 20, 19, 8, 12, 15, 5 是大根堆（最大堆） ，对该堆进行两次删除操作后，得到 的新堆是 。
+
+- A. 20, 19, 15, 12, 8, 5
+- B. 20, 19, 15, 5, 8, 12
+- C. 20, 19, 12, 15, 8, 5
+- D. 20, 19, 8, 12, 15, 5
+
+---
+
+## 2024-Q10
+
+> question_id: 2024-Q10
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.merge]
+> answer_key: null
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: partial
+> gap_status: partial
+> gap_fields: [answer]
+
+**题干**：现有由关键字组成的 3 个有序序列(3，5)、(7，9)和(6)， 若按从左至右的次序选择有序序列进行二 路归并排序，则关键字之间的总比较次数是 。
+
+- A. 3
+- B. 4
+- C. 5
+- D. 6
+
+---
+
+## 2024-Q11
+
+> question_id: 2024-Q11
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.sort.merge]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在外排序中，利用败者树对初始为升序的归并段进行多路归并，败者树中记录“冠军”的结点保 存的是 。
+
+- A. 最大关键字
+- B. 最小关键字
+- C. 最大关键字所在的归并段号
+- D. 最小关键字所在的归并段号
+
+---
+
+## 2024-Q12
+
+> question_id: 2024-Q12
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：C 语言代码如下： int i = 32777; short si =i; int j=si; 执行上述代码段后，j 的值是 。
+
+- A. －32 777
+- B. －32 759
+- C. 32 759
+- D. 32 777
+
+---
+
+## 2024-Q13
+
+> question_id: 2024-Q13
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：通常情况下， 将汇编语言程序中实现特定功能的指令序列定义成一条伪指令“（pseudoinstruction）。 下列选项中，CPU 能理解并直接执行的是 。 I. 伪指令 II. 微指令 III. 机器指令 IV . 汇编指令
+
+- A. 仅 I 和 IV
+- B. 仅 II 和 III
+- C. 仅 III 和 IV
+- D. 仅 I、II 和 IV
+
+---
+
+## 2024-Q14
+
+> question_id: 2024-Q14
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.representation.ieee754]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某科学实验中，需要使用大量的整型参数，为了在保证表数精度的基础上提高运算速度，需要选 择合理的数据表示方法。 若整型参数α、β 的取值范围分别为－2 20 ～2 20 、－2 40 ～2 40 ， 则下列选项中， α、β 最适宜采用的数据表示方法分别是 。
+
+- A. 32 位整数、32 位整数
+- B. 单精度浮点数、单精度浮点数
+- C. 32 位整数、双精度浮点数
+- D. 单精度浮点数、双精度浮点数
+
+---
+
+## 2024-Q15
+
+> question_id: 2024-Q15
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.datapath]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于整数乘法运算的叙述中，错误．．的是 。
+
+- A. 用阵列乘法器实现的乘运算可以在一个时钟周期内完成
+- B. 用 ALU 和移位器实现的乘运算无法在一个时钟周期内完成
+- C. 变量与常数的乘运算可编译优化为若干条移位及加/减运算指令
+- D. 两个变量的乘运算无法编译转换为移位及加法等指令的循环实现
+
+---
+
+## 2024-Q16
+
+> question_id: 2024-Q16
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.storage.cache]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：对于页式虚拟存储管理系统，下列关于存储器层次结构的叙述中，错误的是 。
+
+- A. Cache–主存层次的交换单位为主存块，主存–外存层次的交换单位为页
+- B. Cache–主存层次替换算法由硬件实现，主存–外存层次替换算法由软件实现
+- C. Cache–主存层次可采用回写法写策略，主存–外存层次通常采用回写法写策略
+- D. Cache–主存层次可采用直接映射方式，主存–外存层次通常采用直接映射方式
+
+---
+
+## 2024-Q17
+
+> question_id: 2024-Q17
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.storage.cache]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某计算机按字节编址，采用页式虚拟存储管理方式，虚拟地址为 32 位，主存地址为 30 位，页大 小为 1KB。若 TLB 共有 32 个表项， 采用4 路组相联映射方式， 则TLB 表项中标记字段的位数至 少是 。
+
+- A. 17
+- B. 18
+- C. 19
+- D. 20
+
+---
+
+## 2024-Q18
+
+> question_id: 2024-Q18
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.storage.cache]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列事件中，不是．．在 MMU 地址转换过程检测的是 。
+
+- A. 访问越权
+- B. Cache 缺失
+- C. 页面缺失
+- D. TLB 缺失 --- page 3 --- 2024 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 3 页（共 12 页）
+
+---
+
+## 2024-Q19
+
+> question_id: 2024-Q19
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.pipeline]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：对于采用“取指、译码/取数、执行、访存、写回”5 段流水线的 RISC 数据通路，下列关于指令流 水线数据冒险处理的叙述中，错误．．的是 。
+
+- A. 相邻两条指令中的操作数相关可能引起数据冒险
+- B. 在数据相关的指令间插入“气泡”能避免数据冒险
+- C. 所有数据冒险都可以通过加入转发（旁路）电路解决
+- D. 所有数据冒险都能通过调整指令顺序和插入 nop 指令解决
+
+---
+
+## 2024-Q20
+
+> question_id: 2024-Q20
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.bus.bandwidth]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某存储器总线的时钟频率为 420MHz，总线宽度为 64 位，每个时钟周期传送 2 次数据；其总线事 务支持突发传送方式，最多传送 8 次数据，第 1 个时钟周期传送地址和读/写命令，从第 4 个至第 7 个时钟周期连续传送 8 次数据。该总线的总线带宽（最大数据传输率）为 。
+
+- A. 3.84GB/s
+- B. 6.72GB/s
+- C. 30.72 GB/s
+- D. 53.76GB/s
+
+---
+
+## 2024-Q21
+
+> question_id: 2024-Q21
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列关于中断 I/O 方式的叙述中，错误．．的是 。
+
+- A. 中断屏蔽字用于确定中断响应的优先级
+- B. 保存断点和程序状态字在中断响应阶段完成
+- C. 保存通用寄存器和设置新中断屏蔽字由软件实现
+- D. 单重中断方式下中断处理时 CPU 处于关中断状态
+
+---
+
+## 2024-Q22
+
+> question_id: 2024-Q22
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：DMA 控制 I/O 方式下，设备的输入/输出由 DMA 控制器控制完成， 此时，DMA 控制器控制的数 据传输通路位于 。
+
+- A. CPU 和主存之间
+- B. CPU 和 DMA 控制器之间
+- C. 设备接口和主存之间
+- D. 设备接口和 DMA 控制器之间
+
+---
+
+## 2024-Q23
+
+> question_id: 2024-Q23
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下面关于中断、异常和系统调用的叙述中，错误．．的是 。
+
+- A. 中断或异常发生时，CPU 处于内核态
+- B. 每个系统调用都有对应的内核服务例程
+- C. 中断处理程序开始执行时，CPU 处于内核态
+- D. 系统添加新类型的设备时，需注册相应的中断服务例程
+
+---
+
+## 2024-Q24
+
+> question_id: 2024-Q24
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.process.state]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列选项中，操作系统在终止进程时不一定．．．执行的是 。
+
+- A. 终止子进程
+- B. 回收进程占用的设备
+- C. 撤销进程控制块
+- D. 回收为进程分配的内存
+
+---
+
+## 2024-Q25
+
+> question_id: 2024-Q25
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.stack]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在支持页式存储管理的系统中，进程切换时操作系统需要执行的操作是 。 I. 更新程序计数器的值 II. 更新栈基址寄存器值 III. 更新页表基地址寄存器值
+
+- A. 仅 III
+- B. 仅 I、II
+- C. 仅 I、III
+- D. I、II、III
+
+---
+
+## 2024-Q26
+
+> question_id: 2024-Q26
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.linear.linked_list]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：文件系统需占用部分外存空间记录空闲块位置。下列方法中，占用外存空间的大小与当前空闲块 数量无关的是 。
+
+- A. 位图法
+- B. 空闲表法
+- C. 成组链接法
+- D. 空闲链表法
+
+---
+
+## 2024-Q27
+
+> question_id: 2024-Q27
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.memory.partition]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列算法中，每次回收分区时仅合并大小相等的空闲分区的是 。
+
+- A. 伙伴算法
+- B. 最佳适应算法
+- C. 最坏适应算法
+- D. 首次适应算法
+
+---
+
+## 2024-Q28
+
+> question_id: 2024-Q28
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.stack]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若进程 P 中的线程 T 先打开文件， 得到文件描述符fd， 再创建两个线程Ta 和 Tb， 则下列资源中， Ta 与 Tb 可共享的是 I. 进程 P 的地址空间 II. 线程 T 的栈 III. 文件描述符 fd
+
+- A. 仅 I
+- B. 仅 I、III
+- C. 仅 II、III
+- D. I、II、III
+
+---
+
+## 2024-Q29
+
+> question_id: 2024-Q29
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.overview.syscall]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：下列系统调用的实现中，包含文件按名查找功能的是 。
+
+- A. open()
+- B. read()
+- C. write()
+- D. close()
+
+---
+
+## 2024-Q30
+
+> question_id: 2024-Q30
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: ds
+> kp_ids: [ds.stack_queue.queue]
+> answer_key: A
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：假设某系统使用时间片轮转调度算法进行 CPU 调度，时间片大小为 5ms，系统共有 10 个进程， 初始时均处于就绪队列，执行结束前仅处于执行态或就绪态。若队尾的进程 P 所需 CPU 时间最 短，时间为 25ms，在不考虑系统开销的情况下，则进程 P 的周转时间为 。
+
+- A. 200ms
+- B. 205ms
+- C. 250ms
+- D. 295ms
+
+---
+
+## 2024-Q31
+
+> question_id: 2024-Q31
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.cpu.exception]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：键盘中断服务例程执行结束时，所输入数据的存放位置是 。 --- page 4 --- 2024 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 4 页（共 12 页）
+
+- A. 用户缓冲区
+- B. CPU 中的通用寄存器
+- C. 内核缓冲区
+- D. 键盘控制器的数据寄存器
+
+---
+
+## 2024-Q32
+
+> question_id: 2024-Q32
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: os
+> kp_ids: [os.file.disk_schedule]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：某磁盘的磁道数为 400“（磁道号为 0～399）， 采用循环扫描算法“（CSCAN）进行磁盘调度， 完成对 200 号磁道的请求后，磁头向磁道号减小的方向移动。若还有 7 个磁盘请求，对应的磁道号分别 为 300, 120, 110, 0, 160, 210, 399，则完成上述磁盘访问请求后磁头移动的距离是 。
+
+- A. 599
+- B. 619
+- C. 788
+- D. 799
+
+---
+
+## 2024-Q33
+
+> question_id: 2024-Q33
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.bus.bandwidth]
+> answer_key: C
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：若某分组交换网络及每段链路的带宽如下图所示，则 H1 到 H2 的最大吞吐量约为 。 题 33 图
+
+- A. 1Mb/s
+- B. 10Mb/s
+- C. 100Mb/s
+- D. 1 000Mb/s
+
+---
+
+## 2024-Q34
+
+> question_id: 2024-Q34
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.physical.channel]
+> answer_key: B
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在下列二进制数字调制方法中，需要 2 个不同频率载波的是 。
+
+- A. ASK
+- B. PSK
+- C. FSK
+- D. DPSK
+
+---
+
+## 2024-Q35
+
+> question_id: 2024-Q35
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.datalink.mac]
+> answer_key: C
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：如题 35 图所示的支持 VLAN 划分的交换机，已按端口划分了 3 个 VLAN，部分端口连接主机的 IP 地址和 MAC 地址如图中所示，ARP 表结构为<IP 地址，MAC 地址，TTL>。下列选项中，不． 会．出现在 H4 的 ARP 表中的是 。 题 35 图
+
+- A. 192.168.3.81, 00-18-A2-3B-36-21, 14:32:00
+- B. 192.168.3.91, 00-3E-C2-39-12-B5, 14:37:00
+- C. 192.168.3.125, 00-E5-78-4A-09-B2, 14:45:00
+- D. 192.168.3.129, 00-08-6E-05-A7-82, 14:52:00
+
+---
+
+## 2024-Q36
+
+> question_id: 2024-Q36
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: co
+> kp_ids: [co.bus.bandwidth]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：在采用 CSMA/CA 的 802.11 无线局域网中，DIFS=128s，SIFS≥28μs，RTS、CTS 和 ACK 帧的传 输时延分别是 3μs、2us 和 2μs，忽略信号传播时延。若主机 A 欲向 AP 发送一个总长度为 1 998B 的数据帧， 无线链路带宽为54Mb/s， 则隐藏站B 收到 AP 发送的 CTS 帧时， 设置的网络分配向量 NAV 的值是 。
+
+- A. 326μs
+- B. 354μs
+- C. 385μs
+- D. 513μs
+
+---
+
+## 2024-Q37
+
+> question_id: 2024-Q37
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.datalink.flow_control]
+> answer_key: B
+> reference_answer: null
+> has_figure: true
+> figure_status: missing
+> completeness: partial
+> gap_status: partial
+> gap_fields: [figure]
+
+**题干**：主机甲通过选择重传（SR）滑动窗口协议向主机乙发送帧的部分过程如题 37 图所示，Fx 为数据 帧，ACKx 为确认帧，x 是位数为 3 比特的序号。 乙只对正确接收的数据帧进行独立确认， 发送窗 口与接收窗口大小相同且均为最大值。甲在 t1 时刻和 t2 时刻发送的数据帧分别是 。 --- page 5 --- 2024 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 5 页（共 12 页）
+
+- A. F1, F3
+- B. F1, F4
+- C. F3, F1
+- D. F4, F1
+
+---
+
+## 2024-Q38
+
+> question_id: 2024-Q38
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.transport.tcp]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：假设主机 H 通过 TCP 向服务器发送长度为 3000B 的报文，往返时间 RTT=10ms，最长报文段寿 命 MSL=30s，最大报文段长度 MSS=1 000B，忽略 TCP 段的传输时延，报文传输结束后 H 首先 请求断开连接，则从 H 请求建立 TCP 连接时刻起，到 H 进入 CLOSED 状态为止，所需的时间 至少是 。
+
+- A. 30.03s
+- B. 30.04s
+- C. 60.03s
+- D. 60.04s
+
+---
+
+## 2024-Q39
+
+> question_id: 2024-Q39
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.transport.udp]
+> answer_key: D
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若 UDP 协议在计算校验和过程中，计算得到中间结果为 1011 1001 1011 0110 时，还需要加上最 后一个 16 位数 0110 0101 1100 0101，则最终计算得到的校验和是 。
+
+- A. 0001 1111 0111 1011
+- B. 0001 1111 0111 1100
+- C. 1110 0000 1000 0011
+- D. 1110 0000 1000 0100
+
+---
+
+## 2024-Q40
+
+> question_id: 2024-Q40
+> exam_year: 2024
+> question_type: choice
+> score: 2
+> part: 一、单项选择题
+> source_type: third_party
+> credibility: high
+> explanation_status: scan
+> subject: cn
+> kp_ids: [cn.transport.tcp]
+> answer_key: C
+> reference_answer: null
+> has_figure: false
+> figure_status: null
+> completeness: complete
+> gap_status: none
+> gap_fields: []
+
+**题干**：若浏览器不支持并行 TCP 连接，使用非持久的 HTTP/1.0 协议请求浏览 1 个 Web 页，该顶中引 用同一网站上 7 个小图像文件，则从浏览器为传输 Web 页请求建立 TCP 连接开始，到接收完所 有内容为止，所需要的往返时间 RTT 数至少是 。
+
+- A. 4
+- B. 9
+- C. 14
+- D. 16 --- page 6 --- 2024 年全国硕士研究生入学统一考试计算机学科专业基础综合试题 第 6 页（共 12 页）
+
+---
+
