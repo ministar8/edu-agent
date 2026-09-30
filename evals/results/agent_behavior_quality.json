@@ -1,0 +1,63 @@
+{
+  "quality_score": 0.159,
+  "cases": {
+    "practice_no_answer": {
+      "evidence_usage": 0.0942,
+      "source_cited": 1.0,
+      "completeness": 1.0,
+      "reply_len": 1384.0,
+      "pack_len": 3611.0
+    },
+    "empty_no_hallucination": {
+      "evidence_usage": 0.1,
+      "source_cited": 0.0,
+      "completeness": 0.425,
+      "reply_len": 85.0,
+      "pack_len": 107.0
+    },
+    "verify_source_usage": {
+      "evidence_usage": 0.1645,
+      "source_cited": 0.0,
+      "completeness": 1.0,
+      "reply_len": 2938.0,
+      "pack_len": 4770.0
+    },
+    "multi_turn_context": {
+      "evidence_usage": 0.0,
+      "source_cited": 0.0,
+      "completeness": 0.185,
+      "reply_len": 37.0,
+      "pack_len": 2598.0
+    },
+    "thin_pack_no_fabrication": {
+      "evidence_usage": 0.0606,
+      "source_cited": 1.0,
+      "completeness": 1.0,
+      "reply_len": 303.0,
+      "pack_len": 3657.0
+    },
+    "tri_full_8docs": {
+      "evidence_usage": 0.2125,
+      "source_cited": 1.0,
+      "completeness": 1.0,
+      "reply_len": 379.0,
+      "pack_len": 1701.0
+    },
+    "tri_thin_2docs": {
+      "evidence_usage": 0.5152,
+      "source_cited": 1.0,
+      "completeness": 1.0,
+      "reply_len": 268.0,
+      "pack_len": 673.0
+    },
+    "tri_empty_0docs": {
+      "evidence_usage": 0.125,
+      "source_cited": 0.0,
+      "completeness": 1.0,
+      "reply_len": 433.0,
+      "pack_len": 25.0
+    }
+  },
+  "hard_fails": [],
+  "recorded_at": "2026-09-30T12:50:45"
+}
