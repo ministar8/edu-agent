@@ -547,7 +547,12 @@ async def record_all(
 
     # `load_golden_queries` 返回 (query, category, knowledge_points) 三元组；
     # 这里只要 query。
-    queries = [q for q, _cat, _kps in load_golden_queries("evals/sample_408.jsonl", limit=limit)]
+    queries = [
+        q
+        for q, _cat, _kps in load_golden_queries(
+            "evals/datasets/golden/sample_408.jsonl", limit=limit
+        )
+    ]
     traces: list[StageTrace] = []
     excluded: list[str] = []
     for query in queries:

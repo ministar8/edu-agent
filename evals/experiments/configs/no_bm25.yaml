@@ -1,0 +1,9 @@
+# no_bm25.yaml — 去掉 BM25 路由
+name: no_bm25
+description: 完整系统去掉 keyword_bm25 路由
+inherits: full
+components:
+  bm25: false
+legacy_policy: per_mode
+rerank: false
+note: 消融显示 kp_mrr −0.088

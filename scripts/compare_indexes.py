@@ -1,6 +1,6 @@
 """两份索引的检索层对照（零 LLM 成本），用于决定「保留哪一份」。
 
-口径：20 条配对样本（evals/ragas_paired20.jsonl），
+口径：20 条配对样本（evals/datasets/ragas/ragas_paired20.jsonl），
 按生产配置（RERANK_ENABLED=false）跑检索，只比较检索层可算的指标：
   - chapter_hit@5：top-5 证据里是否出现「期望章节文件」
   - first_hit_rank：首个命中期望章节的排名（越小越好，未命中记 ∞）
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(r"C:/Users/26452/Desktop/edu-agent")
-PAIRED = ROOT / "evals/ragas_paired20.jsonl"
+PAIRED = ROOT / "evals/datasets/ragas/ragas_paired20.jsonl"
 
 _PREFIX = re.compile(r"^\d+_")
 

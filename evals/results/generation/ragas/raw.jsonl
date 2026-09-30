@@ -1,0 +1,1 @@
+{"id": "ragas_001", "question": "（示例，待跑时替换）什么是 TLB？", "answer": "（模型生成答案）", "contexts": ["basic-ca-tlb-001"], "scores": {"faithfulness": null, "answer_relevancy": null}}

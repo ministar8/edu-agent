@@ -1,0 +1,9 @@
+# no_metadata.yaml — 去掉元数据路由
+name: no_metadata
+description: 完整系统去掉 concept_meta/section_meta 等元数据路由
+inherits: full
+components:
+  metadata_routes: false
+legacy_policy: per_mode
+rerank: false
+note: 消融显示 kp_mrr −0.113（单路贡献最大）

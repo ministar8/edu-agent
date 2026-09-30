@@ -1,0 +1,17 @@
+# ragas.yaml — 生成质量评测（PENDING，最后跑）
+name: ragas
+description: RAGAS faithfulness / answer_relevancy / context_*
+inherits: null
+dataset: datasets/ragas/ragas_paired20.jsonl
+script: python -m evaluation.cli
+metrics: [faithfulness, answer_relevancy, context_precision, context_recall]
+components: {}            # 非检索消融，无组件开关
+legacy_policy: per_mode
+rerank: false
+status: pending
+note: 旧数据口径有问题已删；重跑前需修标注，勿直接引用
+results_dir: results/generation/ragas/
+output_files:
+  raw: raw.jsonl      # 逐样本
+  metrics: metrics.json  # 汇总
+  summary: summary.md    # 人工结论

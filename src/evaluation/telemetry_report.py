@@ -67,8 +67,8 @@ from rag.metrics import DEFAULT_METRICS_PATH
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_GOLDEN_PATH = "evals/sample_408.jsonl"
-DEFAULT_PAIRED_PATH = "evals/ragas_paired20.jsonl"
+DEFAULT_GOLDEN_PATH = "evals/datasets/golden/sample_408.jsonl"
+DEFAULT_PAIRED_PATH = "evals/datasets/ragas/ragas_paired20.jsonl"
 
 # 逐阶段漏斗的键（顺序即管线顺序）。取自 `retriever` 写入 `retrieve_query` 的字段名，
 # **不要重排** —— 报表的「过阈率」按下标取，重排会静默算错。

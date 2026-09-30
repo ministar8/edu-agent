@@ -1,7 +1,7 @@
 """RAGAS 评估 CLI。
 
 uv sync --group eval
-python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 5
+python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 5
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def _preflight(cfg) -> list[tuple[bool, str]]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="edu-agent RAGAS evaluation")
-    parser.add_argument("--dataset", default="evals/sample_408.jsonl")
+    parser.add_argument("--dataset", default="evals/datasets/golden/sample_408.jsonl")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument(
         "--sample-per-type",
@@ -94,7 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         default="faithfulness,context_precision,context_recall,answer_relevancy",
         help="逗号分隔",
     )
-    parser.add_argument("--output-dir", default="evals/results")
+    parser.add_argument("--output-dir", default="evals/results/generation/ragas")
     parser.add_argument("--tag", default="")
     parser.add_argument("--ragas-timeout", type=int, default=120, help="单个 judge 操作超时秒数")
     parser.add_argument("--ragas-max-retries", type=int, default=1, help="judge 最大重试次数")

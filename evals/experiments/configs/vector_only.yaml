@@ -1,0 +1,15 @@
+# vector_only.yaml — 仅语义向量（≈ 朴素 RAG baseline）
+name: vector_only
+description: 语义向量 top-k，无 BM25/元数据/分解/HyDE/任务策略
+inherits: full
+components:
+  vector: true
+  bm25: false
+  metadata_routes: false
+  decompose: false
+  hyde: false
+  window: true
+  task_policy: false
+legacy_policy: include
+rerank: false
+note: 基础 RAG 对照；kp_mrr −0.158 / task MACRO −0.083

@@ -1,0 +1,9 @@
+{
+  "status": "pending",
+  "samples": 0,
+  "faithfulness": null,
+  "answer_relevancy": null,
+  "context_precision": null,
+  "context_recall": null,
+  "note": "旧数据口径有问题已删；重跑后覆盖本文件"
+}

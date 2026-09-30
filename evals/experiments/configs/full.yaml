@@ -1,0 +1,16 @@
+# full.yaml — 完整系统（对照基线）
+# ★ 所有 configs/*.yaml 保持同一字段结构，见 ../README.md「配置字段约定」
+name: full
+description: 多路召回 + task_mode → preferred_layers → legacy_policy
+inherits: null            # 基线，不继承
+components:
+  vector: true
+  bm25: true
+  metadata_routes: true
+  decompose: true
+  hyde: true
+  window: true
+  task_policy: true
+legacy_policy: per_mode   # learn/method/practice/verify=exclude, grade/explain=fallback
+rerank: false             # 默认关（消融显示负优化）
+note: 对照基线，消融均相对此配置

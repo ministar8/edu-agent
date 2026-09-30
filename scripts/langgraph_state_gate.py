@@ -42,7 +42,7 @@ from langgraph.graph.message import add_messages  # noqa: E402
 from langgraph.types import Command, interrupt  # noqa: E402
 from typing_extensions import TypedDict  # noqa: E402
 
-EVIDENCE_DIR = ROOT / "evals" / "results" / "langgraph_state"
+EVIDENCE_DIR = ROOT / "evals" / "results" / "system_validation" / "langgraph_state"
 
 results: list[tuple[str, bool, str]] = []
 evidence: dict[str, Any] = {}

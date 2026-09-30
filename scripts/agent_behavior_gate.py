@@ -13,7 +13,7 @@
 - verify          ：禁止无来源声称「已验证 / 已确认正确」
 - 通用            ：禁止编造来源文件名、编造页码
 
-**Soft Quality Score（只记分不阻断）** —— `evals/results/agent_behavior_quality.json`
+**Soft Quality Score（只记分不阻断）** —— `evals/results/system_validation/agent_behavior/agent_behavior_quality.json`
 - 解释完整度 / 来源引用率 / 回复长度 / evidence_usage
 
 **Evidence-aware**
@@ -26,7 +26,7 @@
 
 用法：
     uv run python scripts/agent_behavior_gate.py
-    uv run python scripts/agent_behavior_gate.py --quality-out evals/results/agent_behavior_quality.json
+    uv run python scripts/agent_behavior_gate.py --quality-out evals/results/system_validation/agent_behavior/agent_behavior_quality.json
 """
 
 from __future__ import annotations
@@ -440,7 +440,14 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--quality-out",
-        default=str(ROOT / "evals" / "results" / "agent_behavior_quality.json"),
+        default=str(
+            ROOT
+            / "evals"
+            / "results"
+            / "system_validation"
+            / "agent_behavior"
+            / "agent_behavior_quality.json"
+        ),
         help="软质量分输出路径",
     )
     args = ap.parse_args()

@@ -52,7 +52,7 @@ PROBES = [
     ),
 ]
 
-OUT = ROOT / "evals" / "results" / "legacy_runtime"
+OUT = ROOT / "evals" / "results" / "retrieval" / "legacy_runtime"
 
 
 def _layer(m: dict) -> str:

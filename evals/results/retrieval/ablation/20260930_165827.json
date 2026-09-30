@@ -1,0 +1,41 @@
+{
+  "recorded_at": "20260930_165827",
+  "golden": "evals/sample_408.jsonl",
+  "limit": 60,
+  "rows": [
+    {
+      "config": "full",
+      "note": "完整系统（当前默认）",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 76.2,
+      "category_hit_at_1": 0.9833,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9917,
+      "category_precision": 0.9717,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 4.1167,
+      "kp_hit_at_k": 0.9833,
+      "kp_mrr": 0.8972,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "no_rerank",
+      "note": "去掉重排",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 41.6,
+      "category_hit_at_1": 0.9833,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9917,
+      "category_precision": 0.9504,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.7167,
+      "kp_hit_at_k": 1.0,
+      "kp_mrr": 0.9431,
+      "kp_annotated": 60.0
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 """Legacy inventory：盘点无 kb_depth 旧资产（不改权重）。
 
 产出：
-  evals/legacy_inventory.json
+  evals/datasets/analysis/legacy_inventory.json
   - 各集合 legacy / 有标签 chunk 计数
   - 来源文件 top
   - 与新 L1/L2/L3 的重叠主题（抽样）

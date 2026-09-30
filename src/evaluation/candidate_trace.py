@@ -30,7 +30,7 @@
 用法::
 
     uv run python -m evaluation.candidate_trace                    # 跑默认 probe 表
-    uv run python -m evaluation.candidate_trace --probe evals/retrieval_probes.jsonl
+    uv run python -m evaluation.candidate_trace --probe evals/datasets/golden/retrieval_probes.jsonl
     uv run python -m evaluation.candidate_trace --json             # 机器可读
     uv run python -m evaluation.candidate_trace --limit 2          # 只跑前 N 条
 """
@@ -51,7 +51,7 @@ from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROBE_PATH = "evals/retrieval_probes.jsonl"
+DEFAULT_PROBE_PATH = "evals/datasets/golden/retrieval_probes.jsonl"
 
 # 正确 chunk 的「消失点」枚举。**必须封闭** —— 自由文本会让归因退化成猜。
 DROP_REASONS: tuple[str, ...] = (

@@ -51,8 +51,8 @@ from evaluation.candidate_trace import DROP_REASONS, load_probes, trace_probe
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PROBE_PATH = "evals/retrieval_probes.jsonl"
-DEFAULT_BASELINE_PATH = "evals/probe_baseline.json"
+DEFAULT_PROBE_PATH = "evals/datasets/golden/retrieval_probes.jsonl"
+DEFAULT_BASELINE_PATH = "evals/baselines/probe_baseline.json"
 
 # 存活层级排序：**下标越大 = 目标存活得越久 = 越好**。
 # 直接复用 `candidate_trace.DROP_REASONS` —— 它已经是管线顺序，**不要另建一份**

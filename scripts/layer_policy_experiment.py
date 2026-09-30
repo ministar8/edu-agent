@@ -29,7 +29,7 @@ from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
 from rag.task_policy import resolve_task_policy  # noqa: E402
 from schema.task_policy import LayerWeightProfile  # noqa: E402
 
-OUT_DIR = ROOT / "evals" / "results" / "layer_policy"
+OUT_DIR = ROOT / "evals" / "results" / "retrieval" / "layer_policy"
 
 # ★ 固定 Probe（禁止每轮换题）
 FIXED_PROBES = [
