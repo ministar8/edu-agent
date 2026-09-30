@@ -1,0 +1,148 @@
+{
+  "checkpoint_restart": {
+    "db": "checkpoints_restart.db",
+    "thread_id": "gate-restart-fb951fda",
+    "n_app_a": 4,
+    "ids_app_a": [
+      "17910868-bcb9-4a55-aa9e-9aca4ce0b4b7",
+      "ai-f58bf106",
+      "e7a1e109-d018-4253-ad84-2eea5f1ffbc1",
+      "ai-62a0bf91"
+    ],
+    "ids_app_b": [
+      "17910868-bcb9-4a55-aa9e-9aca4ce0b4b7",
+      "ai-f58bf106",
+      "e7a1e109-d018-4253-ad84-2eea5f1ffbc1",
+      "ai-62a0bf91"
+    ],
+    "other_thread_msgs": 0
+  },
+  "trim_state_integrity": {
+    "before_ids": [
+      "ebd9013b-7bdc-4dfa-a19f-07db8615c6c3",
+      "ai-74cbb44e",
+      "ba8b291f-e75b-4caa-bf17-dd416e915fda",
+      "ai-cb972fa1",
+      "6dd25d7f-962a-4527-9b5c-32e4987a9113",
+      "ai-3e596dfc",
+      "e821ea00-c03f-4b87-86ae-2ea2b7053646",
+      "ai-8416baef",
+      "ee505354-f03f-4110-8d24-4be818499858",
+      "ai-9917a708",
+      "bdd52532-61ee-46bb-8a0f-f48f885ba1bf",
+      "ai-bd0e8533",
+      "e496237d-e4d4-429f-a823-0952cb7bc910",
+      "ai-fb838c22",
+      "46923821-4c44-4f29-ace4-83106e6799a9",
+      "ai-6cc8ce65",
+      "2fb358d8-9d3f-47d0-8df8-9a2b99bc0b6e",
+      "ai-6d855a06",
+      "deb2ae45-1215-4fa8-ba2b-07827cc4be7c",
+      "ai-ef0ff235",
+      "8585eff6-ef07-457c-8b44-bd1c3c5ec4b6",
+      "ai-0628ec23",
+      "4cd5a702-2600-4f9e-833a-153af3e20c7c",
+      "ai-34dad6c8",
+      "292f891a-72af-4c93-8586-ef1f33fc533f",
+      "ai-e845c2c8",
+      "75e3a94b-88ec-4fd5-9e1c-a0d4d01d3463",
+      "ai-11d2eb2d",
+      "f5db2618-5132-45f5-9b4d-7c2f9b50443e",
+      "ai-e701aaf1"
+    ],
+    "after_ids": [
+      "ebd9013b-7bdc-4dfa-a19f-07db8615c6c3",
+      "ai-74cbb44e",
+      "ba8b291f-e75b-4caa-bf17-dd416e915fda",
+      "ai-cb972fa1",
+      "6dd25d7f-962a-4527-9b5c-32e4987a9113",
+      "ai-3e596dfc",
+      "e821ea00-c03f-4b87-86ae-2ea2b7053646",
+      "ai-8416baef",
+      "ee505354-f03f-4110-8d24-4be818499858",
+      "ai-9917a708",
+      "bdd52532-61ee-46bb-8a0f-f48f885ba1bf",
+      "ai-bd0e8533",
+      "e496237d-e4d4-429f-a823-0952cb7bc910",
+      "ai-fb838c22",
+      "46923821-4c44-4f29-ace4-83106e6799a9",
+      "ai-6cc8ce65",
+      "2fb358d8-9d3f-47d0-8df8-9a2b99bc0b6e",
+      "ai-6d855a06",
+      "deb2ae45-1215-4fa8-ba2b-07827cc4be7c",
+      "ai-ef0ff235",
+      "8585eff6-ef07-457c-8b44-bd1c3c5ec4b6",
+      "ai-0628ec23",
+      "4cd5a702-2600-4f9e-833a-153af3e20c7c",
+      "ai-34dad6c8",
+      "292f891a-72af-4c93-8586-ef1f33fc533f",
+      "ai-e845c2c8",
+      "75e3a94b-88ec-4fd5-9e1c-a0d4d01d3463",
+      "ai-11d2eb2d",
+      "f5db2618-5132-45f5-9b4d-7c2f9b50443e",
+      "ai-e701aaf1",
+      "ebec8104-84f5-4ae2-82d4-00f426acd9c3",
+      "ai-cac57cce"
+    ],
+    "model_input_lens": [
+      1,
+      3,
+      5,
+      7,
+      9,
+      11,
+      13,
+      15,
+      17,
+      19,
+      20,
+      20,
+      20,
+      20,
+      20,
+      20
+    ],
+    "max_messages": 20,
+    "prefix_unchanged": true,
+    "not_shrunk": true,
+    "aux_checkpoint_ge_input": true
+  },
+  "interrupt_resume": {
+    "log_after_first": [
+      "start",
+      "ask"
+    ],
+    "log_after_resume": [
+      "start",
+      "ask",
+      "ask",
+      "end"
+    ],
+    "next_after_interrupt": [
+      "ask"
+    ],
+    "tasks_interrupted": true,
+    "resume_value_used": true,
+    "service_command_resume_wired": true,
+    "has_interrupt_key": true
+  },
+  "store_rehydration": {
+    "user_id": "gate-store-1a31f0c9",
+    "topic": "AVL旋转调整",
+    "thread_a": "thread-A",
+    "thread_b": "thread-B-bd7e02",
+    "card_from_store": "【学生记忆】\n薄弱：AVL旋转调整（最近20分，「题干1：AVL 插入后如何旋转」）",
+    "card_in_thread_b_state": "【学生记忆】\n薄弱：AVL旋转调整（最近20分，「题干1：AVL 插入后如何旋转」）",
+    "card_message_id": "edu_memory_card"
+  },
+  "_summary": {
+    "passed": 4,
+    "total": 4,
+    "cases": {
+      "checkpoint restart": true,
+      "trim state integrity": true,
+      "interrupt / resume": true,
+      "store rehydration": true
+    }
+  }
+}
