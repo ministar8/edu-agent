@@ -35,6 +35,7 @@ GATEWAY_MODELS: dict[Gateway, frozenset[str]] = {
     Gateway.DASHSCOPE: frozenset(
         {
             "qwen3.8-max",
+            "qwen3.8-max-0902",
             "qwen3.8-flash",
             "qwen3.8-27b",
             "qwen3.7-flash",
