@@ -1,19 +1,19 @@
 """Retrieval Policy 解析入口（tools 使用）。
 
-模型真源：`schema.retrieval_policy`；分类/构建规则见 docs/RETRIEVAL_POLICY.md §4。
-本模块保持 `resolve_retrieval_policy` / `classify_task_mode` 兼容 API。
+模型真源：`schema.task_policy`；分类/构建规则见 docs/RETRIEVAL_POLICY.md §4。
+本模块保持 `resolve_task_policy` / `classify_task_mode` 兼容 API。
 """
 
 from __future__ import annotations
 
 import re
 
-from schema.retrieval_policy import (
+from schema.task_policy import (
     ExamResources,
-    LegacyPoolPolicy,
+    LegacyPolicy,
     RetrievalDepthName,
-    RetrievalPolicy,
     TaskMode,
+    TaskPolicy,
 )
 
 DEFAULT_TASK_MODE: TaskMode = "learn"
@@ -71,12 +71,12 @@ _PREFERRED: dict[TaskMode, list[str]] = {
 }
 
 # legacy（无 kb_depth 旧讲义/题库）= **资产质量/迁移状态**，不是第四知识层。
-# 入池策略（legacy_pool_policy）：
+# 入池策略（legacy_policy）：
 #   exclude  = 不进证据包 —— learn/method/practice/verify（主池只认 L1/L2/L3）
 #   fallback = 主池不足才补入 —— grade/explain（需要旧题库对照/讲解）
 # 实验（evals/results/legacy_runtime）显示真删后层精度 0.38~0.50 → 1.00。
 # 不做 downrank：调权重治不了数据治理问题。
-_LEGACY_POOL: dict[TaskMode, LegacyPoolPolicy] = {
+_LEGACY_POOL: dict[TaskMode, LegacyPolicy] = {
     "learn": "exclude",
     "method": "exclude",
     "practice": "exclude",
@@ -139,7 +139,7 @@ def policy_for_mode(
     query: str = "",
     use_rerank: bool = True,
     k: int | None = None,
-) -> RetrievalPolicy:
+) -> TaskPolicy:
     mode = task_mode
     if mode == "practice":
         exam_resources = ExamResources(question="forbidden", answer="forbidden", paper="forbidden")
@@ -177,7 +177,7 @@ def policy_for_mode(
         else "standard"
     )
 
-    return RetrievalPolicy(
+    return TaskPolicy(
         task_mode=mode,
         preferred_layers=preferred,  # type: ignore[arg-type]
         exam_resources=exam_resources,
@@ -191,12 +191,12 @@ def policy_for_mode(
         k=k,
         use_rerank=use_rerank,
         allow_question_id_leak=(mode in ("grade", "explain", "verify")),
-        legacy_pool_policy=_LEGACY_POOL[mode],
+        legacy_policy=_LEGACY_POOL[mode],
         layer_policy_id=layer_policy_id,
     )
 
 
-def resolve_retrieval_policy(
+def resolve_task_policy(
     query: str,
     task_mode: TaskMode | None = None,
     *,
@@ -206,7 +206,7 @@ def resolve_retrieval_policy(
     agent_prior: str = "",
     use_rerank: bool = True,
     k: int | None = None,
-) -> RetrievalPolicy:
+) -> TaskPolicy:
     """入口：显式 task_mode 优先，否则按 §4.0 优先级分类。"""
     mode = task_mode or classify_task_mode(
         query, context_mode=context_mode, agent_prior=agent_prior

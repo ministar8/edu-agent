@@ -162,8 +162,13 @@ class Settings(BaseSettings):
     BM25_CANDIDATE_FLOOR: int = 0
     """候选池下限（0 = 不设下限）。★ 别按直觉设成 300 —— 见上面 #34 的复测结论。"""
 
-    # ── Semantic Cache（ChromaDB-backed）──────────
-    SEMANTIC_CACHE_ENABLED: bool = True
+    # ── Semantic Cache（ChromaDB-backed，**可选优化**）────
+    # ★ 默认 False（M5）—— 语义缓存是「命中即返回旧证据」的优化，
+    #   会让检索链的可复现性变差（同 query 不同轮可能走缓存/不走缓存），
+    #   干扰消融实验与门禁基线。主链路不依赖它。
+    #   开启前请注意：init 有 Chroma 依赖，偶发 'RustBindingsAPI' 抖动。
+    # 消融用法：SEMANTIC_CACHE_ENABLED=true 跑一轮，对比 hit 率与 kp@k。
+    SEMANTIC_CACHE_ENABLED: bool = False
     SEMANTIC_CACHE_SIMILARITY_THRESHOLD: float = 0.88
 
     # ── Token Budget ────────────────────────────────
@@ -228,8 +233,8 @@ class Settings(BaseSettings):
     # 保留本开关是为了**可对照**：设为 true 即恢复「文档被归一」的旧行为，
     # 但必须**同步恢复 rerank 侧的 query 归一**（该分支已随 S4 删除）。
     INGEST_SYNONYM_NORMALIZE: bool = False
-    # 预热成功率低于此值即视为异常并告警。预热全落空通常意味着索引未就绪或检索链故障，
-    # 但旧代码只打印一行 INFO，导致问题无声无息。
+    # 入库后检索 smoke 成功率低于此值即视为异常并告警（现仅 1 条 smoke query）。
+    # smoke 全落空通常意味着索引未就绪或检索链故障。
     WARMUP_MIN_SUCCESS_RATE: float = 0.8
 
     # ── Knowledge ──────────────────────────────────

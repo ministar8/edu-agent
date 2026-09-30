@@ -1,7 +1,7 @@
 """Evidence Policy：release 唯一出口（设计定稿 §5）。
 
 职责：
-- 按 RetrievalPolicy 裁 FusedEvidence（exam_answer / 答案字段 / 题号）
+- 按 TaskPolicy 裁 FusedEvidence（exam_answer / 答案字段 / 题号）
 - 置 release flags，供 Agent 约束
 
 禁止：
@@ -15,7 +15,7 @@ import re
 from typing import Any
 
 from rag.evidence import FusedEvidence, TextEvidence
-from schema.retrieval_policy import RetrievalPolicy
+from schema.task_policy import TaskPolicy
 
 _ANSWER_KEY_RE = re.compile(r"\banswer_key\b|\breference_answer\b", re.I)
 _QUESTION_ID_RE = re.compile(r"\b(?:19|20)\d{2}-Q\d+\b")
@@ -48,7 +48,7 @@ def _is_exam_paper(ev: TextEvidence) -> bool:
     return _doc_role(ev) == "exam_paper"
 
 
-def _resource_blocked(policy: RetrievalPolicy, ev: TextEvidence) -> bool:
+def _resource_blocked(policy: TaskPolicy, ev: TextEvidence) -> bool:
     """exam_resources eligibility（与召回侧 where 双保险）。"""
     if _is_exam_answer(ev) and policy.eligibility_block_exam_answer:
         return True
@@ -105,7 +105,7 @@ def is_legacy_asset(ev: TextEvidence) -> bool:
 
 def apply_layer_ranking(
     fused: FusedEvidence,
-    policy: RetrievalPolicy,
+    policy: TaskPolicy,
     *,
     boost: float = 1.25,
 ) -> FusedEvidence:
@@ -131,7 +131,7 @@ def apply_layer_ranking(
 
 def finalize_with_layer_ranking(
     fused: FusedEvidence,
-    policy: RetrievalPolicy,
+    policy: TaskPolicy,
     *,
     keep: int = 5,
     boost: float = 1.35,
@@ -146,7 +146,7 @@ def finalize_with_layer_ranking(
 
     必须在**扩大候选**之后调用，否则 preferred 层进不了池就无法提权。
     """
-    pool_policy = policy.legacy_pool_policy
+    pool_policy = policy.legacy_policy
     items = list(fused.text_evidences or [])
     main_items = [ev for ev in items if not is_legacy_asset(ev)]
     legacy_items = [ev for ev in items if is_legacy_asset(ev)]
@@ -187,7 +187,7 @@ def finalize_with_layer_ranking(
     out.metadata = {
         **(out.metadata or {}),
         "layer_pack": {
-            "legacy_pool_policy": pool_policy,
+            "legacy_policy": pool_policy,
             "n_main": len(main_items),
             "n_legacy_reserve": len(legacy_items),
             "dropped_legacy": dropped_legacy,
@@ -202,7 +202,7 @@ def finalize_with_layer_ranking(
 
 def apply_evidence_policy(
     fused: FusedEvidence,
-    policy: RetrievalPolicy,
+    policy: TaskPolicy,
 ) -> tuple[FusedEvidence, dict[str, Any]]:
     """返回 (裁剪后的 FusedEvidence, release flags)。不改索引。"""
     kept: list[TextEvidence] = []
@@ -271,7 +271,7 @@ def apply_evidence_policy(
         "explanation_released": policy.explanation_released,
         "layer_policy_id": policy.layer_policy_id,
         # legacy 池策略结果（fallback 补入 / exclude 剔除后的包体状态）
-        "legacy_pool_policy": policy.legacy_pool_policy,
+        "legacy_policy": policy.legacy_policy,
         "layer_degraded": bool(layer_pack.get("degraded")),
         "dropped_legacy": int(layer_pack.get("dropped_legacy") or 0),
         "used_fallback": int(layer_pack.get("used_fallback") or 0),

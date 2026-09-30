@@ -18,8 +18,8 @@ from rag.evidence_policy import (  # noqa: E402
     apply_evidence_policy,
     finalize_with_layer_ranking,
 )
-from rag.retrieval_policy import resolve_retrieval_policy  # noqa: E402
 from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.task_policy import resolve_task_policy  # noqa: E402
 
 _QID_RE = re.compile(r"(?:19|20)\d{2}-Q\d+")
 _ANS_FIELD_RE = re.compile(r"answer_key|reference_answer", re.I)
@@ -85,7 +85,7 @@ def _layers(meta: dict) -> str:
 async def run_one(case: dict) -> list[str]:
     fails: list[str] = []
     q = case["q"]
-    policy = resolve_retrieval_policy(q)
+    policy = resolve_task_policy(q)
     mode = policy.task_mode
     if mode != case["mode"]:
         # grade 与 explain 信号可重叠

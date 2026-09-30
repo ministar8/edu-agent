@@ -22,7 +22,7 @@ from agents.task_context import (  # noqa: E402
     remember_query_mode,
     set_context_mode,
 )
-from rag.retrieval_policy import classify_task_mode  # noqa: E402
+from rag.task_policy import classify_task_mode  # noqa: E402
 
 
 def main() -> int:

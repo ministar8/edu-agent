@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from rag.evidence import FusedEvidence, TextEvidence  # noqa: E402
 from rag.evidence_policy import apply_evidence_policy  # noqa: E402
-from rag.retrieval_policy import resolve_retrieval_policy  # noqa: E402
+from rag.task_policy import resolve_task_policy  # noqa: E402
 
 _QID_RE = re.compile(r"(?:19|20)\d{2}-Q\d+")
 _ANS_FIELD_RE = re.compile(r"answer_key|reference_answer", re.I)
@@ -96,7 +96,7 @@ def check_mode_gate() -> list[str]:
 
     print("==== Mode Gate ====")
     for mode, spec in cases.items():
-        p = resolve_retrieval_policy(spec["q"])
+        p = resolve_task_policy(spec["q"])
         if p.task_mode != mode:
             # grade/explain/verify 依赖信号；容忍并记录
             if not (mode == "grade" and p.task_mode in ("grade", "explain")):
@@ -142,7 +142,7 @@ def check_layer_gate() -> list[str]:
     ]
     print("==== Layer Gate ====")
     for q, want_mode, expect_layers in cases:
-        p = resolve_retrieval_policy(q)
+        p = resolve_task_policy(q)
         out, _ = apply_evidence_policy(fused, p)
         layers = [_layer_of(e) for e in out.text_evidences]
         # layer_recall@k：期望层是否出现在结果
@@ -166,14 +166,14 @@ def check_layer_gate() -> list[str]:
 def check_eligibility_where() -> list[str]:
     fails: list[str] = []
     print("==== Eligibility Where ====")
-    p = resolve_retrieval_policy("给我一道 BST 练习题")
+    p = resolve_task_policy("给我一道 BST 练习题")
     w = p.eligibility_where()
     blob = str(w)
     for role in ("exam_item", "exam_answer", "exam_paper"):
         if role not in blob:
             fails.append(f"practice where missing block {role}")
     print(f"  practice where={w}")
-    p2 = resolve_retrieval_policy("2019-Q11 为什么选 B？")
+    p2 = resolve_task_policy("2019-Q11 为什么选 B？")
     w2 = p2.eligibility_where()
     print(f"  explain where={w2}")
     if w2 and "exam_answer" in str(w2) and "$ne" in str(w2):

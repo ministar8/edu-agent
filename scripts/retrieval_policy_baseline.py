@@ -47,13 +47,13 @@ def _run_script(name: str) -> tuple[int, str]:
 
 
 def collect() -> dict:
-    from rag.retrieval_policy import classify_task_mode
-    from schema.retrieval_policy import RetrievalPolicy
+    from rag.task_policy import classify_task_mode
+    from schema.task_policy import TaskPolicy
 
     classify = {q: classify_task_mode(q) for q in EXPECTED_CLASSIFY}
 
     # eligibility where 快照（安全相关）
-    from rag.retrieval_policy import resolve_retrieval_policy
+    from rag.task_policy import resolve_task_policy
 
     where_snapshot = {}
     for mode, q in [
@@ -64,7 +64,7 @@ def collect() -> dict:
         ("explain", "2019-Q11 为什么选 B？"),
         ("verify", "BST 删除考过哪些真题？"),
     ]:
-        p: RetrievalPolicy = resolve_retrieval_policy(q)
+        p: TaskPolicy = resolve_task_policy(q)
         where_snapshot[mode] = {
             "task_mode": p.task_mode,
             "where": p.eligibility_where(),

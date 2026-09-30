@@ -39,7 +39,7 @@ def _rrf_scale(k: int) -> float:
     """把 RRF 分数归一到**标定参考 k**（`_RRF_K_BASE`），使分数尺度与路由数解耦。
 
     ★ 为什么必须有（2026-09-27 实测）：阈值是按 **k = `_RRF_K_BASE`(=20)** 标定的
-    （见 `retriever._resolve_retrieval_policy` 注释里 `2.5/40` 的算例），
+    （见 `retriever._resolve_thresholds` 注释里 `2.5/40` 的算例），
     而 `_dynamic_rrf_k` 在 13 条路由时给出 **36** ⇒ 分数尺度随之缩小约 1.76×，
     **阈值却没跟着缩**。后果是**量纲错配**，不是「宁严勿滥」：
 
@@ -72,7 +72,7 @@ def _rrf_scale_needed(cat: QueryCategory | None, k: int) -> bool:
     同时被标为 `is_exercise` **与** `is_code`，但它有 `code_meta` 与另一条同权重路由
     （top2 = 5.0），可达上限 0.1351 **高于**阈值 0.12，**并不越界**。按类别名判会误伤它。
 
-    ⚠️ 这里的阈值公式与 `retriever._resolve_retrieval_policy` **同源**
+    ⚠️ 这里的阈值公式与 `retriever._resolve_thresholds` **同源**
     （`0.06` / `1.5` / `1.2·0.75·1.1` 三个系数）。**两者是一对**：
     那边改公式，这里必须同步，否则判定会静默失效（该修的没修、或不该修的乱修）。
 
@@ -85,7 +85,7 @@ def _rrf_scale_needed(cat: QueryCategory | None, k: int) -> bool:
 
     weights = sorted((get_route_weight(r, cat) for r in ALL_ROUTES), reverse=True)
 
-    # 与 `retriever._resolve_retrieval_policy` 同源的阈值（只用于**判定**，不改阈值）
+    # 与 `retriever._resolve_thresholds` 同源的阈值（只用于**判定**，不改阈值）
     threshold = 0.06 * (weights[0] / 1.5)
     if cat.is_exercise or cat.is_answer:
         threshold *= 1.2

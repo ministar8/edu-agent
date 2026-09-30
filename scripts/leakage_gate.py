@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from rag.evidence import FusedEvidence, TextEvidence  # noqa: E402
 from rag.evidence_policy import apply_evidence_policy  # noqa: E402
-from rag.retrieval_policy import resolve_retrieval_policy  # noqa: E402
+from rag.task_policy import resolve_task_policy  # noqa: E402
 
 _PRACTICE_QUERIES = [
     "给我一道死锁练习题",
@@ -80,7 +80,7 @@ def main() -> int:
     fails: list[str] = []
     fused = _fixture_pack()
     for q in _PRACTICE_QUERIES:
-        policy = resolve_retrieval_policy(q)
+        policy = resolve_task_policy(q)
         if policy.task_mode != "practice":
             fails.append(f"{q!r} classified {policy.task_mode}")
             continue
@@ -102,7 +102,7 @@ def main() -> int:
             if not ok:
                 fails.append(f"{q}: {name}")
     # 反向：explain 应放行
-    p = resolve_retrieval_policy("2019-Q11 为什么选 B？")
+    p = resolve_task_policy("2019-Q11 为什么选 B？")
     out, _ = apply_evidence_policy(fused, p)
     if not any(e.metadata.get("doc_role") == "exam_answer" for e in out.text_evidences):
         fails.append("explain should keep exam_answer")

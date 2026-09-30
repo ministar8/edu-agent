@@ -23,8 +23,8 @@ from rag.evidence_policy import (
     finalize_with_layer_ranking,
 )
 from rag.query_classifier import TEXT_ONLY_DEPTH
-from rag.retrieval_policy import resolve_retrieval_policy
 from rag.retriever import StageSink, aretrieve_evidence_with_retry
+from rag.task_policy import resolve_task_policy
 from rag.verifier import VerificationResult
 from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
 
@@ -231,14 +231,14 @@ async def _retrieve_payload(
         except Exception:
             context_mode = None
 
-    policy = resolve_retrieval_policy(
+    policy = resolve_task_policy(
         query,
         task_mode=task_mode,  # type: ignore[arg-type]
         context_mode=context_mode,  # type: ignore[arg-type]
         agent_prior=agent_prior,
     )
     # eligibility：召回阶段 where 前置（安全），与 Evidence Policy 双保险
-    from schema.retrieval_policy import merge_where_filters
+    from schema.task_policy import merge_where_filters
 
     recall_filter = merge_where_filters(None, policy.eligibility_where())
     # 多取候选 → layer 软加权 → 再截 top-k（否则 preferred 层进不了池）

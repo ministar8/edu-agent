@@ -29,10 +29,27 @@ Retriever → Rerank → Evidence Policy → Evidence Pack → LLM
 
 ---
 
+## 0. 术语收敛（M3）
+
+```
+Task Policy（任务决定目标）
+    → Retrieval Plan（目标生成检索计划）
+        → Evidence Policy（计划控制证据释放）
+```
+
+| 概念 | 模块 | 旧名（勿再用） |
+|---|---|---|
+| Task Policy | `schema/task_policy.py` · `rag/task_policy.py` | retrieval_policy |
+| Retrieval Plan | `rag/retrieval_plan.py` | retrieval_strategy |
+| Evidence Policy | `rag/evidence_policy.py` | — |
+| legacy_policy 字段 | `TaskPolicy.legacy_policy` | legacy_pool_policy |
+
+---
+
 ## 2. Schema（冻结）
 
 ```yaml
-retrieval_policy:
+task_policy:
   # —— 身份 ——
   task_mode: learn | method | practice | grade | explain | verify
   policy_version: "1.0"
@@ -42,7 +59,7 @@ retrieval_policy:
   preferred_layers: [basic | advanced | exams]   # 有序偏好，soft
   excluded_layers: []                            # 尽量空；硬排除见 eligibility
   # —— 资产质量/迁移状态（不是第四层）——
-  legacy_pool_policy: exclude | fallback | include
+  legacy_policy: exclude | fallback | include
 
   # —— 披露 ——
   answer_policy: hidden | released
@@ -75,7 +92,7 @@ retrieval_policy:
   cache_scope: "policy_v1"
 ```
 
-**类型建议**：`schema/retrieval_policy.py`（Pydantic）；非法组合构建时拒绝。
+**类型建议**：`schema/task_policy.py`（Pydantic）；非法组合构建时拒绝。
 
 ### 2.1 ★ `allow_question_id_leak` 语义（冻结）
 
@@ -137,7 +154,7 @@ release      answer_policy 等   → Pack 字段/题号
 | `exam_resources.question` | forbidden | forbidden | **forbidden** | allowed | allowed | **allowed** |
 | `exam_resources.answer` | forbidden | forbidden | **forbidden** | allowed | allowed | **forbidden** |
 | `exam_resources.paper` | forbidden | forbidden | **forbidden** | forbidden | **allowed** | forbidden |
-| `legacy_pool_policy` | exclude | exclude | exclude | fallback | fallback | exclude |
+| `legacy_policy` | exclude | exclude | exclude | fallback | fallback | exclude |
 | `answer_policy` | hidden | hidden | **hidden** | released | released | hidden |
 | `explanation_policy` | hidden | hidden | **hidden** | verified_only | released | hidden |
 | `related_exam_policy` | off | off | **off** | weak | strong | weak |
@@ -265,7 +282,7 @@ default = learn
 **同句多信号优先级**（在 context 之后）：`practice` > `grade` > `explain` > `verify` > `method` > 默认 `learn`  
 （「给我一道…并批改」→ practice；「2019-Q11 为什么选 B」→ explain。）
 
-**输出**：完整 `retrieval_policy` 对象，不是只输出 mode 字符串。
+**输出**：完整 `task_policy` 对象，不是只输出 mode 字符串。
 
 ### 4.2 ★ grade 的 preferred_layers（冻结）
 
@@ -309,7 +326,7 @@ grade
 
 ```text
 输入: user_query, conversation_hint(可选), agent_id(可选)
-输出: retrieval_policy
+输出: task_policy
 ```
 
 - supervisor 路由到的专家可提供 **prior**（knowledge→learn/method，question→practice，grading→grade/explain）  
@@ -357,8 +374,8 @@ tools._retrieve_payload → aretrieve_evidence_with_retry
 
 | 步骤 | 建议 |
 |---|---|
-| 1 | `schema/retrieval_policy.py` 定义模型 + 校验 |
-| 2 | `agents/retrieval_policy.py`：`build_policy(query, agent_prior) -> RetrievalPolicy` |
+| 1 | `schema/task_policy.py` 定义模型 + 校验 |
+| 2 | `agents/task_policy.py`：`build_policy(query, agent_prior) -> TaskPolicy` |
 | 3 | supervisor/handoff 时把 policy 写入 **state** 或 tool `config` |
 | 4 | `tools._retrieve_payload` 读 policy，拆成 retriever 参数 |
 | 5 | Evidence Policy 消费 `answer_policy` 等，产出 Pack + flags |
@@ -422,7 +439,7 @@ experiment.v1 / v2 …  只能动「排序与计算」
 | KP 单跳加权强度 | 排序 |
 
 > ★ `legacy` **不是知识层**，不得进 `layer_weight`。它是资产质量/迁移状态，
-> 由 `legacy_pool_policy`（exclude/fallback/include）管入池，见 §2。
+> 由 `legacy_policy`（exclude/fallback/include）管入池，见 §2。
 
 | **不能改** | 说明 |
 |---|---|

@@ -72,7 +72,7 @@ SHALLOW_DEPTH = RetrievalDepth(
 STANDARD_DEPTH = RetrievalDepth(
     depth="standard",
     k=5,
-    # ★ standard 的唯一配置。此前 retrieval_strategy 维护了一份副本，两者只有
+    # ★ standard 的唯一配置。此前 retrieval_plan 维护了一份副本，两者只有
     # `skip_kg` 相反（该字段已随 KG 遗留移除），造成「分类推导的 standard」与
     # 「策略解析出的 standard」行为不一致 —— 现在只有这一处真源。
     max_metadata_routes=2,

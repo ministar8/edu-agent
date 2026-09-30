@@ -85,8 +85,8 @@ DEFAULT_BASELINE_PATH = "evals/stage_baseline.json"
 
 # (阶段标签, rag.retriever 上的属性名)。顺序仅用于展示。
 STAGE_TARGETS: tuple[tuple[str, str], ...] = (
-    ("resolve_strategy", "resolve_retrieval_strategy"),
-    ("resolve_policy", "_resolve_retrieval_policy"),
+    ("resolve_strategy", "resolve_retrieval_plan"),
+    ("resolve_policy", "_resolve_thresholds"),
     ("decompose", "decompose"),
     ("recall_multi_route_async", "_amulti_route_search"),
     # RRF 融合有**两个入口**，此前只追踪了分解用的那个，导致主 RRF 成为观测盲区：

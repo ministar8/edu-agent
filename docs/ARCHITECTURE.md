@@ -156,9 +156,9 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 
 ### 4.2 检索链的规模问题（已知，诚实记录）
 
-`retriever.py` 有 **1,968 行 / 32 个顶层函数**，但真正属于「门面」的只有 4 个：
-`retrieve_documents` / `aretrieve_documents` / `aretrieve_evidence` / `aretrieve_evidence_with_retry`。
-其余是阶段函数与内部工具。
+`retriever.py` 有 **1,900+ 行 / 30+ 个顶层函数**，但真正属于「门面」的只有 3 个：
+`aretrieve_documents` / `aretrieve_evidence` / `aretrieve_evidence_with_retry`
+（同步入口 `retrieve_documents` 已删除，预热直接驱动 async）。其余是阶段函数与内部工具。
 
 **职责归属存在错位**：`_stage_hyde` 有 116 行在 `retriever.py` 里，而专门的 `hyde.py` 只有 58 行。
 这是「先跑通、后整理」留下的形态，**不影响正确性，但影响可读性**。

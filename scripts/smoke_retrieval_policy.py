@@ -13,10 +13,10 @@ from rag.evidence_policy import (  # noqa: E402
     apply_evidence_policy,
     finalize_with_layer_ranking,
 )
-from rag.retrieval_policy import (  # noqa: E402
+from rag.task_policy import (  # noqa: E402
     classify_task_mode,
     policy_for_mode,
-    resolve_retrieval_policy,
+    resolve_task_policy,
 )
 
 
@@ -69,7 +69,7 @@ def test_policy_leak() -> None:
     )
 
     # practice：禁答案、禁题号、禁 exam_answer
-    p = resolve_retrieval_policy("给我一道 BST 练习题")
+    p = resolve_task_policy("给我一道 BST 练习题")
     assert p.task_mode == "practice", p.task_mode
     out, flags = apply_evidence_policy(fused, p)
     texts = " ".join(e.content for e in out.text_evidences)
@@ -88,7 +88,7 @@ def test_policy_leak() -> None:
         print(f"  {name}: {'OK' if ok else 'FAIL'}")
 
     # explain：应保留答案与题
-    p2 = resolve_retrieval_policy("2019-Q11 为什么选 B？")
+    p2 = resolve_task_policy("2019-Q11 为什么选 B？")
     out2, flags2 = apply_evidence_policy(fused, p2)
     meta2 = str([e.metadata for e in out2.text_evidences])
     print("[explain]", flags2)
@@ -111,7 +111,7 @@ def test_legacy_drop() -> None:
         "verify": "exclude",
     }
     for mode, want in expect_pool.items():
-        got = policy_for_mode(mode).legacy_pool_policy  # type: ignore[arg-type]
+        got = policy_for_mode(mode).legacy_policy  # type: ignore[arg-type]
         print(f"  legacy_pool[{mode}]={got} want={want} {'OK' if got == want else 'FAIL'}")
 
     def _ev(eid: str, layer: str | None, score: float) -> TextEvidence:
@@ -139,8 +139,8 @@ def test_legacy_drop() -> None:
         ],
         final_context="raw",
     )
-    p = resolve_retrieval_policy("给我一道 BST 练习题")
-    assert p.legacy_pool_policy == "exclude", p.legacy_pool_policy
+    p = resolve_task_policy("给我一道 BST 练习题")
+    assert p.legacy_policy == "exclude", p.legacy_policy
 
     out = finalize_with_layer_ranking(fused, p, keep=5)
     layers = [str((e.metadata or {}).get("kb_depth") or "") for e in out.text_evidences]
@@ -166,7 +166,7 @@ def test_legacy_drop() -> None:
         final_context="raw",
     )
     p_fb = policy_for_mode("explain")
-    assert p_fb.legacy_pool_policy == "fallback", p_fb.legacy_pool_policy
+    assert p_fb.legacy_policy == "fallback", p_fb.legacy_policy
     out_fb = finalize_with_layer_ranking(fused_fb, p_fb, keep=3)
     layers_fb = [str((e.metadata or {}).get("kb_depth") or "") for e in out_fb.text_evidences]
     lp_fb = (out_fb.metadata or {}).get("layer_pack") or {}

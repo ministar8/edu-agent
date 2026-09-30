@@ -10,12 +10,6 @@ from schema.models import (
     parse_model_ref,
 )
 from schema.questions import GradeRequest, GradeResponse, QuestionRequest, QuestionResponse
-from schema.retrieval_policy import (
-    ExamResources,
-    LayerWeightProfile,
-    RetrievalPolicy,
-    TaskMode,
-)
 from schema.schema import (
     AgentInfo,
     ChatHistory,
@@ -28,6 +22,12 @@ from schema.schema import (
     UserInput,
     UserThreads,
     UserThreadsInput,
+)
+from schema.task_policy import (
+    ExamResources,
+    LayerWeightProfile,
+    TaskMode,
+    TaskPolicy,
 )
 
 __all__ = [
@@ -47,7 +47,7 @@ __all__ = [
     "QuestionRequest",
     "QuestionResponse",
     "RegisterRequest",
-    "RetrievalPolicy",
+    "TaskPolicy",
     "RetrievalResult",
     "ExamResources",
     "LayerWeightProfile",

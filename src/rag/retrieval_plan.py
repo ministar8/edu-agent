@@ -53,7 +53,7 @@ def strategy_from_depth(depth: RetrievalDepth) -> RetrievalStrategy:
     return RetrievalStrategy(layer="L3", route_type="l3_custom", depth=depth)
 
 
-def resolve_retrieval_strategy(
+def resolve_retrieval_plan(
     cat: QueryCategory, depth: RetrievalDepth | None = None
 ) -> RetrievalStrategy:
     return strategy_from_depth(depth or resolve_retrieval_depth(cat))

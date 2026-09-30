@@ -30,7 +30,7 @@ from langgraph.prebuilt.tool_node import msg_content_output  # noqa: E402
 
 from rag.evidence import FusedEvidence, TextEvidence  # noqa: E402
 from rag.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking  # noqa: E402
-from rag.retrieval_policy import policy_for_mode, resolve_retrieval_policy  # noqa: E402
+from rag.task_policy import policy_for_mode, resolve_task_policy  # noqa: E402
 from schema.evidence import RetrievalResult  # noqa: E402
 
 # —— 泄漏面（与 leakage_gate 对齐）——
@@ -315,7 +315,7 @@ async def run_live() -> list[str]:
         fails += check_structure(payload, label)
         fails += check_empty_and_error(payload, label)
 
-        actual_mode = resolve_retrieval_policy(q, agent_prior=mode).task_mode
+        actual_mode = resolve_task_policy(q, agent_prior=mode).task_mode
         fails += check_disclosure(payload, actual_mode, label)
         fails += check_layer_notes(payload, label)
         print(

@@ -4,7 +4,7 @@
 L1/L2/L3 单独 `where kb_depth=…` 能命中，但进不了最终候选池。
 
 策略（非权重）：
-对 policy.preferred_layers 各做一次定向召回，合并进 FusedEvidence，
+对 preferred_layers 各做一次定向召回，合并进 FusedEvidence，
 保证目标层**至少进入候选池**，再由 layer ranking / Evidence Policy 决策。
 """
 
@@ -14,7 +14,6 @@ import logging
 
 from rag.evidence import FusedEvidence, TextEvidence
 from rag.topic_relevance import is_topic_relevant, topic_relevance_score
-from schema.retrieval_policy import RetrievalPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +46,7 @@ def _doc_to_evidence(doc, score: float, collection: str) -> TextEvidence:
 
 async def topup_preferred_layers(
     query: str,
-    policy: RetrievalPolicy,
+    preferred_layers: list[str],
     fused: FusedEvidence,
     *,
     per_layer: int = 2,
@@ -59,7 +58,7 @@ async def topup_preferred_layers(
     - 每层每集合最多 per_layer，总新增 ≤ max_add
     - 按 score 截断，避免无关 advanced 灌满 pack
     """
-    preferred = list(policy.preferred_layers or [])
+    preferred = list(preferred_layers or [])
     if not preferred:
         return fused
 

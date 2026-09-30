@@ -197,7 +197,8 @@ def _capture():
     「召回池 19 条 → 同section去重后 63 条」这种**条数反而变多**的反常。
     故用两个开关把内部漏斗限定在各自的外层阶段内。
     """
-    import rag.retriever as R
+    # M1 拆分后阶段函数在 rag.pipeline；挂在 pipeline 上才能拦住真实调用
+    import rag.pipeline as R
 
     events: list[tuple[str, Any]] = []
     plan_box: dict[str, Any] = {}

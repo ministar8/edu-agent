@@ -19,9 +19,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from rag.evidence_policy import apply_evidence_policy  # noqa: E402
-from rag.retrieval_policy import resolve_retrieval_policy  # noqa: E402
 from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
-from schema.retrieval_policy import LayerWeightProfile  # noqa: E402
+from rag.task_policy import resolve_task_policy  # noqa: E402
+from schema.task_policy import LayerWeightProfile  # noqa: E402
 
 # 与 layer_policy_experiment 固定 probe 一致
 TARGETS = [
@@ -89,7 +89,7 @@ def apply_v1(fused, policy, keep=8):
 
 async def analyze_one(p: dict) -> dict:
     q, want = p["q"], set(p["want_layers"])
-    policy = resolve_retrieval_policy(q)
+    policy = resolve_task_policy(q)
     where = policy.eligibility_where()
     raw, _ = await aretrieve_evidence_with_retry(
         query=q,

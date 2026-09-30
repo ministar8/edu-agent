@@ -31,7 +31,7 @@ GraphExpansion = Literal["disabled"]
 #   fallback = 主池不足时才补入（grade/explain，需要旧题库对照）
 #   include  = 与主池同等入池（调试/特殊场景）
 # 不做 downrank —— 调权重治不了数据治理问题。
-LegacyPoolPolicy = Literal["exclude", "fallback", "include"]
+LegacyPolicy = Literal["exclude", "fallback", "include"]
 RetrievalDepthName = Literal["shallow", "standard", "deep", "code", "text_only"]
 
 # 语义知识层全集（L1/L2/L3）。legacy **不在**此列。
@@ -56,7 +56,7 @@ class ExamResources(BaseModel):
         return getattr(self, resource) == "allowed"
 
 
-class RetrievalPolicy(BaseModel):
+class TaskPolicy(BaseModel):
     """一次检索的完整策略对象（唯一策略真源）。"""
 
     # —— 身份 ——
@@ -68,7 +68,7 @@ class RetrievalPolicy(BaseModel):
     preferred_layers: list[LayerName] = Field(default_factory=_default_preferred_layers)
     excluded_layers: list[LayerName] = Field(default_factory=list)
     # 资产质量/迁移状态（fallback 池策略），**不是**层权重
-    legacy_pool_policy: LegacyPoolPolicy = "fallback"
+    legacy_policy: LegacyPolicy = "fallback"
 
     # —— L3 资源资格 ——
     exam_resources: ExamResources = Field(default_factory=ExamResources)
@@ -93,7 +93,7 @@ class RetrievalPolicy(BaseModel):
     cache_scope: str = CACHE_SCOPE
 
     @model_validator(mode="after")
-    def _check_safety_invariants(self) -> RetrievalPolicy:
+    def _check_safety_invariants(self) -> TaskPolicy:
         """非法组合在构建时拒绝（见 RETRIEVAL_POLICY.md §3.3）。"""
         mode = self.task_mode
         ar = self.exam_resources
@@ -214,7 +214,7 @@ class LayerWeightProfile(BaseModel):
 
     ★ 白名单：只允许排序/计算相关字段；安全字段出现即拒绝。
     ★ layer_weights 的键**只能是语义层**（basic/advanced/exams）——
-      legacy 是资产质量/迁移状态，用 `legacy_pool_policy` 管，不进权重表。
+      legacy 是资产质量/迁移状态，用 `legacy_policy` 管，不进权重表。
     """
 
     name: str = "default"
@@ -248,7 +248,7 @@ class LayerWeightProfile(BaseModel):
         if bad:
             raise ValueError(
                 f"layer_weights 只含语义层 {SEMANTIC_LAYERS}，不得包含 {sorted(bad)}"
-                "（legacy 是资产质量，用 legacy_pool_policy 管）"
+                "（legacy 是资产质量，用 legacy_policy 管）"
             )
         return self
 

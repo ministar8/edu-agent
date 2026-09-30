@@ -25,9 +25,9 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from rag.evidence import FusedEvidence  # noqa: E402
 from rag.evidence_policy import apply_evidence_policy  # noqa: E402
-from rag.retrieval_policy import resolve_retrieval_policy  # noqa: E402
 from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
-from schema.retrieval_policy import LayerWeightProfile  # noqa: E402
+from rag.task_policy import resolve_task_policy  # noqa: E402
+from schema.task_policy import LayerWeightProfile  # noqa: E402
 
 OUT_DIR = ROOT / "evals" / "results" / "layer_policy"
 
@@ -72,7 +72,7 @@ FIXED_PROBES = [
 ]
 
 # ★ 固定 profile：只动**语义层**排序系数（legacy 是资产状态，不进权重表）
-#   安全字段见 schema 校验，禁止写入；legacy 池策略由 legacy_pool_policy 管
+#   安全字段见 schema 校验，禁止写入；legacy 池策略由 legacy_policy 管
 PROFILES: dict[str, LayerWeightProfile] = {
     "v0": LayerWeightProfile(
         name="v0",
@@ -143,7 +143,7 @@ def apply_profile_weights(
 async def run_probe(probe: dict, profile: LayerWeightProfile) -> ProbeMetrics:
     q = probe["q"]
     want = set(probe["want_layers"])
-    policy = resolve_retrieval_policy(q)
+    policy = resolve_task_policy(q)
     where = policy.eligibility_where()
 
     raw, _ = await aretrieve_evidence_with_retry(

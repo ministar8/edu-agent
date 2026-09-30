@@ -25,8 +25,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from rag.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking  # noqa: E402
-from rag.retrieval_policy import resolve_retrieval_policy  # noqa: E402
 from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.task_policy import resolve_task_policy  # noqa: E402
 
 BASELINE_PATH = ROOT / "evals" / "policy_layer_evidence_baseline.json"
 
@@ -92,7 +92,7 @@ def _role(m: dict) -> str:
 
 async def probe_one(p: dict) -> dict:
     q, want_mode = p["q"], p["mode"]
-    policy = resolve_retrieval_policy(q)
+    policy = resolve_task_policy(q)
     mode = policy.task_mode
     where = policy.eligibility_where()
 
@@ -129,9 +129,9 @@ async def probe_one(p: dict) -> dict:
     )
     # 5) legacy 是资产状态不是层：
     #    exclude 模式 pack 内不得有 legacy；fallback 补入必须显式可查
-    if policy.legacy_pool_policy == "exclude":
+    if policy.legacy_policy == "exclude":
         checks["exclude_no_legacy"] = "legacy" not in pack_layers
-    if policy.legacy_pool_policy == "fallback":
+    if policy.legacy_policy == "fallback":
         used_fb = int(layer_pack.get("used_fallback") or 0)
         n_legacy_in_pack = pack_layers.count("legacy")
         checks["fallback_count_consistent"] = used_fb == n_legacy_in_pack or used_fb == 0
@@ -169,7 +169,7 @@ async def probe_one(p: dict) -> dict:
         "pack_roles": pack_roles,
         "n_pool": len(pool_layers),
         "n_pack": len(pack_layers),
-        "legacy_pool_policy": policy.legacy_pool_policy,
+        "legacy_policy": policy.legacy_policy,
         "layer_pack": layer_pack,
     }
 
@@ -213,7 +213,7 @@ async def main() -> int:
         bad = [k for k, v in r["checks"].items() if not v]
         lp = r.get("layer_pack") or {}
         note = ""
-        if r.get("legacy_pool_policy") == "exclude":
+        if r.get("legacy_policy") == "exclude":
             note = f" dropped={lp.get('dropped_legacy', 0)}"
         elif lp.get("used_fallback"):
             note = f" fallback={lp.get('used_fallback')}"
