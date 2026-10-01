@@ -51,13 +51,18 @@ def _git(*args: str) -> str:
         return ""
 
 
+# 判定「代码是否被改动」的范围。
+# ★ 只看代码/配置，**不看结果归档** —— 否则「刚跑完实验、归档尚未提交」会被误判成
+#   `-dirty`，把「代码有未提交改动」这个真正危险的信号淹没在噪声里。
+CODE_PATHS: tuple[str, ...] = ("src", "scripts", "pyproject.toml", ".env.example")
+
+
 def code_version() -> str:
-    """``<short-sha>``，工作区脏时加 ``-dirty``；git 不可用返回 ``unknown``。"""
+    """``<short-sha>``，**代码目录**有未提交改动时加 ``-dirty``；git 不可用返回 ``unknown``。"""
     sha = _git("rev-parse", "--short", "HEAD")
     if not sha:
         return "unknown"
-    # `--porcelain` 有输出 = 有未提交改动（含未跟踪文件）→ 结果不可用 SHA 唯一复现
-    if _git("status", "--porcelain"):
+    if _git("status", "--porcelain", "--", *CODE_PATHS):
         return f"{sha}-dirty"
     return sha
 
