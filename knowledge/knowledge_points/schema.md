@@ -180,6 +180,6 @@ choice | fill | calculation | comprehensive | code | design
 |---|---|
 | `scripts/gen_kp_skeleton.py` | 骨架生成（可重跑覆盖） |
 | `docs/KP_SKELETON.md` | 人读树（与 jsonl 同步） |
-| `docs/KB_DESIGN.md` | 知识库总设计 |
+| `docs/KB_MASTER_DESIGN.md` | 知识库总册 |
 
 **Coverage Test**：用 2009–2025 真题反向锚定；未命中记 GAP，禁止硬贴最近节点。

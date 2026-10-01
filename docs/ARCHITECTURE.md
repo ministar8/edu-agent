@@ -15,8 +15,8 @@
 
 | 主线 | 内容 | 代码位置 | 规模 |
 |---|---|---|---|
-| **A. 检索增强（论文核心）** | 8 阶段检索链：把 41 篇知识文档变成**可溯源、可评测**的证据 | `src/rag/` | 11,003 行 |
-| **B. 多 Agent 编排** | 1 个 supervisor + 3 个专家，按意图分派并闭环 | `src/agents/` | 943 行 |
+| **A. 检索增强（论文核心）** | 8 阶段检索链：把知识库文档变成**可溯源、可评测**的证据 | `src/rag/` | 12,177 行 |
+| **B. 多 Agent 编排** | 1 个 supervisor + 3 个专家，按意图分派并闭环 | `src/agents/` | 1,259 行 |
 
 **为什么这两条都要有**：单纯 RAG 只能「查了再答」，无法处理「给我出 5 道题」「帮我改这道题」这类
 **有副作用的请求**；单纯多 Agent 没有可靠的知识底座，会退化成「让大模型凭记忆讲 408」。
@@ -141,8 +141,10 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 | 7 | `hyde` | `_stage_hyde` | HyDE：用假设性答案补召回 |
 | 8 | `expand` | `_stage_expand_windows` | 窗口扩展：补回被切碎的上下文 |
 
-阶段顺序在 `retriever.py:1503-1579` 由 `_emit_stage(...)` 显式标注，**可被 SSE 实时上报**
-（`StageSink`），所以前端能看到「正在重排」这类中间状态。
+阶段顺序在 `pipeline.py` 的 `aretrieve_evidence()` 内由 `_emit_stage(...)` 显式标注
+（8 次调用，**可被 SSE 实时上报**，`StageSink`），所以前端能看到「正在重排」这类中间状态。
+> 注：M1 拆分后阶段函数已从 `retriever.py` 移入 `pipeline.py`；入口仍是
+> `rag.retriever.aretrieve_evidence_with_retry`（门面）。
 
 ### 4.1 输出：`FusedEvidence`
 

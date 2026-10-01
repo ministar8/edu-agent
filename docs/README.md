@@ -12,7 +12,6 @@
 | `BASIC_DESIGN.md` | L1 细节 | 写/改 Basic |
 | `ADVANCED_DESIGN.md` | L2 细节 | 写/改 Advanced |
 | `EXAMS_DESIGN.md` | L3 细节（D0–D6 决策） | 写/改 Exams |
-| `KB_DESIGN.md` | 早期总图（与总册冲突以总册为准） | 历史对照 |
 | `ARCHITECTURE.md` | 分层与调用链（L0~L3 分层、检索/生成/护栏） | 理解系统结构 |
 | **`ARCHITECTURE_RETRIEVAL.md`** | **检索架构总览（as-built）+ 术语表 + 模块索引 + 已知局限** | **写论文第 3 章 / 定位代码** |
 | **`RETRIEVAL_PLAN.md`** | **当前执行方案**（Step 1~6 + 实测数据 + 已否决项） | **动手改检索前** |
@@ -35,14 +34,21 @@
 |---|---|
 | `python -m evaluation.telemetry_report` | 把 `data/metrics/rag_metrics.jsonl` 聚合成人可读报表：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、分层/路由分布、入库交叉校验。**只读、无基线、无判定** —— 退出码只用于「读不到日志」。★ 两条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源，实测 **99.4% 是评测流量** ⇒ 它回答的是「管线各层在黄金集上的行为分布」，**不是**线上统计；② 日志**混了多个代码版本**，必须用 `--since` / `--until` 把窗口钉到单一版本（实测 `generate` 过阈率在 09-27 15:00 前后 0.075 → 0.187），否则读到的是**混合口径**。`--output <path>` 可把 JSON 落盘归档（建议 `evals/results/`） |
 
-## 评测产物
+## 评测产物（`evals/results/`）
 
-`evals/results/` 下有两类，都是**证据**，不要随意清理：
+都是**证据**，不要随意清理。所有归档 JSON **自带 `provenance`**
+（`code_version` / `golden_sha256` / `script` / `argv`），可从论文数字反查到代码版本。
 
-1. `ragas_*.json` —— **付费**的 RAGAS 答案级评测结果（含时间戳，可当基线用，避免为跑「before」再付费）；
-2. `step*_*/` —— 各轮检索改动的**免费门禁验证证据**（门禁 / 探针 / 诊断日志 + 产生它们的脚本原文）。
-   每个目录有自己的 `README.md`，写明背景、关键数字与「读日志时要知道的事」。
+| 路径 | 内容 |
+|---|---|
+| `retrieval/ablation/` | 组件消融 · 重排对照 · Task-aware · 基础 RAG · 方差 · 阈值敏感度 · L2 归因 |
+| `retrieval/layer_policy/` | L1/L2/L3 分层消融 · Task × Layer 交互矩阵 |
+| `retrieval/legacy_runtime/` | legacy 三策略 |
+| `generation/ragas/` | `raw.jsonl` 逐样本 · `metrics.json` 汇总 · `summary.md` 结论 |
+| `system_validation/` | Agent 行为 · LangGraph State 闭环 |
+| `../baselines/` | 门禁基线（`retrieval_baseline.json` 等），门禁运行时即时比对 |
 
-> ★ 这些目录里的 `*.log` 由 `.gitignore` 的**例外规则** `!evals/results/**/*.log` 放行
-> （`*.log` 会静默拦截它们）；`scripts/*.py` 则被 pre-commit 的 ruff 钩子 **排除**
-> （`exclude: ^evals/`）—— 归档脚本是证据，不该被会改写文件的钩子重排。
+> 目录清单与命名约定的说明见 `evals/results/README.md`；实验数字与解读见 `docs/EXPERIMENTS.md`。
+> 归档脚本落在 `scripts/`，由 pre-commit 的 ruff 钩子正常检查。
+> （`.pre-commit-config.yaml` 的 `exclude: ^evals/` 仍保留，服务 `baselines/` 与 `datasets/`
+> 这类**输入**；`.gitignore` 的 `!evals/results/**/*.log` 例外当前已无匹配文件。）

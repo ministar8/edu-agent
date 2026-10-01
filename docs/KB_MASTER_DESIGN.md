@@ -2,7 +2,7 @@
 
 > 状态：**定稿整合**（2026-09-28）  
 > 范围：L1 Basic + KP + L2 Advanced + L3 Exams + links + gap inventory  
-> 分册：`BASIC_DESIGN.md` / `ADVANCED_DESIGN.md` / `EXAMS_DESIGN.md` / `KB_DESIGN.md`（细节以分册为准，冲突以本总册冻结结论为准）  
+> 分册：`BASIC_DESIGN.md` / `ADVANCED_DESIGN.md` / `EXAMS_DESIGN.md`（细节以分册为准，冲突以本总册冻结结论为准）  
 > 学习路径：独立库，本册只定接口，不在本期落地。
 
 ---
@@ -397,6 +397,5 @@ knowledge/
 | `BASIC_DESIGN.md` | L1 细节 |
 | `ADVANCED_DESIGN.md` | L2 细节 |
 | `EXAMS_DESIGN.md` | L3 细节（D0–D6） |
-| `KB_DESIGN.md` | 早期总图（以本册为准） |
 | `knowledge/rules/*` | 写作/切分/元数据/门禁规则 |
 | `knowledge/schema/*` | JSON Schema |
