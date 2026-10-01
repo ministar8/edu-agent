@@ -1,0 +1,2819 @@
+{
+  "recorded_at": "20261001_162808",
+  "queries": {
+    "learn": [
+      "什么是二叉排序树？",
+      "什么是死锁？",
+      "进程和线程的区别是什么？",
+      "Cache 的映射方式有哪些？",
+      "TCP 三次握手的过程是什么？",
+      "什么是虚拟存储器？"
+    ],
+    "method": [
+      "BST 删除时双支结点怎么处理？",
+      "如何用银行家算法避免死锁？",
+      "页面置换算法 LRU 怎么实现？",
+      "Dijkstra 算法的步骤是什么？",
+      "如何判断一个二叉树是平衡二叉树？",
+      "TCP 拥塞控制怎么实现？"
+    ],
+    "practice": [
+      "给我一道死锁练习题",
+      "来一道 BST 删除的练习题",
+      "出一道进程同步的题目",
+      "给一道 Cache 映射的练习"
+    ],
+    "grade": [
+      "请批改我对「进程死锁四个必要条件」的回答：互斥、占有并等待、不可剥夺、循环等待",
+      "批改我的答案：TCP 三次握手是 SYN、SYN+ACK、ACK",
+      "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改"
+    ],
+    "explain": [
+      "2019-Q2 为什么树的后根遍历对应二叉树的中序？",
+      "2019-Q11 为什么选 B？请详细解析",
+      "2020-Q2 这道题的解题思路是什么？"
+    ],
+    "verify": [
+      "BST 删除考过哪些真题？",
+      "死锁在历年真题中出现过吗？",
+      "Cache 映射方式考过几次？"
+    ]
+  },
+  "config_snapshot": {
+    "design": "Task Mode × Layer Policy（交互矩阵）",
+    "frozen": [
+      "exam_resources",
+      "answer_policy",
+      "explanation_policy",
+      "legacy_policy"
+    ],
+    "varied": "preferred_layers only",
+    "layer_policies": {
+      "flat": {
+        "preferred": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "note": "全层平铺，无任务区分"
+      },
+      "ours": {
+        "preferred": "task_mapping",
+        "note": "task_mode → preferred_layers（系统默认）"
+      },
+      "prefer_l1": {
+        "preferred": [
+          "basic"
+        ],
+        "note": "全局软偏好 L1 basic"
+      },
+      "prefer_l2": {
+        "preferred": [
+          "advanced"
+        ],
+        "note": "全局软偏好 L2 advanced"
+      },
+      "prefer_l3": {
+        "preferred": [
+          "exams"
+        ],
+        "note": "全局软偏好 L3 exams"
+      }
+    },
+    "task_target_layer": {
+      "learn": [
+        "basic"
+      ],
+      "method": [
+        "advanced"
+      ],
+      "practice": [
+        "advanced",
+        "exams"
+      ],
+      "grade": [
+        "exams"
+      ],
+      "explain": [
+        "exams"
+      ],
+      "verify": [
+        "exams"
+      ]
+    }
+  },
+  "results": {
+    "flat": {
+      "note": "全层平铺，无任务区分",
+      "macro_layer_hit": 0.9444,
+      "by_mode": {
+        "learn": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.5833,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.5,
+          "target_layers": [
+            "basic"
+          ]
+        },
+        "method": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.6056,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 3.5,
+          "target_layers": [
+            "advanced"
+          ]
+        },
+        "practice": {
+          "n": 4,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.5417,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 3.25,
+          "target_layers": [
+            "advanced",
+            "exams"
+          ]
+        },
+        "grade": {
+          "n": 3,
+          "layer_hit_rate": 0.6667,
+          "layer_precision_pack": 0.2,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 5.0,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "explain": {
+          "n": 3,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.3778,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.33,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "verify": {
+          "n": 3,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.3333,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.0,
+          "target_layers": [
+            "exams"
+          ]
+        }
+      }
+    },
+    "ours": {
+      "note": "task_mode → preferred_layers（系统默认）",
+      "macro_layer_hit": 0.9444,
+      "by_mode": {
+        "learn": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.5833,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.5,
+          "target_layers": [
+            "basic"
+          ]
+        },
+        "method": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.6056,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 3.5,
+          "target_layers": [
+            "advanced"
+          ]
+        },
+        "practice": {
+          "n": 4,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.5417,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 3.25,
+          "target_layers": [
+            "advanced",
+            "exams"
+          ]
+        },
+        "grade": {
+          "n": 3,
+          "layer_hit_rate": 0.6667,
+          "layer_precision_pack": 0.2667,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.67,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "explain": {
+          "n": 3,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.3778,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.33,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "verify": {
+          "n": 3,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.4167,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.0,
+          "target_layers": [
+            "exams"
+          ]
+        }
+      }
+    },
+    "prefer_l1": {
+      "note": "全局软偏好 L1 basic",
+      "macro_layer_hit": 0.3472,
+      "by_mode": {
+        "learn": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 1.0,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 1.17,
+          "target_layers": [
+            "basic"
+          ]
+        },
+        "method": {
+          "n": 6,
+          "layer_hit_rate": 0.5,
+          "layer_precision_pack": 0.2639,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.0,
+          "target_layers": [
+            "advanced"
+          ]
+        },
+        "practice": {
+          "n": 4,
+          "layer_hit_rate": 0.25,
+          "layer_precision_pack": 0.125,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.25,
+          "target_layers": [
+            "advanced",
+            "exams"
+          ]
+        },
+        "grade": {
+          "n": 3,
+          "layer_hit_rate": 0.0,
+          "layer_precision_pack": 0.0,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.0,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "explain": {
+          "n": 3,
+          "layer_hit_rate": 0.3333,
+          "layer_precision_pack": 0.1333,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.0,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "verify": {
+          "n": 3,
+          "layer_hit_rate": 0.0,
+          "layer_precision_pack": 0.0,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.0,
+          "target_layers": [
+            "exams"
+          ]
+        }
+      }
+    },
+    "prefer_l2": {
+      "note": "全局软偏好 L2 advanced",
+      "macro_layer_hit": 0.5278,
+      "by_mode": {
+        "learn": {
+          "n": 6,
+          "layer_hit_rate": 0.8333,
+          "layer_precision_pack": 0.5,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.17,
+          "target_layers": [
+            "basic"
+          ]
+        },
+        "method": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.9667,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.33,
+          "target_layers": [
+            "advanced"
+          ]
+        },
+        "practice": {
+          "n": 4,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 1.0,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 1.75,
+          "target_layers": [
+            "advanced",
+            "exams"
+          ]
+        },
+        "grade": {
+          "n": 3,
+          "layer_hit_rate": 0.0,
+          "layer_precision_pack": 0.0,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.67,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "explain": {
+          "n": 3,
+          "layer_hit_rate": 0.3333,
+          "layer_precision_pack": 0.1333,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.0,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "verify": {
+          "n": 3,
+          "layer_hit_rate": 0.0,
+          "layer_precision_pack": 0.0,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.33,
+          "target_layers": [
+            "exams"
+          ]
+        }
+      }
+    },
+    "prefer_l3": {
+      "note": "全局软偏好 L3 exams",
+      "macro_layer_hit": 0.9444,
+      "by_mode": {
+        "learn": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.5833,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.5,
+          "target_layers": [
+            "basic"
+          ]
+        },
+        "method": {
+          "n": 6,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.6056,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 3.5,
+          "target_layers": [
+            "advanced"
+          ]
+        },
+        "practice": {
+          "n": 4,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.5417,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 3.25,
+          "target_layers": [
+            "advanced",
+            "exams"
+          ]
+        },
+        "grade": {
+          "n": 3,
+          "layer_hit_rate": 0.6667,
+          "layer_precision_pack": 0.2667,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.0,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "explain": {
+          "n": 3,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 0.3778,
+          "leakage_rate": null,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 4.33,
+          "target_layers": [
+            "exams"
+          ]
+        },
+        "verify": {
+          "n": 3,
+          "layer_hit_rate": 1.0,
+          "layer_precision_pack": 1.0,
+          "leakage_rate": 0.0,
+          "pack_nonempty_rate": 1.0,
+          "mean_n_pack": 2.0,
+          "target_layers": [
+            "exams"
+          ]
+        }
+      }
+    }
+  },
+  "rows": {
+    "flat": [
+      {
+        "query": "什么是二叉排序树？",
+        "mode": "learn",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是死锁？",
+        "mode": "learn",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "basic",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "进程和线程的区别是什么？",
+        "mode": "learn",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 的映射方式有哪些？",
+        "mode": "learn",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 三次握手的过程是什么？",
+        "mode": "learn",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是虚拟存储器？",
+        "mode": "learn",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "BST 删除时双支结点怎么处理？",
+        "mode": "method",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何用银行家算法避免死锁？",
+        "mode": "method",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "页面置换算法 LRU 怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Dijkstra 算法的步骤是什么？",
+        "mode": "method",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何判断一个二叉树是平衡二叉树？",
+        "mode": "method",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 5,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 拥塞控制怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给我一道死锁练习题",
+        "mode": "practice",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "来一道 BST 删除的练习题",
+        "mode": "practice",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "出一道进程同步的题目",
+        "mode": "practice",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给一道 Cache 映射的练习",
+        "mode": "practice",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "请批改我对「进程死锁四个必要条件」的回答：互斥、占有并等待、不可剥夺、循环等待",
+        "mode": "grade",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "exams",
+          "exams",
+          "basic",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "批改我的答案：TCP 三次握手是 SYN、SYN+ACK、ACK",
+        "mode": "grade",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "exams",
+          "basic",
+          "advanced",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改",
+        "mode": "grade",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q2 为什么树的后根遍历对应二叉树的中序？",
+        "mode": "explain",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "exams",
+          "exams",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q11 为什么选 B？请详细解析",
+        "mode": "explain",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 3,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2020-Q2 这道题的解题思路是什么？",
+        "mode": "explain",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "BST 删除考过哪些真题？",
+        "mode": "verify",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "死锁在历年真题中出现过吗？",
+        "mode": "verify",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 映射方式考过几次？",
+        "mode": "verify",
+        "layer_policy_id": "flat",
+        "preferred_layers": [
+          "basic",
+          "advanced",
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "exams",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      }
+    ],
+    "ours": [
+      {
+        "query": "什么是二叉排序树？",
+        "mode": "learn",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "basic",
+          "advanced"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是死锁？",
+        "mode": "learn",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "basic",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "basic",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "进程和线程的区别是什么？",
+        "mode": "learn",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "basic",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 的映射方式有哪些？",
+        "mode": "learn",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "basic",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 三次握手的过程是什么？",
+        "mode": "learn",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "basic",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是虚拟存储器？",
+        "mode": "learn",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "basic",
+          "advanced"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "BST 删除时双支结点怎么处理？",
+        "mode": "method",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何用银行家算法避免死锁？",
+        "mode": "method",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "页面置换算法 LRU 怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Dijkstra 算法的步骤是什么？",
+        "mode": "method",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何判断一个二叉树是平衡二叉树？",
+        "mode": "method",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 5,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 拥塞控制怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给我一道死锁练习题",
+        "mode": "practice",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "来一道 BST 删除的练习题",
+        "mode": "practice",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "出一道进程同步的题目",
+        "mode": "practice",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给一道 Cache 映射的练习",
+        "mode": "practice",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "请批改我对「进程死锁四个必要条件」的回答：互斥、占有并等待、不可剥夺、循环等待",
+        "mode": "grade",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "exams",
+          "exams",
+          "basic",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "批改我的答案：TCP 三次握手是 SYN、SYN+ACK、ACK",
+        "mode": "grade",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "exams",
+          "exams",
+          "advanced",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改",
+        "mode": "grade",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 4,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q2 为什么树的后根遍历对应二叉树的中序？",
+        "mode": "explain",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "exams",
+          "exams",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q11 为什么选 B？请详细解析",
+        "mode": "explain",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "exams",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 3,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2020-Q2 这道题的解题思路是什么？",
+        "mode": "explain",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced",
+          "basic"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "BST 删除考过哪些真题？",
+        "mode": "verify",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "死锁在历年真题中出现过吗？",
+        "mode": "verify",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "advanced",
+          "exams"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 映射方式考过几次？",
+        "mode": "verify",
+        "layer_policy_id": "ours",
+        "preferred_layers": [
+          "exams",
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "exams",
+          "exams"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      }
+    ],
+    "prefer_l1": [
+      {
+        "query": "什么是二叉排序树？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是死锁？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "进程和线程的区别是什么？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 的映射方式有哪些？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 三次握手的过程是什么？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是虚拟存储器？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "BST 删除时双支结点怎么处理？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何用银行家算法避免死锁？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "页面置换算法 LRU 怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Dijkstra 算法的步骤是什么？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何判断一个二叉树是平衡二叉树？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 拥塞控制怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给我一道死锁练习题",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "来一道 BST 删除的练习题",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "出一道进程同步的题目",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给一道 Cache 映射的练习",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "basic",
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "请批改我对「进程死锁四个必要条件」的回答：互斥、占有并等待、不可剥夺、循环等待",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "legacy",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "批改我的答案：TCP 三次握手是 SYN、SYN+ACK、ACK",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 4,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 3,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q2 为什么树的后根遍历对应二叉树的中序？",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "legacy",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q11 为什么选 B？请详细解析",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 2,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2020-Q2 这道题的解题思路是什么？",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "BST 删除考过哪些真题？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "死锁在历年真题中出现过吗？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 映射方式考过几次？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l1",
+        "preferred_layers": [
+          "basic"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "basic"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      }
+    ],
+    "prefer_l2": [
+      {
+        "query": "什么是二叉排序树？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是死锁？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "进程和线程的区别是什么？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 的映射方式有哪些？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 三次握手的过程是什么？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是虚拟存储器？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "BST 删除时双支结点怎么处理？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何用银行家算法避免死锁？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "页面置换算法 LRU 怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Dijkstra 算法的步骤是什么？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何判断一个二叉树是平衡二叉树？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 5,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 拥塞控制怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给我一道死锁练习题",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "来一道 BST 删除的练习题",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "出一道进程同步的题目",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给一道 Cache 映射的练习",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "请批改我对「进程死锁四个必要条件」的回答：互斥、占有并等待、不可剥夺、循环等待",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "basic",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "批改我的答案：TCP 三次握手是 SYN、SYN+ACK、ACK",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 4,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q2 为什么树的后根遍历对应二叉树的中序？",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q11 为什么选 B？请详细解析",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 2,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2020-Q2 这道题的解题思路是什么？",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "BST 删除考过哪些真题？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "死锁在历年真题中出现过吗？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 映射方式考过几次？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l2",
+        "preferred_layers": [
+          "advanced"
+        ],
+        "layers": [
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      }
+    ],
+    "prefer_l3": [
+      {
+        "query": "什么是二叉排序树？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是死锁？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "basic",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "进程和线程的区别是什么？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 的映射方式有哪些？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 三次握手的过程是什么？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "什么是虚拟存储器？",
+        "mode": "learn",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "BST 删除时双支结点怎么处理？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何用银行家算法避免死锁？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "页面置换算法 LRU 怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "basic",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Dijkstra 算法的步骤是什么？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 1,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "如何判断一个二叉树是平衡二叉树？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 5,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "TCP 拥塞控制怎么实现？",
+        "mode": "method",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "advanced",
+          "advanced",
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给我一道死锁练习题",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "来一道 BST 删除的练习题",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 3,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "出一道进程同步的题目",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "给一道 Cache 映射的练习",
+        "mode": "practice",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "basic",
+          "advanced",
+          "advanced",
+          "basic"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 4,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "请批改我对「进程死锁四个必要条件」的回答：互斥、占有并等待、不可剥夺、循环等待",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "basic",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "批改我的答案：TCP 三次握手是 SYN、SYN+ACK、ACK",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改",
+        "mode": "grade",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": false,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 2,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q2 为什么树的后根遍历对应二叉树的中序？",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "basic",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2019-Q11 为什么选 B？请详细解析",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 3,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "2020-Q2 这道题的解题思路是什么？",
+        "mode": "explain",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams",
+          "legacy",
+          "legacy",
+          "legacy"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": false,
+        "n_pack": 5,
+        "legacy_policy": "fallback"
+      },
+      {
+        "query": "BST 删除考过哪些真题？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "死锁在历年真题中出现过吗？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      },
+      {
+        "query": "Cache 映射方式考过几次？",
+        "mode": "verify",
+        "layer_policy_id": "prefer_l3",
+        "preferred_layers": [
+          "exams"
+        ],
+        "layers": [
+          "exams",
+          "exams"
+        ],
+        "layer_hit": true,
+        "leakage": false,
+        "answer_hidden_mode": true,
+        "n_pack": 2,
+        "legacy_policy": "exclude"
+      }
+    ]
+  }
+}

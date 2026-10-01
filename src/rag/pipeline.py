@@ -33,7 +33,7 @@ from rag.query_classifier import (
     classify_query,
 )
 from rag.query_decomposer import decompose
-from rag.rag_utils import extract_query_terms, normalize_query_text
+from rag.rag_utils import content_key, extract_query_terms, normalize_query_text
 from rag.recall import ALL_ROUTES
 from rag.reranker import rerank
 from rag.retrieval_plan import resolve_retrieval_plan, strategy_from_depth
@@ -593,18 +593,6 @@ async def _stage_rerank(
     return out, True, elapsed_ms
 
 
-def _content_key(doc: Document) -> str:
-    """HyDE 追加时的去重键：优先内容哈希，缺失时退回「来源 + 正文前 80 字」。
-
-    原实现在同一段里内联了两次这个表达式，抽出来避免两处走样。
-    """
-    return str(
-        doc.metadata.get("content_hash")
-        or f"{doc.metadata.get('source', '') or doc.metadata.get('source_file', '')}:"
-        f"{doc.page_content[:80]}"
-    )
-
-
 @dataclass(frozen=True)
 class _HydeOutcome:
     """HyDE 阶段的产出。
@@ -715,10 +703,10 @@ async def _stage_hyde(
                 doc.metadata["_hyde_fallback"] = True
                 doc.metadata["_hyde_query"] = hyde_query[:120]
 
-            existing_keys = {_content_key(doc) for doc in filtered}
+            existing_keys = {content_key(doc) for doc in filtered}
             merged_hyde_docs = []
             for doc in hyde_docs:
-                key = _content_key(doc)
+                key = content_key(doc)
                 if key not in existing_keys:
                     merged_hyde_docs.append(doc)
                     existing_keys.add(key)

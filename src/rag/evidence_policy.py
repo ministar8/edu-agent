@@ -67,6 +67,22 @@ def _is_incomplete_stem(ev: TextEvidence) -> bool:
     return False
 
 
+def pack_blocked(policy: TaskPolicy, ev: TextEvidence) -> bool:
+    """该证据是否会被 `apply_evidence_policy` 裁掉（合规预判，不改安全）。
+
+    与 `apply_evidence_policy` 的 `continue` 条件保持一致：
+    eligibility 资源 + 缺题干 + explanation 隐藏的 exam_answer。
+    供 sufficiency 兜底判定「包内是否还有合规项」。
+    """
+    if _resource_blocked(policy, ev):
+        return True
+    if _is_incomplete_stem(ev):
+        return True
+    if policy.explanation_policy == "hidden" and _is_exam_answer(ev):
+        return True
+    return False
+
+
 def _strip_answer_fields(meta: dict[str, Any]) -> dict[str, Any]:
     """剥离答案类 metadata（含旧题库 qa.* 字段）。"""
     out = dict(meta)
@@ -169,6 +185,22 @@ def finalize_with_layer_ranking(
     if keep > 0 and len(pack) > keep:
         pack = pack[:keep]
 
+    # ── sufficiency 兜底（2026-10-01）──────────────────────────────
+    # 症状：错误层偏好（如 prefer_l3）把 eligibility 禁止的 exam 资源顶进 pack，
+    # Evidence Policy 随后**全部**裁掉 → n_pack=0（包被掏空，任务直接不可用）。
+    # 这里只做**不放松安全**的兜底：若包内已无合规项，从候选里按 score 回填合规项。
+    # 注意：只回填 `main_items`（已按 legacy_policy 过滤），不引入被排除的资产。
+    sufficiency_refill = 0
+    if keep > 0 and main_items and all(pack_blocked(policy, ev) for ev in pack):
+        eligible_pool = sorted(
+            (ev for ev in main_items if not pack_blocked(policy, ev)),
+            key=lambda e: float((e.metadata or {}).get("score") or e.score or 0.0),
+            reverse=True,
+        )
+        refilled = eligible_pool[:keep]
+        sufficiency_refill = len(refilled)
+        pack = refilled
+
     used_fallback = 0
     if pool_policy == "fallback" and keep > 0 and len(pack) < keep and legacy_items:
         # 主池不足：按 score 从 fallback 池补入（显式记录，不静默）
@@ -192,6 +224,7 @@ def finalize_with_layer_ranking(
             "n_legacy_reserve": len(legacy_items),
             "dropped_legacy": dropped_legacy,
             "used_fallback": used_fallback,
+            "sufficiency_refill": sufficiency_refill,
             "n_pack": len(pack),
             "keep": keep,
             "degraded": insufficient,
@@ -275,6 +308,7 @@ def apply_evidence_policy(
         "layer_degraded": bool(layer_pack.get("degraded")),
         "dropped_legacy": int(layer_pack.get("dropped_legacy") or 0),
         "used_fallback": int(layer_pack.get("used_fallback") or 0),
+        "sufficiency_refill": int(layer_pack.get("sufficiency_refill") or 0),
     }
 
     rebuilt = fused.model_copy(deep=True)

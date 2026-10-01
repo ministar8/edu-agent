@@ -7,21 +7,26 @@
 | `retrieval/` | 检索性能提升 | 「你的实验结果是什么？」 |
 | `generation/` | 生成质量 | 「生成可靠吗？」 |
 | `system_validation/` | 系统可靠性保证 | 「系统可靠吗？」 |
-| `archive/` | 开发调参历史 | 一般不提 |
+
+> 2026-09-30 起结果只保留**规范文件名**（无时间戳、无 `archive/`）。
 
 ## retrieval/ 检索实验
 
-| 子目录 | 内容 |
+| 文件 | 内容 |
 |---|---|
-| `ablation/` | 组件消融、基础 RAG 对比、task-aware |
-| `layer_policy/` | L1/L2/L3 分层消融 |
-| `legacy_runtime/` | legacy 三策略对比 |
+| `ablation/component_ablation.json` | 组件消融 |
+| `ablation/rerank_compare.json` | 重排对照 |
+| `ablation/task_layer_ablation.json` | Task-aware |
+| `ablation/basic_rag_compare.json` | 基础 RAG |
+| `layer_policy/layer_ablation.json` | L1/L2/L3 |
+| `layer_policy/task_mode_x_layer_policy.json` | Task × Layer 交互 |
+| `legacy_runtime/legacy_runtime.json` | legacy 三策略 |
 
 ## generation/ 生成质量
 
 | 子目录 | 内容 |
 |---|---|
-| `ragas/` | `raw.jsonl` 逐样本 · `metrics.json` 汇总 · `summary.md` 结论（PENDING） |
+| `ragas/` | `raw.jsonl` 逐样本 · `metrics.json` 汇总 · `summary.md` 结论（**已完成 2026-10-01，n=20**） |
 
 ## system_validation/ 系统验证
 

@@ -134,7 +134,9 @@ async def run_one(query: str, mode: str, policy: TaskPolicy) -> dict[str, Any]:
         use_rerank=True,
         max_retries=0,
         use_llm_verify=False,
+        filter=policy.eligibility_where(),
         preferred_layers=list(policy.preferred_layers),
+        eligible_layers=policy.eligible_semantic_layers(),
     )
     fused = finalize_with_layer_ranking(fused, policy, keep=5)
     fused, flags = apply_evidence_policy(fused, policy)

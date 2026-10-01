@@ -24,6 +24,7 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import Sequence
 
 from core.settings import settings
 from rag.evidence import FusedEvidence
@@ -295,7 +296,8 @@ async def aretrieve_evidence_with_retry(
     *,
     max_retries: int = 1,
     use_llm_verify: bool = False,
-    preferred_layers: list[str] | None = None,
+    preferred_layers: Sequence[str] | None = None,
+    eligible_layers: Sequence[str] | None = None,
 ) -> tuple[FusedEvidence, VerificationResult]:
     """异步检索入口：默认**不走** verify/retry，可选 LLM verify + 最多 1 次 retry。
 
@@ -310,8 +312,12 @@ async def aretrieve_evidence_with_retry(
            └─ True → LLM verify → 必要时 retry **1 次** → 再 verify
 
     ``preferred_layers``：候选池 top-up（Candidate Pool Recall），保证目标层进池。
+    ``eligible_layers``：policy 认定的**合规语义层**（`TaskPolicy.eligible_semantic_layers()`）。
+    仅当 preferred 层与资格冲突（全不合规）时用于回退，保证候选池不空；None = 不做回退。
     """
     from rag.verifier import Verdict, VerificationResult, averify_evidence
+
+    allowed = [ly for ly in (eligible_layers or []) if ly in ("basic", "advanced", "exams")]
 
     async def _with_topup(fused: FusedEvidence) -> FusedEvidence:
         layers = list(preferred_layers or [])
@@ -319,7 +325,13 @@ async def aretrieve_evidence_with_retry(
             return fused
         from rag.layer_recall import topup_preferred_layers
 
-        return await topup_preferred_layers(query, layers, fused)
+        # ★ 资格一致（2026-10-01）：preferred 层若与 eligibility 矛盾（如 practice 偏好 exams，
+        #   而 exam_resources 全 forbidden），top-up 只按 kb_depth 找会被 where 挡空 →
+        #   主池可能**完全为空**（证据包被掏空）。此处把 preferred 收敛到合规层：
+        #   全部冲突时回退到「全部合规层」，保证池不空。生产 policy 恒一致，不影响默认行为。
+        if allowed and layers and all(ly not in allowed for ly in layers):
+            layers = list(allowed)
+        return await topup_preferred_layers(query, layers, fused, eligibility_where=filter)
 
     def _verdict_from(fused: FusedEvidence) -> VerificationResult:
         """取 aretrieve_evidence 已写入的规则 verdict；缺失时兜底 PASS。"""

@@ -1,0 +1,231 @@
+{
+  "recorded_at": "20261001_161754",
+  "golden": "evals/datasets/golden/sample_408.jsonl",
+  "limit": 60,
+  "config_snapshot": {
+    "full": {
+      "note": "完整系统（当前默认）"
+    },
+    "no_l1": {
+      "layer_filter": {
+        "kb_depth": {
+          "$ne": "basic"
+        }
+      },
+      "note": "去掉 L1 基础层"
+    },
+    "no_l2": {
+      "layer_filter": {
+        "kb_depth": {
+          "$ne": "advanced"
+        }
+      },
+      "note": "去掉 L2 进阶层"
+    },
+    "no_l3": {
+      "layer_filter": {
+        "kb_depth": {
+          "$ne": "exams"
+        }
+      },
+      "note": "去掉 L3 真题层"
+    },
+    "l1_only": {
+      "layer_filter": {
+        "kb_depth": "basic"
+      },
+      "note": "仅 L1 基础"
+    },
+    "l2_only": {
+      "layer_filter": {
+        "kb_depth": "advanced"
+      },
+      "note": "仅 L2 进阶"
+    },
+    "l3_only": {
+      "layer_filter": {
+        "kb_depth": "exams"
+      },
+      "note": "仅 L3 真题"
+    },
+    "no_legacy": {
+      "layer_filter": {
+        "kb_depth": {
+          "$in": [
+            "basic",
+            "advanced",
+            "exams"
+          ]
+        }
+      },
+      "note": "去 legacy（仅 L1/L2/L3，对照 full 看旧资产贡献）"
+    },
+    "legacy_only": {
+      "layer_filter": {
+        "kb_depth": {
+          "$nin": [
+            "basic",
+            "advanced",
+            "exams"
+          ]
+        }
+      },
+      "note": "仅 legacy（旧资产单独看）"
+    }
+  },
+  "rows": [
+    {
+      "config": "full",
+      "note": "完整系统（当前默认）",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 58.4,
+      "category_hit_at_1": 0.9833,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9917,
+      "category_precision": 0.95,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.6667,
+      "kp_hit_at_k": 1.0,
+      "kp_mrr": 0.9625,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "no_l1",
+      "note": "去掉 L1 基础层",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 40.9,
+      "category_hit_at_1": 0.9667,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9833,
+      "category_precision": 0.9583,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.6,
+      "kp_hit_at_k": 1.0,
+      "kp_mrr": 0.9556,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "no_l2",
+      "note": "去掉 L2 进阶层",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 38.0,
+      "category_hit_at_1": 0.9667,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9806,
+      "category_precision": 0.9528,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.65,
+      "kp_hit_at_k": 1.0,
+      "kp_mrr": 0.9514,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "no_l3",
+      "note": "去掉 L3 真题层",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 40.4,
+      "category_hit_at_1": 0.9667,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9833,
+      "category_precision": 0.95,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.6667,
+      "kp_hit_at_k": 1.0,
+      "kp_mrr": 0.9617,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "l1_only",
+      "note": "仅 L1 基础",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 48.7,
+      "category_hit_at_1": 0.95,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9722,
+      "category_precision": 0.9662,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.9167,
+      "kp_hit_at_k": 0.9833,
+      "kp_mrr": 0.9444,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "l2_only",
+      "note": "仅 L2 进阶",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 55.2,
+      "category_hit_at_1": 0.95,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9681,
+      "category_precision": 0.941,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.65,
+      "kp_hit_at_k": 0.7833,
+      "kp_mrr": 0.7167,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "l3_only",
+      "note": "仅 L3 真题",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 343.7,
+      "category_hit_at_1": 0.0,
+      "category_hit_at_k": 0.0,
+      "category_mrr": 0.0,
+      "category_precision": 0.0,
+      "empty_result_rate": 0.9833,
+      "mean_evidence_count": 0.0667,
+      "kp_hit_at_k": 0.0,
+      "kp_mrr": 0.0,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "no_legacy",
+      "note": "去 legacy（仅 L1/L2/L3，对照 full 看旧资产贡献）",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 38.1,
+      "category_hit_at_1": 0.9667,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9792,
+      "category_precision": 0.9497,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.9667,
+      "kp_hit_at_k": 0.9833,
+      "kp_mrr": 0.8988,
+      "kp_annotated": 60.0
+    },
+    {
+      "config": "legacy_only",
+      "note": "仅 legacy（旧资产单独看）",
+      "n_queries": 60,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 38.7,
+      "category_hit_at_1": 0.95,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.975,
+      "category_precision": 0.9585,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.6167,
+      "kp_hit_at_k": 1.0,
+      "kp_mrr": 0.945,
+      "kp_annotated": 60.0
+    }
+  ]
+}

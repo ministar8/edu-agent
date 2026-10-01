@@ -1,63 +1,63 @@
 {
-  "quality_score": 0.159,
+  "quality_score": 0.1473,
   "cases": {
     "practice_no_answer": {
-      "evidence_usage": 0.0942,
-      "source_cited": 1.0,
+      "evidence_usage": 0.0582,
+      "source_cited": 0.0,
       "completeness": 1.0,
-      "reply_len": 1384.0,
-      "pack_len": 3611.0
+      "reply_len": 1292.0,
+      "pack_len": 2578.0
     },
     "empty_no_hallucination": {
-      "evidence_usage": 0.1,
+      "evidence_usage": 0.0,
       "source_cited": 0.0,
-      "completeness": 0.425,
-      "reply_len": 85.0,
+      "completeness": 0.61,
+      "reply_len": 122.0,
       "pack_len": 107.0
     },
     "verify_source_usage": {
-      "evidence_usage": 0.1645,
-      "source_cited": 0.0,
+      "evidence_usage": 0.0899,
+      "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 2938.0,
-      "pack_len": 4770.0
+      "reply_len": 516.0,
+      "pack_len": 6631.0
     },
     "multi_turn_context": {
       "evidence_usage": 0.0,
       "source_cited": 0.0,
-      "completeness": 0.185,
-      "reply_len": 37.0,
-      "pack_len": 2598.0
+      "completeness": 0.095,
+      "reply_len": 19.0,
+      "pack_len": 1849.0
     },
     "thin_pack_no_fabrication": {
-      "evidence_usage": 0.0606,
+      "evidence_usage": 0.0404,
       "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 303.0,
-      "pack_len": 3657.0
+      "reply_len": 358.0,
+      "pack_len": 2768.0
     },
     "tri_full_8docs": {
-      "evidence_usage": 0.2125,
+      "evidence_usage": 0.2625,
       "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 379.0,
+      "reply_len": 482.0,
       "pack_len": 1701.0
     },
     "tri_thin_2docs": {
-      "evidence_usage": 0.5152,
+      "evidence_usage": 0.7273,
       "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 268.0,
+      "reply_len": 234.0,
       "pack_len": 673.0
     },
     "tri_empty_0docs": {
-      "evidence_usage": 0.125,
-      "source_cited": 0.0,
+      "evidence_usage": 0.0,
+      "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 433.0,
+      "reply_len": 557.0,
       "pack_len": 25.0
     }
   },
   "hard_fails": [],
-  "recorded_at": "2026-09-30T12:50:45"
+  "recorded_at": "2026-10-01T17:21:14"
 }

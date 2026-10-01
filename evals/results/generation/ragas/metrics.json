@@ -1,9 +1,113 @@
 {
-  "status": "pending",
-  "samples": 0,
-  "faithfulness": null,
-  "answer_relevancy": null,
-  "context_precision": null,
-  "context_recall": null,
-  "note": "旧数据口径有问题已删；重跑后覆盖本文件"
+  "status": "ok",
+  "error": null,
+  "tag": "final",
+  "n_loaded": 20,
+  "n_filled": 20,
+  "query_type_distribution": {
+    "code": 5,
+    "concept": 5,
+    "generate": 5,
+    "grade": 5
+  },
+  "judge_model": "dashscope:qwen3.8-max-0902",
+  "generation_model": "dashscope:qwen3.7-flash",
+  "retrieval_k": 5,
+  "effective_rerank_enabled": false,
+  "embedding_fake": false,
+  "note": "逐样本明细见 raw.jsonl 与 ragas_<tag>.json；分类型均值为本文件派生",
+  "faithfulness": {
+    "mean": 0.7588,
+    "n": 20
+  },
+  "context_precision": {
+    "mean": 0.684,
+    "n": 20
+  },
+  "context_recall": {
+    "mean": 0.4,
+    "n": 20
+  },
+  "answer_relevancy": {
+    "mean": 0.5994,
+    "n": 20
+  },
+  "by_query_type": {
+    "code": {
+      "n": 5,
+      "faithfulness": {
+        "mean": 0.8067,
+        "n": 5
+      },
+      "context_precision": {
+        "mean": 0.4775,
+        "n": 5
+      },
+      "context_recall": {
+        "mean": 0.35,
+        "n": 5
+      },
+      "answer_relevancy": {
+        "mean": 0.2915,
+        "n": 5
+      }
+    },
+    "concept": {
+      "n": 5,
+      "faithfulness": {
+        "mean": 1.0,
+        "n": 5
+      },
+      "context_precision": {
+        "mean": 0.8167,
+        "n": 5
+      },
+      "context_recall": {
+        "mean": 0.6333,
+        "n": 5
+      },
+      "answer_relevancy": {
+        "mean": 0.7921,
+        "n": 5
+      }
+    },
+    "generate": {
+      "n": 5,
+      "faithfulness": {
+        "mean": 0.5205,
+        "n": 5
+      },
+      "context_precision": {
+        "mean": 0.6186,
+        "n": 5
+      },
+      "context_recall": {
+        "mean": 0.0667,
+        "n": 5
+      },
+      "answer_relevancy": {
+        "mean": 0.6064,
+        "n": 5
+      }
+    },
+    "grade": {
+      "n": 5,
+      "faithfulness": {
+        "mean": 0.708,
+        "n": 5
+      },
+      "context_precision": {
+        "mean": 0.8233,
+        "n": 5
+      },
+      "context_recall": {
+        "mean": 0.55,
+        "n": 5
+      },
+      "answer_relevancy": {
+        "mean": 0.7074,
+        "n": 5
+      }
+    }
+  }
 }

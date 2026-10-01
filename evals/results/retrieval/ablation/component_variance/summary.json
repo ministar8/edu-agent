@@ -1,0 +1,581 @@
+{
+  "summary": {
+    "design": "3 independent processes × 4 configs × 60 golden queries",
+    "n_runs": 3,
+    "metrics": [
+      "kp_hit_at_k",
+      "kp_mrr",
+      "category_hit_at_1",
+      "category_mrr",
+      "mean_evidence_count"
+    ],
+    "metric_map": {
+      "kp_hit_at_k": "kp_hit",
+      "kp_mrr": "kp_mrr",
+      "category_hit_at_1": "cat@1",
+      "category_mrr": "cat_mrr",
+      "mean_evidence_count": "evidence_count"
+    },
+    "per_config": {
+      "full": {
+        "kp_hit_at_k": {
+          "runs": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "mean": 1.0,
+          "std": 0.0
+        },
+        "kp_mrr": {
+          "runs": [
+            0.9625,
+            0.9625,
+            0.9625
+          ],
+          "mean": 0.9625,
+          "std": 0.0
+        },
+        "category_hit_at_1": {
+          "runs": [
+            0.9833,
+            0.9833,
+            0.9833
+          ],
+          "mean": 0.9833,
+          "std": 0.0
+        },
+        "category_mrr": {
+          "runs": [
+            0.9917,
+            0.9917,
+            0.9917
+          ],
+          "mean": 0.9917,
+          "std": 0.0
+        },
+        "mean_evidence_count": {
+          "runs": [
+            5.6167,
+            5.65,
+            5.6833
+          ],
+          "mean": 5.65,
+          "std": 0.0333
+        },
+        "n_errors": {
+          "runs": [
+            0,
+            0,
+            0
+          ],
+          "mean": 0.0
+        }
+      },
+      "no_bm25": {
+        "kp_hit_at_k": {
+          "runs": [
+            0.9833,
+            0.9833,
+            0.9833
+          ],
+          "mean": 0.9833,
+          "std": 0.0
+        },
+        "kp_mrr": {
+          "runs": [
+            0.9,
+            0.9,
+            0.9
+          ],
+          "mean": 0.9,
+          "std": 0.0
+        },
+        "category_hit_at_1": {
+          "runs": [
+            0.95,
+            0.95,
+            0.95
+          ],
+          "mean": 0.95,
+          "std": 0.0
+        },
+        "category_mrr": {
+          "runs": [
+            0.975,
+            0.975,
+            0.975
+          ],
+          "mean": 0.975,
+          "std": 0.0
+        },
+        "mean_evidence_count": {
+          "runs": [
+            5.7333,
+            5.7333,
+            5.7333
+          ],
+          "mean": 5.7333,
+          "std": 0.0
+        },
+        "n_errors": {
+          "runs": [
+            0,
+            0,
+            0
+          ],
+          "mean": 0.0
+        }
+      },
+      "no_metadata": {
+        "kp_hit_at_k": {
+          "runs": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "mean": 1.0,
+          "std": 0.0
+        },
+        "kp_mrr": {
+          "runs": [
+            0.9417,
+            0.9417,
+            0.9417
+          ],
+          "mean": 0.9417,
+          "std": 0.0
+        },
+        "category_hit_at_1": {
+          "runs": [
+            0.95,
+            0.95,
+            0.95
+          ],
+          "mean": 0.95,
+          "std": 0.0
+        },
+        "category_mrr": {
+          "runs": [
+            0.975,
+            0.975,
+            0.975
+          ],
+          "mean": 0.975,
+          "std": 0.0
+        },
+        "mean_evidence_count": {
+          "runs": [
+            5.7833,
+            5.7667,
+            5.7667
+          ],
+          "mean": 5.7722,
+          "std": 0.0096
+        },
+        "n_errors": {
+          "runs": [
+            0,
+            0,
+            0
+          ],
+          "mean": 0.0
+        }
+      },
+      "vector_only": {
+        "kp_hit_at_k": {
+          "runs": [
+            0.9833,
+            0.9833,
+            1.0
+          ],
+          "mean": 0.9889,
+          "std": 0.0096
+        },
+        "kp_mrr": {
+          "runs": [
+            0.9306,
+            0.9222,
+            0.9306
+          ],
+          "mean": 0.9278,
+          "std": 0.0048
+        },
+        "category_hit_at_1": {
+          "runs": [
+            0.9333,
+            0.9333,
+            0.9333
+          ],
+          "mean": 0.9333,
+          "std": 0.0
+        },
+        "category_mrr": {
+          "runs": [
+            0.9583,
+            0.9583,
+            0.9667
+          ],
+          "mean": 0.9611,
+          "std": 0.0048
+        },
+        "mean_evidence_count": {
+          "runs": [
+            5.6667,
+            5.6667,
+            5.6833
+          ],
+          "mean": 5.6722,
+          "std": 0.0096
+        },
+        "n_errors": {
+          "runs": [
+            0,
+            0,
+            0
+          ],
+          "mean": 0.0
+        }
+      }
+    },
+    "paired_delta_vs_full": {
+      "no_bm25": {
+        "kp_hit_at_k": {
+          "paired_deltas": [
+            -0.0167,
+            -0.0167,
+            -0.0167
+          ],
+          "mean": -0.0167,
+          "std": 0.0
+        },
+        "kp_mrr": {
+          "paired_deltas": [
+            -0.0625,
+            -0.0625,
+            -0.0625
+          ],
+          "mean": -0.0625,
+          "std": 0.0
+        },
+        "category_hit_at_1": {
+          "paired_deltas": [
+            -0.0333,
+            -0.0333,
+            -0.0333
+          ],
+          "mean": -0.0333,
+          "std": 0.0
+        },
+        "category_mrr": {
+          "paired_deltas": [
+            -0.0167,
+            -0.0167,
+            -0.0167
+          ],
+          "mean": -0.0167,
+          "std": 0.0
+        },
+        "mean_evidence_count": {
+          "paired_deltas": [
+            0.1166,
+            0.0833,
+            0.05
+          ],
+          "mean": 0.0833,
+          "std": 0.0333
+        }
+      },
+      "no_metadata": {
+        "kp_hit_at_k": {
+          "paired_deltas": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "std": 0.0
+        },
+        "kp_mrr": {
+          "paired_deltas": [
+            -0.0208,
+            -0.0208,
+            -0.0208
+          ],
+          "mean": -0.0208,
+          "std": 0.0
+        },
+        "category_hit_at_1": {
+          "paired_deltas": [
+            -0.0333,
+            -0.0333,
+            -0.0333
+          ],
+          "mean": -0.0333,
+          "std": 0.0
+        },
+        "category_mrr": {
+          "paired_deltas": [
+            -0.0167,
+            -0.0167,
+            -0.0167
+          ],
+          "mean": -0.0167,
+          "std": 0.0
+        },
+        "mean_evidence_count": {
+          "paired_deltas": [
+            0.1666,
+            0.1167,
+            0.0834
+          ],
+          "mean": 0.1222,
+          "std": 0.0419
+        }
+      },
+      "vector_only": {
+        "kp_hit_at_k": {
+          "paired_deltas": [
+            -0.0167,
+            -0.0167,
+            0.0
+          ],
+          "mean": -0.0111,
+          "std": 0.0096
+        },
+        "kp_mrr": {
+          "paired_deltas": [
+            -0.0319,
+            -0.0403,
+            -0.0319
+          ],
+          "mean": -0.0347,
+          "std": 0.0048
+        },
+        "category_hit_at_1": {
+          "paired_deltas": [
+            -0.05,
+            -0.05,
+            -0.05
+          ],
+          "mean": -0.05,
+          "std": 0.0
+        },
+        "category_mrr": {
+          "paired_deltas": [
+            -0.0334,
+            -0.0334,
+            -0.025
+          ],
+          "mean": -0.0306,
+          "std": 0.0048
+        },
+        "mean_evidence_count": {
+          "paired_deltas": [
+            0.05,
+            0.0167,
+            0.0
+          ],
+          "mean": 0.0222,
+          "std": 0.0255
+        }
+      }
+    },
+    "footnote": "n=3 独立进程；std 为运行间系统非确定性波动，不作为统计显著性检验。Δ 为逐 run 配对差（ablation_i − full_i）的 mean±std。",
+    "run_ids": [
+      1,
+      2,
+      3
+    ],
+    "recorded_at": [
+      "20261001_164131",
+      "20261001_164406",
+      "20261001_164637"
+    ]
+  },
+  "runs_meta": [
+    {
+      "run_id": 1,
+      "config_metrics": {
+        "full": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.9833,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.9917,
+          "category_precision": 0.9496,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.6167,
+          "kp_hit_at_k": 1.0,
+          "kp_mrr": 0.9625,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "no_bm25": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.95,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.975,
+          "category_precision": 0.9273,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.7333,
+          "kp_hit_at_k": 0.9833,
+          "kp_mrr": 0.9,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "no_metadata": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.95,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.975,
+          "category_precision": 0.9481,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.7833,
+          "kp_hit_at_k": 1.0,
+          "kp_mrr": 0.9417,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "vector_only": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.9333,
+          "category_hit_at_k": 0.9833,
+          "category_mrr": 0.9583,
+          "category_precision": 0.9382,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.6667,
+          "kp_hit_at_k": 0.9833,
+          "kp_mrr": 0.9306,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        }
+      }
+    },
+    {
+      "run_id": 2,
+      "config_metrics": {
+        "full": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.9833,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.9917,
+          "category_precision": 0.9499,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.65,
+          "kp_hit_at_k": 1.0,
+          "kp_mrr": 0.9625,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "no_bm25": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.95,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.975,
+          "category_precision": 0.9273,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.7333,
+          "kp_hit_at_k": 0.9833,
+          "kp_mrr": 0.9,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "no_metadata": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.95,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.975,
+          "category_precision": 0.948,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.7667,
+          "kp_hit_at_k": 1.0,
+          "kp_mrr": 0.9417,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "vector_only": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.9333,
+          "category_hit_at_k": 0.9833,
+          "category_mrr": 0.9583,
+          "category_precision": 0.9382,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.6667,
+          "kp_hit_at_k": 0.9833,
+          "kp_mrr": 0.9222,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        }
+      }
+    },
+    {
+      "run_id": 3,
+      "config_metrics": {
+        "full": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.9833,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.9917,
+          "category_precision": 0.9501,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.6833,
+          "kp_hit_at_k": 1.0,
+          "kp_mrr": 0.9625,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "no_bm25": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.95,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.975,
+          "category_precision": 0.9273,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.7333,
+          "kp_hit_at_k": 0.9833,
+          "kp_mrr": 0.9,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "no_metadata": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.95,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.975,
+          "category_precision": 0.948,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.7667,
+          "kp_hit_at_k": 1.0,
+          "kp_mrr": 0.9417,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        },
+        "vector_only": {
+          "n_queries": 60,
+          "category_hit_at_1": 0.9333,
+          "category_hit_at_k": 1.0,
+          "category_mrr": 0.9667,
+          "category_precision": 0.9413,
+          "empty_result_rate": 0.0,
+          "mean_evidence_count": 5.6833,
+          "kp_hit_at_k": 1.0,
+          "kp_mrr": 0.9306,
+          "kp_annotated": 60.0,
+          "n_errors": 0,
+          "errors": []
+        }
+      }
+    }
+  ]
+}

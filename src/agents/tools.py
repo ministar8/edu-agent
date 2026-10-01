@@ -254,6 +254,7 @@ async def _retrieve_payload(
             use_llm_verify=False,
             on_stage=_stage_sink(),
             preferred_layers=list(policy.preferred_layers),
+            eligible_layers=policy.eligible_semantic_layers(),
         )
     except Exception as e:
         return _retrieval_error_payload(query, e)

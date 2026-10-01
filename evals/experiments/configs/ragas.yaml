@@ -8,8 +8,8 @@ metrics: [faithfulness, answer_relevancy, context_precision, context_recall]
 components: {}            # 非检索消融，无组件开关
 legacy_policy: per_mode
 rerank: false
-status: pending
-note: 旧数据口径有问题已删；重跑前需修标注，勿直接引用
+status: done   # 2026-10-01 全量 20 条完成（judge=qwen3.8-max-0902 关 thinking）
+note: 完成。generation=qwen3.7-flash；judge=qwen3.8-max-0902（RAGAS_JUDGE_MODEL，强制关 thinking，因 answer_relevancy 需 n>1）。整理脚本 scripts/ragas_report.py
 results_dir: results/generation/ragas/
 output_files:
   raw: raw.jsonl      # 逐样本

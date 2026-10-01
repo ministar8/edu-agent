@@ -10,8 +10,52 @@ import logging
 import re
 
 import jieba
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
+
+# ── 领域词典（防止 jieba 把专业词切坏）─────────────────
+# ★ 为什么必须有：jieba 默认词典不含这些词组，会把相邻字误并成一个不存在的词。
+#   实测（2026-10-01）：「单链表逆置」被切成 `['单链', '表逆置']`、「单链表就地逆置」
+#   切成 `['单链', '表就', '地逆置']` —— **「逆置」根本不成词**。后果是
+#   `extract_query_terms` 给出坏词 → `focus` 路由按坏词召回 → 目标 chunk（L2 方法层
+#   「逆置：三指针 pre/cur/nxt 逐个头插」）召回不到，整池退化为 legacy 讲义。
+#   加入词典后切分为 `['单链表', '逆置']`，同一 query 目标 chunk 直接进包。
+#
+# ⚠️ 只影响**查询侧**分词（`extract_query_terms` / BM25 `cut_for_search` / topic 判分）；
+#   入库切分（`splitter` / `cleaner`）不依赖 jieba，故**改这里不需要重建索引**。
+#   但会改变召回结果 —— 改动后必须跑 `evaluation.retrieval_gate`。
+_DOMAIN_WORDS: tuple[str, ...] = (
+    # 线性表 / 链表
+    "单链表",
+    "双链表",
+    "循环链表",
+    "静态链表",
+    "头结点",
+    "逆置",
+    "就地逆置",
+    "头插法",
+    "尾插法",
+)
+
+_jieba_words_registered = False
+
+
+def ensure_jieba_domain_words() -> None:
+    """把领域词注册进 jieba 全局词典（幂等，进程内一次）。
+
+    jieba 的词典是**进程级全局**，注册一次对所有调用点生效。
+    """
+    global _jieba_words_registered
+    if _jieba_words_registered:
+        return
+    for word in _DOMAIN_WORDS:
+        jieba.add_word(word, freq=20000)
+    _jieba_words_registered = True
+    logger.debug("已注册 %d 个领域词到 jieba 词典", len(_DOMAIN_WORDS))
+
+
+ensure_jieba_domain_words()
 
 # ── 常量 ──────────────────────────────────────────────
 
@@ -158,6 +202,22 @@ def extract_query_terms(query: str, max_terms: int = _MAX_QUERY_TERMS) -> list[s
 
 def get_bm25_stop_words() -> frozenset[str]:
     return _QUERY_STOP_WORDS
+
+
+# ── 内容键（去重 / 确定性排序） ──────────────────────
+
+
+def content_key(doc: Document) -> str:
+    """去重与确定性排序键：优先内容哈希，缺失时退回「来源 + 正文前 80 字」。
+
+    供 pipeline（HyDE 追加去重）与 routes（top-k 平票定序）共用。
+    实现只能有这一份 —— 改动会同时影响召回边界与去重集合。
+    """
+    return str(
+        doc.metadata.get("content_hash")
+        or f"{doc.metadata.get('source', '') or doc.metadata.get('source_file', '')}:"
+        f"{doc.page_content[:80]}"
+    )
 
 
 # ── 内容类型检测 ─────────────────────────────────────

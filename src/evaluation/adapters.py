@@ -123,13 +123,23 @@ async def fill_sample(
 def build_judge_llm(timeout: int | None = None):
     """RAGAS judge：复用项目 LLM（ChatOpenAI → LangchainLLMWrapper）。
 
+    模型取 ``settings.ragas_judge_model``（未配则跟随 ``LLM_MODEL``）——
+    judge 与检索链/生成的**配额按模型分配**，分离后换 judge 不必动整条链口径。
+
     ``settings.LLM_TIMEOUT`` 在客户端创建时会同时写入 sync/async httpx client。
     RAGAS 的 ``RunConfig`` 后续只更新 wrapper 的 ``request_timeout``，不会可靠地更新
     已创建的底层 client；因此这里显式同步三处超时，避免仍被旧的 90 秒 client 截断。
     """
     from ragas.llms import LangchainLLMWrapper  # type: ignore[import-not-found]
 
-    llm = get_llm(streaming=False, temperature=0.0)
+    from core.settings import settings as _settings
+
+    judge_ref = _settings.ragas_judge_model
+    logger.info("RAGAS judge 模型 = %s（思考模式已关闭）", judge_ref)
+    # disable_thinking：DashScope 在 thinking 开启时拒绝 `n>1`，
+    # 而 RAGAS 的 answer_relevancy 必须 `n>1`（实测 400 InvalidParameter）。
+    # judge 只需结构化打分，不需要思维链，故强制关闭。
+    llm = get_llm(streaming=False, temperature=0.0, model_ref=judge_ref, disable_thinking=True)
     # DashScope 等网关上强制 JSON，降低 judge 解析失败率
     existing = dict(getattr(llm, "model_kwargs", None) or {})
     existing["response_format"] = {"type": "json_object"}

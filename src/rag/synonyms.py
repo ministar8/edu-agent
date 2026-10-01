@@ -55,6 +55,18 @@ _SYNONYM_RAW: dict[str, str] = {
     "顺序表": "顺序表",
     "链表": "链表",
     "单链表": "单链表",
+    # ★ 「逆置」相关（2026-10-01）：术语不匹配导致 L2 方法层召不回。
+    #   实测：query「单链表就地逆置」、chunk 写的是「逆置：三指针 pre/cur/nxt」，
+    #   两边用词不同 → BM25/扩展路由都命不中；目标 chunk 向量 rank 1~2 却进不了包。
+    #   注意：还需 `rag_utils.ensure_jieba_domain_words()` 先把「就地逆置」切成词，
+    #   否则 `SYNONYM_EXPAND_RE` 在原文里扫不到它（曾被切成「表就」「地逆置」）。
+    "逆置": "逆置",
+    "就地逆置": "逆置",
+    "链表逆置": "逆置",
+    "反转": "逆置",
+    "链表反转": "逆置",
+    "头插法": "头插法",
+    "尾插法": "尾插法",
     "双向链表": "双向链表",
     "循环链表": "循环链表",
     "栈": "栈",
@@ -413,13 +425,21 @@ def expand_query_with_synonyms(query: str, max_expansions: int = 8) -> str:
     for t in re.findall(r"[A-Za-z_][A-Za-z0-9_\.]{0,}", query):
         existing.add(t.casefold())
 
-    query_lower = query.casefold()
     # 标准词已是 query 子串 → 不重复追加
+    #
+    # ★ 2026-10-01 修正：判据从「**子串**出现」改为「**已是分词结果**」。
+    #   原文案按子串判断，对「就地逆置」这类词是错的：
+    #   - query「单链表就地逆置」分词 → `['单链表', '就地逆置']`
+    #   - 标准词「逆置」**只是「就地逆置」的子串**，并未成为任何可检索 token
+    #   - 旧逻辑据此把它预置进 `existing` → 扩展**永远不加「逆置」**
+    #   后果实测：目标 chunk（L2「逆置：三指针 pre/cur/nxt」）**任何路由 k=25 都召不回**，
+    #   而同一 chunk 用聚焦词查询时向量 rank **1**。修后该词进入 expanded 路由。
+    tokens = {t.casefold() for t in extract_query_terms(query)}
     for m in SYNONYM_EXPAND_RE.finditer(query):
         if _is_embedded_ascii_match(query, m):
             continue
         std = _lookup_standard(m.group(0))
-        if std and std.casefold() in query_lower:
+        if std and std.casefold() in tokens:
             existing.add(std.casefold())
 
     expansions: list[str] = []

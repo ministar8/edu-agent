@@ -17,6 +17,7 @@ from core.settings import settings
 from rag.bm25 import bm25_search
 from rag.postprocess import merge_route_results
 from rag.query_classifier import QueryCategory, RetrievalDepth
+from rag.rag_utils import content_key
 from rag.recall import (
     build_metadata_routes,
     build_recall_queries,
@@ -31,18 +32,6 @@ _COMPACT_SUBQUERY_ROUTES = {"keyword_bm25", "concept_meta", "structured_meta", "
 
 # 语义检索过采样倍数：Chroma 近似索引 top-k 边界会抖，多取再确定性截断
 _SEMANTIC_OVERSAMPLE = 3
-
-
-def _content_key(doc: Document) -> str:
-    """去重/确定性排序键：优先内容哈希，缺失时退回「来源 + 正文前 80 字」。
-
-    ★ 必须与 pipeline 的同名函数一致 —— top-k 平票时靠它定序，改实现会动召回边界。
-    """
-    return str(
-        doc.metadata.get("content_hash")
-        or f"{doc.metadata.get('source', '') or doc.metadata.get('source_file', '')}:"
-        f"{doc.page_content[:80]}"
-    )
 
 
 # 查询缓存（有界 + TTL，线程安全；命中计数由缓存自带）——
@@ -216,10 +205,19 @@ def _raw_search(
         # 多取 `_SEMANTIC_OVERSAMPLE` 倍候选、再按 (分数, 内容键) 确定性排序取前 k，
         # 让边界抖动不再影响最终集合 —— 顺带把被漏掉的候选捞回来（提升召回）。
         # 次级键用内容键而非原始顺序：后者依赖 Chroma 的返回次序，本身就不确定。
+        #
+        # ★★ 排序方向（2026-10-01 修正）：Chroma 的 score 是**距离**（越小越相似），
+        #    故必须**升序**取前 k。此处原为 `key=lambda pair: -pair[1]`（降序距离），
+        #    等于**返回最不相似的 k 条** —— 实测同一 query：
+        #      Chroma 原始 top-5 = [0.3318(目标), 0.3579, 0.3733, 0.3757, 0.3764]
+        #      本函数返回      = [0.4212, 0.4208, 0.4198, 0.4196, 0.4152]  ← 取的是 15 条里最差的
+        #    后果：语义/ focus / expanded 三条**向量路由全部返回最不相关候选**，
+        #    目标 chunk（如 L2「逆置：三指针」）虽为最近邻却进不了包；L2 跨学科污染亦源于此。
+        #    BM25 路由不受影响（`bm25_search` 返回相似度、天然降序，且不经此处重排）。
         oversampled = get_vector_store_manager().similarity_search_with_score(
             collection_name, query, k=k * _SEMANTIC_OVERSAMPLE, filter=filter
         )
-        results = sorted(oversampled, key=lambda pair: (-pair[1], _content_key(pair[0])))[:k]
+        results = sorted(oversampled, key=lambda pair: (pair[1], content_key(pair[0])))[:k]
 
     # 注入集合来源，供 RRF 合并区分跨集合的同名文档
     for doc, _score in results:

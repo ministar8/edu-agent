@@ -1,0 +1,100 @@
+{
+  "recorded_at": "20261001_162328",
+  "limit": 60,
+  "config_snapshot": {
+    "basic_rag": "semantic top-k only (no bm25/metadata/decompose/hyde/rerank/task_policy)",
+    "ours": "full system (multi-route + task_mode policy)"
+  },
+  "retrieval": {
+    "basic_rag": {
+      "arm": "basic_rag",
+      "elapsed_s": 38.0,
+      "n_queries": 60,
+      "category_hit_at_1": 0.9167,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9556,
+      "category_precision": 0.9296,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 4.7333,
+      "kp_hit_at_k": 0.9667,
+      "kp_mrr": 0.875,
+      "kp_annotated": 60.0
+    },
+    "ours": {
+      "arm": "ours",
+      "elapsed_s": 44.6,
+      "n_queries": 60,
+      "category_hit_at_1": 0.9833,
+      "category_hit_at_k": 1.0,
+      "category_mrr": 0.9917,
+      "category_precision": 0.9494,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.6,
+      "kp_hit_at_k": 1.0,
+      "kp_mrr": 0.9625,
+      "kp_annotated": 60.0
+    }
+  },
+  "task": {
+    "basic_rag": {
+      "arm": "basic_rag",
+      "by_mode": {
+        "learn": {
+          "layer_hit_rate": 0.8333,
+          "leakage_rate": 0.0
+        },
+        "method": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": 0.0
+        },
+        "practice": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": 0.25
+        },
+        "grade": {
+          "layer_hit_rate": 0.6667,
+          "leakage_rate": null
+        },
+        "explain": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": null
+        },
+        "verify": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": 0.3333
+        }
+      },
+      "macro_layer_hit": 0.9167
+    },
+    "ours": {
+      "arm": "ours",
+      "by_mode": {
+        "learn": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": 0.0
+        },
+        "method": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": 0.0
+        },
+        "practice": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": 0.0
+        },
+        "grade": {
+          "layer_hit_rate": 0.6667,
+          "leakage_rate": null
+        },
+        "explain": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": null
+        },
+        "verify": {
+          "layer_hit_rate": 1.0,
+          "leakage_rate": 0.0
+        }
+      },
+      "macro_layer_hit": 0.9444
+    }
+  }
+}

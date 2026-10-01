@@ -40,11 +40,12 @@ def _is_qwen3_max(model: str) -> bool:
     return bool(re.search(r"qwen[\d.]+-max", (model or "").lower()))
 
 
-# 缓存键 = 网关 + 模型 ID + 温度 + 是否流式。
+# 缓存键 = 网关 + 模型 ID + 温度 + 是否流式 + 是否禁用思考。
 # - **必须含网关**：同一个模型 ID 可以走不同网关（如 dashscope:deepseek-v4-flash 与
 #   deepseek:deepseek-v4-flash），不含网关会让两家的客户端互相串用
 # - 含 streaming → agent 层恒 True、RAG 层多为 False，行为不同必须区分
-type LlmCacheKey = tuple[str, str, float, bool]
+# - 含 disable_thinking → 同一模型在「思考开/关」下是真的不同客户端，混用会串口径
+type LlmCacheKey = tuple[str, str, float, bool, bool]
 
 # 实际用量 = 模型数 × 温度（常量）× streaming，上限设 64 几乎不会触发淘汰。
 _MAX_CACHED_CLIENTS = 64
@@ -80,17 +81,30 @@ def reset_llm_cache(*, notify: bool = False) -> None:
 
 
 def _build_client(
-    model_ref: str, model_id: str, temperature: float, *, streaming: bool
+    model_ref: str,
+    model_id: str,
+    temperature: float,
+    *,
+    streaming: bool,
+    disable_thinking: bool = False,
 ) -> ChatOpenAI:
-    """构建 ChatOpenAI，并按厂商注入思考模式参数。"""
-    api_base = settings.api_base_for_model(model_ref)
+    """构建 ChatOpenAI，并按厂商注入思考模式参数。
 
+    ``disable_thinking=True``：**强制**关闭思考（优先级高于下面的厂商默认）。
+    唯一用户是 RAGAS judge —— `answer_relevancy` 需要 `n>1`，而 DashScope 在
+    thinking 开启时直接拒绝 `n>1`（实测 400 `The n parameter must be 1 when
+    enable_thinking is true`）。judge 只需输出结构化打分，不需要思维链。
+    """
     extra_body: dict = {}
     # 以网关为准判断厂商；URL 字符串可能不含 "dashscope"（例如 MaaS 自定义域名）
     gateway = parse_model_ref(model_ref)[0]
     is_deepseek = gateway is Gateway.DEEPSEEK
     is_dashscope = gateway is Gateway.DASHSCOPE
     is_qwen3_max = _is_qwen3_max(model_id)
+
+    if disable_thinking and is_dashscope and _is_qwen3(model_id):
+        extra_body["enable_thinking"] = False
+        return _finish_client(model_ref, model_id, temperature, streaming, extra_body)
 
     # DeepSeek / Qwen3.x：默认禁用思考模式（reasoning token 暴增输出费用）
     if (is_deepseek or _is_qwen3(model_id)) and not (is_qwen3_max and is_dashscope):
@@ -103,9 +117,19 @@ def _build_client(
     if is_qwen3_max and is_dashscope:
         extra_body["enable_thinking"] = True
 
+    return _finish_client(model_ref, model_id, temperature, streaming, extra_body)
+
+
+def _finish_client(
+    model_ref: str,
+    model_id: str,
+    temperature: float,
+    streaming: bool,
+    extra_body: dict,
+) -> ChatOpenAI:
     kwargs: dict = dict(
         api_key=settings.api_key_for_model(model_ref),
-        base_url=api_base,
+        base_url=settings.api_base_for_model(model_ref),
         model=model_id,
         temperature=temperature,
         streaming=streaming,
@@ -118,12 +142,16 @@ def _build_client(
     return ChatOpenAI(**kwargs)
 
 
-def _cached_client(model_ref: str, temperature: float, *, streaming: bool) -> ChatOpenAI:
-    """按 (网关, 模型 ID, 温度, streaming) 单飞获取客户端，两条入口共用。"""
+def _cached_client(
+    model_ref: str, temperature: float, *, streaming: bool, disable_thinking: bool = False
+) -> ChatOpenAI:
+    """按 (网关, 模型 ID, 温度, streaming, disable_thinking) 单飞获取客户端。"""
     gateway, model_id = parse_model_ref(model_ref)
     return _LLM_CACHE.get_or_create(
-        (gateway, model_id, temperature, streaming),
-        lambda: _build_client(model_ref, model_id, temperature, streaming=streaming),
+        (gateway, model_id, temperature, streaming, disable_thinking),
+        lambda: _build_client(
+            model_ref, model_id, temperature, streaming=streaming, disable_thinking=disable_thinking
+        ),
     )
 
 
@@ -146,10 +174,25 @@ def get_model(
     return _cached_client(model_ref, temp, streaming=True)
 
 
-def get_llm(streaming: bool = False, temperature: float = 0.3) -> ChatOpenAI | FakeToolModel:
+def get_llm(
+    streaming: bool = False,
+    temperature: float = 0.3,
+    model_ref: str | None = None,
+    disable_thinking: bool = False,
+) -> ChatOpenAI | FakeToolModel:
     """基于 ``settings.LLM_MODEL`` 获取 LLM 实例（RAG 检索链使用）。
 
     默认非流式 —— 与全部 RAG 调用点一致；需要流式时显式传 ``streaming=True``。
+
+    ``model_ref``：显式覆盖模型（形如 ``<gateway>:<model_id>``）。供「同一进程里
+    需要用不同模型」的场景，目前唯一用户是 RAGAS judge
+    （`settings.ragas_judge_model`，默认仍跟随 ``LLM_MODEL``）。
+    —— 之所以要能覆盖：judge 与检索链/生成的**配额是按模型分配的**，实测
+    `qwen3.8-flash` 免费额度用尽而其余模型可用；若不能分离，judge 只能被迫换掉
+    整条链的口径。
+
+    ``disable_thinking``：强制关闭思考模式。同样给 judge 用 —— RAGAS 的
+    `answer_relevancy` 需要 `n>1`，DashScope 在 thinking 开启时拒绝 `n>1`。
 
     ``LLM_MODEL`` 指向 fake 网关时返回 ``FakeToolModel``（与 ``get_model`` 同款处理）。
 
@@ -166,7 +209,8 @@ def get_llm(streaming: bool = False, temperature: float = 0.3) -> ChatOpenAI | F
     ``FakeToolModel`` 无法满足 structured output，因此 ``call_structured_*`` 会返回 None、
     检索链回落到规则路径 —— 这正是无外部依赖评测想要的行为。
     """
+    ref = model_ref or settings.LLM_MODEL
     # 与 get_model 同理：FakeToolModel 有状态（responses 队列会被消费），不进缓存
-    if parse_model_ref(settings.LLM_MODEL)[0] is Gateway.FAKE:
+    if parse_model_ref(ref)[0] is Gateway.FAKE:
         return FakeToolModel(responses=["This is a test response from the fake model."])
-    return _cached_client(settings.LLM_MODEL, temperature, streaming=streaming)
+    return _cached_client(ref, temperature, streaming=streaming, disable_thinking=disable_thinking)

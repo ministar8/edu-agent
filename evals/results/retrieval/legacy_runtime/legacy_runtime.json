@@ -1,0 +1,364 @@
+{
+  "_meta": {
+    "recorded_at": "2026-10-01T08:28:22.169001+00:00",
+    "note": "Legacy 运行时三策略；不改索引、不改 layer_weight 数字",
+    "probes": [
+      "method-tree-build",
+      "method-bst-delete",
+      "practice-bst",
+      "practice-huffman",
+      "explain-q2",
+      "learn-traversal"
+    ]
+  },
+  "strategies": [
+    {
+      "strategy": "keep",
+      "by_probe": [
+        {
+          "id": "method-tree-build",
+          "mode": "method",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "legacy_in_pack": 6,
+          "pack_layers": [
+            "legacy",
+            "legacy",
+            "advanced",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "method-bst-delete",
+          "mode": "method",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "legacy_in_pack": 5,
+          "pack_layers": [
+            "legacy",
+            "advanced",
+            "advanced",
+            "legacy",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "practice-bst",
+          "mode": "practice",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "legacy_in_pack": 6,
+          "pack_layers": [
+            "basic",
+            "legacy",
+            "legacy",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "practice-huffman",
+          "mode": "practice",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "legacy_in_pack": 5,
+          "pack_layers": [
+            "basic",
+            "basic",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "explain-q2",
+          "mode": "explain",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.625,
+          "legacy_in_pack": 3,
+          "pack_layers": [
+            "exams",
+            "exams",
+            "legacy",
+            "legacy",
+            "basic",
+            "legacy",
+            "basic",
+            "basic"
+          ]
+        },
+        {
+          "id": "learn-traversal",
+          "mode": "learn",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.5,
+          "legacy_in_pack": 4,
+          "pack_layers": [
+            "advanced",
+            "advanced",
+            "basic",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        }
+      ],
+      "aggregate": {
+        "layer_recall_pool": 1.0,
+        "layer_recall_pack": 1.0,
+        "layer_precision_pack": 0.396,
+        "legacy_in_pack_sum": 29
+      }
+    },
+    {
+      "strategy": "downrank",
+      "by_probe": [
+        {
+          "id": "method-tree-build",
+          "mode": "method",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "legacy_in_pack": 5,
+          "pack_layers": [
+            "advanced",
+            "basic",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "method-bst-delete",
+          "mode": "method",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "legacy_in_pack": 5,
+          "pack_layers": [
+            "advanced",
+            "advanced",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "practice-bst",
+          "mode": "practice",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.25,
+          "legacy_in_pack": 6,
+          "pack_layers": [
+            "basic",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "practice-huffman",
+          "mode": "practice",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.375,
+          "legacy_in_pack": 5,
+          "pack_layers": [
+            "basic",
+            "basic",
+            "advanced",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "explain-q2",
+          "mode": "explain",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.75,
+          "legacy_in_pack": 2,
+          "pack_layers": [
+            "exams",
+            "exams",
+            "basic",
+            "basic",
+            "basic",
+            "advanced",
+            "legacy",
+            "legacy"
+          ]
+        },
+        {
+          "id": "learn-traversal",
+          "mode": "learn",
+          "n_pack": 8,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 0.5,
+          "legacy_in_pack": 4,
+          "pack_layers": [
+            "advanced",
+            "advanced",
+            "basic",
+            "basic",
+            "legacy",
+            "legacy",
+            "legacy",
+            "legacy"
+          ]
+        }
+      ],
+      "aggregate": {
+        "layer_recall_pool": 1.0,
+        "layer_recall_pack": 1.0,
+        "layer_precision_pack": 0.438,
+        "legacy_in_pack_sum": 27
+      }
+    },
+    {
+      "strategy": "drop",
+      "by_probe": [
+        {
+          "id": "method-tree-build",
+          "mode": "method",
+          "n_pack": 3,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 1.0,
+          "legacy_in_pack": 0,
+          "pack_layers": [
+            "advanced",
+            "basic",
+            "advanced"
+          ]
+        },
+        {
+          "id": "method-bst-delete",
+          "mode": "method",
+          "n_pack": 3,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 1.0,
+          "legacy_in_pack": 0,
+          "pack_layers": [
+            "advanced",
+            "advanced",
+            "basic"
+          ]
+        },
+        {
+          "id": "practice-bst",
+          "mode": "practice",
+          "n_pack": 2,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 1.0,
+          "legacy_in_pack": 0,
+          "pack_layers": [
+            "basic",
+            "advanced"
+          ]
+        },
+        {
+          "id": "practice-huffman",
+          "mode": "practice",
+          "n_pack": 3,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 1.0,
+          "legacy_in_pack": 0,
+          "pack_layers": [
+            "basic",
+            "basic",
+            "advanced"
+          ]
+        },
+        {
+          "id": "explain-q2",
+          "mode": "explain",
+          "n_pack": 6,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 1.0,
+          "legacy_in_pack": 0,
+          "pack_layers": [
+            "exams",
+            "exams",
+            "basic",
+            "basic",
+            "basic",
+            "advanced"
+          ]
+        },
+        {
+          "id": "learn-traversal",
+          "mode": "learn",
+          "n_pack": 4,
+          "layer_recall_pool": 1.0,
+          "layer_recall_pack": 1.0,
+          "layer_precision_pack": 1.0,
+          "legacy_in_pack": 0,
+          "pack_layers": [
+            "advanced",
+            "advanced",
+            "basic",
+            "basic"
+          ]
+        }
+      ],
+      "aggregate": {
+        "layer_recall_pool": 1.0,
+        "layer_recall_pack": 1.0,
+        "layer_precision_pack": 1.0,
+        "legacy_in_pack_sum": 0
+      }
+    }
+  ]
+}

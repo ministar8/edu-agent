@@ -95,6 +95,11 @@ class Settings(BaseSettings):
 
     # ── RAG 检索链使用的文本模型（格式 <gateway>:<model_id>）──────
     LLM_MODEL: str = "deepseek:deepseek-v4-flash"
+    # ── RAGAS judge 模型（留空 = 跟随 LLM_MODEL）──────────────────
+    # 为什么要能单独配：各家（DashScope 等）的**免费额度按模型分配**。实测
+    # `qwen3.8-flash` 额度用尽而其余模型可用；若不分离，judge 就只能被迫连同
+    # 检索链/生成一起换口径。留空保持原行为，不影响默认路径。
+    RAGAS_JUDGE_MODEL: str = ""
     # with_structured_output 策略：DashScope/DeepSeek 兼容端上 function_calling 最稳
     STRUCTURED_OUTPUT_METHOD: Literal["function_calling", "json_mode", "json_schema"] = (
         "function_calling"
@@ -316,6 +321,8 @@ class Settings(BaseSettings):
             fake_ref = make_model_ref(Gateway.FAKE, GATEWAY_DEFAULT_MODEL[Gateway.FAKE])
             self.DEFAULT_MODEL = fake_ref
             self.LLM_MODEL = fake_ref
+            # judge 也必须拉回假网关，否则「假模型评测」会真的调用线上 judge 并产生费用
+            self.RAGAS_JUDGE_MODEL = fake_ref
 
         if self.DEFAULT_MODEL:
             self._validate_model_ref(self.DEFAULT_MODEL, field="DEFAULT_MODEL", active=active)
@@ -329,6 +336,11 @@ class Settings(BaseSettings):
             self.AVAILABLE_MODELS.add(self.DEFAULT_MODEL)
 
         self._validate_model_ref(self.LLM_MODEL, field="LLM_MODEL", active=active)
+
+        if self.RAGAS_JUDGE_MODEL:
+            self._validate_model_ref(
+                self.RAGAS_JUDGE_MODEL, field="RAGAS_JUDGE_MODEL", active=active
+            )
 
     def _validate_model_ref(self, model_ref: str, *, field: str, active: list[Gateway]) -> None:
         """校验模型引用：可解析、网关已启用、model_id 在该网关清单内。"""
@@ -353,6 +365,11 @@ class Settings(BaseSettings):
         未知网关直接报错，不再「猜」—— 静默走错 base 比报错难排查得多。
         """
         return parse_model_ref(model_ref)[0]
+
+    @property
+    def ragas_judge_model(self) -> str:
+        """RAGAS judge 实际使用的模型；未显式配置时跟随 ``LLM_MODEL``。"""
+        return self.RAGAS_JUDGE_MODEL or self.LLM_MODEL
 
     def api_base_for_model(self, model_ref: str) -> str:
         """按标识里的网关返回对应的 API base。"""

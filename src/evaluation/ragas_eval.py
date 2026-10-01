@@ -262,6 +262,39 @@ def _type_distribution(samples: list[EvalSample]) -> dict[str, int]:
     return dict(sorted(counter.items()))
 
 
+def _dump_generated_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> str | None:
+    """把「已检索+已生成」的样本落盘，再交给 RAGAS。
+
+    ★ 为什么必须在 `run_ragas_on_samples` **之前**：生成是 LLM 花费所在，
+    而 judge（`ragas.evaluate`）可能整段失败（实测 `OSError [Errno 22]`）。
+    若不落盘，一次 judge 失败就让前面全部生成花费作废 —— 只能重跑重花钱。
+    本文件是「花过的钱换来的产物」，失败后可据此复用，不必重新生成。
+    """
+    if not samples:
+        return None
+    out_dir = Path(cfg.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tag = cfg.output_tag or "default"
+    path = out_dir / f"ragas_{tag}_samples.jsonl"
+    with path.open("w", encoding="utf-8") as f:
+        for s in samples:
+            f.write(
+                json.dumps(
+                    {
+                        "query": s.query,
+                        "reference": s.reference,
+                        "metadata": s.metadata,
+                        "answer": s.answer,
+                        "contexts": s.contexts,
+                        "retrieval": s.retrieval_details,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    return str(path)
+
+
 async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
     """加载数据集 → 检索+生成 → RAGAS → 写 JSON 报告。"""
     from core.settings import settings
@@ -276,7 +309,24 @@ async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
         return {"_meta": {"error": f"empty dataset: {cfg.dataset_path}"}}
 
     filled = await prepare_samples(samples, cfg)
+    # 先落盘生成产物：judge 失败不浪费已花的生成成本
+    samples_path = _dump_generated_samples(filled, cfg)
+    if samples_path:
+        logger.info("生成样本已落盘（judge 失败可复用）：%s", samples_path)
     report = run_ragas_on_samples(filled, cfg)
+
+    # ── 全指标无分 = judge 整体失败，必须显式报错 ────────────────────────
+    # 实测（2026-10-01）：judge 配额用尽时 `raise_exceptions=False` 会把每个指标
+    # 吞成 NaN，报告里四项全是 `{"mean": None, "n": 0}`，而 `_meta` 无 error、
+    # 进程退出码 0 —— 一份**看似成功但毫无信息**的报告，最坏情况是据此写进论文。
+    # 故此处把「全部指标 n=0」升级为显式 error（退出码 1）。
+    requested = [m for m in cfg.ragas_metrics if m in report]
+    scored = [m for m in requested if int((report.get(m) or {}).get("n") or 0) > 0]
+    if requested and not scored and not report.get("_meta", {}).get("error"):
+        report.setdefault("_meta", {})["error"] = (
+            "所有 RAGAS 指标均无有效分数（judge 全部失败，通常是配额/鉴权问题）——"
+            "报告不可用；已生成样本见 generated_samples_path，可复用无需重新生成"
+        )
 
     # ★ 报告自描述：把「本次实际生效的口径」写进去。
     # 动机：`cfg.use_rerank=True` 与实际是否重排**不是一回事** ——
@@ -288,6 +338,10 @@ async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
     report["_meta"]["run_config"] = {
         "dataset": cfg.dataset_path,
         "limit": cfg.dataset_limit,
+        # 模型口径必须自描述：judge 与生成可能是**不同模型**
+        # （免费额度按模型分配，judge 另有 `RAGAS_JUDGE_MODEL` 槽位）。
+        "generation_model": settings.LLM_MODEL,
+        "judge_model": settings.ragas_judge_model,
         # 抽样口径必须写进报告：只跑子集时，「n」不足以说明测的是哪一批。
         # 类型分布是判断「这次抽样是否覆盖了 4 类查询」的唯一依据。
         "sample_per_type": cfg.sample_per_type,
@@ -308,6 +362,7 @@ async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
         "include_details": cfg.include_details,
         "n_filled": len(filled),
         "n_loaded": len(samples),
+        "generated_samples_path": samples_path,
     }
 
     out_dir = Path(cfg.output_dir)

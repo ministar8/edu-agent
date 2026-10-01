@@ -1,0 +1,23 @@
+# task_mode_x_layer_policy.yaml — Task Mode × Layer Policy 交互实验
+# ★ YAML 是实验快照，执行配置以 scripts/task_mode_layer_policy.py 为准
+name: task_mode_x_layer_policy
+description: 6 task_mode × 5 layer_policy 交互矩阵（只动 preferred_layers）
+inherits: null
+frozen_fields:
+  - exam_resources
+  - answer_policy
+  - explanation_policy
+  - legacy_policy
+varied_fields:
+  - preferred_layers
+task_modes: [learn, method, practice, grade, explain, verify]
+layer_policies:
+  flat: [basic, advanced, exams]
+  ours: task_mapping
+  prefer_l1: [basic]
+  prefer_l2: [advanced]
+  prefer_l3: [exams]
+metrics:
+  primary: pack_nonempty_rate   # 非空 Evidence Pack 占比（sufficiency，空包=不可用）
+  secondary: [layer_hit_rate, layer_precision_pack, mean_n_pack, leakage_rate]
+note: 安全字段各臂相同；验证任务-层策略交叉交互

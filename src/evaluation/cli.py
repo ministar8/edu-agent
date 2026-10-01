@@ -70,6 +70,42 @@ def _preflight(cfg) -> list[tuple[bool, str]]:
             (False, "USE_FAKE_EMBEDDING=true：检索走确定性哈希向量，**语义质量结论无效**")
         )
 
+    # ── judge LLM 探活（★ 必须在生成之前拦住）────────────────────────────
+    # 为什么必须放在这里：生成 N 条答案要花 LLM 费用，而 judge 与生成**可能不同配额**
+    # （DashScope 免费额度按模型分配；judge 另有 `RAGAS_JUDGE_MODEL` 槽位）。
+    # 实测（2026-10-01）：judge 侧 403 时生成已经全部跑完 —— 一轮评测的钱白花，
+    # 报告里四项指标全 None。探活把「已花钱才发现不可用」变成「一分不花就明确失败」。
+    try:
+        from core.llm import get_llm
+
+        probe = get_llm(streaming=False, temperature=0.0).invoke("ping")
+        if probe is None:
+            problems.append((True, "生成 LLM 探活返回空响应"))
+    except Exception as e:
+        problems.append(
+            (
+                True,
+                f"生成 LLM 不可用（model={settings.LLM_MODEL}）：{type(e).__name__}: {e}",
+            )
+        )
+
+    # judge 是评测中调用量最大的一环，且可能配了与生成不同的模型 —— 必须单独探。
+    judge_ref = settings.ragas_judge_model
+    if judge_ref != settings.LLM_MODEL:
+        try:
+            from core.llm import get_llm
+
+            probe = get_llm(streaming=False, temperature=0.0, model_ref=judge_ref).invoke("ping")
+            if probe is None:
+                problems.append((True, f"RAGAS judge LLM 探活返回空响应（model={judge_ref}）"))
+        except Exception as e:
+            problems.append(
+                (
+                    True,
+                    f"RAGAS judge LLM 不可用（model={judge_ref}）：{type(e).__name__}: {e}",
+                )
+            )
+
     return problems
 
 

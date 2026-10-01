@@ -1,0 +1,137 @@
+{
+  "recorded_at": "2026-10-01T09:16:40.199278+00:00",
+  "l2_total": 98,
+  "l2_by_subject": {
+    "data_structure": 38,
+    "computer_organization": 20,
+    "operating_system": 21,
+    "computer_network": 19
+  },
+  "l2_by_chapter": {
+    "树与二叉树": 8,
+    "线性表": 7,
+    "图": 5,
+    "查找": 6,
+    "排序": 5,
+    "栈和队列": 4,
+    "代码实现": 19,
+    "数据表示与运算": 4,
+    "存储系统": 5,
+    "体系结构": 3,
+    "输入输出系统": 3,
+    "进程管理": 7,
+    "内存管理": 4,
+    "文件管理": 8,
+    "数据链路层": 4,
+    "网络层": 3,
+    "传输层": 3
+  },
+  "method_queries": [
+    {
+      "query": "BST 删除时双支结点怎么处理？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        3
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/data_structure/03_tree.md"
+      ],
+      "pack_chapters": [
+        "查找",
+        "树与二叉树",
+        "树与二叉树"
+      ]
+    },
+    {
+      "query": "如何用银行家算法避免死锁？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        5
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/operating_system/01_process_sync.md"
+      ],
+      "pack_chapters": [
+        "传输层",
+        "进程管理",
+        "进程管理",
+        "进程管理"
+      ]
+    },
+    {
+      "query": "页面置换算法 LRU 怎么实现？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        7,
+        10
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/computer_organization/02_storage_cache.md",
+        "knowledge/advanced/operating_system/02_memory.md"
+      ],
+      "pack_chapters": [
+        "存储系统",
+        "内存管理",
+        "存储系统",
+        "内存管理"
+      ]
+    },
+    {
+      "query": "Dijkstra 算法的步骤是什么？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        4
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/data_structure/04_graph.md"
+      ],
+      "pack_chapters": [
+        "图"
+      ]
+    },
+    {
+      "query": "如何判断一个二叉树是平衡二叉树？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        6,
+        9
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/computer_network/03_transport.md",
+        "knowledge/advanced/data_structure/03_tree.md"
+      ],
+      "pack_chapters": [
+        "传输层",
+        "树与二叉树",
+        "树与二叉树",
+        "树与二叉树"
+      ]
+    },
+    {
+      "query": "TCP 拥塞控制怎么实现？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        8,
+        9,
+        10
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/operating_system/03_file_disk.md",
+        "knowledge/advanced/computer_organization/03_pipeline.md",
+        "knowledge/advanced/computer_network/03_transport.md"
+      ],
+      "pack_chapters": [
+        "文件管理",
+        "体系结构",
+        "传输层",
+        "传输层"
+      ]
+    }
+  ]
+}

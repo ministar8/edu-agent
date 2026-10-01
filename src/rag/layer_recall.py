@@ -11,6 +11,7 @@ L1/L2/L3 单独 `where kb_depth=…` 能命中，但进不了最终候选池。
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 
 from rag.evidence import FusedEvidence, TextEvidence
 from rag.topic_relevance import is_topic_relevant, topic_relevance_score
@@ -46,18 +47,27 @@ def _doc_to_evidence(doc, score: float, collection: str) -> TextEvidence:
 
 async def topup_preferred_layers(
     query: str,
-    preferred_layers: list[str],
+    preferred_layers: Sequence[str],
     fused: FusedEvidence,
     *,
     per_layer: int = 2,
     max_add: int = 4,
+    eligibility_where: dict | None = None,
 ) -> FusedEvidence:
     """preferred 层缺口补齐（不是无条件灌池）。
 
     - 仅当候选池**缺少**某 preferred 层时 top-up 该层
     - 每层每集合最多 per_layer，总新增 ≤ max_add
     - 按 score 截断，避免无关 advanced 灌满 pack
+
+    ★ **资格边界**：本函数只决定「从哪些层补」，**不重写 eligibility**。
+      调用方必须把 policy 的 `eligibility_where()` 传入 `eligibility_where`
+      （与主检索同一条 where），避免 top-up 绕过 doc_role 约束
+      —— 例如 verify 禁 `exam_answer`，但 top-up 只按 `kb_depth=exams`
+      会把 answer.md 拉进池，随后被 Evidence Policy 裁掉，形成空 L3。
     """
+    from schema.task_policy import merge_where_filters
+
     preferred = list(preferred_layers or [])
     if not preferred:
         return fused
@@ -81,7 +91,8 @@ async def topup_preferred_layers(
     }
     candidates: list[TextEvidence] = []
     for layer in missing:
-        filt = {"kb_depth": layer}
+        # 层约束 + 资格约束（policy 真源）；layer_recall 不实现资格规则
+        filt = merge_where_filters({"kb_depth": layer}, eligibility_where)
         for coll in SUBJECT_COLLECTIONS:
             try:
                 hits = await mgr.asimilarity_search_with_score(coll, query, per_layer, filter=filt)

@@ -175,6 +175,18 @@ class TaskPolicy(BaseModel):
         """practice：Pack 不得出现题号。"""
         return self.task_mode == "practice"
 
+    def eligible_semantic_layers(self) -> list[LayerName]:
+        """当前 policy 下**允许进候选**的语义层（资格真源）。
+
+        basic/advanced 恒允许；exams 仅在三种资源至少一种 allowed 时允许。
+        供召回侧判断「preferred 层是否与 eligibility 矛盾」——
+        例如 practice 的 `exam_resources` 全 forbidden，exams 就不合规。
+        """
+        layers: list[LayerName] = ["basic", "advanced"]
+        if any(self.exam_resources.allows(r) for r in ("question", "answer", "paper")):
+            layers.append("exams")
+        return layers
+
     def eligibility_where(self) -> dict | None:
         """召回侧 Chroma where（安全前置，见 RETRIEVAL_LAYER_DESIGN §6）。
 

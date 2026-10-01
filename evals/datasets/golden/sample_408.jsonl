@@ -35,7 +35,7 @@
 {"query": "什么是 ARP 协议？", "reference": "ARP 将同一局域网内的 IP 地址解析为 MAC 地址，主机通过 ARP 请求/应答获得下一跳的硬件地址。", "metadata": {"subject": "network", "knowledge_points": ["网络层", "数据链路层"]}}
 {"query": "路由选择协议 RIP 和 OSPF 有什么不同？", "reference": "RIP 基于距离向量、以跳数为度量、收敛较慢；OSPF 基于链路状态、使用 Dijkstra，收敛更快、适合较大网络。", "metadata": {"subject": "network", "knowledge_points": ["网络层"]}}
 {"query": "传输层端口号的作用是什么？", "reference": "端口号区分同一主机上不同应用进程，实现进程到进程的复用与分用。", "metadata": {"subject": "network", "knowledge_points": ["传输层"]}}
-{"query": "什么是滑动窗口协议？", "reference": "滑动窗口允许发送方在未收到确认前连续发送多个分组，窗口大小决定在途数据量，提高信道利用率并配合流量控制。", "metadata": {"subject": "network", "knowledge_points": ["传输层"]}}
+{"query": "什么是滑动窗口协议？", "reference": "滑动窗口允许发送方在未收到确认前连续发送多个分组，窗口大小决定在途数据量，提高信道利用率并配合流量控制。", "metadata": {"subject": "network", "knowledge_points": ["数据链路层", "传输层"]}}
 {"query": "Cache 的作用是什么？", "reference": "Cache 位于 CPU 与主存之间，存放近期使用的程序与数据，缓解 CPU 与主存速度不匹配。", "metadata": {"subject": "co", "knowledge_points": ["存储系统"]}}
 {"query": "什么是存储器层次结构？", "reference": "典型层次为寄存器-Cache-主存-辅存；Cache-主存解决速度问题，主存-辅存解决容量问题。", "metadata": {"subject": "co", "knowledge_points": ["存储系统"]}}
 {"query": "MAR 和 MDR 分别是什么？", "reference": "MAR 是主存地址寄存器，保存访问地址；MDR 是主存数据寄存器，保存读出或待写入的数据。二者逻辑上属存储器但集成在 CPU。", "metadata": {"subject": "co", "knowledge_points": ["计算机系统概述", "存储系统"]}}
