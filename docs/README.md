@@ -1,6 +1,6 @@
 # docs/ 索引
 
-**先读哪个**：动知识库 → `KB_MASTER_DESIGN.md`（总册）。动检索路由/策略 → `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md`。改检索相关代码前 → `RETRIEVAL_PLAN.md` + `RETRIEVAL_ROADMAP.md`（**「不做清单」在这里，改动前必看**）。
+**先读哪个**：动知识库 → `KB_MASTER_DESIGN.md`（总册）。动检索路由/策略 → `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md`。改检索相关代码前 → `RETRIEVAL_PLAN.md` + `RETRIEVAL_ROADMAP.md`（**「不做清单」在这里，改动前必看**）。**写论文 / 快速定位代码 → `ARCHITECTURE_RETRIEVAL.md` + `EXPERIMENTS.md`。**
 
 ## 现行文档
 
@@ -14,6 +14,7 @@
 | `EXAMS_DESIGN.md` | L3 细节（D0–D6 决策） | 写/改 Exams |
 | `KB_DESIGN.md` | 早期总图（与总册冲突以总册为准） | 历史对照 |
 | `ARCHITECTURE.md` | 分层与调用链（L0~L3 分层、检索/生成/护栏） | 理解系统结构 |
+| **`ARCHITECTURE_RETRIEVAL.md`** | **检索架构总览（as-built）+ 术语表 + 模块索引 + 已知局限** | **写论文第 3 章 / 定位代码** |
 | **`RETRIEVAL_PLAN.md`** | **当前执行方案**（Step 1~6 + 实测数据 + 已否决项） | **动手改检索前** |
 | `RETRIEVAL_ROADMAP.md` | 效果路线图；**含「不做清单」（同类改动有负收益先例）** | **动手改检索前** |
 | `L1L2L3_RETRIEVAL_REVIEW.md` | L1/L2/L3 分级设计评审（问题清单 + 五维度优劣） | 改分级/路由/阈值前 |
