@@ -694,6 +694,23 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 > 本节点记录修复与证据；§17 的 V-2026-10-01 **已被本节点取代**，
 > §2/§9/§10/§11/§12/§13/§14/§5 的数字均已按本版本重跑。
 
+### 18.0 ★ 版本锚点（可追溯链起点）
+
+| 项 | 值 |
+|---|---|
+| **代码版本** | **`1cc69b39f5c1287e2941ae282f9a03a5e80464c6`**（短 `1cc69b3`） |
+| **黄金集 sha256** | **`be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66`**（156 条） |
+| 生成集 | `evals/datasets/ragas/ragas_paired20.jsonl`（20 条） |
+| 冻结日期 | 2026-10-01 |
+
+> **与实验的关系**：本节点所有归档均由 `1cc69b3` 的**前一工作区状态**产生；
+> 提交时的唯一额外改动是 `Sequence[str]` **纯类型注解**（`rag/retriever.py`、
+> `rag/layer_recall.py`，两文件均 `from __future__ import annotations`）——
+> **无运行时行为差异，实验结果对 `1cc69b3` 有效**。
+>
+> **待补（结构性缺口，见 §18.6）**：归档 JSON 目前**不记录** `code_version` 与
+> `golden_sha256`，反查需依赖本表；已在 §18.6 列为待修项。
+
 ### 18.1 改了什么
 
 | # | 位置 | 改动 | 性质 |
@@ -773,8 +790,33 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 | 阈值敏感度（§14） | ✅ | `threshold_sensitivity.json` |
 | **RAGAS（§5）** | ✅ 仅冻结版跑 | `generation/ragas/` |
 
-**门禁全过**：`retrieval_gate`（kp_hit 0.8718 / kp_mrr 0.6761，均高于基线）·
-`probe_gate` · `leakage_gate` · `mode_layer_gate` · `topic_relevance_gate` ·
-`topup_eligibility_gate` · `sufficiency_gate` · `policy_layer_evidence_proof`（6/6 ok）
+**门禁全过**：`retrieval_gate`（kp_hit **0.8718** / kp_mrr **0.6729–0.6761**，均高于基线；
+区间的抖动源于已知 Chroma ANN 边界效应）· `probe_gate` · `leakage_gate` · `mode_layer_gate` ·
+`topic_relevance_gate` · `topup_eligibility_gate` · `sufficiency_gate` ·
+`policy_layer_evidence_proof`（6/6 ok）· `agent_behavior_gate`（8/8 PASS，quality 0.1473）
 
 > **跨版本不可混引**：§17（V-2026-10-01）的数字与本节不可混用同一张表。
+
+### 18.6 ★ 冻结前检查发现的**结构性缺口**（待修）
+
+**四层可追溯链检查**（`uv run python scripts/freeze_precheck.py`）：
+
+| 层 | 状态 |
+|---|---|
+| ④ 文档数字 → JSON | ✅ 通过（全量审计 + 抽样反查） |
+| ③ JSON → 脚本/参数 | ⚠️ 有 `config_snapshot`，但**无生成脚本名**；3 个归档无 cfg |
+| ② JSON → 黄金集 | ⚠️ 部分记录了 golden 路径，**无哈希** |
+| ① 节点 → 代码版本 | ❌ **全无**：**零个归档**记录 `code_version` |
+
+**断点示例**：
+```
+paper_tables 表 2  full kp_mrr = 0.9625
+  → component_ablation.json rows[full].kp_mrr = 0.9625        ✅
+  → config_snapshot.full = {"note": "完整系统（当前默认）"}      ⚠️ 太薄
+  → golden 路径 + limit=60 已记录                              ✅
+  → 具体代码版本：无（需依赖 §18.0 的本表）                     ❌
+```
+
+**待修（列入下一步，冻结后不宜再改）**：给全部实验脚本统一注入 `provenance`
+（`recorded_at` / `code_version` / `golden_sha256` / `script` / `argv`），
+使每个归档自描述，不再依赖人工维护本表。
