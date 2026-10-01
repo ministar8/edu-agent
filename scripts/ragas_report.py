@@ -15,12 +15,16 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RAGAS_DIR = ROOT / "evals" / "results" / "generation" / "ragas"
 METRICS = ("faithfulness", "context_precision", "context_recall", "answer_relevancy")
+
+sys.path.insert(0, str(ROOT / "src"))
+from evaluation.provenance import build_provenance  # noqa: E402
 
 
 def _current_judge_model() -> str | None:
@@ -124,6 +128,9 @@ def main() -> int:
         "effective_rerank_enabled": rc.get("effective_rerank_enabled"),
         "embedding_fake": rc.get("embedding_fake"),
         "note": "逐样本明细见 raw.jsonl 与 ragas_<tag>.json；分类型均值为本文件派生",
+        # 本文件由本脚本派生，故 provenance 记本脚本；上游 RAGAS 运行的口径见上方 model 字段
+        "source_report": f"ragas_{args.tag}.json",
+        **build_provenance("scripts/ragas_report.py"),
     }
     for m in METRICS:
         metrics_out[m] = report.get(m)
