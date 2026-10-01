@@ -42,6 +42,8 @@ from langgraph.graph.message import add_messages  # noqa: E402
 from langgraph.types import Command, interrupt  # noqa: E402
 from typing_extensions import TypedDict  # noqa: E402
 
+from evaluation.provenance import build_provenance  # noqa: E402
+
 EVIDENCE_DIR = ROOT / "evals" / "results" / "system_validation" / "langgraph_state"
 
 results: list[tuple[str, bool, str]] = []
@@ -424,6 +426,7 @@ async def main() -> int:
         "total": total,
         "cases": {n: ok for n, ok, _ in results},
     }
+    evidence.update(build_provenance("scripts/langgraph_state_gate.py"))
     out = EVIDENCE_DIR / "state_gate.json"
     out.write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"evidence → {out}")

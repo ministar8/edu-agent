@@ -17,6 +17,7 @@ from evaluation.adapters import (
 )
 from evaluation.config import EvaluationConfig
 from evaluation.dataset import EvalSample
+from evaluation.provenance import build_provenance
 
 if TYPE_CHECKING:
     # 仅类型检查期需要。ragas 属可选 `eval` 依赖组，CI **不装**（故带 import-not-found 忽略）；
@@ -369,6 +370,7 @@ async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     tag = cfg.output_tag or "default"
     path = out_dir / f"ragas_{tag}.json"
+    report.update(build_provenance("src/evaluation/ragas_eval.py"))
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     report["_meta"]["report_path"] = str(path)
     logger.info("RAGAS 报告已写入 %s", path)

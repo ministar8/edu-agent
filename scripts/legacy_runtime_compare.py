@@ -23,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from evaluation.provenance import build_provenance  # noqa: E402
 from rag.evidence_policy import apply_evidence_policy  # noqa: E402
 from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
 from rag.task_policy import resolve_task_policy  # noqa: E402
@@ -140,6 +141,7 @@ async def main() -> int:
             "probes": [p[0] for p in PROBES],
         },
         "strategies": [],
+        **build_provenance("scripts/legacy_runtime_compare.py"),
     }
     for strategy in ("keep", "downrank", "drop"):
         print(f"==== legacy strategy: {strategy} ====")

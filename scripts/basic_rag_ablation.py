@@ -33,6 +33,7 @@ from task_layer_ablation import (  # noqa: E402
     run_one,
 )
 
+from evaluation.provenance import build_provenance  # noqa: E402
 from evaluation.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     GATE_K,
@@ -202,6 +203,7 @@ async def main() -> int:
                 },
                 "retrieval": {"basic_rag": ret_basic, "ours": ret_ours},
                 "task": {"basic_rag": task_basic, "ours": task_ours},
+                **build_provenance("scripts/basic_rag_ablation.py"),
             },
             ensure_ascii=False,
             indent=2,

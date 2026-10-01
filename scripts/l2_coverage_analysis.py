@@ -26,12 +26,12 @@ import asyncio
 import json
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from evaluation.provenance import build_provenance  # noqa: E402
 from evaluation.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     chapter_of_source,
@@ -160,12 +160,11 @@ def main() -> int:
     OUT.write_text(
         json.dumps(
             {
-                # 审计要求：归档必须自带时间戳，否则跨版本追溯只能靠文件 mtime
-                "recorded_at": datetime.now(UTC).isoformat(),
                 "l2_total": total,
                 "l2_by_subject": per_subject,
                 "l2_by_chapter": counts,
                 "method_queries": rows,
+                **build_provenance("scripts/l2_coverage_analysis.py"),
             },
             ensure_ascii=False,
             indent=2,

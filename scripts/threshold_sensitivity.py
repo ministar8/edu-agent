@@ -16,7 +16,6 @@ import json
 import sys
 import time
 from contextlib import contextmanager
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -71,10 +70,18 @@ def capture_fallback():
         logging.getLogger("rag.pipeline").removeHandler(handler)
 
 
+from evaluation.provenance import build_provenance  # noqa: E402
+from evaluation.retrieval_gate import (  # noqa: E402
+    DEFAULT_GOLDEN_PATH,
+    QueryOutcome,
+    compute_metrics,
+    load_golden_queries,
+)
+
+
 async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
     from ablation_retrieval import CONFIGS, apply_config
 
-    from evaluation.retrieval_gate import QueryOutcome, compute_metrics
     from rag.retriever import aretrieve_evidence_with_retry
 
     flags = CONFIGS[arm]
@@ -150,8 +157,6 @@ async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
 async def main() -> int:
     import argparse
 
-    from evaluation.retrieval_gate import DEFAULT_GOLDEN_PATH, load_golden_queries
-
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", default="full", help="full | vector_only | 逗号分隔")
     args = ap.parse_args()
@@ -198,12 +203,11 @@ async def main() -> int:
     path.write_text(
         json.dumps(
             {
-                # 审计要求：归档必须自带时间戳，否则跨版本追溯只能靠文件 mtime
-                "recorded_at": datetime.now(UTC).isoformat(),
                 "design": "E-next: RRF threshold × scale; fixed 60 golden / index / top-k; no LLM",
                 "arms": arms,
                 "scales": list(SCALES),
                 "results": all_results,
+                **build_provenance("scripts/threshold_sensitivity.py"),
             },
             ensure_ascii=False,
             indent=2,

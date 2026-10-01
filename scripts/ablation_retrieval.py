@@ -28,6 +28,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from evaluation.provenance import build_provenance  # noqa: E402
 from evaluation.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     GATE_K,
@@ -345,6 +346,7 @@ async def main() -> int:
                 # 当次配置快照：实验可追溯（YAML 是文档，这里才是实际执行口径）
                 "config_snapshot": {n: CONFIGS[n] for n in names},
                 "rows": rows,
+                **build_provenance("scripts/ablation_retrieval.py"),
             },
             ensure_ascii=False,
             indent=2,

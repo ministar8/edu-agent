@@ -56,6 +56,7 @@ from agent_behavior_smoke import (  # noqa: E402
 )
 
 from agents.agents import DEFAULT_AGENT, get_agent  # noqa: E402
+from evaluation.provenance import build_provenance  # noqa: E402
 
 # ── 硬安全模式（Gate 口径，比 smoke 收紧）────────────────
 # practice/learn 禁止出现的答案面
@@ -418,7 +419,7 @@ async def run_all(quality_out: Path) -> int:
         "quality_score": quality_score,
         "cases": {g.name: g.metrics for g in results},
         "hard_fails": hard_all,
-        "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        **build_provenance("scripts/agent_behavior_gate.py"),
     }
     quality_out.parent.mkdir(parents=True, exist_ok=True)
     quality_out.write_text(json.dumps(quality, ensure_ascii=False, indent=2), encoding="utf-8")

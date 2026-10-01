@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
+from evaluation.provenance import build_provenance  # noqa: E402
 from evaluation.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     GATE_K,
@@ -165,6 +166,7 @@ async def run_one_run(run_id: int) -> dict[str, Any]:
         "elapsed_s": elapsed,
         "config_metrics": config_metrics,
         "detail": detail,
+        **build_provenance("scripts/component_variance.py"),
     }
 
 
@@ -281,6 +283,7 @@ async def main() -> int:
             "runs_meta": [
                 {"run_id": r["run_id"], "config_metrics": r["config_metrics"]} for r in runs
             ],
+            **build_provenance("scripts/component_variance.py"),
         }
         path = OUT_DIR / "summary.json"
         path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -311,6 +314,7 @@ async def main() -> int:
     summary = {
         "summary": aggregate(runs),
         "runs_meta": [{"run_id": r["run_id"], "config_metrics": r["config_metrics"]} for r in runs],
+        **build_provenance("scripts/component_variance.py"),
     }
     path = OUT_DIR / "summary.json"
     path.write_text(json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

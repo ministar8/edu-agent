@@ -88,6 +88,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from evaluation.provenance import build_provenance
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -1093,6 +1095,7 @@ def build_baseline_payload(
             "recorded_at": time.strftime("%Y-%m-%d"),
         },
         "metrics": metrics.as_dict(),
+        **build_provenance("src/evaluation/retrieval_gate.py"),
     }
 
 
