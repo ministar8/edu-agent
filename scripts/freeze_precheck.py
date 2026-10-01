@@ -43,16 +43,18 @@ def check_code_state() -> None:
     print(f"  HEAD 提交信息    : {git('log', '-1', '--format=%s')}")
     dirty = git("status", "--porcelain")
     files = [ln for ln in dirty.splitlines() if ln.strip()]
-    tracked_mod = [ln for ln in files if not ln.startswith("??")]
-    print(f"  未提交改动文件数 : {len(files)}（其中已跟踪 {len(tracked_mod)}）")
-    if tracked_mod:
-        print("  → 判定：❌ 版本节点无不可变引用（代码改动未提交，无法用 SHA 定位）")
+    # 只看代码目录（与 evaluation.provenance.code_version 同一判据）：
+    # 「刚跑完实验、归档未提交」不算代码改动，否则真正的危险信号会被淹没。
+    code_dirty = [ln for ln in files if ln.split(maxsplit=1)[-1].startswith(("src/", "scripts/"))]
+    print(f"  工作区改动文件数 : {len(files)}（其中代码目录 {len(code_dirty)}）")
+    if code_dirty:
+        print("  → 判定：❌ 代码有未提交改动，无法用 SHA 唯一定位")
     else:
-        print("  → 判定：✅ 工作区干净，可用 HEAD SHA 定位")
-    for ln in files[:14]:
+        print("  → 判定：✅ 代码目录干净，可用 HEAD SHA 定位（归档改动不影响）")
+    for ln in code_dirty[:10]:
         print(f"     {ln}")
-    if len(files) > 14:
-        print(f"     … 另有 {len(files) - 14} 项")
+    if len(code_dirty) > 10:
+        print(f"     … 另有 {len(code_dirty) - 10} 项")
 
 
 def check_golden() -> None:

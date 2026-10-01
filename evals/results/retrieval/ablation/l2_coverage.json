@@ -1,5 +1,4 @@
 {
-  "recorded_at": "2026-10-01T09:16:40.199278+00:00",
   "l2_total": 98,
   "l2_by_subject": {
     "data_structure": 38,
@@ -133,5 +132,13 @@
         "传输层"
       ]
     }
-  ]
+  ],
+  "recorded_at": "2026-10-01T10:30:06.813345+00:00",
+  "provenance": {
+    "recorded_at": "2026-10-01T10:30:06.813345+00:00",
+    "code_version": "d6eed4c",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/l2_coverage_analysis.py",
+    "argv": []
+  }
 }

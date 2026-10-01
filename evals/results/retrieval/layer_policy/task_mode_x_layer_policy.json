@@ -1,5 +1,5 @@
 {
-  "recorded_at": "20261001_162808",
+  "recorded_at": "2026-10-01T10:29:30.378822+00:00",
   "queries": {
     "learn": [
       "什么是二叉排序树？",
@@ -144,7 +144,7 @@
         "grade": {
           "n": 3,
           "layer_hit_rate": 0.6667,
-          "layer_precision_pack": 0.2,
+          "layer_precision_pack": 0.2667,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
           "mean_n_pack": 5.0,
@@ -155,10 +155,10 @@
         "explain": {
           "n": 3,
           "layer_hit_rate": 1.0,
-          "layer_precision_pack": 0.3778,
+          "layer_precision_pack": 0.35,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.33,
+          "mean_n_pack": 4.67,
           "target_layers": [
             "exams"
           ]
@@ -220,7 +220,7 @@
           "layer_precision_pack": 0.2667,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.67,
+          "mean_n_pack": 5.0,
           "target_layers": [
             "exams"
           ]
@@ -228,10 +228,10 @@
         "explain": {
           "n": 3,
           "layer_hit_rate": 1.0,
-          "layer_precision_pack": 0.3778,
+          "layer_precision_pack": 0.35,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.33,
+          "mean_n_pack": 4.67,
           "target_layers": [
             "exams"
           ]
@@ -293,7 +293,7 @@
           "layer_precision_pack": 0.0,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.0,
+          "mean_n_pack": 5.0,
           "target_layers": [
             "exams"
           ]
@@ -304,7 +304,7 @@
           "layer_precision_pack": 0.1333,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.0,
+          "mean_n_pack": 4.33,
           "target_layers": [
             "exams"
           ]
@@ -366,7 +366,7 @@
           "layer_precision_pack": 0.0,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.67,
+          "mean_n_pack": 5.0,
           "target_layers": [
             "exams"
           ]
@@ -377,7 +377,7 @@
           "layer_precision_pack": 0.1333,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.0,
+          "mean_n_pack": 4.33,
           "target_layers": [
             "exams"
           ]
@@ -439,7 +439,7 @@
           "layer_precision_pack": 0.2667,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.0,
+          "mean_n_pack": 5.0,
           "target_layers": [
             "exams"
           ]
@@ -447,10 +447,10 @@
         "explain": {
           "n": 3,
           "layer_hit_rate": 1.0,
-          "layer_precision_pack": 0.3778,
+          "layer_precision_pack": 0.35,
           "leakage_rate": null,
           "pack_nonempty_rate": 1.0,
-          "mean_n_pack": 4.33,
+          "mean_n_pack": 4.67,
           "target_layers": [
             "exams"
           ]
@@ -824,10 +824,10 @@
           "exams"
         ],
         "layers": [
-          "advanced",
           "exams",
-          "basic",
+          "exams",
           "advanced",
+          "basic",
           "legacy"
         ],
         "layer_hit": true,
@@ -847,8 +847,8 @@
         ],
         "layers": [
           "advanced",
-          "advanced",
           "basic",
+          "advanced",
           "legacy",
           "legacy"
         ],
@@ -892,12 +892,13 @@
         "layers": [
           "exams",
           "legacy",
+          "legacy",
           "legacy"
         ],
         "layer_hit": true,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 3,
+        "n_pack": 4,
         "legacy_policy": "fallback"
       },
       {
@@ -1322,10 +1323,10 @@
           "advanced"
         ],
         "layers": [
-          "advanced",
           "exams",
           "exams",
           "advanced",
+          "basic",
           "legacy"
         ],
         "layer_hit": true,
@@ -1345,13 +1346,14 @@
         "layers": [
           "advanced",
           "advanced",
+          "basic",
           "legacy",
           "legacy"
         ],
         "layer_hit": false,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 4,
+        "n_pack": 5,
         "legacy_policy": "fallback"
       },
       {
@@ -1388,12 +1390,13 @@
         "layers": [
           "exams",
           "legacy",
+          "legacy",
           "legacy"
         ],
         "layer_hit": true,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 3,
+        "n_pack": 4,
         "legacy_policy": "fallback"
       },
       {
@@ -1777,6 +1780,7 @@
         ],
         "layers": [
           "basic",
+          "advanced",
           "legacy",
           "legacy",
           "legacy"
@@ -1784,7 +1788,7 @@
         "layer_hit": false,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 4,
+        "n_pack": 5,
         "legacy_policy": "fallback"
       },
       {
@@ -1796,13 +1800,15 @@
         ],
         "layers": [
           "basic",
+          "advanced",
+          "advanced",
           "legacy",
           "legacy"
         ],
         "layer_hit": false,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 3,
+        "n_pack": 5,
         "legacy_policy": "fallback"
       },
       {
@@ -1834,12 +1840,13 @@
         ],
         "layers": [
           "legacy",
+          "legacy",
           "legacy"
         ],
         "layer_hit": false,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 2,
+        "n_pack": 3,
         "legacy_policy": "fallback"
       },
       {
@@ -2218,7 +2225,7 @@
         ],
         "layers": [
           "advanced",
-          "advanced",
+          "basic",
           "legacy",
           "legacy",
           "legacy"
@@ -2239,13 +2246,14 @@
         "layers": [
           "advanced",
           "advanced",
+          "basic",
           "legacy",
           "legacy"
         ],
         "layer_hit": false,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 4,
+        "n_pack": 5,
         "legacy_policy": "fallback"
       },
       {
@@ -2277,12 +2285,13 @@
         ],
         "layers": [
           "legacy",
+          "legacy",
           "legacy"
         ],
         "layer_hit": false,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 2,
+        "n_pack": 3,
         "legacy_policy": "fallback"
       },
       {
@@ -2678,8 +2687,8 @@
         "layers": [
           "exams",
           "exams",
-          "legacy",
-          "legacy",
+          "advanced",
+          "basic",
           "legacy"
         ],
         "layer_hit": true,
@@ -2696,13 +2705,16 @@
           "exams"
         ],
         "layers": [
+          "advanced",
+          "basic",
+          "advanced",
           "legacy",
           "legacy"
         ],
         "layer_hit": false,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 2,
+        "n_pack": 5,
         "legacy_policy": "fallback"
       },
       {
@@ -2735,12 +2747,13 @@
         "layers": [
           "exams",
           "legacy",
+          "legacy",
           "legacy"
         ],
         "layer_hit": true,
         "leakage": false,
         "answer_hidden_mode": false,
-        "n_pack": 3,
+        "n_pack": 4,
         "legacy_policy": "fallback"
       },
       {
@@ -2815,5 +2828,12 @@
         "legacy_policy": "exclude"
       }
     ]
+  },
+  "provenance": {
+    "recorded_at": "2026-10-01T10:29:30.378822+00:00",
+    "code_version": "d6eed4c",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/task_mode_layer_policy.py",
+    "argv": []
   }
 }

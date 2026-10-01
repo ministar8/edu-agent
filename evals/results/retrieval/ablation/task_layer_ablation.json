@@ -1,5 +1,5 @@
 {
-  "recorded_at": "20261001_161927",
+  "recorded_at": "2026-10-01T10:45:54.520502+00:00",
   "queries": {
     "learn": [
       "什么是二叉排序树？",
@@ -337,8 +337,8 @@
       "layers": [
         "advanced",
         "advanced",
-        "basic",
-        "basic",
+        "advanced",
+        "advanced",
         "legacy"
       ],
       "layer_hit": true,
@@ -463,16 +463,15 @@
       "query": "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改",
       "mode": "grade",
       "layers": [
+        "advanced",
+        "advanced",
         "basic",
-        "legacy",
-        "advanced",
-        "advanced",
         "legacy"
       ],
       "layer_hit": false,
       "leakage": false,
       "answer_hidden_mode": false,
-      "n_pack": 5,
+      "n_pack": 4,
       "legacy_policy": "include"
     },
     {
@@ -715,13 +714,14 @@
       "layers": [
         "advanced",
         "advanced",
-        "basic",
+        "advanced",
+        "advanced",
         "basic"
       ],
       "layer_hit": true,
       "leakage": false,
       "answer_hidden_mode": true,
-      "n_pack": 4,
+      "n_pack": 5,
       "legacy_policy": "exclude"
     },
     {
@@ -834,14 +834,12 @@
       "layers": [
         "advanced",
         "advanced",
-        "legacy",
-        "legacy",
         "legacy"
       ],
       "layer_hit": false,
       "leakage": false,
       "answer_hidden_mode": false,
-      "n_pack": 5,
+      "n_pack": 3,
       "legacy_policy": "fallback"
     },
     {
@@ -936,5 +934,12 @@
       "n_pack": 4,
       "legacy_policy": "exclude"
     }
-  ]
+  ],
+  "provenance": {
+    "recorded_at": "2026-10-01T10:45:54.520502+00:00",
+    "code_version": "0479d6e",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/task_layer_ablation.py",
+    "argv": []
+  }
 }

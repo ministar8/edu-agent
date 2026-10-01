@@ -1,63 +1,70 @@
 {
-  "quality_score": 0.1473,
+  "quality_score": 0.1222,
   "cases": {
     "practice_no_answer": {
-      "evidence_usage": 0.0582,
+      "evidence_usage": 0.0628,
       "source_cited": 0.0,
       "completeness": 1.0,
-      "reply_len": 1292.0,
-      "pack_len": 2578.0
+      "reply_len": 2097.0,
+      "pack_len": 3591.0
     },
     "empty_no_hallucination": {
       "evidence_usage": 0.0,
       "source_cited": 0.0,
-      "completeness": 0.61,
-      "reply_len": 122.0,
-      "pack_len": 107.0
+      "completeness": 0.39,
+      "reply_len": 78.0,
+      "pack_len": 0.0
     },
     "verify_source_usage": {
-      "evidence_usage": 0.0899,
-      "source_cited": 1.0,
+      "evidence_usage": 0.1275,
+      "source_cited": 0.0,
       "completeness": 1.0,
-      "reply_len": 516.0,
-      "pack_len": 6631.0
+      "reply_len": 3080.0,
+      "pack_len": 1924.0
     },
     "multi_turn_context": {
       "evidence_usage": 0.0,
       "source_cited": 0.0,
-      "completeness": 0.095,
-      "reply_len": 19.0,
-      "pack_len": 1849.0
+      "completeness": 0.135,
+      "reply_len": 27.0,
+      "pack_len": 1850.0
     },
     "thin_pack_no_fabrication": {
-      "evidence_usage": 0.0404,
+      "evidence_usage": 0.0543,
       "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 358.0,
-      "pack_len": 2768.0
+      "reply_len": 338.0,
+      "pack_len": 2468.0
     },
     "tri_full_8docs": {
-      "evidence_usage": 0.2625,
+      "evidence_usage": 0.1875,
       "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 482.0,
+      "reply_len": 347.0,
       "pack_len": 1701.0
     },
     "tri_thin_2docs": {
-      "evidence_usage": 0.7273,
+      "evidence_usage": 0.5455,
       "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 234.0,
+      "reply_len": 364.0,
       "pack_len": 673.0
     },
     "tri_empty_0docs": {
       "evidence_usage": 0.0,
       "source_cited": 1.0,
       "completeness": 1.0,
-      "reply_len": 557.0,
+      "reply_len": 468.0,
       "pack_len": 25.0
     }
   },
   "hard_fails": [],
-  "recorded_at": "2026-10-01T17:21:14"
+  "recorded_at": "2026-10-01T10:44:27.555771+00:00",
+  "provenance": {
+    "recorded_at": "2026-10-01T10:44:27.555771+00:00",
+    "code_version": "0479d6e",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/agent_behavior_gate.py",
+    "argv": []
+  }
 }

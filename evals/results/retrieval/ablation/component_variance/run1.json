@@ -1,6 +1,6 @@
 {
   "run_id": 1,
-  "recorded_at": "20261001_164131",
+  "recorded_at": "2026-10-01T10:35:02.091482+00:00",
   "golden": "evals/datasets/golden/sample_408.jsonl",
   "limit": 60,
   "configs": [
@@ -9,16 +9,16 @@
     "no_metadata",
     "vector_only"
   ],
-  "elapsed_s": 143.3,
+  "elapsed_s": 89.5,
   "config_metrics": {
     "full": {
       "n_queries": 60,
       "category_hit_at_1": 0.9833,
       "category_hit_at_k": 1.0,
       "category_mrr": 0.9917,
-      "category_precision": 0.9496,
+      "category_precision": 0.9499,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.6167,
+      "mean_evidence_count": 5.65,
       "kp_hit_at_k": 1.0,
       "kp_mrr": 0.9625,
       "kp_annotated": 60.0,
@@ -44,9 +44,9 @@
       "category_hit_at_1": 0.95,
       "category_hit_at_k": 1.0,
       "category_mrr": 0.975,
-      "category_precision": 0.9481,
+      "category_precision": 0.948,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.7833,
+      "mean_evidence_count": 5.7667,
       "kp_hit_at_k": 1.0,
       "kp_mrr": 0.9417,
       "kp_annotated": 60.0,
@@ -62,7 +62,7 @@
       "empty_result_rate": 0.0,
       "mean_evidence_count": 5.6667,
       "kp_hit_at_k": 0.9833,
-      "kp_mrr": 0.9306,
+      "kp_mrr": 0.9222,
       "kp_annotated": 60.0,
       "n_errors": 0,
       "errors": []
@@ -222,7 +222,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 7,
+      "evidence_count": 10,
       "infra_error": ""
     },
     {
@@ -599,7 +599,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 7,
+      "evidence_count": 8,
       "infra_error": ""
     },
     {
@@ -742,7 +742,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 10,
+      "evidence_count": 8,
       "infra_error": ""
     },
     {
@@ -2159,7 +2159,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 9,
+      "evidence_count": 8,
       "infra_error": ""
     },
     {
@@ -3079,7 +3079,7 @@
       "query": "管程与信号量相比有什么优势？",
       "kp_annotated": true,
       "kp_hit": 1,
-      "kp_mrr": 1.0,
+      "kp_mrr": 0.5,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
       "evidence_count": 10,
@@ -3189,5 +3189,15 @@
       "evidence_count": 7,
       "infra_error": ""
     }
-  ]
+  ],
+  "provenance": {
+    "recorded_at": "2026-10-01T10:35:02.091482+00:00",
+    "code_version": "d6eed4c",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/component_variance.py",
+    "argv": [
+      "--run-id",
+      "1"
+    ]
+  }
 }

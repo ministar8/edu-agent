@@ -1,5 +1,5 @@
 {
-  "recorded_at": "20261001_160602",
+  "recorded_at": "2026-10-01T10:23:51.552832+00:00",
   "golden": "evals/datasets/golden/sample_408.jsonl",
   "limit": 60,
   "config_snapshot": {
@@ -18,7 +18,7 @@
       "n_queries": 60,
       "n_errors": 0,
       "errors": [],
-      "elapsed_s": 68.6,
+      "elapsed_s": 44.7,
       "category_hit_at_1": 0.9833,
       "category_hit_at_k": 1.0,
       "category_mrr": 0.9917,
@@ -35,16 +35,28 @@
       "n_queries": 60,
       "n_errors": 0,
       "errors": [],
-      "elapsed_s": 43.3,
+      "elapsed_s": 19.2,
       "category_hit_at_1": 0.9833,
       "category_hit_at_k": 1.0,
       "category_mrr": 0.9917,
-      "category_precision": 0.9496,
+      "category_precision": 0.9494,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.6167,
+      "mean_evidence_count": 5.6,
       "kp_hit_at_k": 1.0,
       "kp_mrr": 0.9625,
       "kp_annotated": 60.0
     }
-  ]
+  ],
+  "provenance": {
+    "recorded_at": "2026-10-01T10:23:51.552832+00:00",
+    "code_version": "d6eed4c",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/ablation_retrieval.py",
+    "argv": [
+      "--limit",
+      "60",
+      "--configs",
+      "full,no_rerank"
+    ]
+  }
 }

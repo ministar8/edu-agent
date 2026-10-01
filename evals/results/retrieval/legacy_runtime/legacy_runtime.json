@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "recorded_at": "2026-10-01T08:28:22.169001+00:00",
+    "recorded_at": "2026-10-01T10:29:33.438361+00:00",
     "note": "Legacy 运行时三策略；不改索引、不改 layer_weight 数字",
     "probes": [
       "method-tree-build",
@@ -121,9 +121,9 @@
           "pack_layers": [
             "advanced",
             "advanced",
-            "basic",
-            "basic",
             "legacy",
+            "basic",
+            "basic",
             "legacy",
             "legacy",
             "legacy"
@@ -360,5 +360,13 @@
         "legacy_in_pack_sum": 0
       }
     }
-  ]
+  ],
+  "recorded_at": "2026-10-01T10:29:33.438361+00:00",
+  "provenance": {
+    "recorded_at": "2026-10-01T10:29:33.438361+00:00",
+    "code_version": "d6eed4c",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/legacy_runtime_compare.py",
+    "argv": []
+  }
 }

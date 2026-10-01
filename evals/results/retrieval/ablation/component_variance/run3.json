@@ -1,6 +1,6 @@
 {
   "run_id": 3,
-  "recorded_at": "20261001_164637",
+  "recorded_at": "2026-10-01T10:38:11.235942+00:00",
   "golden": "evals/datasets/golden/sample_408.jsonl",
   "limit": 60,
   "configs": [
@@ -9,7 +9,7 @@
     "no_metadata",
     "vector_only"
   ],
-  "elapsed_s": 148.7,
+  "elapsed_s": 93.4,
   "config_metrics": {
     "full": {
       "n_queries": 60,
@@ -55,14 +55,14 @@
     },
     "vector_only": {
       "n_queries": 60,
-      "category_hit_at_1": 0.9333,
+      "category_hit_at_1": 0.95,
       "category_hit_at_k": 1.0,
-      "category_mrr": 0.9667,
-      "category_precision": 0.9413,
+      "category_mrr": 0.975,
+      "category_precision": 0.9474,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.6833,
+      "mean_evidence_count": 5.7,
       "kp_hit_at_k": 1.0,
-      "kp_mrr": 0.9306,
+      "kp_mrr": 0.9472,
       "kp_annotated": 60.0,
       "n_errors": 0,
       "errors": []
@@ -2939,7 +2939,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 10,
+      "evidence_count": 9,
       "infra_error": ""
     },
     {
@@ -3017,7 +3017,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 4,
+      "evidence_count": 6,
       "infra_error": ""
     },
     {
@@ -3079,7 +3079,7 @@
       "query": "管程与信号量相比有什么优势？",
       "kp_annotated": true,
       "kp_hit": 1,
-      "kp_mrr": 0.5,
+      "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
       "evidence_count": 10,
@@ -3092,9 +3092,9 @@
       "query": "目录项与索引结点（inode）的关系是什么？",
       "kp_annotated": true,
       "kp_hit": 1,
-      "kp_mrr": 0.5,
-      "cat_hit_at_1": 0,
-      "cat_mrr": 0.5,
+      "kp_mrr": 1.0,
+      "cat_hit_at_1": 1,
+      "cat_mrr": 1.0,
       "evidence_count": 5,
       "infra_error": ""
     },
@@ -3189,5 +3189,15 @@
       "evidence_count": 7,
       "infra_error": ""
     }
-  ]
+  ],
+  "provenance": {
+    "recorded_at": "2026-10-01T10:38:11.235942+00:00",
+    "code_version": "d6eed4c",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/component_variance.py",
+    "argv": [
+      "--run-id",
+      "3"
+    ]
+  }
 }

@@ -1,5 +1,5 @@
 {
-  "recorded_at": "20261001_162328",
+  "recorded_at": "2026-10-01T10:47:55.255188+00:00",
   "limit": 60,
   "config_snapshot": {
     "basic_rag": "semantic top-k only (no bm25/metadata/decompose/hyde/rerank/task_policy)",
@@ -8,7 +8,7 @@
   "retrieval": {
     "basic_rag": {
       "arm": "basic_rag",
-      "elapsed_s": 38.0,
+      "elapsed_s": 23.2,
       "n_queries": 60,
       "category_hit_at_1": 0.9167,
       "category_hit_at_k": 1.0,
@@ -22,14 +22,14 @@
     },
     "ours": {
       "arm": "ours",
-      "elapsed_s": 44.6,
+      "elapsed_s": 24.8,
       "n_queries": 60,
       "category_hit_at_1": 0.9833,
       "category_hit_at_k": 1.0,
       "category_mrr": 0.9917,
-      "category_precision": 0.9494,
+      "category_precision": 0.95,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.6,
+      "mean_evidence_count": 5.6667,
       "kp_hit_at_k": 1.0,
       "kp_mrr": 0.9625,
       "kp_annotated": 60.0
@@ -96,5 +96,15 @@
       },
       "macro_layer_hit": 0.9444
     }
+  },
+  "provenance": {
+    "recorded_at": "2026-10-01T10:47:55.255188+00:00",
+    "code_version": "0479d6e",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/basic_rag_ablation.py",
+    "argv": [
+      "--limit",
+      "60"
+    ]
   }
 }

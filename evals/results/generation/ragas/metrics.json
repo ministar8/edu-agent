@@ -16,6 +16,18 @@
   "effective_rerank_enabled": false,
   "embedding_fake": false,
   "note": "逐样本明细见 raw.jsonl 与 ragas_<tag>.json；分类型均值为本文件派生",
+  "source_report": "ragas_final.json",
+  "recorded_at": "2026-10-01T10:38:54.118760+00:00",
+  "provenance": {
+    "recorded_at": "2026-10-01T10:38:54.118760+00:00",
+    "code_version": "0479d6e",
+    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "script": "scripts/ragas_report.py",
+    "argv": [
+      "--tag",
+      "final"
+    ]
+  },
   "faithfulness": {
     "mean": 0.7588,
     "n": 20
