@@ -698,10 +698,19 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 
 | 项 | 值 |
 |---|---|
+| **Git 标签** | **`V-2026-10-02`**（附注标签 → 本节点所在提交） |
 | **代码版本** | **`1cc69b39f5c1287e2941ae282f9a03a5e80464c6`**（短 `1cc69b3`） |
 | **黄金集 sha256** | **`be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66`**（156 条） |
 | 生成集 | `evals/datasets/ragas/ragas_paired20.jsonl`（20 条） |
 | 冻结日期 | 2026-10-01 |
+
+**解析方式**（无需翻文档即可定位）：
+
+```bash
+git show V-2026-10-02 --stat              # 本节点完整状态
+git show V-2026-10-02:docs/EXPERIMENTS.md # 该状态下的实验文档（含本节）
+git rev-parse 1cc69b3                     # 产出实验结果的代码版本
+```
 
 > **与实验的关系**：本节点所有归档均由 `1cc69b3` 的**前一工作区状态**产生；
 > 提交时的唯一额外改动是 `Sequence[str]` **纯类型注解**（`rag/retriever.py`、
