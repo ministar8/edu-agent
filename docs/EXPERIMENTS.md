@@ -842,3 +842,43 @@ git rev-parse 1cc69b3                     # 产出实验结果的代码版本
 
 **本版本归档的 `code_version`**：检索类 `d6eed4c` · RAGAS 派生类 `0479d6e`
 （两者差异仅在 `scripts/ragas_report.py`，不影响检索链）。
+
+---
+
+## 19. 最终系统决策表（V-2026-10-02）
+
+> **性质**：本节是 **V-2026-10-02 冻结之后的纯文档补充**（标签 `V-2026-10-02` 指向
+> `e36c766`，**不含本节**）。内容是对 §2–§18 中已发生问题与决策的汇总，不引入新实验。
+> 每行都可在本文件对应小节或 `evals/results/` 归档中反查。
+
+### 19.1 已修（本版本）
+
+| 问题 | 诊断 | 最终处理 | 证据 / 位置 |
+|---|---|---|---|
+| **q052（inode）纯向量下丢目标** | 向量路由**排序方向反了**：Chroma score 是余弦距离（越小越好），代码按 `-score` 降序 = **返回最不相似的 k 条** | 改升序取前 k | `rag/routes.py`；修后目标 semantic **rank 1**（§18.2 #3） |
+| **verify 真题被「先注入后裁掉」** | top-up 只按 `kb_depth` 找，**未继承 `eligibility_where`** → 把 `exam_answer` 拉进池，再被 Evidence Policy 裁 → L3 空 | top-up 与主检索共用同一 where | `rag/layer_recall.py` · `rag/retriever.py`；`topup_eligibility_gate` 4+1 场景 PASS（§15） |
+| **practice 出现空证据包** | ① preferred 层不合规时 top-up 空转 ② 包被 eligibility 裁空后无兜底 | 新增 `eligible_semantic_layers()` 回退 + `pack_blocked()` 空包回填（**只填合规项**） | `schema/task_policy.py` · `rag/evidence_policy.py`；`pack_nonempty_rate` 全 **1.000**（§12.3/§15.7） |
+| **「单链表就地逆置」召不回目标 chunk** | 三层叠加：① jieba 把「逆置」切成「表逆置 / 地逆置」 ② 同义词守卫按「**子串**」判定 → 标准词「逆置」永不追加 ③ 排序方向（同上） | 注册 9 个领域词 + 守卫改「**已是分词结果**」+ 排序修正 | `rag/rag_utils.py` `_DOMAIN_WORDS` · `rag/synonyms.py` · `rag/routes.py`（§18.2 #1–#3） |
+| **「滑动窗口协议」kp_hit 掉分** | **golden 单标签口径**：同文件同主题（L38 标传输层 / L163 标数据链路层），而 IP/MAC、ARP 早已双标签 | 补第二标签（纯数据修正，**未改 evaluation 逻辑**） | `evals/datasets/golden/sample_408.jsonl` L38 → `["数据链路层","传输层"]`（§18.2 #4） |
+| **论文数字无法反查到代码版本** | 归档不自描述（无 `code_version` / golden hash / 脚本名） | 新增 provenance 注入 **13 个写入点**，全部归档按该版本重跑 | `src/evaluation/provenance.py`；`freeze_precheck` 矩阵 **11/11 全 Y**（§18.6） |
+| **RAGAS judge 用不了强模型** | DashScope **thinking 模式拒绝 `n>1`**，而 `answer_relevancy` 必需 `n>1` | judge 独立槽位 `RAGAS_JUDGE_MODEL` + **只对 judge** 强制关 thinking | `core/settings.py` · `core/llm.py` · `evaluation/adapters.py`（§5） |
+| **RAGAS 可能「白花钱」/ 静默失败** | judge 配额/鉴权失败时**生成已跑完**、费用作废；且全指标 `n=0` 仍退出码 0 | preflight **分别探活**生成/judge + 生成产物**先落盘** + 全无分升级为显式错误 | `evaluation/cli.py` · `evaluation/ragas_eval.py`（§5） |
+| **实验路径与 Agent 路径口径不一致** | 实验脚本未传 `eligibility_where` → baseline 虚低、Δ 失真 | 补传 `filter` + `eligible_layers` | `scripts/task_layer_ablation.py` · `scripts/task_mode_layer_policy.py`（§15.5） |
+
+### 19.2 未修 / 已决策（如实记录）
+
+| 问题 | 诊断 | 最终处理 | 数字 |
+|---|---|---|---|
+| **L2 跨学科污染** | `preferred_layers` 提升**所有** advanced；L2 池小（98），错学科靠通用词面挤进包 | **未修**（推迟）——方向是学科感知排序，**非补数据** | **40.0%**（10 条 L2 中 4 条错学科，§16） |
+| **rerank 收益符号不稳** | 边界不稳定 | **默认关闭**（`.env` `RERANK_ENABLED=false`），论文如实披露 | +0.012 / 更早 −0.046（§2.1） |
+| **RRF 阈值 > 可达上限** | 阈值按 k=20 标定、实际 k=36，量纲错配 | **不改默认阈值**（0.9× 可缓解但属边界）；记入「不做清单」 | §14；`postprocess._rrf_scale_needed` |
+| **decompose / HyDE 零增益** | k=5 预算 + 短查询占比高，复杂度未兑现 | **保留启用**（关闭无变化；HyDE 属低频兜底），论文如实报零增益 | 消融 Δ = 0（§2） |
+| **语义缓存** | 会把「缓存命中」混进「检索质量」 | **默认关闭** | `SEMANTIC_CACHE_ENABLED=false` |
+| **L3 不适合作通用知识库** | chunk 是题干/选项/答案/解析，缺定义原理推导 | **设计定位，非缺陷**；grade/verify 下不可替代 | `l3_only` empty 98%（§9） |
+
+### 19.3 一句话总结
+
+已修 9 项集中在三类根因：**① 排序方向 bug**（影响面最大，连带修好 q052 与 #16）、
+**② 资格边界未对齐**（top-up / 实验路径）、**③ 可追溯性缺口**（golden 标注 + 归档 provenance）。
+
+未修 6 项均为**有意决策**，且全部在 §18.4 与论文表中如实标注，不作美化。
