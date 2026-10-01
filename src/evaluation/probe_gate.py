@@ -13,6 +13,12 @@ Chroma「Nothing found on disk」）、没有基线、没有退出码 —— **�
 本模块把探针表变成门禁：跑在**临时索引 + 就绪屏障**上，对每条 probe 记录
 **目标 chunk 在哪一层丢失**，并与基线比较。
 
+★ **语料边界（2026-10-01 实测）**：临时索引由 ``retrieval_gate.build_index()`` 建，
+其语料是 ``rag.ingest.DEFAULT_CATEGORIES``（6 个目录）——**全是 legacy，零 L1/L2/L3**
+（2505 条；生产索引 4085 条含分层）。**5 条探针的目标也确实全在 legacy 文件上**
+（``07_查找.md`` / ``06_代码实现.md`` / ``04_文件管理.md`` / ``02_数据表示与运算.md``）。
+⇒ 本门禁同样**测不到 L1/L2/L3 的退化**。详见 ``retrieval_gate.build_index`` 的 docstring。
+
 判据为什么是「管线序」而不是「是否 survived」
 --------------------------------------------
 `dropped_by` 的取值**有序**（见 `candidate_trace.DROP_REASONS`）：

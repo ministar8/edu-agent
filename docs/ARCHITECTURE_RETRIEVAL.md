@@ -193,6 +193,9 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 L1/L2/L3 的退化**不会被门禁捕获**。5 条探针的目标也全在 legacy 文件上。
 → 论文中引用门禁时须写明这一边界；若要覆盖 L1/L2/L3，需让门禁的入库路径包含分层目录。
 
+> 该边界已同步写进代码注释（`retrieval_gate` 模块 docstring 第 6 条 · `build_index` docstring ·
+> `probe_gate` 模块 docstring），避免「门禁全绿 = 系统没退化」被误读。
+
 ---
 
 ## 7. 关键决策（V-2026-10-02）

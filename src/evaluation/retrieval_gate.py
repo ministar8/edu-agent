@@ -70,6 +70,16 @@ RAG 检索链的改动（阈值常数、RRF 路由权重、切分策略、去重
     # 真实 embedding + 真实 TEI rerank（发布前基线；会调用本地 reranker）
     GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 \
         python -m evaluation.retrieval_gate --update-baseline
+
+6. **★ 语料只覆盖 legacy 段（2026-10-01 实测）。**
+   ``build_index()`` 按 ``rag.ingest.DEFAULT_CATEGORIES`` 入库，而 **L1/L2/L3 由独立脚本
+   入库、不在该清单里** ⇒ 门禁索引 **2505 条全是 legacy**，而生产索引 **4085 条**
+   （legacy 2505 + basic 123 + advanced 98 + exams 1359）。
+
+   **推论：L1/L2/L3 的退化不会被本门禁（及 ``probe_gate``）捕获。**
+   引用门禁结论时必须写明这条边界 —— 「门禁全绿」只代表 legacy 链路没退化。
+   细节与实测命令见 ``build_index`` 的 docstring 与
+   ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3。
 """
 
 from __future__ import annotations
@@ -721,7 +731,24 @@ def build_index(categories: list[str] | None = None) -> dict[str, int]:
     """用与 ``rag.ingest`` 相同的管线把知识库索引进当前（临时）向量库。
 
     刻意复用 ``ingest`` 的同一条链路（load → clean → split → enhance → tag → add），
-    这样门禁覆盖的是**真实入库路径**，而不是一条评测专用的旁路。
+    让门禁跑**真实入库路径**，而不是一条评测专用的旁路。
+
+    ★★ **但语料范围只有 legacy 段**（2026-10-01 实测，非推断）：本函数按
+    ``rag.ingest.DEFAULT_CATEGORIES``（6 个目录：四科讲义 + ``questions`` + ``learning_paths``）
+    遍历，而 **L1/L2/L3 不走这条链** —— 它们由独立脚本入库
+    （``scripts/ingest_basic_all.py`` / ``ingest_advanced.py`` / ``ingest_exams.py``）。
+
+    实测对照（同一知识库、同一时刻）：
+
+    | 索引 | 总条数 | ``kb_depth`` 分布 |
+    |---|---|---|
+    | 本函数（临时，每次重建） | **2505** | legacy **2505**（**零 L1/L2/L3**） |
+    | 生产 / 实验（``.env`` 的 ``CHROMA_PERSIST_DIR``） | **4085** | legacy 2505 + basic 123 + advanced 98 + exams 1359 |
+
+    **后果**：门禁（含 ``probe_gate``）度量的是 **legacy 链路的回归**；
+    L1/L2/L3 的退化**不会被它捕获**（5 条探针的目标也全落在 legacy 文件上）。
+    引用门禁结论时须写明这条边界。要让门禁覆盖分层，需让本函数也跑分层入库脚本
+    —— 那会改变基线数字，属**链路级**改动，勿顺手做（见 ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3）。
     """
     from rag import vectorstore as vs
     from rag.cleaner import clean_documents
