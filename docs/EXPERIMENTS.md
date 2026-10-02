@@ -699,27 +699,31 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 
 | 项 | 值 |
 |---|---|
-| **Git 标签** | **`V-2026-10-02`**（附注标签 → 本节点所在提交） |
-| **代码版本** | **`1cc69b39f5c1287e2941ae282f9a03a5e80464c6`**（短 `1cc69b3`） |
+| **Git 标签** | **`V-2026-10-02`**（附注标签对象 `144976c` → **`e36c766`**） |
+| **检索修复提交** | **`1cc69b3`**（三项检索修复 + golden 补标落点） |
+| **归档 code_version** | 检索类 **`d6eed4c`** · RAGAS 派生类 **`0479d6e`**（以各归档 `provenance.code_version` 为准） |
 | **黄金集 sha256** | **`be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66`**（156 条） |
 | 生成集 | `evals/datasets/ragas/ragas_paired20.jsonl`（20 条） |
-| 冻结日期 | 2026-10-01 |
+| 冻结日期 | 2026-10-02（标签落点 `e36c766`） |
 
 **解析方式**（无需翻文档即可定位）：
 
 ```bash
+git rev-parse "V-2026-10-02^{}"           # 标签落点 e36c766
 git show V-2026-10-02 --stat              # 本节点完整状态
-git show V-2026-10-02:docs/EXPERIMENTS.md # 该状态下的实验文档（含本节）
-git rev-parse 1cc69b3                     # 产出实验结果的代码版本
+git show V-2026-10-02:docs/EXPERIMENTS.md # 该状态下的实验文档（含本节，不含 §19）
+git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 ```
 
-> **与实验的关系**：本节点所有归档均由 `1cc69b3` 的**前一工作区状态**产生；
-> 提交时的唯一额外改动是 `Sequence[str]` **纯类型注解**（`rag/retriever.py`、
-> `rag/layer_recall.py`，两文件均 `from __future__ import annotations`）——
-> **无运行时行为差异，实验结果对 `1cc69b3` 有效**。
+> **与实验的关系**：检索三项修复落在 `1cc69b3`；此后 `33cdb8d`–`e36c766` 只加
+> provenance 基础设施并按该版本重跑归档，**不动检索链**。归档内
+> `provenance.code_version`（检索类 `d6eed4c` / RAGAS 派生类 `0479d6e`）
+> 即论文数字所对应的代码版本；两者与 `1cc69b3` 的差异均为脚本/类型注解级，
+> **无检索运行时行为差异**。
 >
-> **待补（结构性缺口，见 §18.6）**：归档 JSON 目前**不记录** `code_version` 与
-> `golden_sha256`，反查需依赖本表；已在 §18.6 列为待修项。
+> **可追溯性已闭环（原「待补」，见 §18.6）**：归档 JSON 现已记录
+> `code_version` / `golden_sha256` / `script` / `argv`，`freeze_precheck`
+> 四层检查 **11/11 全 Y**，反查不再依赖本表。
 
 ### 18.1 改了什么
 
