@@ -1,0 +1,51 @@
+name: CI
+
+# 毕设「够用」版 CI：只做两件事 ——
+#   1) lint / 类型检查（通用工程规范）
+#   2) 检索质量门禁（与论文主题直接相关：每次 push 重跑黄金集、比对 6 套基线）
+# 刻意不做：RAGAS（要真 key + 花钱 + 随机）、probe_gate（基线是 real embedding 口径，
+# 需真 TEI）、真实 TEI 路由（要 GPU）、覆盖率（本仓无测试套件）。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: # 答辩时可手动触发一次，当场展示门禁结果
+
+jobs:
+  lint:
+    name: lint / 类型检查
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true # 缓存 uv 下载与 venv，二次运行快很多
+      # 默认包含 dev 组（ruff / pyrefly 都在里面）
+      - run: uv sync --frozen
+      - run: uv run ruff check src/
+      # ★ check 与 format 是两条独立命令，必须分别跑（只跑一条会漏）
+      - run: uv run ruff format --check src/
+      - run: uv run pyrefly check
+
+  retrieval-gate:
+    name: 检索质量门禁（假 embedding 路由）
+    runs-on: ubuntu-latest
+    # 该路由用确定性哈希 embedding：不依赖 TEI、不联网、不需要真密钥。
+    # 这几个变量与 pyproject 的 [tool.pytest_env] 同口径。
+    env:
+      USE_FAKE_MODEL: "true"
+      USE_FAKE_EMBEDDING: "true"
+      MEMORY_STORE_VECTOR_ENABLED: "false"
+      DASHSCOPE_API_KEY: "sk-fake-dashscope-key" # 仅为构造模型实例，不发请求
+      JWT_SECRET: "test-secret-key"
+      PYTHONPATH: src
+      PYTHONUTF8: "1" # 避免 GBK 环境下的中文日志乱码
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # 门禁只依赖运行时依赖（不 import ragas），故排除 dev 组保持精简
+      - run: uv sync --frozen --no-dev
+      # 156 条黄金集 × 9 指标，比 retrieval_baseline.json；任一指标跌破即退出码 1
+      - run: uv run python -m evaluation.retrieval_gate

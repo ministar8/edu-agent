@@ -80,8 +80,9 @@ docker compose up --build                # 容器化启动
 
 本仓库是**运行时 + 论文核心**的裁剪版：
 
-- **不含**测试套件、CI 工作流、代码覆盖率与结构规模棘轮门禁 —— 已移出到
-  `../edu-agent-engineering-archive/`（其 `ARCHIVE_INDEX.md` 记录清单与取回方式）。
+- **不含**测试套件、CI 工作流、代码覆盖率与结构规模棘轮门禁 —— 已从本仓库移出。
+  ★ 原归档目录 `../edu-agent-engineering-archive/` **在本机已不存在**（2026-10-03 核实），
+  无本地副本可取回。
 - **保留**的自研门禁：`evaluation.retrieval_gate`（检索质量）与 `pre-commit`（ruff / pyrefly / 空白检查）。
 - 源码中的质量约束靠**人工遵守**，本工作区没有 CI 强制。
 

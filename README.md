@@ -32,7 +32,7 @@ RAG 检索管线: 查询归一 → 分类 → 多路召回(语义 + BM25 + 元�
 | 评测 | RAGAS Layer-1（faithfulness / context_precision / context_recall / answer_relevancy） |
 | LLM | DashScope / DeepSeek（OpenAI 兼容接口） |
 | 依赖管理 | uv + pyproject.toml |
-| 质量 | ruff + pyrefly + pre-commit（提交前钩子）+ 检索质量门禁（三路由比基线） |
+| 质量 | ruff + pyrefly + pre-commit（提交前钩子）+ 检索质量门禁（按路由比基线） |
 
 ## 项目结构
 
@@ -49,13 +49,13 @@ edu-agent/
 │   ├── schema/           # 协议/领域模型（questions / grading / evidence / auth …）
 │   ├── memory/           # 短期窗口 + 长期 Store 业务封装
 │   ├── evaluation/       # 评测：RAGAS（dataset / adapters / ragas_eval / cli）
-│   │                     #      + 检索质量门禁（retrieval_gate，三路由比基线）
+│   │                     #      + 检索质量门禁（retrieval_gate，按路由比基线）
 │   ├── db/               # SQLAlchemy User 表
 │   ├── service/          # FastAPI（service / auth / threads / errors / health）
 │   ├── tools/            # 离线数据清洗（ingest 使用，不参与运行时问答）
 │   └── run_service.py    # 服务入口
 ├── static/               # 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css）
-├── evals/                # 评测样本（sample_408.jsonl）+ 三份检索基线（retrieval_baseline*.json）
+├── evals/                # 数据集（datasets/）+ 9 份门禁基线（baselines/，含 6 份检索路由基线）
 ├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile.service
@@ -158,8 +158,9 @@ pre-commit install             # 安装 git 钩子（一次性；此后每次 co
 钩子包含：YAML 校验、文件尾换行、行尾空白、ruff（`--fix`）、ruff-format、pyrefly。
 `evals/` 为门禁基线输入，已豁免空白类改写。
 
-> 说明：本工作区不含测试套件与 CI，有效检查范围是 `src/`。移出的内容见
-> `../edu-agent-engineering-archive/ARCHIVE_INDEX.md`（含清单与取回方式）。
+> 说明：本工作区不含测试套件与 CI，有效检查范围是 `src/`。移出的内容原归档于
+> `../edu-agent-engineering-archive/`，但该目录**在本机已不存在**（2026-10-03 核实），
+> 无本地副本可取回。
 
 ## Docker
 

@@ -604,6 +604,9 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 3. 这直接压低 `l2_only kp_mrr`：目标章与错学科章竞争 top-k。
 4. **本版本未修**（§18.4）。若要动，方向是**学科感知的 L2 排序/过滤**（如 `preferred_layers`
    叠加学科约束），而非新增数据。
+5. **影响面与「修不修」输入**见 `evals/reports/l2_impact_analysis.md`（V-2026-10-02）：
+   污染伤的是**证据包纯度与 `l2_only`**（0.7194），full 仅 −0.011；任务侧
+   `layer_hit` **对学科盲**，不能当 L2 质量证据。生成侧是否受影响**未测**。
 
 ---
 

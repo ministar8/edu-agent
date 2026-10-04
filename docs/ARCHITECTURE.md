@@ -2,7 +2,7 @@
 
 > 408 考研智能教学辅导系统 · 多 Agent + RAG
 > 本文用途：**把系统讲清楚**。每一节都可以独立作为答辩/论文的一小节。
-> 数字均为 2026-09-23 实测（`src/` 共 20,770 行 / 104 个 .py 文件）。
+> 数字均为 2026-10-03 实测（`src/` 共 25,364 行 / 118 个 .py 文件）。
 
 ---
 
@@ -15,7 +15,7 @@
 
 | 主线 | 内容 | 代码位置 | 规模 |
 |---|---|---|---|
-| **A. 检索增强（论文核心）** | 8 阶段检索链：把知识库文档变成**可溯源、可评测**的证据 | `src/rag/` | 12,177 行 |
+| **A. 检索增强（论文核心）** | 8 阶段检索链：把知识库文档变成**可溯源、可评测**的证据 | `src/rag/` | 12,228 行 |
 | **B. 多 Agent 编排** | 1 个 supervisor + 3 个专家，按意图分派并闭环 | `src/agents/` | 1,259 行 |
 
 **为什么这两条都要有**：单纯 RAG 只能「查了再答」，无法处理「给我出 5 道题」「帮我改这道题」这类
@@ -158,14 +158,17 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 
 ### 4.2 检索链的规模问题（已知，诚实记录）
 
-`retriever.py` 有 **1,900+ 行 / 30+ 个顶层函数**，但真正属于「门面」的只有 3 个：
-`aretrieve_documents` / `aretrieve_evidence` / `aretrieve_evidence_with_retry`
-（同步入口 `retrieve_documents` 已删除，预热直接驱动 async）。其余是阶段函数与内部工具。
+M1 拆分后，`retriever.py` 已收敛为**门面（465 行）**，对外只暴露 3 个入口：
+`aretrieve_evidence` / `aretrieve_evidence_with_retry` / `warmup_query_cache`
+（`aretrieve_documents` 与 `_resolve_thresholds` 由 `retriever.py` 从 `pipeline.py` **再导出**，
+保持 `import rag.retriever as R` 的旧调用方式兼容；同步入口 `retrieve_documents` 已删除）。
 
-**职责归属存在错位**：`_stage_hyde` 有 116 行在 `retriever.py` 里，而专门的 `hyde.py` 只有 58 行。
+**剩余问题**：8 个阶段函数（`_stage_classify_query` … `_stage_expand_windows`）与
+`aretrieve_documents` 编排都集中在 `pipeline.py`（**1,139 行**），阶段实现与编排同处一文件；
+且 `_stage_hyde`（139 行）与专门的 `hyde.py`（58 行）存在职责重叠。
 这是「先跑通、后整理」留下的形态，**不影响正确性，但影响可读性**。
-重构方向是把阶段函数下沉到各自的模块（`hyde.py` / `query_decomposer.py` …），
-`retriever.py` 只留编排。**尚未做**，因为重构检索链必须重跑评测门禁（见 §7）。
+重构方向是把阶段函数继续下沉到各自模块（`hyde.py` / `query_decomposer.py` …），
+`pipeline.py` 只留编排。**尚未做**，因为重构检索链必须重跑评测门禁（见 §7）。
 
 ---
 
@@ -314,21 +317,22 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.retrieval_g
 
 | 归属 | 模块 | 行数 | 占比 |
 |---|---|---|---|
-| **论文主体** | `rag` + `agents` + `prompts` + `schema` | 12,808 | 61.7% |
-| **产品外壳** | `service` + `memory` + `core` + `db` | 3,216 | 15.5% |
-| **数据处理工具** | `tools` | 2,871 | 13.8% |
-| **评测设施** | `evaluation` | 1,845 | 8.9% |
+| **论文主体** | `rag` + `agents` + `prompts` + `schema` | 14,632 | 57.7% |
+| **产品外壳** | `service` + `memory` + `core` + `db` | 3,302 | 13.0% |
+| **数据处理工具** | `tools` | 2,858 | 11.3% |
+| **评测设施** | `evaluation` | 4,542 | 17.9% |
 | 顶层入口 | `src/__init__.py` + `run_service.py` | 30 | 0.1% |
-| | **合计** | **20,770** | 100% |
+| | **合计** | **25,364** | 100% |
 
 > `src/tools/` 被 `evaluation/retrieval_gate.py` 与 `rag/ingest.py` 依赖（`clean_documents`），
 > **不能单独归档** —— 删它会让门禁与入库链一起崩。
 
-**已归档的工程化设施**（`mv` 同盘重命名，未删除），清单见
-`../edu-agent-engineering-archive/ARCHIVE_INDEX.md`：
-测试套件 17,540 行 / CI（`.github/`）/ codecov / `docs/ENGINEERING.md` / 3 个诊断脚本 /
-`src/client/` SDK。★ 其中 **`.pre-commit-config.yaml` 已取回并适配启用**。
-归档前固化的论文素材：**1,688 测试用例 / 覆盖率 75.2% / 8,982 语句**。
+**已移出的工程化设施**：测试套件 17,540 行 / CI（`.github/`）/ codecov /
+`docs/ENGINEERING.md` / 3 个诊断脚本 / `src/client/` SDK。
+★ 其中 **`.pre-commit-config.yaml` 已取回并适配启用**。
+★ **原归档目录 `../edu-agent-engineering-archive/` 在本机已不存在**（2026-10-03 核实，
+全盘无副本），上述内容**不可取回**。
+归档前固化的论文素材（快照，不可复跑）：**1,688 测试用例 / 覆盖率 75.2% / 8,982 语句**。
 
 ---
 
@@ -338,7 +342,8 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.retrieval_g
 
 1. **检索门禁的类目指标已饱和**（`category_hit_at_k = 1.0000`，40/40）。
    它能防回归，但**证明不了语义质量** —— 后者要靠 RAGAS 与真实 embedding 路由。
-2. **`retriever.py` 职责错位**（1,968 行 / 32 函数，门面只 4 个），可读性差，重构未做。
+2. **`pipeline.py` 单文件偏大**（1,139 行，8 个阶段函数与编排同处），可读性差；
+   `retriever.py` 已收敛为门面（465 行）。阶段函数进一步下沉未做。
 3. **`verifier.py` 的 LLM 校验层实际未启用**（`use_llm_verify` 全为 False）。
    「有代码 ≠ 在用」，判据只能是调用链。
 4. **~~`rerank_used` 语义不准~~ —— ✅ 已修（2026-09-24）**。
