@@ -1,11 +1,12 @@
-# EFFECT_PLAN — 效果完整度提升方案（草案 v3）
+# EFFECT_PLAN — 效果完整度提升方案（定稿 v1.0）
 
 > 目标（**已重定义**）：不用「完整度 75%」这类**无数学意义**的项目管理数字当论文指标。
 > 论文口径 = **「系统效果表」+「系统工程表」**。
 > 边界：**工程化已够**，本方案**只补效果，不铺工程**。
 > 版本锚点：`V-2026-10-02`（`e36c766`）。★ **动检索链 → 新版本 + 全量重跑 + 重录门禁 + 换论文数**。
 > 闭环：**Phase 0 测量 → Phase 1 优化 → Final Gate 验收**。
-> 状态：草案 v3，待审。
+> 状态：**定稿 v1.0**（2026-10-04）。★ 规则已冻结（§3.1 五项 pass 判据、§4 L3 闸门规则）；
+> 数值门槛（§0.1 目标、§6 Final Gate）**推迟至 Phase 0 回填**。
 
 ---
 
@@ -13,7 +14,7 @@
 
 ### 0.1 系统效果表（**论文指标**）
 
-| 能力 | diagnostic（诊断） | final（终评） | 核心指标 | 目标（占位，Phase 0 后校准） |
+| 能力 | diagnostic（诊断） | final（终评） | 核心指标 | 目标（**Phase 0 回填**） |
 |---|---|---|---|---|
 | **QA** | 15 | 30 | `final_quality ≥ 4` 占比 | ≥ 80% |
 | **Generate** | 15 | 30 | **五项完整交付率** | ≥ 75% |
@@ -222,13 +223,13 @@ Source Cited（✅）· Clarity —— 判据按 mode 微调。
 
 **★ Generate**（`practice`）
 
-| 指标 | pass 判据（**规则现在固定；阈值 Phase 0 前冻结**） |
+| 指标 | pass 判据（**v1.0 已冻结**） |
 |---|---|
 | `completeness_pass` | 题干 + 选项/要求 + 标准答案 + 解析 **齐全** |
-| `answerability_pass` | 给定资料**足以唯一/明确判定**答案 |
-| `knowledge_coverage_pass` | 命中 `expected_kp` |
+| `answerability_pass` | **人工判定为主**；重采样一致性**仅作辅助诊断**，不作准 |
+| `knowledge_coverage_pass` | `retrieved_kp ⊇ expected_kp`（**必须全覆盖**） |
 | `correctness_pass` | gold 判定**正确** |
-| `difficulty_match_pass` | 与 `expected_difficulty` **在允许档位内**（档位容差须冻结） |
+| `difficulty_match_pass` | 与 `expected_difficulty` **±1 档**（**1–5 五档制**） |
 
 ```
 five_of_five = completeness_pass ∧ answerability_pass ∧ knowledge_coverage_pass
@@ -237,7 +238,8 @@ five_of_five = completeness_pass ∧ answerability_pass ∧ knowledge_coverage_p
 五项完整交付率 = five_of_five 占比        ← 论文主指标
 ```
 
-> ★★ **"怎么算 pass"现在固定，"阈值"Phase 0 前冻结** —— 否则 Phase 0 跑完又会纠结「这题算 4 还是 5」。
+> ★★ **五项 pass 判据 v1.0 全部冻结**（含 `difficulty` 容差 **±1 档**）——
+> Phase 0 直接按此判定，**不再讨论**，避免跑完又纠结「这题算 4 还是 5」。
 > ★ 主表报五项 + 此率，**不简单平均**。
 
 **★ Grade**（`grade`）—— **与 Generate 同级**，final n ≥ 30（理想 50）
@@ -300,12 +302,17 @@ code **不是核心任务轴**。实测 4/5 拒答，根因是**知识库代码�
 
 ## 4. Phase 1.5 — L3 覆盖诊断（**gated**）
 
-先测（用 §3.1 Verify 的 30 cases）：
+> ★ **冻结的是决策规则，不是数字**（数字由 Phase 0 体检给出）。
 
-| 判据 | 结论 |
+**判定规则（v1.0 冻结）—— 「L3 是否构成低质量回答的*主要因果原因*？」**
+
+| 判定 | 动作 |
 |---|---|
-| L3 recall ≈70% **且** `final_quality` ≈4.4/5 | **不修** |
-| L3 recall ≈45% **且** 70% 低质量回答因真题缺失 | **才开 `V-2026-10-03`** |
+| **是**（真题缺失是低质量回答的主因） | **才开 `V-2026-10-03`**（动检索引擎） |
+| **否**（L3 召回偏低，但低质量回答的主因在别处） | **不修**，仅披露 |
+
+先测（用 §3.1 Verify 的 30 cases）：`question_id_recall@k` · `answer_availability` · `final_quality`
++ 低质量回答的 `primary_failure` 分布。
 
 ---
 
@@ -322,7 +329,7 @@ code **不是核心任务轴**。实测 4/5 拒答，根因是**知识库代码�
 
 **闭环：Phase 0 测量 → Phase 1 优化 → 本 Gate 验收。**
 
-| 维度 | 最低要求（**占位**，Phase 0 后按真实分布校准） |
+| 维度 | 最低要求（**Phase 0 回填**，按真实分布设定） |
 |---|---|
 | QA | ≥ 80% case `final_quality ≥ 4` |
 | Generate | ≥ 75% 五项完整交付 |
@@ -336,7 +343,8 @@ code **不是核心任务轴**。实测 4/5 拒答，根因是**知识库代码�
 | Docker / TEI | 一键启动成功 |
 | 四任务链 | 全部可演示 |
 
-> ★★ **这些数字现在不要随便拍** —— 先跑 Phase 0，再据真实分布设定最终门槛。
+> ★★ **门槛数字推迟到 Phase 0 回填** —— 先测量，再据真实分布设定；
+> **规则（怎么算）v1.0 已固定**（§3.1 / §4）。
 
 ---
 
@@ -386,7 +394,7 @@ Phase 0A Smoke ──► Phase 0B 诊断基线 ──► Phase 1 优化 ──�
 |---|---|
 | **E2E 跑不通**（论文说能力全，答辩跑不起来） | **0A Smoke 提前验证** |
 | 环境依赖（TEI/Docker 宕） | Phase 0 先修 |
-| 判分主观 | rubric 固定 + 阈值 Phase 0 前冻结 + 记 `judge` |
+| 判分主观 | rubric 固定 + pass 判据 v1.0 冻结 + 记 `judge` |
 | 成本 | RAGAS 只跑冻结集、必要时才跑 |
 | 检索改动连带 | 能披露就不修 |
 
