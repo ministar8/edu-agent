@@ -1,6 +1,6 @@
 # docs/ 索引
 
-**先读哪个**：动知识库 → `KB_MASTER_DESIGN.md`（总册）。动检索路由/策略 → `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md`。改检索相关代码前 → `RETRIEVAL_PLAN.md` + `RETRIEVAL_ROADMAP.md`（**「不做清单」在这里，改动前必看**）。**写论文 / 快速定位代码 → `ARCHITECTURE_RETRIEVAL.md` + `EXPERIMENTS.md`。**
+**先读哪个**：动知识库 → `KB_MASTER_DESIGN.md`（总册）。动检索路由/策略 → `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md`。改检索相关代码前 → `RETRIEVAL_PLAN.md` + `RETRIEVAL_ROADMAP.md`（**「不做清单」在这里，改动前必看**）。**写论文 / 快速定位代码 → `ARCHITECTURE_RETRIEVAL.md` + `EXPERIMENTS.md`。** 补效果 / 定论文效果指标 → **`EFFECT_PLAN.md`**。
 
 ## 现行文档
 
@@ -16,6 +16,7 @@
 | **`ARCHITECTURE_RETRIEVAL.md`** | **检索架构总览（as-built）+ 术语表 + 模块索引 + 已知局限** | **写论文第 3 章 / 定位代码** |
 | **`RETRIEVAL_PLAN.md`** | **当前执行方案**（Step 1~6 + 实测数据 + 已否决项） | **动手改检索前** |
 | `RETRIEVAL_ROADMAP.md` | 效果路线图；**含「不做清单」（同类改动有负收益先例）** | **动手改检索前** |
+| **`EFFECT_PLAN.md`** | **效果完整度提升方案**（Phase 0 体检 → 任务级评测 → 闸门 → 验收；四张任务表 + rubric + 退出条件） | **补效果 / 写论文效果章前** |
 | `L1L2L3_RETRIEVAL_REVIEW.md` | L1/L2/L3 分级设计评审（问题清单 + 五维度优劣） | 改分级/路由/阈值前 |
 | `RERANK_SWITCH_ANALYSIS.md` | `RERANK_ENABLED` 三态与 `use_rerank` 双职责分析 | 改重排开关相关代码前 |
 | `DOCKER.md` | 部署、健康检查、**TEI 端点契约** | 起容器 / 探活 TEI 前 |
