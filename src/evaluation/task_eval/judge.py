@@ -423,6 +423,33 @@ class CalibrationReport:
     boundary_bias: dict[str, float] = field(default_factory=dict)
     passed: bool = False
     failed_on: list[str] = field(default_factory=list)
+    # ★ D6（2026-10-07，登记为 §20.5 #19）：**秩相关的信息量必须自己说出来**。
+    #   实测 `calibration_30.jsonl` 的 `human_score` 分布 = `{5: 28, 0: 1, 2: 1}` ⇒
+    #   众数占 93.3%，`spearman` 的判别力全在**那 2 行**上（把任一条改成 5 就掉到 ~0.5 FAIL；
+    #   把那两行的 judge 分改成 0 却**仍然 PASS**，因为秩相关只看排序不看量级）。
+    #   ⇒ 「PASS」可以是真的，但引用它当「judge 与人工秩相关良好」就是过度声称。
+    #   ★ 这里**只加露出，不动判定**：阈值（`CALIBRATION_THRESHOLDS`）是「预先约定标准」的落点，
+    #     人工分是真实标注 —— 两者都不许为了好看去改（后者等于伪造数据）。
+    human_mode: float | None = None
+    informative_n: int = 0
+    informative_share: float | None = None
+    rank_degenerate: bool = False
+
+
+def _human_dispersion(human: list[float]) -> tuple[float | None, int, float | None]:
+    """返回（众数、非众数行数、非众数占比）。占比为 None ⇒ 无可比对样本。"""
+    if not human:
+        return None, 0, None
+    counts: dict[float, int] = {}
+    for b in human:
+        counts[b] = counts.get(b, 0) + 1
+    mode = max(counts.items(), key=lambda kv: (kv[1], -kv[0]))[0]
+    informative = sum(1 for b in human if b != mode)
+    return mode, informative, round(informative / len(human), 4)
+
+
+# 阈值：非众数样本不足 20% ⇒ 秩相关由极少数行决定，必须显式标出（不是判失败，是禁止过度引用）
+_INFORMATIVE_SHARE_MIN = 0.20
 
 
 def calibrate(llm_scores: list[float], human_scores: list[float]) -> CalibrationReport:
@@ -435,6 +462,7 @@ def calibrate(llm_scores: list[float], human_scores: list[float]) -> Calibration
     within_1 = sum(1 for a, b in pairs if abs(a - b) <= 1) / n
     mae = sum(abs(a - b) for a, b in pairs) / n
     rho = _spearman([a for a, _ in pairs], [b for _, b in pairs])
+    mode, inf_n, inf_share = _human_dispersion([b for _, b in pairs])
     report = CalibrationReport(
         n=n,
         exact=round(exact, 4),
@@ -442,6 +470,10 @@ def calibrate(llm_scores: list[float], human_scores: list[float]) -> Calibration
         mae=round(mae, 4),
         spearman=round(rho, 4) if rho is not None else None,
         boundary_bias=_boundary_bias(pairs),
+        human_mode=mode,
+        informative_n=inf_n,
+        informative_share=inf_share,
+        rank_degenerate=(inf_share is not None and inf_share < _INFORMATIVE_SHARE_MIN),
     )
     checks = {
         "exact": exact >= CALIBRATION_THRESHOLDS["exact"],

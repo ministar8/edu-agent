@@ -2232,6 +2232,156 @@ def check_19() -> None:
     _ = coerce_episode  # 仅表明假 store 的形状与真实读出路径一致（coerce_episode 消费 dict）
 
 
+def check_20() -> None:
+    """⑳ 校准报告的「非众数占比」露出（D6，登记为 §20.5 #19）。零 LLM。
+
+    背景：`calibration_30.jsonl` 的人工分是 `{5:28, 0:1, 2:1}`，`spearman=0.7321`
+    刚过 0.70 阈值 ⇒ PASS。破坏性检验显示：把那 2 条非众数行任一条改成 5 ⇒ 掉到 ~0.5（FAIL）；
+    把那 2 条的 **judge 分改成 0**（judge 在唯一可判别处完全打错）⇒ **仍然 PASS**
+    （秩相关只看排序）。⇒ 信息量只在 2/30 行上，必须让报告自己说出来。
+    ★ 本项**不判成败、不动阈值**：只锁「露出存在且算对」，以及「分布正常时不许误报」（避免变成一刀切禁用）。
+    """
+    section("⑳ 校准 PASS 的秩相关信息量必须自己露出（D6 / #19）")
+
+    from evaluation.task_eval.judge import _INFORMATIVE_SHARE_MIN, calibrate
+
+    real_h = [5.0] * 28 + [0.0, 2.0]
+    real_l = [5.0] * 26 + [4.0, 4.0, 0.0, 2.0]
+    rep = calibrate(real_l, real_h)
+    check(
+        "⑳a 真实形状（28 个 5 + 2 条可判别）⇒ 报出非众数 2/30=6.7% 且标为秩退化",
+        rep.informative_n == 2
+        and abs((rep.informative_share or 0) - round(2 / 30, 4)) < 1e-9
+        and rep.rank_degenerate is True
+        and rep.human_mode == 5.0,
+        f"n={rep.informative_n} share={rep.informative_share} mode={rep.human_mode} deg={rep.rank_degenerate}",
+    )
+    check(
+        "⑳b 露出**不改变判定**：同一份表仍按原阈值给 PASS（阈值是预先约定的标准，不为好看调整）",
+        rep.passed is True and rep.spearman is not None and rep.spearman >= 0.70,
+        f"spearman={rep.spearman} passed={rep.passed}",
+    )
+    # ★ 反向：分布正常的表不许误报（否则这条露出会退化成「永远警告」= 没有信息）
+    hum = [0, 1, 2, 3, 3, 4, 5, 5, 2, 3, 1, 4, 5, 3, 2, 4, 1, 0, 5, 3, 4, 2, 3, 5, 1, 4, 2, 3, 5, 4]
+    llm = [0, 1, 2, 3, 4, 4, 5, 5, 2, 3, 1, 4, 5, 3, 2, 4, 2, 0, 5, 3, 4, 2, 3, 5, 1, 4, 2, 3, 5, 4]
+    rep2 = calibrate([float(x) for x in llm], [float(x) for x in hum])
+    check(
+        f"⑳c 反向：分布正常（非众数 {rep2.informative_n}/30）⇒ 不误报退化",
+        rep2.rank_degenerate is False and (rep2.informative_share or 0) >= _INFORMATIVE_SHARE_MIN,
+        f"share={rep2.informative_share} deg={rep2.rank_degenerate}",
+    )
+    # ⑳d 真实文件本身必须被报告成退化（读的是仓内校准表，不调 LLM）
+    import json as _json
+
+    p = ROOT / "evals" / "datasets" / "demo" / "calibration_30.jsonl"
+    if p.exists():
+        rows = [
+            _json.loads(ln)
+            for ln in p.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.startswith("#")
+        ]
+        pairs = [
+            (float(r["llm_score"]), float(r["human_score"]))
+            for r in rows
+            if r.get("llm_score") is not None and r.get("human_score") is not None
+        ]
+        rep3 = calibrate([a for a, _ in pairs], [b for _, b in pairs])
+        check(
+            "⑳d 仓内真实校准表被报告为秩信息量不足（2/30）",
+            rep3.rank_degenerate is True and rep3.informative_n == 2,
+            f"n={len(pairs)} 非众数={rep3.informative_n} share={rep3.informative_share}",
+        )
+    else:
+        print("  ⏭ ⑳d 跳过：calibration_30.jsonl 不在本机")
+
+
+def check_21() -> None:
+    """㉑ 预检要探到**推理端点**，写链断裂要标成**环境问题**（2026-10-07 实发事故）。
+
+    事故过程（不是假想）：Step 9 跑完后 TEI 半死 —— `/health` 返 **200**，
+    `/embeddings` 返 **502**；`memory.safe` 只打一行 WARNING「长期记忆写入超时（grade，>1.5s），
+    已忽略」就**丢弃写入**。于是护栏 ⑩d' 报「EPISODES 落库 = 0 条」。
+    真正的危险不是红灯，而是**绿灯时的假数字**：若这条发生在正式跑里，
+    画像为空 ⇒ B 段召不回 ⇒ 会被写成「Memory 产品没召回」——
+    而我们当天刚把同类现象归因给 #22 的 KP 阈值。**归因会被环境污染伪造。**
+    ⇒ 两道闸：① 预检必须真发一次向量请求；② 「有批改但零 episode」标 env_error 并中止。
+    """
+    section("㉑ 预检探推理端点 / 写链断裂归环境类（防假归因）")
+
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from core.settings import settings as _s
+    from evaluation.task_eval.runner import memory_write_missing, preflight_check
+
+    class _HalfDead(BaseHTTPRequestHandler):
+        """复刻事故：健康检查说活着，推理端点 502。"""
+
+        def do_GET(self):  # noqa: N802
+            self.send_response(200 if self.path.startswith("/health") else 404)
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+        def do_POST(self):  # noqa: N802
+            self.send_response(502)
+            self.end_headers()
+            self.wfile.write(b"gateway unavailable")
+
+        def log_message(self, *_a):
+            pass
+
+    srv = HTTPServer(("127.0.0.1", 0), _HalfDead)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+
+    old_base, old_fake = _s.EMBEDDING_API_BASE, _s.USE_FAKE_EMBEDDING
+    try:
+        _s.EMBEDDING_API_BASE = f"http://127.0.0.1:{port}"
+        _s.USE_FAKE_EMBEDDING = False
+        probs = preflight_check()
+        check(
+            "㉑a ★ /health 200 但 /embeddings 502 时，预检必须报问题（旧预检会放行的正是这种）",
+            any("推理" in p for p in probs),
+            f"problems={[p[:70] for p in probs]}",
+        )
+        _s.EMBEDDING_API_BASE = "http://127.0.0.1:1"  # 端口都没开
+        probs2 = preflight_check()
+        check(
+            "㉑b 服务完全不可达也报问题（两条路径不互相掩盖）",
+            len(probs2) >= 1,
+            f"{[p[:50] for p in probs2]}",
+        )
+    finally:
+        _s.EMBEDDING_API_BASE, _s.USE_FAKE_EMBEDDING = old_base, old_fake
+        srv.shutdown()
+
+    # 假嵌入模式（CI/单测）：base 指向死端口也应放行 —— 证明它没有"顺手多探一发"把 CI 打死
+    _s.USE_FAKE_EMBEDDING = True
+    _s.EMBEDDING_API_BASE = "http://127.0.0.1:1"
+    fake_probs = preflight_check()
+    _s.USE_FAKE_EMBEDDING = old_fake
+    check(
+        "㉑c 假嵌入模式（CI/单测）下预检放行，即使 base 指向死端口",
+        fake_probs == [],
+        str([p[:50] for p in fake_probs]),
+    )
+
+    # 写链断裂判据的四条分支（纯函数，含「不该报」的两侧，防它退化成永远报警）
+    check(
+        "㉑d 有批改 + Store 开着 + 零 episode ⇒ 判环境类（唯一该报的组合）",
+        memory_write_missing(store_enabled=True, grade_calls=2, episodes=[]) is True,
+    )
+    check(
+        "㉑e 反向三例不报警：有 episode / OFF 组 / 压根没批改",
+        memory_write_missing(
+            store_enabled=True, grade_calls=2, episodes=[{"knowledge_points": ["x"]}]
+        )
+        is False
+        and memory_write_missing(store_enabled=False, grade_calls=2, episodes=[]) is False
+        and memory_write_missing(store_enabled=True, grade_calls=0, episodes=[]) is False,
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -2253,6 +2403,8 @@ def main() -> int:
     check_17()
     check_18()
     check_19()
+    check_20()
+    check_21()
 
     print()
     print("=" * 72)

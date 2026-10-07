@@ -99,6 +99,23 @@ def ensure_localhost_no_proxy() -> None:
         os.environ[key] = ",".join(items)
 
 
+def memory_write_missing(
+    *, store_enabled: bool, grade_calls: int, episodes: list[dict[str, Any]]
+) -> bool:
+    """A 段有批改、Store 开着，却**一条 episode 都没落库** ⇒ 写链断了（环境类）。
+
+    ★ 为什么必须单独判（2026-10-07 实测）：TEI 的 `/embeddings` 返回 502 时，
+      `memory.safe` 只打一行 WARNING「长期记忆写入超时（grade，>1.5s），已忽略」就丢弃写入，
+      而 `/health` 仍是 200 ⇒ 预检拦不住。后果不是「跑失败」而是**跑出错的东西**：
+      画像为空 ⇒ B 段召不回 ⇒ 被记成 Memory 产品失败（我们当天刚把这类现象归因给 #22 的
+      KP 阈值）。⇒ 这种样本必须标成环境问题、不进指标。
+      ★ 与 `MIN_HITS` 无关：这里看的是**原始 episode 是否落库**，不是画像有没有值。
+    """
+    if not store_enabled or grade_calls <= 0:
+        return False
+    return not episodes
+
+
 def preflight_check() -> list[str]:
     """运行前预检外部依赖，返回问题列表（空 = 全部就绪）。
 
@@ -106,7 +123,8 @@ def preflight_check() -> list[str]:
       检索链**不抛异常**，只返回空结果 ⇒ 探针 run 带着「检索全空」跑满 12 分钟，
       把「服务挂了」记成 `retrieval_miss`，伪装成「能力不行」。
       而 `retrieval_error` 是**空的**，事后的文本标记也检测不到。
-      ⇒ 唯一可靠的办法是**花钱之前先探活**。
+    ★ 2026-10-07 补：**只探 `/health` 不够** —— 实测 TEI 半死时 `/health` 返 200、
+      `/embeddings` 返 502 ⇒ 检索与 Memory 写链都会静默退化。必须真发一次向量请求。
     """
     import httpx
 
@@ -127,6 +145,20 @@ def preflight_check() -> list[str]:
                 ):
                     hint = "（检测到本机设了 HTTP(S)_PROXY；已自动排除 localhost，若仍失败请检查代理配置）"
                 problems.append(f"embedding 服务不可达：{base}（{type(exc).__name__}）{hint}")
+            # ★ 关键的一步：health 通过 ≠ 能推理。真发一次 embedding 请求。
+            try:
+                from rag.embeddings import get_embeddings
+
+                vec = get_embeddings().embed_query("预检")
+                if not vec or len(vec) < 8:
+                    problems.append(
+                        f"embedding 返回异常向量（维度={len(vec) if vec else 0}）：{base}"
+                    )
+            except Exception as exc:  # noqa: BLE001
+                problems.append(
+                    f"embedding **推理**失败（`/health` 可能仍是 200，别只看健康检查）：{base}"
+                    f"（{type(exc).__name__}: {str(exc)[:120]}）"
+                )
     return problems
 
 
@@ -565,6 +597,19 @@ async def run_case(
     # ★ 环境类错误优先判定：命中则**不**把它计入 case 级 failure_reason，
     #   由调用方中止整轮（见 cli._run），避免「账号没额度」被记成「工具报错」。
     record.env_error = is_env_error(" ".join(hard_fails) + " " + probe.error)
+    # ★ 写链断了也算环境问题（2026-10-07：TEI /embeddings 502 而 /health 仍 200 ⇒
+    #   `memory.safe` 静默丢弃写入 ⇒ 画像为空 ⇒ 会被误读成「产品不召回」）。
+    #   这种样本**不进指标**，且应当中止整轮 —— 继续跑只会产出误导性数字。
+    if memory_write_missing(
+        store_enabled=store_enabled,
+        grade_calls=sum(1 for g in grade_scores if g.get("score") is not None),
+        episodes=episodes,
+    ):
+        record.env_error = True
+        record.validity_reason = (
+            f"{record.validity_reason}；" if record.validity_reason else ""
+        ) + "A 段有批改但 Store 无 episode ⇒ 记忆写链断开（环境类，非产品失败）"
+
     if record.env_error:
         record.failure_reason = ["tool_error"]
         record.primary_failure = "tool_error"

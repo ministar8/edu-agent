@@ -144,6 +144,19 @@ def _calibrate(args: argparse.Namespace) -> int:
     print(json.dumps(rep.__dict__, ensure_ascii=False, indent=2))
     print(f"\n阈值: {judge_mod.CALIBRATION_THRESHOLDS}")
     print("判定:", "PASS —— judge 可进批量" if rep.passed else f"FAIL —— 未达标项 {rep.failed_on}")
+    # ★ D6（§20.5 #19）：**秩相关的信息量单独露出**，不参与判定、不改退出码。
+    #   真实校准表是 `{5:28, 0:1, 2:1}` ⇒ PASS 可以是真的，但 `spearman` 只由 2/30 行决定。
+    if rep.rank_degenerate:
+        print(
+            f"\n⚠ 人工分**近似同值**：众数 {rep.human_mode} 占 "
+            f"{1 - (rep.informative_share or 0):.1%}，非众数仅 {rep.informative_n}/{rep.n} 行"
+            f"（{rep.informative_share:.1%} < {judge_mod._INFORMATIVE_SHARE_MIN:.0%}）"
+        )
+        print(
+            "  ⇒ `spearman` 的判别力集中在那几行上，**不要**把本表当「judge 与人工秩相关良好」引用；"
+            "论文里应表述为「N 条中 M 条人机完全一致 + 其余 K 条排序正确」。"
+        )
+        print("  ⇒ 阈值与人工分都**不为此调整**（改人工分等于伪造标注）。")
     return 0 if rep.passed else 1
 
 
