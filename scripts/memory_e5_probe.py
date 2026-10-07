@@ -38,6 +38,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -57,7 +58,27 @@ from prompts.service import _knowledge_points_block  # noqa: E402
 from rag.llm_calls import call_structured  # noqa: E402
 from schema.grading import GradingResult  # noqa: E402
 
-OUT = ROOT / "evals" / "results" / "task_eval" / "phase1_e5_prompt_following.jsonl"
+# ★ 默认落盘路径**不许默默覆写既有证据**：E-5 跑过一次（prompt hash `f09c75642029`），
+#   #8 剔根节点后 hash 变成 `2f485d2d7ef7` ⇒ 复测必须写到**新文件**，旧那份是「中间态」证据。
+#   用 `E5_OUT=<路径>` 指定输出（Step 9 就是这么跑的）。
+#   ★ `E5_OUT` 允许**相对仓库根**的路径：不 resolve 会在收尾的 `OUT.relative_to(ROOT)` 处抛
+#     `ValueError`（实测踩过：12 次调用已跑完并已落盘，只是最后打印崩 ⇒ 退出码 1 但数据没丢）。
+_out_env = os.environ.get("E5_OUT", "")
+OUT = (
+    Path(_out_env)
+    if Path(_out_env).is_absolute()
+    else (
+        ROOT / _out_env
+        if _out_env
+        else ROOT / "evals" / "results" / "task_eval" / "phase1_e5_prompt_following.jsonl"
+    )
+)
+
+# ★ 臂名是**归档里的键**，也是统计表的行名 ⇒ 只允许在这一处定义。
+#   `162` 是首跑时的词表条数，#8 之后实际为 158；名字保持不动（旧归档要能对上），
+#   真实条数由 `_system_vocab_size()` 在运行时打印并写进归档头部。
+ARM_A = "A_vocab162"
+ARM_B = "B_examples8"
 
 # ── 6 道题：覆盖缺陷 E 的**真实肇事考点**（平衡二叉树 / 图 / 堆与排序）──────
 #   题面取自 `evals/datasets/demo/memory_cases.jsonl` 的 Session A 提问，
@@ -129,6 +150,26 @@ def _system_text(prompt: ChatPromptTemplate) -> str:
     return prompt.messages[0].prompt.template
 
 
+def _system_vocab_size(prompt: ChatPromptTemplate) -> int:
+    """system 里「【章名】A、B、C」行的**去重词数**（即该臂实际注入了多少个候选词）。
+
+    ★ 为什么抽成函数（2026-10-07 Step 9）：臂名沿用的是首跑时的条数 `A_vocab162`，
+      而 #8 过滤课程根节点后实际只剩 **158** ⇒ 归档头行若把「162」写死，就成了
+      **与实际注入不符**的自述。运行时条数必须以代码算出来的为准，故这里只有一处实现。
+    """
+    import re as _re
+
+    text = _system_text(prompt)
+    return len(
+        {
+            tok
+            for line in _re.findall(r"【[^】]*】([^\n]+)", text)
+            for tok in line.split("、")
+            if tok
+        }
+    )
+
+
 def _build_arms() -> dict[str, ChatPromptTemplate]:
     """臂 A = 真实 `GRADE_PROMPT`；臂 B = 只把词表块换成降级版。"""
     system_a = _system_text(GRADE_PROMPT)
@@ -145,24 +186,16 @@ def _build_arms() -> dict[str, ChatPromptTemplate]:
     arms = {
         # ★ 臂名里的 `162` 是**首跑时**的词表条数（#8 过滤课程根节点后实为 158）。
         #   刻意**不改名** —— 既有归档按臂名存取，改名会让 `--reanalyse` 读旧档时取不到统计。
-        #   实际条数在下面每次运行时打印，以打印值为准。
-        "A_vocab162": GRADE_PROMPT,
-        "B_examples8": ChatPromptTemplate.from_messages(
+        #   实际条数由 `_system_vocab_size()` 在运行时打印**并写进归档头部**，以那两处为准。
+        ARM_A: GRADE_PROMPT,
+        ARM_B: ChatPromptTemplate.from_messages(
             [("system", system_a.replace(block_a, block_b, 1)), ("human", human_tpl)]
         ),
     }
-    import re as _re
 
     for name, prompt in arms.items():
         text = _system_text(prompt)
-        n_vocab = len(
-            {
-                tok
-                for line in _re.findall(r"【[^】]*】([^\n]+)", text)
-                for tok in line.split("、")
-                if tok
-            }
-        )
+        n_vocab = _system_vocab_size(prompt)
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         print(f"  臂 {name}: system {len(text)} 字符 · 词表 {n_vocab} 个 · sha256[:12]={digest}")
     return arms
@@ -255,8 +288,8 @@ def _summarise(records: list[dict]) -> None:
         c = f"{s['expected_hits']}/{s['cases']}"
         print(f"{arm:14s} {a:>14s} {b:>14s} {c:>10s} {s['empty_outputs']:>7d}")
 
-    a_rate = stats.get("A_vocab162", {}).get("follow_rate", 0.0)
-    b_rate = stats.get("B_examples8", {}).get("follow_rate", 0.0)
+    a_rate = stats.get(ARM_A, {}).get("follow_rate", 0.0)
+    b_rate = stats.get(ARM_B, {}).get("follow_rate", 0.0)
     print(f"\nΔ 词级跟随率（A − B）= {a_rate - b_rate:+.3f}")
     for arm, s in stats.items():
         if s["non_canonical_words"]:
@@ -355,7 +388,11 @@ async def main() -> int:
     }
     OUT.parent.mkdir(parents=True, exist_ok=True)
     with OUT.open("w", encoding="utf-8") as fh:
-        fh.write("# E-5 缺陷 E 效果探针（配对：臂 A 词表 162 vs 臂 B 8 示例=E-3 前口径）。\n")
+        fh.write(
+            "# E-5 缺陷 E 效果探针（配对：臂 A 实际注入 "
+            f"{_system_vocab_size(arms[ARM_A])} 个候选词 vs 臂 B 8 条示例=E-3 前口径；"
+            "臂名沿用首跑条数，实际条数以本行为准）。\n"
+        )
         fh.write("# 测量，非门禁；模型有随机性，判定看两臂聚合差值。\n")
         fh.write(f"# provenance={json.dumps(provenance, ensure_ascii=False)}\n")
         for rec in records:
