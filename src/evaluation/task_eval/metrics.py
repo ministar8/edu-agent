@@ -1,0 +1,456 @@
+"""task-aware 指标：纯函数，无 IO、无 LLM，便于单测与复算。
+
+口径全部来自 `docs/EFFECT_PLAN.md` §2.B / §3.1（v1.0 已冻结的规则）：
+- `knowledge_coverage_pass = expected_kp ≠ ∅ AND expected_kp ⊆ retrieved_kp`；
+  `expected_kp = ∅` → **N/A**（不是 FAIL）—— 避免「未标注」被算成「检索失败」。
+- `difficulty_match_pass`：±1 档（**1–5 五档制**）。
+- `score_tolerance@±10`：`|model − human| ≤ 10`（Grade 输出本就是 0–100）。
+- Verify 的 `question_id_recall@5` 属 **Phase 1**（Phase 0 用 `exam_hit@5` 代理），
+  但函数在此备好，Phase 1 直接可用。
+
+★ 三态返回约定：`True` = 通过 / `False` = 失败 / `None` = **不适用**（缺 gold）。
+报告侧必须把 `None` 单独计为 `n/a`，**不得并入失败率**。
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Sequence
+
+# ── failure_reason 枚举（§2.B.3 冻结）─────────────────────
+FAILURE_REASONS: tuple[str, ...] = (
+    "retrieval_miss",
+    "retrieval_dropped",
+    "evidence_pollution",
+    "generation_wrong",
+    "generation_incomplete",
+    "format_violation",
+    "tool_error",
+    "memory_miss",
+    # ★ `case_invalid`（2026-10-06 Step 5 新增）：**case 前置条件没成立**，
+    #   与 `memory_miss`（产品没召回）**语义相反**，故必须单列。
+    #   典型：mem-006 要求 A 段两次高分、实际跑出 100/52 ⇒ grading LLM 随机性所致，
+    #   不是 Memory 产品失败。此类 case 的 Memory 三项记 N/A，不进分母。
+    "case_invalid",
+    "hallucination",
+    "refusal",
+    "none",
+)
+
+# primary_failure 的取用优先级：**最上游（根因）优先**，以便画因果链
+# `retrieval_miss → evidence_insufficient → generation_incomplete`。
+# 说明：`refusal` 排在末位 —— 它可能是**正确拒答**（见 §3.5 code 边界），
+# 不宜盖过更具体的上游原因；`none` 永远最后。
+# ★ `case_invalid` 排在最前：它是「样本本身无效」，比任何产品侧失败都更上游 ——
+#   样本无效时，后面所有失败都不可信，故应压过一切。
+_PRIMARY_PRIORITY: tuple[str, ...] = (
+    "case_invalid",
+    "tool_error",
+    "retrieval_miss",
+    "retrieval_dropped",
+    "evidence_pollution",
+    "memory_miss",
+    "hallucination",
+    "generation_incomplete",
+    "generation_wrong",
+    "format_violation",
+    "refusal",
+    "none",
+)
+
+# 难度字符串 → 1–5 档（文档口径是 1–5；demo 集允许写 basic/medium/hard 便于人工标）
+_DIFFICULTY_MAP: dict[str, int] = {
+    "basic": 2,
+    "easy": 1,
+    "medium": 3,
+    "mid": 3,
+    "hard": 4,
+    "difficult": 5,
+}
+
+DIFFICULTY_TOLERANCE = 1  # ±1 档（v1.0 冻结）
+GRADE_TOLERANCE = 10.0  # score_tolerance@±10（0–100 制，v1.0 拍板锁定）
+QUALITY_PASS_THRESHOLD = 4  # final_quality ≥ 4 视为「好」
+
+
+def pick_primary_failure(reasons: Sequence[str]) -> str:
+    """按「最上游优先」从多个 failure_reason 里取主因；空则 `none`。"""
+    present = {r for r in reasons if r in FAILURE_REASONS}
+    for reason in _PRIMARY_PRIORITY:
+        if reason in present:
+            return reason
+    return "none"
+
+
+# ── 检索侧 ────────────────────────────────────────────────
+
+
+def kp_coverage(expected_kp: Sequence[str] | None, retrieved_kp: Sequence[str]) -> bool | None:
+    """`expected_kp ⊆ retrieved_kp`（必须全覆盖）；`expected_kp` 为空 → None（N/A）。
+
+    ★ **祖先感知**（2026-10-05 修，属 §2.B.5 允许的「case runner 的 bug」）：
+    考点 ID 是**层级制**（`co.storage` → `co.storage.cache`）。
+    实测 `expected_kp=[co.storage]` 而命中 chunk 带 `co.storage.cache` —— 精确集合比较
+    会判 False，但**父考点被其子节点覆盖在语义上是满足的**。
+    故判定为「命中项 = 期望项 或其**子孙**」（按 id 前缀 `.` 分隔）。
+
+    ⚠️ 该层级语义是对 §2.B.1 冻结公式的**解释**，非新增判据 —— 若你要求严格集合相等，
+    把 `_kp_covered` 的子孙分支去掉即可（一处改动）。
+    """
+    if not expected_kp:
+        return None
+    have = {_norm(k) for k in retrieved_kp}
+    want = {_norm(k) for k in expected_kp}
+    return all(_kp_covered(e, have) for e in want)
+
+
+def kp_mrr(
+    expected_kp: Sequence[str] | None, retrieved_kp_per_item: Sequence[Sequence[str]]
+) -> float | None:
+    """第一个「覆盖任一 expected_kp」的文档的倒数排名；无 expected_kp → None。"""
+    if not expected_kp:
+        return None
+    want = {_norm(k) for k in expected_kp}
+    for rank, kps in enumerate(retrieved_kp_per_item, 1):
+        have = {_norm(k) for k in kps}
+        if any(_kp_covered(e, have) for e in want):
+            return round(1.0 / rank, 4)
+    return 0.0
+
+
+def _kp_covered(expected: str, have: set[str]) -> bool:
+    """期望考点是否被命中集合覆盖（精确 或 被其子孙覆盖）。"""
+    if expected in have:
+        return True
+    return any(h.startswith(expected + ".") for h in have)
+
+
+# kp_index 侧的学科码 → 门禁侧的类目键。★ `cn` 是 kp_index 用的码，
+# `SUBJECT_TO_CATEGORY` 的键是 `network`，不对齐就会恒不命中（见 `category_hit`）。
+_SUBJECT_ALIASES = {"cn": "network"}
+
+
+def category_hit(subject: str, categories: Sequence[str]) -> bool | None:
+    """top-k 内是否出现期望学科类目；未标或未登记学科 → **None（N/A，不进分母）**。
+
+    ★ 2026-10-07 修：原实现 `SUBJECT_TO_CATEGORY.get(subject, subject)` 在查不到时拿
+    **学科码本身**去和类目名比 ⇒ 恒不等 ⇒ **假失败**。实测：demo 的 `grade` / `verify`
+    用 kp_index 的学科码 **`cn`**，而映射表的键是 **`network`**，各有 4 条被系统性记成
+    `False`；`qa` / `generate` 用的是 `network`，所以一直全 True——同一函数在两个任务上
+    表现不一致，正是它长期没被发现的原因。⇒「**测不到**」记 N/A，不能记「测错」。
+    """
+    if not subject:
+        return None
+    from evaluation.retrieval_gate import SUBJECT_TO_CATEGORY
+
+    want = SUBJECT_TO_CATEGORY.get(_SUBJECT_ALIASES.get(subject, subject))
+    if want is None:
+        return None
+    return any(c == want for c in categories)
+
+
+def exam_hit_at_k(is_exam_flags: Sequence[bool], k: int = 5) -> bool:
+    """top-k 内是否命中 L3 真题资产（**Phase 0 Verify 的主要代理**）。"""
+    return any(is_exam_flags[:k])
+
+
+def exam_rank(is_exam_flags: Sequence[bool]) -> int | None:
+    """首条真题的排名（1-based）；无则 None。"""
+    for rank, flag in enumerate(is_exam_flags, 1):
+        if flag:
+            return rank
+    return None
+
+
+# ── 生成侧（任务级）────────────────────────────────────────
+
+
+def difficulty_match(expected: object, actual: object) -> bool | None:
+    """难度是否 ±1 档内；任一缺失/无法解析 → None（N/A）。"""
+    e = _as_difficulty(expected)
+    a = _as_difficulty(actual)
+    if e is None or a is None:
+        return None
+    return abs(e - a) <= DIFFICULTY_TOLERANCE
+
+
+def score_tolerance(
+    model_score: float | None, human_score: float | None, tol: float = GRADE_TOLERANCE
+) -> bool | None:
+    """`|model − human| ≤ tol`（默认 ±10，0–100 制）；缺任一 → None（N/A）。"""
+    if model_score is None or human_score is None:
+        return None
+    return abs(float(model_score) - float(human_score)) <= tol
+
+
+def score_mae(pairs: Sequence[tuple[float | None, float | None]]) -> float | None:
+    """平均绝对误差（只统计两侧都有的样本）；无有效样本 → None。"""
+    diffs = [abs(float(m) - float(h)) for m, h in pairs if m is not None and h is not None]
+    if not diffs:
+        return None
+    return round(sum(diffs) / len(diffs), 3)
+
+
+def question_id_recall(predicted: Sequence[str], gold: Sequence[str]) -> float | None:
+    """`|Pred ∩ Gold| / |Gold|`（§3.1 冻结的统一公式）；gold 为空 → None。
+
+    单题 gold 自然退化为 0/1，无需另立布尔口径。
+    """
+    if not gold:
+        return None
+    p = {_norm(x) for x in predicted}
+    g = {_norm(x) for x in gold}
+    return round(len(p & g) / len(g), 4)
+
+
+def question_id_hit(predicted: Sequence[str], gold: Sequence[str]) -> bool | None:
+    """`Pred ∩ Gold ≠ ∅`（答辩友好）；gold 为空 → None。"""
+    if not gold:
+        return None
+    return bool({_norm(x) for x in predicted} & {_norm(x) for x in gold})
+
+
+def quality_pass(
+    final_quality: float | None, threshold: float = QUALITY_PASS_THRESHOLD
+) -> bool | None:
+    """`final_quality ≥ threshold`（默认 ≥4）；缺分 → None（N/A，非失败）。"""
+    if final_quality is None:
+        return None
+    return float(final_quality) >= threshold
+
+
+# ★ 说明性数字（满分 / 总分）先遮掉 —— 否则"关键词式"正则一定先撞上它们：
+#   「总分 100 分，你得了 62 分」→ 100、「得分（满分 100）：62」→ 100（实测踩过）。
+#   中文里「总分/满分」指的是**题目满分值**而非学生得分，故遮蔽是可辩护的；
+#   产品自己的输出格式（`grading_core.format_grading_for_chat`）是「评分：40/100」，
+#   不含这两个词，所以正常路径完全不受影响。
+_MASK_FULLMARK_RE = re.compile(r"(?:满分|总分)\s*(?:为|=)?\s*\d{1,3}")
+# 优先级：① 显式冒号式（最贴近产品输出）② 「你得 X 分」③ X/Y 比例 ④ 旧的宽松式兜底
+_SCORE_EXPLICIT_RE = re.compile(
+    r"(?:得分|评分|最终得分|分数)\s*[:：]\s*(\d{1,3})(?:\s*/\s*(\d{1,3}))?"
+)
+_SCORE_YOU_RE = re.compile(r"你(?:得|拿了|获得了|扣了)?\D{0,3}?(\d{1,3})\s*分")
+_SCORE_RATIO_RE = re.compile(r"(\d{1,3})\s*/\s*(\d{1,3})")
+_SCORE_LOOSE_RE = re.compile(r"(?:得分|评分|分数|总分)\D{0,4}(\d{1,3})(?:\s*/\s*(\d{1,3}))?")
+
+
+def _to100(m: re.Match[str]) -> float | None:
+    """把 (得分, 满分?) 两组折算到 100 制。单组正则（如「你得 X 分」）按百分制处理。"""
+    score = float(m.group(1))
+    second = m.group(2) if m.re.groups >= 2 else None
+    full = float(second) if second else 100.0
+    if not full:
+        return None
+    if full != 100.0:
+        score = score / full * 100.0
+    if score > 100.0:  # 明显不可能是百分制得分（如把 2013 这类年份当分数）
+        return None
+    return round(score, 2)
+
+
+def parse_grade_score(text: str) -> float | None:
+    """从 Grade 回复里尽力解析 0–100 得分（**best-effort**，判据需在报告中声明）。
+
+    解析不到 → None（该 case 的 `score_tolerance` 记为 N/A，**不得算作失败**）。
+    """
+    if not text:
+        return None
+    masked = _MASK_FULLMARK_RE.sub(" ", text)
+    for rex in (_SCORE_EXPLICIT_RE, _SCORE_YOU_RE, _SCORE_RATIO_RE, _SCORE_LOOSE_RE):
+        m = rex.search(masked)
+        if m:
+            value = _to100(m)
+            if value is not None:
+                return value
+    return None
+
+
+# ── 汇总 ──────────────────────────────────────────────────
+
+
+def rate(flags: Sequence[bool | None]) -> dict[str, float | int | None]:
+    """通过率：**N/A（None）从分母剔除**。
+
+    这是本项目所有率值指标的统一口径 —— 见下方 `delivery_rate` 的说明。
+
+    ★ 返回**超集键**（`rate` 与 `value` 同值，另附 passed/failed/n/n_a）：
+      历史上本函数曾先后用过 `rate` 与 `value` 两个键名，而消费方（`report._pct`
+      读 `rate`、能力总表读 `value`）各认一个 —— 只留一个会让另一处**静默显示 n/a**。
+      统一返回超集，避免再次出现「指标算对了但报告显示 n/a」。
+    """
+    passed = sum(1 for f in flags if f is True)
+    failed = sum(1 for f in flags if f is False)
+    n_a = sum(1 for f in flags if f is None)
+    denom = passed + failed
+    value = round(passed / denom, 4) if denom else None
+    return {
+        "rate": value,
+        "value": value,
+        "passed": passed,
+        "failed": failed,
+        "n": denom,
+        "n_a": n_a,
+    }
+
+
+# ── Generate 交付判据（§3.1 v1.0；2026-10-06 按用户裁决重构）──────────────
+#
+# ★ 口径冻结（用户 2026-10-06 拍板，**不得偏离**）：
+#   1. `expected_difficulty` 无可靠 gold 来源（黄金集无难度字段、query 0/32 提及难度）
+#      ⇒ 记 **N/A**，`difficulty_match_pass` 该 case **不适用、不扣分**。
+#      ❌ 禁止编默认难度（如 3）；❌ 禁止用系统自报的「理解/综合」反推 gold。
+#   2. **不适用项（None）一律从分母剔除**（2026-10-06 定，仍不变）：
+#      例：coverage=T, difficulty=N/A, answerability=T, correctness=T, structure=T
+#          ⇒ 该题按 **4 项**判定，**不是**按 5 项打 80%。
+#      ★ 聚合口径已于 2026-10-07（#2 定稿）改为**逐题 AND**（`every_item_passes`，对齐
+#        `EFFECT_PLAN §3.1`「五项全过才算这题完整」）；原先的**项级池化**
+#        （适用项通过数 / 适用项数，跨题累加）**降级为诊断**，不再当主指标 ——
+#        因为池化会把「一道题崩掉 3 项」被另外十几道好题摊薄（实测同一归档：
+#        池化 0.9423 vs 逐题 0.80，差 0.14 全在"稀释"里）。
+#   3. `gold_answer` **不得**用黄金集示例题答案冒充生成题的 gold ⇒
+#      `correctness_pass` 改用**校准后的质量判断**（judge 的 `final_quality`），
+#      不引入独立 gold_answer。
+#   4. 五项目标拆为**独立报告项**：结构完整率 / 答案可判定率 / 知识点覆盖率 /
+#      内容正确率 / 难度匹配（后者本批全 N/A）。
+
+# 结构四要素的机械判据（§3.1「题干 + 选项/要求 + 标准答案 + 解析 齐全」）
+_STRUCTURE_STEM = re.compile(r"题干")
+_STRUCTURE_ANSWER = re.compile(r"标准答案|参考答案")
+_STRUCTURE_EXPLAIN = re.compile(r"解析|解题思路|错因")
+# 「选项/题型结构」：有选项字母，或标了题型，或给出编号小问
+_STRUCTURE_OPTIONS = re.compile(
+    r"(?:^|\n)\s*[A-D]\s*[.、．)）]|类型\s*[：:]|(?:^|\n)\s*[（(]\s*[1-9]\s*[）)]"
+)
+# 答案不可判定的模糊表述
+_VAGUE_ANSWER = re.compile(r"略|见解析|视情况|不确定|无法确定|自行|略述")
+
+
+def structure_completeness(reply: str) -> dict[str, bool]:
+    """结构四要素（题干 / 选项·题型结构 / 标准答案 / 解析）。"""
+    text = str(reply or "")
+    return {
+        "stem": bool(_STRUCTURE_STEM.search(text)),
+        "options_or_task": bool(_STRUCTURE_OPTIONS.search(text)),
+        "answer": bool(_STRUCTURE_ANSWER.search(text)),
+        "explanation": bool(_STRUCTURE_EXPLAIN.search(text)),
+    }
+
+
+def structure_pass(reply: str) -> bool:
+    """四要素**齐全**才算结构完整（§3.1）。"""
+    return all(structure_completeness(reply).values())
+
+
+def answerability_pass(reply: str) -> bool | None:
+    """答案可判定率：是否存在**明确、可验证**的答案。
+
+    判据：给出了「标准答案/参考答案」，且不是「略/见解析/视情况」这类模糊表述。
+    （「答案是否真的唯一正确」属 `correctness_pass`，不在本条判定。）
+    """
+    text = str(reply or "")
+    if not _STRUCTURE_ANSWER.search(text):
+        return False
+    m = re.search(r"(?:标准答案|参考答案)\s*[：:]\s*(.{1,80})", text, re.S)
+    if not m:
+        return False
+    return not _VAGUE_ANSWER.search(m.group(1))
+
+
+def delivery_rate(flags: Sequence[bool | None]) -> dict[str, float | int | None]:
+    """Generate **项级池化通过率** = 适用项通过数 / 适用项数（不适用项剔除）。
+
+    与 `rate` 同为 N/A 剔除口径，单列此函数是为了让**语义显式**：
+    报告里必须写明「分母 = 适用项数」，避免被误读成「必须 5/5」。
+
+    ★ 2026-10-07（#2 定稿）：这一口径**降级为诊断**，主指标改 `every_item_passes`
+      的逐题聚合。原因：池化把「15 题 × 每题 4 项」和「4 题 × 每题 15 项」算成
+      同一个数 —— 一道题崩掉 3 项会被另外 14 道题的通过**稀释**，于是它测的是
+      「项平均健康度」而不是「系统能否交付一道完整的题」。§3.1 冻结的是逐题 AND。
+    """
+    return rate(flags)
+
+
+def every_item_passes(flags: Sequence[bool | None]) -> bool | None:
+    """**逐题**聚合：一题的若干交付项，全部适用项都通过才算这题通过。
+
+    - 全是 `None`（这题一项都测不了）⇒ 返回 `None`（N/A，**不进分母**）。
+      ★ 不能返回 `True`：那等于「测不了的题算通过」，会把 #10 那类索引缺标签
+      导致的不可测直接洗成满分。
+    - 有适用项 ⇒ 全部为真才 `True`（对齐 `EFFECT_PLAN §3.1` 的逐题 AND 口径）。
+    """
+    applicable = [f for f in flags if f is not None]
+    if not applicable:
+        return None
+    return all(applicable)
+
+
+def degenerate_gold(values: Sequence[float]) -> tuple[bool, int]:
+    """Grade 的 gold 是否**退化**（两极分布）—— 2026-10-07 修 #7。
+
+    `score_tolerance@±10` 测的是「模型分与人工分在 ±10 内是否一致」。若人工分
+    只有两个取值（实测 0B 的 15 条 = `{100: 8, 0: 7}`），那这道题实际在问
+    「模型有没有也跟着说 0 或 100」—— **没有中间地带可供 ±10 去判别**，
+    于是 `tolerance = 1.000` 会被读成"判分能力完美"，而它只证明了对齐二值标注。
+
+    判据刻意简单可解释：**样本 ≥5 且不同取值 ≤2** ⇒ 退化。
+    （不用"必须等于 0/满分"这类魔法阈值：只要取值 ≤2 个，无论是什么值，
+    容差指标都没有判别力。）
+
+    Returns
+    -------
+    (degenerate, distinct_count)
+        样本 < 5 时返回 ``(False, n_distinct)`` —— 那是**样本不足**，不是退化，
+        不该由本函数冒充判定。
+    """
+    distinct = {round(float(v), 2) for v in values if v is not None}
+    if len(values) < 5:
+        return False, len(distinct)
+    return len(distinct) <= 2, len(distinct)
+
+
+# 「答对」的分数线。**直接引用产品自己的定义**（`schema/grading.py`：
+# `is_wrong` 的说明就是「score < 60 视为错误」）⇒ 评测器不自造阈值。
+WRONG_SCORE_LINE = 60.0
+
+
+def verdict_agreement(
+    model_score: float | None,
+    human_score: float | None,
+    full_marks: float = 100.0,
+) -> bool | None:
+    """**结论一致率**：模型判"答对/答错"与人工是否一致。任一缺失 ⇒ None（N/A）。
+
+    ★ 为什么本项目该用它当 Grade 头号指标（2026-10-07 修 #7）：
+    L3 语料 **674/674 全是 2 分选择题**、demo 的 grade case 学生答案**全是 1 个字母**
+    ⇒ 人工分只能是 0 / 满分，`score_tolerance@±10` 在这种二值 gold 上**没有可判别的
+    中间地带**（它其实只在问"模型有没有也跟着说 0 或 100"）。
+    而"对错"这件事在二值 gold 上是**完全合法**的标注 —— 所以合法的问题形式是
+    **结论对不对**，不是**分数差多少**。
+
+    与 `score_tolerance` 的关键差别（护栏 ③o 锁这条）：
+    模型给 70、人工给 100 ⇒ 数值差 30，`tolerance` 判**失败**，
+    但两者结论都是"答对" ⇒ `verdict_agreement` 判**通过** —— 后者才是我们想测的能力。
+    """
+    if model_score is None or human_score is None:
+        return None
+    model_says_right = model_score >= WRONG_SCORE_LINE
+    human_says_right = human_score >= (full_marks / 2.0)
+    return model_says_right == human_says_right
+
+
+# ── 内部 ──────────────────────────────────────────────────
+
+
+def _norm(text: object) -> str:
+    return str(text or "").strip().casefold()
+
+
+def _as_difficulty(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        level = int(value)
+        return level if 1 <= level <= 5 else None
+    return _DIFFICULTY_MAP.get(str(value).strip().lower())

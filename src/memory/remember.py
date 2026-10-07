@@ -138,26 +138,55 @@ async def record_question(
     return eid, bid
 
 
+def _resolve_config(config: RunnableConfig | None) -> dict[str, Any]:
+    """取 `configurable` 字典：**显式传入优先，缺失时回落到运行时上下文**。
+
+    ★ 2026-10-06（Step 5 实测缺陷）：LangChain **不会**把运行时 ``RunnableConfig``
+    注入到工具函数的 ``config`` 参数（实测：参数恒为 ``None``，而
+    ``langgraph.config.get_config()`` 能拿到真值）。此前工具内只读参数，导致
+    ``user_id`` 恒为 ``None`` ⇒ ``record_grade`` 的 ``if uid:`` 分支被**静默跳过**，
+    批改成功却**一条 episode 都不写** ⇒ ``weak_topics`` 永远为空 ⇒ B 段永不召回。
+
+    这类"成功但没落库"最难查：工具输出看着正常（``评分：40/100``），只有 Agent
+    自己知道 `EPISODES: 0`。故此处把「参数 → 上下文」的回落**收敛到一处**，
+    所有 ``*_from_config`` 共用，避免再次漏改。
+
+    ★ 契约（2026-10-07 与并发实测一并定稿，改动前请先读）：
+    - **整块替换，不做键级合并**：只要 ``config`` 带了非空 ``configurable``，
+      就只信它 —— 显式 config 只写 ``thread_id`` 时，``user_id`` 结果是 ``None``
+      （不会去运行时上下文里补）。仓内所有调用方都**同时**给两把键
+      （``service.py:218`` 的 ``configurable`` / gate 的 ⑩a），故今天没有踩到这条；
+      新增调用方若只传其一，请**显式传全**，不要指望回落帮你补 —— 补了反而更难归因。
+    - **回落是安全的**：``get_config()`` 读的是 contextvar，asyncio 每个 Task 持有
+      自己的 context 副本 ⇒ 并发请求各取各自的用户。实测：4 个 ``RunnableLambda``
+      分别注入 U0~U3、内部 ``sleep`` 交错，两次阅读仍各自返回自己的 uid
+      （护栏 ⑩e 固化这一点）。所以「参数为 None ⇒ 用上下文」不是「算到谁头上算谁的」，
+      而是**当前那次 graph 调用的** config。
+    """
+    explicit = dict(config.get("configurable") or {}) if config else {}
+    if explicit:
+        return explicit
+    try:
+        from langgraph.config import get_config
+
+        return dict((get_config() or {}).get("configurable") or {})
+    except Exception:  # 非 LangGraph 运行时（如直接单测）时静默降级
+        return {}
+
+
 def user_id_from_config(config: RunnableConfig | None) -> str | None:
     """从 RunnableConfig 取 user_id（聊天工具用）。"""
-    if not config:
-        return None
-    configurable: dict[str, Any] = dict(config.get("configurable") or {})
-    uid = configurable.get("user_id")
+    uid = _resolve_config(config).get("user_id")
     return str(uid) if uid is not None else None
 
 
 def thread_id_from_config(config: RunnableConfig | None) -> str:
-    if not config:
-        return ""
-    configurable: dict[str, Any] = dict(config.get("configurable") or {})
-    tid = configurable.get("thread_id")
+    conf = _resolve_config(config)
+    tid = conf.get("thread_id")
     return str(tid) if tid is not None else ""
 
 
 def batch_id_from_config(config: RunnableConfig | None) -> str:
-    if not config:
-        return ""
-    configurable: dict[str, Any] = dict(config.get("configurable") or {})
-    bid = configurable.get("question_batch_id")
+    conf = _resolve_config(config)
+    bid = conf.get("question_batch_id")
     return str(bid) if bid is not None else ""

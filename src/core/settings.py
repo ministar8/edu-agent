@@ -104,6 +104,14 @@ class Settings(BaseSettings):
     STRUCTURED_OUTPUT_METHOD: Literal["function_calling", "json_mode", "json_schema"] = (
         "function_calling"
     )
+    # ★ 2026-10-06（Step 5 实测）：结构化输出的**硬失败重试**。
+    #   实测 DashScope 兼容端在 `method="function_calling"` 下**偶发**返回裸文本
+    #   （形如 `score: 40\nfeedback: ...`）而非 tool call 参数；一旦该文本超过 schema
+    #   的 `max_length`，Pydantic 校验即失败。此前 `call_structured` 直接返回 None，
+    #   调用方（grading_core）只能抛 `RuntimeError("批改失败")` ⇒ 批改整体失效。
+    #   本项为**同 prompt 重试次数**（不含首次），契约变更：`timeout` 现在是**单次
+    #   尝试**的超时上限，整段最多耗时 `(1 + RETRIES) * timeout`。
+    STRUCTURED_OUTPUT_RETRIES: int = 1
 
     # 空串表示「尚未推导」；model_post_init 必定填入，否则构造期直接报错
     DEFAULT_MODEL: str = ""

@@ -105,20 +105,6 @@ _COLUMN_MIN_CONSECUTIVE = 6
 from rag.synonyms import normalize_synonyms  # noqa: E402
 
 
-def clean_text(text: str) -> str:
-    if not text or not text.strip():
-        return ""
-
-    text = _CONTROL_CHARS_RE.sub("", text)
-    text = unicodedata.normalize("NFKC", text)
-    text = _PAGE_NUM_RE.sub("", text)
-    text = _MULTI_NEWLINE_RE.sub("\n\n", text)
-    text = _MULTI_SPACE_RE.sub(" ", text)
-    text = _LINE_TRIM_RE.sub("", text)
-    text = text.strip()
-    return text
-
-
 def _get_source_ext(doc: Document) -> str:
     source = (
         doc.metadata.get("source_path")

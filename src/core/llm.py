@@ -72,14 +72,6 @@ _LLM_CACHE: BoundedCache[LlmCacheKey, ChatOpenAI] = BoundedCache(
 )
 
 
-def reset_llm_cache(*, notify: bool = False) -> None:
-    """清空 LLM 缓存，仅用于测试隔离（本项目不需要配置热更新）。
-
-    notify=False 时不触发 on_evict —— 测试中客户端通常从未真正建立过连接。
-    """
-    _LLM_CACHE.clear(notify=notify)
-
-
 def _build_client(
     model_ref: str,
     model_id: str,

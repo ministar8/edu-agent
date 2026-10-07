@@ -523,28 +523,3 @@ def verify_evidence(
         reasons=reasons,
         retry_hints=retry_hints,
     )
-
-
-def is_retrieval_sufficient(
-    fused: FusedEvidence,
-    query: str = "",
-    use_llm: bool = False,
-    min_verdict: Verdict = Verdict.SOFT_FAIL,
-) -> bool:
-    """快捷判断：检索结果是否足够使用
-
-    比 verify_evidence 更简洁，适合 Agent 内联调用。
-
-    Args:
-        fused: FusedEvidence
-        query: 原始查询
-        use_llm: 是否启用 LLM 校验
-        min_verdict: 最低可接受判定（默认 SOFT_FAIL 即 soft_fail 也算通过）
-
-    Returns:
-        True 如果 verdict >= min_verdict
-    """
-    result = verify_evidence(fused, query=query, use_llm=use_llm)
-    # Verdict 优先级: PASS > SOFT_FAIL > HARD_FAIL
-    priority = {Verdict.PASS: 2, Verdict.SOFT_FAIL: 1, Verdict.HARD_FAIL: 0}
-    return priority.get(result.verdict, 0) >= priority.get(min_verdict, 1)

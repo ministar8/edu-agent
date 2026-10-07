@@ -86,10 +86,6 @@ class _ResourceGuard:
         self.record(operation)
         return True
 
-    @property
-    def degraded_ops(self) -> set[str]:
-        return self._degraded.copy()
-
     def reset(self) -> None:
         """重置所有计数器和降级状态"""
         self._counters.clear()
@@ -860,7 +856,7 @@ def _detect_pdf_title_lines(text: str) -> list[dict]:
 def _tokenize_with_positions(text: str) -> tuple[list[str], list[int]]:
     """分词，并同时给出每个词的字符起点。
 
-    ★ 合并了原先分散在两处的分词（`_tokenize_text` 与 `_semantic_segment` 里重建位置的那段）。
+    ★ 统一分词与字符位置计算，避免调用方重复分词后再重建位置。
     """
     if not text or not text.strip():
         return [], []
@@ -884,11 +880,6 @@ def _tokenize_with_positions(text: str) -> tuple[list[str], list[int]]:
                 positions.append(idx)
                 search_start = idx + len(word)
     return words, positions
-
-
-def _tokenize_text(text: str) -> list[str]:
-    """分词，返回词序列（含停用词过滤）。薄委托 —— 逻辑在 `_tokenize_with_positions`。"""
-    return _tokenize_with_positions(text)[0]
 
 
 def _window_jaccard_distances(

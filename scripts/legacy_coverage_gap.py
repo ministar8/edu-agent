@@ -183,7 +183,6 @@ def coverage(rows: list[dict]) -> dict:
         "topic_chunk_counts": dict(sorted(topic_docs.items(), key=lambda x: -x[1])),
         "topics_present": sorted(topic_docs.keys()),
         "token_count": len(all_tokens),
-        "top_tokens": [w for w, _ in Counter().update(all_tokens) or []] if False else [],
     }
 
 

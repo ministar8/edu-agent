@@ -139,16 +139,6 @@ class TaskPolicy(BaseModel):
 
         return self
 
-    def cache_key_parts(self) -> tuple[str, ...]:
-        """语义缓存 key 必含片段（安全隔离）。"""
-        return (
-            self.task_mode,
-            self.depth,
-            self.layer_policy_id,
-            self.policy_version,
-            self.cache_scope,
-        )
-
     # —— 兼容属性（tools / evidence_policy）——
     @property
     def answer_released(self) -> bool:

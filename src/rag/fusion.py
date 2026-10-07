@@ -204,28 +204,13 @@ def fuse_evidence(
     return fused
 
 
-def fuse_documents(
-    docs: list[Document],
-    query: str = "",
-    max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
-    depth: str = "standard",
-) -> FusedEvidence:
-    """把检索到的 Document 融合成 `FusedEvidence`（同步版）。"""
-    return fuse_evidence(
-        text_evidences=[text_evidence_from_document(doc) for doc in docs],
-        query=query,
-        max_tokens=max_tokens,
-        depth=depth,
-    )
-
-
 async def afuse_documents(
     docs: list[Document],
     query: str = "",
     max_tokens: int = settings.CONTEXT_TOKEN_BUDGET,
     depth: str = "standard",
 ) -> FusedEvidence:
-    """`fuse_documents` 的异步版（当前实现同步完成，签名保持异步以适配调用方）。"""
+    """把检索到的 Document 融合成 `FusedEvidence`（异步签名，实现同步完成）。"""
     return fuse_evidence(
         text_evidences=[text_evidence_from_document(doc) for doc in docs],
         query=query,

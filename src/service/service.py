@@ -577,6 +577,9 @@ async def grade_question(
         score=float(result.score),
         error_analysis=result.error_analysis or "",
         stem=req.stem,
+        # ★ 必须透传：缺它 ⇒ 本路径的 episode KP 恒空 ⇒ `compute_weak_topics`
+        #   只能退回题干前 80 字（legacy fallback），薄弱点就变成"某道题的开头"。
+        knowledge_points=list(result.knowledge_points or []),
         agent_path="api_grade",
         batch_id=req.batch_id,
         question_id=req.question_id,

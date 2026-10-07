@@ -401,10 +401,13 @@ async def agrade_student_answer(
     if uid:
         await record_grade(
             user_id=uid,
+            # `topic` 保留原语义（题干截断）**仅作 legacy 兼容**，不参与 Memory 语义；
+            # Memory 聚合的唯一事实源是下面的 `knowledge_points`（2026-10-06 Phase 1.5）。
             topic=stem[:80],
             score=float(result.score),
             error_analysis=result.error_analysis or "",
             stem=stem,
+            knowledge_points=result.knowledge_points,
             thread_id=thread_id_from_config(config),
             agent_path="chat_grade",
             batch_id=batch_id_from_config(config),

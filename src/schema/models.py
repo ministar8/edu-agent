@@ -43,7 +43,12 @@ GATEWAY_MODELS: dict[Gateway, frozenset[str]] = {
         }
     ),
     # DeepSeek 官方：只有自家模型
-    Gateway.DEEPSEEK: frozenset({"deepseek-v4-flash"}),
+    # DeepSeek 官网（https://api.deepseek.com）。
+    # ★ 2026-10-06 实测：官网 `/models` 只列两个 ID —— `deepseek-flash`
+    #   （name = "DeepSeek-V4.1-Flash"）与 `deepseek-v4-pro`。
+    #   原白名单写的 `deepseek-v4-flash` 是**别名**（能跑通，但非官网正式 ID）；
+    #   这里把正式 ID `deepseek-flash` 一并收录，两者都可用。
+    Gateway.DEEPSEEK: frozenset({"deepseek-flash", "deepseek-v4-flash", "deepseek-v4-pro"}),
     # 测试用假模型
     Gateway.FAKE: frozenset({"fake"}),
 }
@@ -51,7 +56,7 @@ GATEWAY_MODELS: dict[Gateway, frozenset[str]] = {
 # 每个网关的默认模型（多个网关同时启用时，按 Gateway 定义顺序取第一个可用的）
 GATEWAY_DEFAULT_MODEL: dict[Gateway, str] = {
     Gateway.DASHSCOPE: "qwen3.8-max",
-    Gateway.DEEPSEEK: "deepseek-v4-flash",
+    Gateway.DEEPSEEK: "deepseek-flash",
     Gateway.FAKE: "fake",
 }
 

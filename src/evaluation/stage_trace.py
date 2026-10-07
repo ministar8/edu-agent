@@ -498,20 +498,6 @@ def compare_traces(
     return TraceComparison(failures, advisories, max_delta)
 
 
-def diff_traces(
-    expected: dict[str, Any], actual: dict[str, Any], *, rel_tol: float = 1e-9
-) -> list[str]:
-    """**严格**比对（所有阶段逐位一致），返回失败列表；空列表表示一致。
-
-    差异信息刻意带上**阶段名与下标**，这样拆分重构出错时能直接定位到哪一步，
-    而不是只知道"最终结果不一样"。
-
-    需要容忍 ANN 边界抖动时用 ``compare_traces``；这里保留严格语义是为了
-    让"确实应该逐位一致"的场景（单元测试、非召回阶段）有一个不含糊的断言。
-    """
-    return compare_traces(expected, actual, rel_tol=rel_tol, volatile_stages=frozenset()).failures
-
-
 def _deep_equal(a: Any, b: Any, *, rel_tol: float) -> bool:
     if _floats_close(a, b, rel_tol=rel_tol):
         return True

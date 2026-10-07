@@ -1,4 +1,6 @@
-# 提交前门禁。本工作区无 CI，这是**唯一的自动强制**环节。
+# 提交前门禁。★ 2026-10-07 更正：本仓**已有 CI**（`.github/workflows/ci.yml`：lint/类型 + 默认路由检索门禁），
+# 但 CI 只覆盖 `src/` 与一条检索路由 —— 本文件的 ruff/pyrefly 范围更广（含 `scripts/` 的 check），
+# 且 Memory 护栏/效果层刻意不进 CI（需本机 Chroma/TEI 或要花钱），所以这里仍是**本地唯一强制**环节。
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0

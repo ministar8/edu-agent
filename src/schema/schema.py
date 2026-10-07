@@ -79,18 +79,6 @@ class ChatMessage(BaseModel):
     response_metadata: dict[str, Any] = Field(description="响应元数据。", default={})
     custom_data: dict[str, Any] = Field(description="custom 消息的数据载荷。", default={})
 
-    def pretty_repr(self) -> str:
-        base_title = self.type.title() + " Message"
-        padded = " " + base_title + " "
-        sep_len = (80 - len(padded)) // 2
-        sep = "=" * sep_len
-        second_sep = sep + "=" if len(padded) % 2 else sep
-        title = f"{sep}{padded}{second_sep}"
-        return f"{title}\n\n{self.content}"
-
-    def pretty_print(self) -> None:
-        print(self.pretty_repr())  # noqa: T201
-
 
 class ChatHistoryInput(BaseModel):
     """拉取会话历史的输入。"""
