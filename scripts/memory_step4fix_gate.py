@@ -1794,6 +1794,88 @@ def check_15() -> None:
         _prompts.PROMPT_SET_VERSION = orig
 
 
+def check_16() -> None:
+    """⑯ 检索侧「可离线重算」快照（Step 9 前置，2026-10-07）。
+
+    动机是两条实测取证的洞：
+      ① 归档只有**结果布尔**（`category_hit`/`kp_hit`/`exam_hit`），没存 top-k 每条命中文档的
+         类目/KP/来源 ⇒ 修好指标也无法离线重算老数字（#10 那 8 条因此被判「只能重跑」）。
+      ② 也没存**配置**：`phase1_baseline_v2.log` 里有「重排已按部署开关关闭」的 WARNING，
+         说明那次是「请求重排但没生效」；可没有 log 的 run（Step 5 两份就没有）无从取证。
+    ⇒ 现在 `run_case` 落 `retrieval_cfg` + `top_items`。本节用**零 LLM** 的真实路径
+    （`run_agent=False`）证明：字段真被填了，且**只用落盘字段就能重算出同一个指标值**。
+    ★ 判据边界：重算用的是归档里的**数据**（类目/角色/来源/KP），但 `is_exam` 的**角色白名单**
+      仍取自 `retrieval_probe._EXAM_ROLES`（语义常量）。 ⇒ 本节证明的是「输入齐备、可复算」，
+      不是「重新发明真题判定」。
+    """
+    section("⑯ 检索配置与 top-k 落盘 ⇒ 检索侧指标可离线重算")
+
+    import asyncio as _aio
+
+    from core.settings import settings as _s
+    from evaluation.task_eval import metrics
+    from evaluation.task_eval.cases import load_demo
+    from evaluation.task_eval.retrieval_probe import _EXAM_ROLES
+    from evaluation.task_eval.runner import run_case
+
+    case = load_demo("grade", limit=1)[0]
+    rec = _aio.run(run_case(case, run_agent=False))
+    d = rec.to_dict()
+
+    check(
+        "⑯a retrieval_cfg 落盘，且 rerank_effective = 请求 ∧ 部署开关（不再只能靠 .log 取证）",
+        set(d["retrieval_cfg"]) >= {"k", "use_rerank_requested", "rerank_effective"}
+        and d["retrieval_cfg"]["rerank_effective"]
+        == (d["retrieval_cfg"]["use_rerank_requested"] and bool(_s.RERANK_ENABLED)),
+        str(d["retrieval_cfg"]),
+    )
+    check(
+        "⑯b top_items 落盘每条命中的 类目/KP/doc_role/kb_depth/source（重算输入齐备）",
+        bool(d["top_items"])
+        and all(
+            {"category", "kp", "doc_role", "kb_depth", "source"} <= set(i) for i in d["top_items"]
+        ),
+        f"{len(d['top_items'])} 条",
+    )
+
+    k = d["retrieval_cfg"]["k"]
+    items = d["top_items"]
+    cats = [i["category"] for i in items]
+    allkp = [x for i in items for x in i["kp"]]
+    is_exam = [
+        (
+            i["kb_depth"] == "exams"
+            or i["doc_role"] in _EXAM_ROLES
+            or i["category"] == "questions"
+            or "/exams/" in i["source"].replace("\\", "/").lower()
+            or i["source"].replace("\\", "/").lower().startswith("exams/")
+        )
+        for i in items
+    ]
+    r_cat = metrics.category_hit(case.subject, cats)
+    r_exam = metrics.exam_hit_at_k(is_exam, k)
+    r_kp = metrics.kp_coverage(d["gold"].get("expected_kp"), allkp) if allkp else None
+    check(
+        "⑯c 只用归档字段重算 category/exam ⇒ 与存值一致（这才叫「可复算」）",
+        r_cat == rec.category_hit and r_exam == rec.exam_hit,
+        f"重算 cat={r_cat}/存={rec.category_hit} exam={r_exam}/存={rec.exam_hit}",
+    )
+    check(
+        "⑯d 重算 kp_hit 与存值一致（无 KP 元数据时两侧都必须 N/A，不许一边 False 一边 None）",
+        r_kp == rec.kp_hit,
+        f"重算={r_kp} 存值={rec.kp_hit}",
+    )
+    # ★ 反向：把落盘的类目换成不相干值 ⇒ 重算必须**从 True 翻成 False**，
+    #   证明 ⑯c 的相等不是「喂什么都得同一个值」的空转。
+    #   （所以这里挑一条 `category_hit is True` 的 case 来验；挑不到就明确判红，不留后门）
+    garbage = metrics.category_hit(case.subject, ["__不相干类目__"] * len(items))
+    check(
+        "⑯e 反向：类目换成不相干值 ⇒ 重算从 True 翻成 False（⑯c 确有依赖）",
+        rec.category_hit is True and garbage is False,
+        f"存值 cat={rec.category_hit} 不相干输入 cat={garbage}",
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -1811,6 +1893,7 @@ def main() -> int:
     check_13()
     check_14()
     check_15()
+    check_16()
 
     print()
     print("=" * 72)

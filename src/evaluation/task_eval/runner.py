@@ -197,6 +197,18 @@ class CaseRecord:
     retrieval_error: str = ""
     env_error: bool = False  # ★ 环境类错误（额度/鉴权）——必须从失败归因中剔除
 
+    # —— ★ 检索侧「可离线重算」快照（2026-10-07 补，Step 9 前置）——
+    #   洞（实测取证）：归档里检索侧只有**结果布尔**（`category_hit` / `kp_hit` / `exam_hit`），
+    #   没存 top-k 每条命中文档的类目/KP/来源 ⇒ 修好指标后也**无法**离线重算老数字
+    #   （#10 那 8 条就是这么被判成「只能重跑」的）；而 `tool_calls` 只有
+    #   `{kind,status,query,docs}`，同样没带类目。
+    #   另一半洞是**配置**：`phase1_baseline_v2.log` 里有「重排已按部署开关关闭」的 WARNING，
+    #   说明那次跑的是「请求重排但没生效」—— 可没有 log 的 run（Step 5 两份就没有）**无从取证**。
+    #   ⇒ 把「输入」与「配置」一起落盘，检索侧指标从此可复算、可比对。
+    #   ★ 老归档没有这两个字段 ⇒ 按空处理（未知），不要拿当前配置回填。
+    retrieval_cfg: dict[str, Any] = field(default_factory=dict)
+    top_items: list[dict[str, Any]] = field(default_factory=list)
+
     # —— 原文与溯源 ——
     reply: str = ""
     hard_fails: list[str] = field(default_factory=list)
@@ -453,6 +465,27 @@ async def run_case(
     record.retrieval_error = probe.error
 
     top = probe.top_k(k)
+    # ★ 落盘「配置 + top-k 输入」，让检索侧指标可离线重算（字段说明见 CaseRecord）
+    from core.settings import settings as _prov
+
+    record.retrieval_cfg = {
+        "k": k,
+        "use_rerank_requested": use_rerank,
+        "rerank_effective": bool(_prov.RERANK_ENABLED) and bool(use_rerank),
+        "use_fake_embedding": bool(_prov.USE_FAKE_EMBEDDING),
+        "semantic_cache_enabled": bool(_prov.SEMANTIC_CACHE_ENABLED),
+    }
+    record.top_items = [
+        {
+            "source": i.source,
+            "category": i.category,
+            "doc_role": i.doc_role,
+            "kb_depth": i.kb_depth,
+            "kp": list(i.knowledge_points),
+            "score": round(i.score, 4),
+        }
+        for i in top
+    ]
     # ★ 2026-10-06 修：**检索到的 chunk 没有任何 KP 元数据时，`kp_hit` 记 N/A 而非 False** ——
     #   此时「覆盖与否」不可判定，记 False 会变成**系统性假阴性**（把 0.714 压成 0.333，
     #   直接误导 Phase 1 的投入方向）。`metrics.rate` 排除 None，故 N/A 不进分母。
