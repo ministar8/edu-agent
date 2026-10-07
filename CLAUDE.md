@@ -36,7 +36,7 @@
 | `src/tools/` | 离线数据清洗工具（**不参与运行时**） |
 | `static/` | 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
-| `src/evaluation/` | 评测：RAGAS Layer-1（dataset/adapters/ragas_eval/cli）+ 检索质量门禁（retrieval_gate）+ `evals/` 样本 |
+| `src/evaluation/` | 评测。**三套彼此独立的尺子**：① **`task_eval/`** —— **论文效果章的产出器**（5 任务 `qa/generate/grade/verify/memory` × 66 条 demo case；子命令 `run/sanity/calibrate/rejudge/reprobe/backfill`）；② RAGAS Layer-1（`dataset/adapters/ragas_eval/cli`，组件指标，**不是任务指标**）；③ 检索质量门禁（`retrieval_gate` / `probe_gate` / `telemetry_report`）。★ 版本锚点见 `docs/EXPERIMENTS.md` **§20**（效果）与 §18（检索） |
 | `docs/` | **工程文档**（见 `docs/README.md` 索引）。现行：**`ARCHITECTURE_RETRIEVAL.md` 检索架构总览（as-built + 术语表）** / `ARCHITECTURE.md` 系统架构 / `KB_MASTER_DESIGN.md` 知识库总册 / `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md` 层设计与策略契约 / `DOCKER.md` 容器 + TEI 端点契约 / **`RETRIEVAL_PLAN.md` 执行方案** / `RETRIEVAL_ROADMAP.md` 路线与**「不做清单」** / `L1L2L3_RETRIEVAL_REVIEW.md` 分级评审 / `RERANK_SWITCH_ANALYSIS.md` 重排开关分析 / **`EXPERIMENTS.md` 实验总册** |
 
 ## 常用命令
@@ -45,6 +45,18 @@
 uv sync                                  # 安装依赖
 uv sync --group eval                     # RAGAS 评测依赖（可选）
 PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 5
+
+# 任务级评测（论文效果章 · src/evaluation/task_eval）
+PYTHONPATH=src uv run python -m evaluation.task_eval sanity       # Gold 体检，进 0B 前必跑
+PYTHONPATH=src uv run python -m evaluation.task_eval run --no-agent   # 只跑检索探针，零 LLM 成本
+PYTHONPATH=src uv run python -m evaluation.task_eval run          # 跑 agent + judge，出效果数字（消耗 token）
+PYTHONPATH=src uv run python -m evaluation.task_eval reprobe      # 只重跑检索探针（零 LLM）
+PYTHONPATH=src uv run python -m evaluation.task_eval backfill     # 回填机械可算字段（零 LLM）
+
+# Memory 链路 Gate 与效果探针（★ 本机必须带 PYTHONIOENCODING=utf-8，否则 GBK 打印 ✅ 时崩）
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step2_gate.py
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step4fix_gate.py
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_e5_probe.py --reanalyse --write  # 零 LLM 重析
 uv run python src/run_service.py         # 启动服务 → http://127.0.0.1:8000
 uv run python -m rag.ingest              # 知识库增量入库
 uv run python -m rag.ingest --rebuild    # 知识库全量重建
@@ -80,11 +92,22 @@ docker compose up --build                # 容器化启动
 
 本仓库是**运行时 + 论文核心**的裁剪版：
 
-- **不含**测试套件、CI 工作流、代码覆盖率与结构规模棘轮门禁 —— 已从本仓库移出。
+- **不含**测试套件、代码覆盖率与结构规模棘轮门禁 —— 已从本仓库移出。
   ★ 原归档目录 `../edu-agent-engineering-archive/` **在本机已不存在**（2026-10-03 核实），
   无本地副本可取回。
-- **保留**的自研门禁：`evaluation.retrieval_gate`（检索质量）与 `pre-commit`（ruff / pyrefly / 空白检查）。
-- 源码中的质量约束靠**人工遵守**，本工作区没有 CI 强制。
+- **有 CI，但只有两条 job**（`.github/workflows/ci.yml`，2026-10-06 加）：
+  ① `ruff check` + `ruff format --check` + `pyrefly check`；
+  ② 检索质量门禁 —— **只跑默认路由**（假 embedding / 重排 off），比对的只是
+  `evals/baselines/retrieval_baseline.json` **这 1 份**。★ 门禁整体按 `(embedding, rerank)`
+  组合登记了 **6 份基线**，但其余 5 条（含唯一能答语义质量问题的**真 TEI 路由**）
+  **不在 CI 里**，须本机手跑（见 `README.md` 的路由口径说明）。
+  另支持 `workflow_dispatch` —— 答辩时可现场触发一次。
+- ★ **`task_eval` 与三个 Memory Gate 刻意不进 CI**：要真密钥、按 token 计费、且模型输出有随机性。
+  ⇒ **论文效果章的数字没有任何自动兜底**，改动批改链 / Memory 写链 / 评测器后，
+  **必须本机手动重跑** `scripts/memory_step*_gate.py`（带 `PYTHONIOENCODING=utf-8`）。
+- **保留**的自研门禁：`evaluation.retrieval_gate` / `probe_gate`（检索）+ 上述 Memory Gate（效果）。
+- 检索数字的版本归属见 `docs/EXPERIMENTS.md` §18（`V-2026-10-02`），
+  效果数字见 **§20**（`V-2026-10-07`，标签待打）；两处都列了「已知偏离」，引用前先核对归属矩阵。
 
 ## 注意事项
 
@@ -136,3 +159,13 @@ docker compose up --build                # 容器化启动
   `VectorStoreManager.wait_until_ready` 因此是**检测器而非修复器** ——
   它把静默错误变成入库期显式失败，并在错误信息里给出补救命令。
   生产路径不要自动重建（删集合 = 真实数据丢失），必须人工确认。
+- **评测器口径四条硬规则**（2026-10-07 一轮 review 里全部实测踩到，改评测器前先读这几句）：
+  ① **「测不到」记 `None`（N/A，不进分母），绝不记 `False`** —— 旧 `category_hit` 用
+  `.get(subject, subject)` 把学科码 `cn` 拿去比类目名，恒 False，
+  系统性压低了 `grade`/`verify` 各 4 条（而 `qa`/`generate` 用 `network` 所以一直没暴露）；
+  ② **`case_invalid` 不进失败率**（分母 = 有效 n）—— 方案 §2.B「validity ≠ product failure」；
+  ③ **`used` 必须有记忆卡的事实前提**（`recalled_actual`），且 `correct_use` **按样本极性定义**
+  —— 旧口径下负样本「什么都没做」判失败、「碰巧提到」判通过，两个方向都错；
+  ④ **gold 一律用可接受集**（`expected_any`）并**逐题查 `kp_index`** ——
+  `堆` 不在表里、`排序` 与 `快速排序` 是并存两个节点，单值 gold 必产生假阴性。
+  ★ ①~④ 分别由 `memory_step4fix_gate.py` 的 **③j / ③i / ③d~③h** 锁定，不是靠文档自觉。

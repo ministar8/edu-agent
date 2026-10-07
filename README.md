@@ -158,9 +158,14 @@ pre-commit install             # 安装 git 钩子（一次性；此后每次 co
 钩子包含：YAML 校验、文件尾换行、行尾空白、ruff（`--fix`）、ruff-format、pyrefly。
 `evals/` 为门禁基线输入，已豁免空白类改写。
 
-> 说明：本工作区不含测试套件与 CI，有效检查范围是 `src/`。移出的内容原归档于
-> `../edu-agent-engineering-archive/`，但该目录**在本机已不存在**（2026-10-03 核实），
-> 无本地副本可取回。
+> 说明：本工作区**不含测试套件与代码覆盖率**（有效检查范围是 `src/`；移出内容原归档于
+> `../edu-agent-engineering-archive/`，该目录**在本机已不存在**，2026-10-03 核实，无本地副本可取回）。
+> ★ 但**有 CI**：`.github/workflows/ci.yml` 两个 job —— lint/类型（ruff check + format --check + pyrefly）
+> 与**检索质量门禁的默认路由**（假 embedding，比 1 份基线；不依赖 TEI、不联网、不需真密钥），
+> 另支持 `workflow_dispatch` 供答辩现场触发。
+> ★ **`task_eval` 与三个 Memory Gate 刻意不进 CI**（要真密钥、按 token 计费、模型输出有随机性）
+> ⇒ 论文**效果章的数字没有自动兜底**，改动批改链 / Memory 写链 / 评测器后须本机手动重跑
+> （Windows 上带 `PYTHONIOENCODING=utf-8`，否则打印 ✅ 会因 GBK 崩在 `print`）。
 
 ## Docker
 
