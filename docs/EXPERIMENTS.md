@@ -1006,7 +1006,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 7 | Grade 的 `gold.human_score` **只有 0 与 100 两值** | 重算分布 `{100:8, 0:7}` ⇒ `score_tolerance@±10` 退化为「模型是否也跟着给 0/100」 | ✅ **已修（换指标，非补标）**。★ **我先前写的处置「按 rubric 补部分分」是错的，已撤回**：L3 语料 **674/674 全是 2 分 `choice`**、case 的学生答案 **15/15 仅 1 个字母** ⇒ **没有部分分可标**，硬要补就只能造题（= 造假 + 动语料）。正确解法是**换成二值 gold 上本来就合法的问题**：新增 `metrics.verdict_agreement()`（阈值直接引用 `schema/grading.py` 的 `score<60 视为错误`）⇒ 实测 **0B 15/15 = 1.000**、**Phase 1 13/13 = 1.000（另 2 条分数不可解析，报告已强制披露）**。两极 gold 下 `tolerance` 置 N/A 但**保留 `raw_rate=1.0`**；护栏 **③o~③r'**（③o 锁住"数值差 30 但结论一致 ⇒ verdict 过 / tolerance 败"这条换指标理由；③r 锁"tolerance 不可判时 verdict 仍可判"，防止这次修复变成删指标） |
 | 8 | 批改词表含 **4 个学科根节点**（数据结构/计算机组成原理/操作系统/计算机网络） | 与同一 prompt 的规则尾「不是学科名（如「数据结构」太粗）」自相矛盾；且根节点是 canonical ⇒ 模型选它能**轻易凑满 `MIN_HITS=2`**，聚成「整门课 = 一个薄弱点」的桶，**比自造词更难发现** | ✅ **已修（本轮，#8）**：新增 `kp_vocab.prompt_names_by_subject()`，按数据字段 **`node_kind == "subject"`** 过滤（★ 不写硬编码名单 —— 硬编码正是缺陷 E 的成因）；`canonical_names()` **仍保 162 全量**（归一化侧必须认得根节点，否则 `normalize_topic('数据结构')` 反被判非 canonical，是另一种错）；`domain` 章名（`图`/`排序`/`内存管理`…）**保留**，它们是合法薄弱点标签。词表 **162 → 158**、护栏 **⑫k 双向**（剔根节点 + 防过滤过头）。★ 连带后果：**`PROMPT_SET_VERSION` 变更**（`f09c75642029` → `2f485d2d7ef7`）⇒ E-5 的 0.875 严格归中间态，需在新 hash 下复测（并入 Step 9） |
 | 9 | **0B 的 Memory 四率与现口径不可比** | 实测：0B 记录的 `gold` 键里**没有 `expected_memory`**（只有 `gold_points`/`human_score` 等），用当前 scorer 判 ⇒ 六项**全 N/A**；可归档里 `mem-002` 等却记着 `used=True`/`cu=True`，且 `judge_memory_used=None` | ⇒ 0B 那组 Memory 数字**不是这套机械 scorer 产出的**（与 §5.1「0B 只测到 checkpointer 会话内记忆」一致）。论文若要用 0B 的 Memory μ=2.833，**必须标注其口径与 Phase 1.5 之后不同** |
-| 10 | `category_hit` 对学科码 **`cn` 恒判未命中** ⇒ **系统性压低 grade / verify 的学科命中指标** | `metrics.category_hit` 旧写法 `.get(subject, subject)` 拿学科码去比类目名：`cn` ≠ `computer_network` ⇒ 恒 False。实测归档分布：`grade` **4 条 `cn` 全 False**、`verify` **4 条 `cn` 全 False**；而 `qa` / `generate` 的 case 用的是 `network` ⇒ 全 True —— **同一函数在两个任务上表现不一致**，这是它长期没暴露的原因。另核实 `retrieval_gate` 自身用 `.get(subject)`（无默认回退），**不受此影响** | ✅ **已修（本轮）**：加 `_SUBJECT_ALIASES = {"cn": "network"}` 对齐，且**未登记学科记 None（N/A，不进分母）**而非 False。护栏新增 **③j**（对齐命中 + 未登记记 N/A），当时 Gate **87 项全绿**（现 116）。★ 归档里那 8 条 False **不可离线重算**（2026-10-07 复核确认：记录只有 `category_hit` 这个**结果布尔**，`tool_calls` 里**没存**每条命中文档的类目 ⇒ 无法反推，正确值需 **Step 9 一并重跑**；旧归档值不覆写）。★ 复核过程本身也纠正了一次误报：直接按 `task` 数 False 会得到 grade 13 / verify 33 条，**看着像**『比登记的 8 条多』—— 其实记录里**没有 `subject` 字段**，必须与 case 表按 `case_id` 关联；关联后 `cn` 恰为 grade 4 + verify 4（且 `cn` 是**唯一 16/16 全 False** 的学科，其余学科有 True 有 False，属真实未命中）⇒ 登记值成立。护栏补 **③j+**：扫遍 `evals/datasets/` 实际出现过的学科码，逐个要求「在映射表里查得到」且「用映射后的真实类目自测为 True」⇒ **防下一个 `cn`**（反向验证：抽掉 `cn` 别名，③j 与③j+ 同时变红） |
+| 10 | `category_hit` 对学科码 **`cn` 恒判未命中** ⇒ **系统性压低 grade / verify 的学科命中指标** | `metrics.category_hit` 旧写法 `.get(subject, subject)` 拿学科码去比类目名：`cn` ≠ `computer_network` ⇒ 恒 False。实测归档分布：`grade` **4 条 `cn` 全 False**、`verify` **4 条 `cn` 全 False**；而 `qa` / `generate` 的 case 用的是 `network` ⇒ 全 True —— **同一函数在两个任务上表现不一致**，这是它长期没暴露的原因。另核实 `retrieval_gate` 自身用 `.get(subject)`（无默认回退），**不受此影响** | ✅ **已修（本轮）**：加 `_SUBJECT_ALIASES = {"cn": "network"}` 对齐，且**未登记学科记 None（N/A，不进分母）**而非 False。护栏新增 **③j**（对齐命中 + 未登记记 N/A），当时 Gate **87 项全绿**（现 116）。★ 归档里那 8 条 False **不可离线重算**（2026-10-07 复核确认：记录只有 `category_hit` 这个**结果布尔**，`tool_calls` 里**没存**每条命中文档的类目 ⇒ 无法反推，正确值需 **Step 9 一并重跑**；旧归档值不覆写 ⇒ ✅ **已补测（§20.8.4）**：同一批 top-k 上新旧公式对照 0.600 → 0.800、`cn` 0/4 → 3/4 ⇒ 确认这 8 条是系统性假阴性，剩余各 1 条为真实未命中）。★ 复核过程本身也纠正了一次误报：直接按 `task` 数 False 会得到 grade 13 / verify 33 条，**看着像**『比登记的 8 条多』—— 其实记录里**没有 `subject` 字段**，必须与 case 表按 `case_id` 关联；关联后 `cn` 恰为 grade 4 + verify 4（且 `cn` 是**唯一 16/16 全 False** 的学科，其余学科有 True 有 False，属真实未命中）⇒ 登记值成立。护栏补 **③j+**：扫遍 `evals/datasets/` 实际出现过的学科码，逐个要求「在映射表里查得到」且「用映射后的真实类目自测为 True」⇒ **防下一个 `cn`**（反向验证：抽掉 `cn` 别名，③j 与③j+ 同时变红） |
 | 11 | Grade 分数解析取**首个数字** ⇒ 把「满分/总分 N」当成得分 | 旧正则在 `"总分 100 分，你得了 62 分"` 上返回 **100**、在 `"得分（满分 100）：62"` 上返回 **100** ⇒ 批改明明正常，指标却记成分数差 38 分；更糟的是它**方向不定**（说明性数字在前就偏高、在后才正常） | ✅ **已修（A1）**：先用 `_MASK_FULLMARK_RE` 把「满分/总分 X」**遮蔽**掉，再按「显式得分 → 你得了 N 分 → a/b 折算 → 兜底」四级正则解析；解析不到返回 **None（N/A）** 而不是 0 分。护栏 **③s**（5 条形态全对）+ **③t**（4 条无分数形态必须 None） |
 | 12 | API 批改端点 `record_grade` **没透传 `knowledge_points`** | `service.py` 的调用缺该参数 ⇒ 本路径写入的 episode KP **恒空** ⇒ `compute_weak_topics` 退回**题干前 80 字**（legacy fallback），薄弱点变成「某道题的开头」 | ✅ **已修（A2）**：`knowledge_points=list(result.knowledge_points or [])`。护栏 **③u**（AST 级：调用参数表里必须有它，防止「删了但注释还在」式漂移） |
 | 13 | 结构化输出的 **salvage 兜底**只在「确实拿到过原文」时生效 | `scripts/memory_e2e_fallback_probe.py` 用注入式假 LLM 驱动**真实** `call_structured`：① 合法对象 OK；② `ValidationError` 带脏原文（多行 KV + 参数标记）⇒ **救回**（score 40，KP `['平衡二叉树','平衡因子']`）；③ 模型**不产 tool call**（返回 `None`）⇒ 无原文可救，结果 `None`（重试后仍失败） | ⚠ **已知盲区，如实披露**（不是修复）：③ 形态下整条批改失败。是否为它再加一层兜底，**由 Step 9 的实测频率决定** —— 现在加就是凭想象加防护。`--reverse`（关掉 salvage）必须变红，实测 exit 1 |
@@ -1153,7 +1153,7 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 「`forbidden_values` 应校验是否 canonical」是错的规则（它是回复文本里的自由词，不是 KP 名）。
 **#13**（tool call 缺失 ⇒ 无原文可救）与 **#18**（gold 数据集本体未入版本控制）**只披露、不擅自修**。
 第三批落 **D1/D3/D4** 三项决定：#2 主指标改逐题聚合（⑭ 6 项）、§7.1 三处「死代码」按实测**只删真死的那一条**（另两条一条是「接了线没人开的开关」、一条注释已自陈惰性，见 §20.5.2）、record 落 `prompt_set_version`（⑮ 6 项）。
-Gate **129 项全绿**（101 → 116 → 128 → 129，末项为 ③j+：数据集学科码全体「可测且自命中」）、`pyrefly` **0 errors**、ruff check/format 通过、
+Gate **148 项全绿**（101→116→128→129→134→138→148：③s~③u、⑩e/⑩f、⑬、⑭、⑮、③j+、⑯、⑰、⑱、⑲）、`pyrefly` **0 errors**、ruff check/format 通过、
 `task_eval sanity` 66 条 ERROR 0、两份归档 12 条 validity **逐条不变**（新 gold 不动已发表数字）。
 
 **22 条已知偏离**全部登记；**#2 已由 D1 定夺并落地（2026-10-07）**：主指标 = 逐题「适用项全过」**0.80**，项级池化 0.9423 降级为诊断（护栏 ⑭）。
@@ -1283,3 +1283,22 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块），但
 - 可以说的是：指标侧的因果链已经**可归因**（`turn_log` + `episodes` + 极性口径），
   「测不到」不再会被误记成「产品差」。
 - 要真正补上正例，需要 **D8** 的决定（下面登记）。
+
+#### 20.8.4 #10 的正确值已补测（`--no-agent` 探针重跑）：**0.600 → 0.800 全部来自指标修复**
+
+归档：`phase1_step9_probeonly_grade.jsonl` / `phase1_step9_probeonly_verify.jsonl`（各 15 条）。
+★ **不是零调用** —— 检索管线自身要用 LLM 做 query 分解/HyDE，实测各 **13** 次远端 POST；
+我先前把它说成「零 token」是错的，这里按实际计数登记。
+
+**先把「指标效应」与「索引漂移」分开** —— 用**同一批 `top_items`** 分别套新旧公式：
+
+| 任务 | 旧公式（`.get(subject, subject)`） | 新公式（`cn → network` 别名） | 其中 `cn` |
+|---|---|---|---|
+| grade | 9/15 = 0.600 | **12/15 = 0.800** | **0/4 → 3/4** |
+| verify | 9/15 = 0.600 | **12/15 = 0.800** | **0/4 → 3/4** |
+
+⇒ 输入完全相同 ⇒ 差异只可能来自公式 ⇒ #10 的定性成立：那 8 条确为**系统性假阴性**。
+⇒ 剩下的未命中是**真实未命中**（`grd-009` 的 top-5 全是 `questions` 块；`co`/`os` 各 1 条），
+   不是指标问题。
+★ 这正是 **`top_items` 落盘的价值**：旧归档只能标「待重跑」，新归档能把
+   「指标效应」与「检索到的内容」拆开重算（护栏 ⑯c 的用途在此兑现）。
