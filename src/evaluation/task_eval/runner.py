@@ -540,9 +540,14 @@ async def run_case(
     #     另有 `questions` 集合 692 条无标签块（`exam-*-answer` 真题答案），但 **practice 模式的
     #     可用层是 `["advanced","basic"]`**（`schema/task_policy.py` 还强制 practice 的
     #     `exam_resources` 全 forbidden）⇒ 那些块不进证据包，与本判据无关。
-    #   ⇒ 归档里 Generate 那 **8 条 N/A** 最可能是**当时索引未打完标签**的产物（现索引下
-    #     裸向量重查 15/15 的 top-5 均带 KP），但**记录未保存每块来源/标签**，无法证明；
-    #     只能由 Step 9 走完整管线实跑定论。见 `docs/EXPERIMENTS.md` §20.5.1。
+    #   ⇒ 归档里 Generate 那 **8 条 N/A** 曾有两条候选解释，都**不能定论**（记录没存
+    #     `evidence_id` ⇒ 分不清某块走的是哪条路径）：
+    #       ① 旧说「当时索引未打完标签」—— 现索引下裸向量重查 15/15 的 top-5 均带 KP；
+    #       ② 新说 **#27**：`rag/layer_recall.py` 的 top-up 路径把 `knowledge_points`
+    #          **写死成 `[]`**（主路径 `rag/evidence.py` 是用解析器读的）⇒ 某题 top-5
+    #          若全走 top-up，`_all_kp(top)` 就是空 ⇒ 判 N/A，与索引有没有标签无关。
+    #     ② 有按构造的实证，且能解释 Step 9 探针归档里 13 条「索引明明有标、`kp` 却为空」
+    #     的 method 块 ⇒ 比 ① 更可能。处置见 `docs/EXPERIMENTS.md` §20.5 #27 / D12。
     _retrieved_kp = _all_kp(top)
     record.kp_hit = (
         metrics.kp_coverage(case.gold.expected_kp, _retrieved_kp) if _retrieved_kp else None
