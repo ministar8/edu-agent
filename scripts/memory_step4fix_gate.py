@@ -1876,6 +1876,105 @@ def check_16() -> None:
     )
 
 
+def check_17() -> None:
+    """⑰ 逐轮执行日志 `turn_log`（2026-10-07 Step 9 补的 harness 洞）。
+
+    起因是 Step 9 实跑出来的一个**无法归因**的现象：
+        Store ON  三条正样本各只捕获 1 次批改 ⇒ 全部 `case_invalid`
+        Store OFF 同三条各捕获 2 次批改
+    而 `_record_grade_score` 明确「`score=None` 也登记」⇒ 逻辑上只能是
+    **「第 2 轮根本没调批改工具」**。可归档里 `reply` 只存**最后一段会话**、
+    `session_replies` 只到**段**一级 ⇒ 这个结论**证不了**。
+    ⇒ 补 `turn_log`：每轮一条 `{session, turn, input, reply, tools, grade_scores}`。
+
+    本节的验证方式：用**注入式 stub agent** 驱动**真实**的 `run_sessions`
+    （零 LLM、零网络），断言它真的按轮记账 —— 而不是去读源码字符串。
+    """
+    section("⑰ 逐轮日志 turn_log ⇒ case_invalid 能归因到具体哪一轮")
+
+    import agent_behavior_smoke as smoke
+    from langchain_core.messages import AIMessageChunk, ToolMessage
+
+    from agents.grading_core import format_grading_for_chat
+    from schema.grading import GradingResult
+
+    _graded_text = format_grading_for_chat(
+        GradingResult(score=40, feedback="概念混淆", is_wrong=True, error_analysis="漏了要点")
+    )
+
+    class _StubAgent:
+        """最小可用替身：只实现 `astream`，事件形状与真 agent 一致。
+
+        第 1 轮**调**批改工具（有 ToolMessage），第 2 轮**不调** —— 这正是 Step 9
+        观察到的形态，用它检验日志能否区分两者。
+        """
+
+        store = None
+        checkpointer = None
+
+        def __init__(self) -> None:
+            self._n = 0
+
+        async def astream(self, _inp, *, config, stream_mode, subgraphs):  # noqa: ARG002
+            self._n += 1
+            if self._n == 1:
+                yield (
+                    ("supervisor",),
+                    "messages",
+                    (
+                        ToolMessage(
+                            # ★ 文本由**产品自己的渲染器**产出（不手打字符串）：
+                            #   手打的形状与 `format_grading_for_chat` 的 `评分：X/100`
+                            #   不一致时，正则抓不到分 ⇒ 护栏会红在「形状」上而不是「逻辑」上
+                            #   （实测第一版就是这么红的：写了「得分：40/100」→ 抓到 None）。
+                            content=_graded_text,
+                            tool_call_id="c1",
+                            name="grade_student_answer",
+                        ),
+                        {},
+                    ),
+                )
+            yield (("supervisor",), "messages", (AIMessageChunk(content=f"回复{self._n}"), {}))
+
+    agent = _StubAgent()
+    import asyncio as _aio
+
+    res = _aio.run(
+        smoke.run_sessions(
+            agent,
+            [["帮我批改：题面……我答 X", "再批改一题：题面……我答 Y"], ["我最近哪里薄弱？"]],
+            user_id="gate-turn-log-stub",
+            cleanup_first=False,
+            store_enabled=True,
+        )
+    )
+
+    tl = res.turn_log
+    check(
+        "⑰a 每轮各一条（3 轮 ⇒ 3 条，含 session/turn 下标）",
+        len(tl) == 3 and [(x["session"], x["turn"]) for x in tl] == [(0, 0), (0, 1), (1, 0)],
+        str([(x.get("session"), x.get("turn")) for x in tl]),
+    )
+    check(
+        "⑰b 该轮的输入与回复都留痕（旧归档只有最后一段）",
+        all(x.get("input") and x.get("reply") for x in tl),
+        str([len(x.get("reply") or "") for x in tl]),
+    )
+    check(
+        "⑰c ★ 能区分「调了工具」与「没调工具」：第 1 轮有 grade、第 2 轮 tools 为空",
+        tl[0]["tools"] == ["grade_student_answer"]
+        and tl[0]["grade_scores"] == [40.0]
+        and tl[1]["tools"] == []
+        and tl[1]["grade_scores"] == [],
+        str([(x["tools"], x["grade_scores"]) for x in tl]),
+    )
+    check(
+        "⑰d 与 grade_scores 总量一致（逐轮明细加总 == 全局计数，不许两套账）",
+        sum(len(x["grade_scores"]) for x in tl) == len(res.grade_scores) == 1,
+        f"逐轮加总={sum(len(x['grade_scores']) for x in tl)} 全局={len(res.grade_scores)}",
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -1894,6 +1993,7 @@ def main() -> int:
     check_14()
     check_15()
     check_16()
+    check_17()
 
     print()
     print("=" * 72)

@@ -91,6 +91,16 @@ class CaseResult:
     # ── ★ Store 开关状态（2026-10-06 补，paired control 用）────────
     # `False` ⇒ 本 case 是 **Store OFF** 对照组（不装 store，B 段不应召回）。
     store_enabled: bool = True
+    # ── ★ 逐轮执行日志（2026-10-07 Step 9 补）──────────────────────
+    # 每轮一条：`{session, turn, input, reply, tools, grade_scores}`。
+    # 为什么必须有：`session_replies` 只到**段**一级，而 `reply` 只留**最后一段** ⇒
+    #   「A 段要求 ≥2 次批改，实际只捕获到 1 次」这类 `case_invalid` **无从归因** ——
+    #   分不清是「第 2 轮 agent 没调批改工具」还是「调了但没抓到分」（两者的论文含义
+    #   完全不同：前者是路由/工具选择问题，后者才是缺陷 A 的批改无分）。
+    #   实测依据：Step 9 的 ON 臂三条正样本各只捕获 1 次批改、OFF 臂同三条各 2 次，
+    #   而 `score=None` 也会被登记 ⇒ 只能是「第 2 轮没调工具」，但当时**无法证明**，
+    #   只能靠这个日志把结论钉死。
+    turn_log: list[dict[str, Any]] = field(default_factory=list)
 
 
 def make_user_id(case_id: str) -> str:
@@ -358,8 +368,11 @@ async def run_sessions(
             thread = f"eval-{user_id}-s{si}"
             used_threads.append(thread)
             config = RunnableConfig(configurable={"thread_id": thread, "user_id": user_id})
-            for text in turns:
+            for ti, text in enumerate(turns):
                 reply_parts.clear()
+                # ★ 逐轮快照起点：本轮新增的批改条目 = grade_scores[gs_start:]
+                gs_start = len(case.grade_scores)
+                turn_tools: list[str] = []
                 try:
                     async for ev in agent.astream(
                         {"messages": [HumanMessage(content=text)]},
@@ -371,6 +384,7 @@ async def run_sessions(
                         if mode == "messages":
                             msg = payload[0]
                             if isinstance(msg, ToolMessage):
+                                turn_tools.append(str(getattr(msg, "name", "") or ""))
                                 _capture_tool_result(case, msg, session_idx=si)
                             elif isinstance(msg, AIMessageChunk):
                                 reply_parts.append(str(msg.content or ""))
@@ -392,6 +406,17 @@ async def run_sessions(
                 except Exception as e:  # noqa: BLE001
                     case.hard_fails.append(f"invoke 抛错(session {si}): {type(e).__name__}: {e}")
                     return case
+                # ★ 本轮日志（缺它就无法区分「没调工具」与「调了没抓到分」）
+                case.turn_log.append(
+                    {
+                        "session": si,
+                        "turn": ti,
+                        "input": text,
+                        "reply": "".join(reply_parts).strip(),
+                        "tools": turn_tools,
+                        "grade_scores": [g.get("score") for g in case.grade_scores[gs_start:]],
+                    }
+                )
             case.session_replies.append("".join(reply_parts).strip())
 
         case.reply = case.session_replies[-1] if case.session_replies else ""

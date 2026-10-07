@@ -188,6 +188,11 @@ class CaseRecord:
     validity_valid: bool | None = None
     validity_reason: str = ""
     grade_scores: list[dict[str, Any]] = field(default_factory=list)
+    # ★ 逐轮执行日志（2026-10-07 Step 9）：`{session, turn, input, reply, tools, grade_scores}`
+    #   用途：`case_invalid`（如「A 段批改次数 1 < 期望下限 2」）必须能归因到**具体哪一轮**、
+    #   以及那一轮是「没调批改工具」还是「调了但没抓到分」—— 两者的论文含义不同。
+    #   旧归档没有该字段 ⇒ 按空处理，不要回填。
+    turn_log: list[dict[str, Any]] = field(default_factory=list)
     # paired control：本 case 是否开着 Store（False=对照组）
     store_enabled: bool = True
 
@@ -431,6 +436,7 @@ async def run_case(
     payloads: list[dict[str, Any]] = []
     memory_cards: list[str] = []
     grade_scores: list[dict[str, Any]] = []
+    turn_log: list[dict[str, Any]] = []
     if run_agent:
         try:
             result = await _run_agent(
@@ -445,6 +451,7 @@ async def run_case(
             payloads = list(result.tool_payloads)
             memory_cards = list(getattr(result, "memory_cards", []) or [])
             grade_scores = list(getattr(result, "grade_scores", []) or [])
+            turn_log = list(getattr(result, "turn_log", []) or [])
         except Exception as e:  # noqa: BLE001
             logger.warning("case %s agent 执行失败: %s", case.case_id, e)
             hard_fails.append(f"invoke 抛错: {type(e).__name__}: {e}")
@@ -535,6 +542,7 @@ async def run_case(
         record.validity_valid = _validity.valid
         record.validity_reason = _validity.reason
         record.grade_scores = grade_scores
+        record.turn_log = turn_log
         record.store_enabled = store_enabled
 
         if _validity.valid is False:
