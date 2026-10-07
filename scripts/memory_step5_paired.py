@@ -265,12 +265,26 @@ async def main_async(args: argparse.Namespace) -> int:
         return 3
 
     stamp = datetime.now(UTC).astimezone().strftime("%Y%m%d_%H%M")
+
+    # ★ `--out-tag`（2026-10-07 Step 9 加）：**默认不覆写既有归档**。
+    #   原实现固定写 `phase1_memory_step5_store_{on,off}.jsonl` —— 那两份是 §5 与 #4/#6
+    #   数字的证据件，重跑一次就把旧证据覆盖了。
+    #   ★ 检查必须在**跑之前**做：放在写盘处会等于「先烧 ~84 次调用、再拒绝落盘」，
+    #     既丢了证据又白花 token（第一版就是这么写的，已挪出来）。
+    suffix = f"_{args.out_tag}" if args.out_tag else ""
+    targets = [OUT_DIR / f"phase1_memory_step5_store_{t}{suffix}.jsonl" for t in ("on", "off")]
+    existing = [str(p.relative_to(ROOT)) for p in targets if p.exists()]
+    if existing and not args.force:
+        logger.error(
+            "以下归档已存在，拒绝覆写：%s（换 --out-tag，或确认要覆盖才用 --force）", existing
+        )
+        return 4
+
     on = await _run_arm(store_enabled=True, limit=args.limit)
     off = await _run_arm(store_enabled=False, limit=args.limit)
 
     # 落盘原始 record（两组分开，便于复算）
-    for arm, tag in ((on, "on"), (off, "off")):
-        p = OUT_DIR / f"phase1_memory_step5_store_{tag}.jsonl"
+    for arm, p in ((on, targets[0]), (off, targets[1])):
         p.parent.mkdir(parents=True, exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
             for r in arm.records:
@@ -289,6 +303,12 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Step 5 Memory paired control")
     ap.add_argument("--limit", type=int, default=None, help="每 task 取前 N 条")
     ap.add_argument("--dry-run", action="store_true", help="只打印计划，不调用 LLM")
+    ap.add_argument(
+        "--out-tag",
+        default="",
+        help="归档文件名后缀（如 step9_20261007）；不填则沿用旧名，且旧名存在时会**中止**",
+    )
+    ap.add_argument("--force", action="store_true", help="允许覆写同名既有归档（默认拒绝）")
     args = ap.parse_args(argv)
     return asyncio.run(main_async(args))
 
