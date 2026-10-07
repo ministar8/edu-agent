@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from typing import Any
 
 # ── failure_reason 枚举（§2.B.3 冻结）─────────────────────
 FAILURE_REASONS: tuple[str, ...] = (
@@ -160,6 +161,64 @@ def exam_rank(is_exam_flags: Sequence[bool]) -> int | None:
         if flag:
             return rank
     return None
+
+
+# ── Memory 侧：**主指标只允许这一份公式**（2026-10-07 修 #21）────────
+#
+#   洞（实测）：`memory_scorer.MemoryJudgement.correct_use` 在 2026-10-07 的 #4 修复里
+#   改成了「按样本极性分定义」，但 `runner.CaseRecord` 上**另有一个同名 property**
+#   仍是旧三元 AND（`retrieved ∧ used ∧ correct`），而 `to_dict()` 用的是**那个 property**
+#   ⇒ 极性版**从来没落到归档**，`report.py` 读的也是旧值。
+#   实测差异：`phase1_memory_step5_store_on` 报告印 `correct_use = 2/6 = 0.333`（旧口径），
+#   而 #4 之后应为 **4/6 = 0.667**；两份归档里 `mem-004`/`mem-005` 两条负样本
+#   全部被旧公式判 False。
+#   ⇒ 同一条指标存在两套实现时，「改了其中一处」等于没改。现在公式收敛到下面这一个函数，
+#     scorer / record / report 三处都从这里取值；护栏 ⑱ 断言三者一致。
+
+
+def memory_correct_use(
+    *,
+    should_be_recalled: bool | None,
+    recalled_actual: bool | None,
+    used: bool | None,
+    correct: bool | None,
+    recalled_pass: bool | None,
+    forbidden_hits: Sequence[str] = (),
+) -> bool | None:
+    """记忆是否被**正确使用**（主指标；任一必需判定量为 None ⇒ N/A）。
+
+    * **正样本**（`should_be_recalled=True`）：实际召回 ∧ used ∧ correct；
+    * **负样本**（`False`）：未实际召回 ∧ **未误用**（回复不含任何 `forbidden_values`）。
+      ★ 负样本**不看** `used`：什么都没召回时「回复里恰好出现该词」来自 RAG 证据或题面，
+      不是用了记忆 —— 旧三元 AND 正是把这条判成失败（假阴性），
+      同时又因「碰巧提到 ⇒ used=True」把空召回判成通过（假阳性）。
+    """
+    trio = (recalled_pass, used, correct, recalled_actual)
+    if any(v is None for v in trio) or should_be_recalled is None:
+        return None
+    if should_be_recalled:
+        return bool(recalled_actual) and bool(used) and bool(correct)
+    return (not recalled_actual) and not tuple(forbidden_hits)
+
+
+def memory_correct_use_from_record(rec: dict[str, Any]) -> bool | None:
+    """从**归档 record** 推导主指标（与 `memory_correct_use` 同一份公式，无第二套）。
+
+    ★ 为什么要从原始字段推导、而不是直接读 `rec["memory_correct_use"]`：
+      2026-10-06 之前落盘的归档里存的是**旧口径**的值，直接读会把已修掉的假阴性
+      继续印出来。原始字段（`memory_retrieved` / `memory_used` / `memory_correct` /
+      `memory_recalled_actual` / `memory_forbidden_hits` + `gold.expected_memory`）
+      都在，⇒ 报告可以按现口径重渲，**不改写归档**。
+    """
+    em = (rec.get("gold") or {}).get("expected_memory") or {}
+    return memory_correct_use(
+        should_be_recalled=em.get("should_be_recalled"),
+        recalled_actual=rec.get("memory_recalled_actual"),
+        used=rec.get("memory_used"),
+        correct=rec.get("memory_correct"),
+        recalled_pass=rec.get("memory_retrieved"),
+        forbidden_hits=rec.get("memory_forbidden_hits") or (),
+    )
 
 
 # ── 生成侧（任务级）────────────────────────────────────────

@@ -159,7 +159,13 @@ def summarize_task(task: str, records: list[dict[str, Any]]) -> TaskReport:
         rep.memory_recalled = metrics.rate([r.get("memory_retrieved") for r in records])
         rep.memory_used_rate = metrics.rate([r.get("memory_used") for r in records])
         rep.memory_correct_rate = metrics.rate([r.get("memory_correct") for r in records])
-        rep.memory_correct_use = metrics.rate([r.get("memory_correct_use") for r in records])
+        # ★ `correct_use` 走 `metrics.memory_correct_use_from_record`（**唯一公式**，
+        #   从原始字段推导）。不能直接读 `r["memory_correct_use"]` —— 2026-10-07 之前
+        #   落盘的归档存的是旧三元 AND 的值（详见 `metrics` 里 #21 的说明），
+        #   直接读会把已修掉的负样本假阴性继续印出来；推导**不改写归档**。
+        rep.memory_correct_use = metrics.rate(
+            [metrics.memory_correct_use_from_record(r) for r in records]
+        )
 
     return rep
 

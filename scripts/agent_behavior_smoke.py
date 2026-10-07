@@ -47,6 +47,7 @@ from agents.agents import DEFAULT_AGENT, get_agent  # noqa: E402
 #   恒为空列表 ⇒ `recalled` 恒 False ⇒ 整条 Memory 指标凭空下降，
 #   而现象与「产品记忆功能退化」完全一致，排查成本极高。导入则改名即报错。
 from agents.teaching_graph import MEMORY_CARD_MESSAGE_ID  # noqa: E402
+from memory.episodes import arecent_episodes  # noqa: E402
 from memory.namespaces import student_episodes_ns, student_profile_ns  # noqa: E402
 
 # —— 启发式模式（故意宽松，压低误报）——
@@ -101,6 +102,13 @@ class CaseResult:
     #   而 `score=None` 也会被登记 ⇒ 只能是「第 2 轮没调工具」，但当时**无法证明**，
     #   只能靠这个日志把结论钉死。
     turn_log: list[dict[str, Any]] = field(default_factory=list)
+    # ── ★ Store 里实际写入了什么（2026-10-07 Step 9 补）───────────────
+    # 每次批改落库的 episode：`{topic, score, knowledge_points, type}`，**在跑后清理之前**读。
+    # 为什么必须有：Step 9 实测「A 段两次 0 分低分、前置条件满足，但 B 段 0 张卡」——
+    #   唯一的解释是两次批改落在**不同 KP** ⇒ 各 1 hit ⇒ `MEMORY_WEAK_MIN_HITS=2` 永不满足。
+    #   可 `grade_scores` 只有分数、工具回文里又不含 KP（`format_grading_for_chat` 只写
+    #   评分/结论/错因）⇒ 这个解释**当时无法证明**。把 episode 的 KP 抓下来即可判定。
+    episodes: list[dict[str, Any]] = field(default_factory=list)
 
 
 def make_user_id(case_id: str) -> str:
@@ -418,6 +426,24 @@ async def run_sessions(
                     }
                 )
             case.session_replies.append("".join(reply_parts).strip())
+
+        # ★ 读 Store 里本次真正写入的 episodes（**必须在 finally 清理之前**）
+        #   OFF 组 `eff_store is None` ⇒ 不读（本来就无写入，读了也是空，容易误读成
+        #   「产品没写」，所以用 store 是否存在来区分「不该有」与「没查到」）。
+        if eff_store is not None:
+            try:
+                eps = await arecent_episodes(eff_store, user_id, limit=20)
+                for e in eps:
+                    case.episodes.append(
+                        {
+                            "topic": e.topic,
+                            "score": e.score,
+                            "knowledge_points": list(e.knowledge_points or []),
+                            "type": str(e.type),
+                        }
+                    )
+            except Exception as e:  # noqa: BLE001
+                case.notes.append(f"读取 episodes 失败：{type(e).__name__}: {e}")
 
         case.reply = case.session_replies[-1] if case.session_replies else ""
         if not case.reply:

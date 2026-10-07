@@ -193,6 +193,10 @@ class CaseRecord:
     #   以及那一轮是「没调批改工具」还是「调了但没抓到分」—— 两者的论文含义不同。
     #   旧归档没有该字段 ⇒ 按空处理，不要回填。
     turn_log: list[dict[str, Any]] = field(default_factory=list)
+    # ★ 本次跑在 Store 里真正写下的 episodes（清理前读）：`{topic, score, knowledge_points, type}`
+    #   用途：判定「前置条件满足却没有记忆卡」是不是 **KP 分散**造成的
+    #   （`MEMORY_WEAK_MIN_HITS=2` 要求同一 KP 命中两次）。老归档没有该字段 ⇒ 按空处理。
+    episodes: list[dict[str, Any]] = field(default_factory=list)
     # paired control：本 case 是否开着 Store（False=对照组）
     store_enabled: bool = True
 
@@ -232,17 +236,14 @@ class CaseRecord:
     date: str = ""
 
     def to_dict(self) -> dict[str, Any]:
-        data = self.__dict__.copy()
-        data["memory_correct_use"] = self.memory_correct_use
-        return data
+        return self.__dict__.copy()
 
-    @property
-    def memory_correct_use(self) -> bool | None:
-        """主指标：`retrieved ∧ used ∧ correct`（§2.B.4）。三者有 None → None。"""
-        trio = (self.memory_retrieved, self.memory_used, self.memory_correct)
-        if any(v is None for v in trio):
-            return None
-        return all(bool(v) for v in trio)
+    # ★ 主指标字段（不是 property）。2026-10-07 修 #21：这里原先是一个**自己算一遍**的
+    #   property（`retrieved ∧ used ∧ correct`），与 `memory_scorer` 里已按极性重写的
+    #   `correct_use` **是两套实现**，而 `to_dict()` 用的正是这个旧的 ⇒ #4 的修复从未落盘，
+    #   报告一直印旧口径（实测 ON 组印 2/6=0.333，应为 4/6=0.667）。
+    #   现在公式只在 `metrics.memory_correct_use` 一处，本字段由 scorer 的判定结果写入。
+    memory_correct_use: bool | None = None
 
 
 # ── 机械判定 ──────────────────────────────────────────────
@@ -398,6 +399,8 @@ def _apply_memory_judgement(
     record.memory_correct = _m.correct
     record.memory_hit_values = list(_m.hit_values)
     record.memory_forbidden_hits = list(_m.forbidden_hits)
+    # ★ 主指标由 scorer 的**唯一公式**写入字段（旧实现在此另算一遍，见字段注释）
+    record.memory_correct_use = _m.correct_use
     record.memory_cards = memory_cards
     # ★ gold 未标注/非法 ⇒ 三项记 None（N/A，不进分母），并标 `memory_miss`
     #   提示人工补齐。**绝不**回退 judge 猜测（那正是本轮要消除的问题）。
@@ -437,6 +440,7 @@ async def run_case(
     memory_cards: list[str] = []
     grade_scores: list[dict[str, Any]] = []
     turn_log: list[dict[str, Any]] = []
+    episodes: list[dict[str, Any]] = []
     if run_agent:
         try:
             result = await _run_agent(
@@ -452,6 +456,7 @@ async def run_case(
             memory_cards = list(getattr(result, "memory_cards", []) or [])
             grade_scores = list(getattr(result, "grade_scores", []) or [])
             turn_log = list(getattr(result, "turn_log", []) or [])
+            episodes = list(getattr(result, "episodes", []) or [])
         except Exception as e:  # noqa: BLE001
             logger.warning("case %s agent 执行失败: %s", case.case_id, e)
             hard_fails.append(f"invoke 抛错: {type(e).__name__}: {e}")
@@ -543,6 +548,7 @@ async def run_case(
         record.validity_reason = _validity.reason
         record.grade_scores = grade_scores
         record.turn_log = turn_log
+        record.episodes = episodes
         record.store_enabled = store_enabled
 
         if _validity.valid is False:

@@ -97,13 +97,21 @@ class MemoryJudgement:
 
         * **正样本**：实际召回 ∧ `used` ∧ `correct`；
         * **负样本**：未实际召回 ∧ **未误用**（回复不含任何 `forbidden_values`）。
+
+        ★ 公式**不在此处实现** —— 委托 `metrics.memory_correct_use`（2026-10-07 修 #21：
+          此前三处各写一份，`runner.CaseRecord` 那份没跟着 #4 改 ⇒ 极性版从未落进归档，
+          报告一直印旧口径 2/6）。单一公式在 `metrics`，护栏 ⑱ 断言三处一致。
         """
-        trio = (self.recalled_pass, self.used, self.correct, self.recalled_actual)
-        if any(v is None for v in trio) or self.should_be_recalled is None:
-            return None
-        if self.should_be_recalled:
-            return bool(self.recalled_actual) and bool(self.used) and bool(self.correct)
-        return (not self.recalled_actual) and not self.forbidden_hits
+        from evaluation.task_eval import metrics
+
+        return metrics.memory_correct_use(
+            should_be_recalled=self.should_be_recalled,
+            recalled_actual=self.recalled_actual,
+            used=self.used,
+            correct=self.correct,
+            recalled_pass=self.recalled_pass,
+            forbidden_hits=self.forbidden_hits,
+        )
 
 
 def _hits(text: str, needles: list[str]) -> tuple[str, ...]:
