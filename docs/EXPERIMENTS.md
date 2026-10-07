@@ -1016,7 +1016,11 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 17 | `min_grade_calls: 0` 单独存在是**永真** ⇒ mem-005 负样本对照的前提从未被校验 | `len(calls) < 0` 不可能成立，而 `is_valid()` 只看「字段非 None」⇒ **gold_sanity 全绿、其实没校验**。mem-005 的 note 写的正是「全新用户无写入⇒卡必空」，即意图是「**恰好 0 次**」。★ 同时**推翻**另一条 review 结论：「`forbidden_values` 未校验是否 canonical」是**错的规则** —— 该字段喂给 `memory_scorer._hits(reply, ...)`，是**回复文本里的自由词**（`['栈','队列']`），不是 KP 名；gold_sanity 已在查「未标注」与「与期望值重叠（自相矛盾）」 | ✅ **已修（B4）**：`SetupConditions` 新增 `max_grade_calls`，mem-005 改为 `min:0 + max:0` ⇒ 对照真被验收；gold_sanity 加「空标」lint（`min=0` 且无 max/bands ⇒ ERROR 并给出改写建议）。护栏 **⑬h~⑬l**，其中 **⑬l** 锁「两份归档 12 条 validity **逐条不变**」⇒ `grade_scores` 实测本就是 `[]`，**不改动任何已发表数字** |
 | 18 | **整个「效果层」都不在版本控制里**（比原登记的「gold 没入库」大得多，2026-10-07 实测扩大） | `git ls-files` 全为 **0** 且**均未被 ignore**：`src/evaluation/task_eval/`（**12 个 .py**：cases / metrics / memory_scorer / gold_sanity / judge / report / runner / cli / retrieval_probe / assets / `__init__` / `__main__`）、`src/core/kp_vocab.py`（缺陷 E 的**单一事实源**）、`scripts/` 下 **12 个**护栏与探针（含 `memory_step4fix_gate.py` 本身、E-5 探针、e2e 兜底探针）、`evals/datasets/demo / probes / probes_phase1 三个目录/` + `exam_answer_corrections.json`。✅ **已解决（2026-10-07 提交）**：`src/evaluation/task_eval/`（12 个 .py）+ `src/core/kp_vocab.py` + `scripts/` 的 12 个护栏/探针已入库；gold 数据集单独一次 `data(evals)` 提交。`evals/results/task_eval/`（3.7MB，其中 1.9MB 是单个 log）**维持不入库**，可复现性由本节的文件指纹 + 已入库的生成/护栏脚本承担。另：`.claude/` 未跟踪（**该 ignore、不该入库**）；`.workbuddy-ai/` 未跟踪但**将被删除** ⇒ 不写忽略规则 | ✅ 见上一格 |
 | 19 | **judge 校准表的 PASS 只有 2/30 的信息量** —— 门槛过了，但它测不出「judge 会不会打分」 | `evals/datasets/demo/calibration_30.jsonl` 的 `human_score` 分布 = `{5: 28, 0: 1, 2: 1}`（众数占 **93.3%**，不同取值仅 3 个）。基线复算：`exact 0.9333 / within_1 1.0 / mae 0.0667 / spearman 0.7321` ⇒ **PASS**（阈值 0.60/0.90/0.50/0.70，`spearman` 仅高出 0.032）。★ 三条**破坏性检验**（零 LLM，只改内存里的副本，未回写文件）：① 把第 8 行（human=0）**单独**改成 5 ⇒ `spearman 0.4902` ⇒ **FAIL**；② 把第 17 行（human=2）改成 5 ⇒ `spearman 0.5265` ⇒ **FAIL**；③ 反向：把这 2 行的 **`llm_score` 改成 0**（即 judge 在唯一可判别的地方完全打错）⇒ 仍然 **PASS**（`spearman 0.7315`）—— 因为秩相关只看排序，不看量级。⇒ 结论：**整个 PASS 压在 6.7% 的样本上，且对「量级完全错」不敏感**（与 #7 同类的分布退化，但成因不同：#7 是 gold 造不出中间档，这里 28 个 5 是**真实人工判断**，说明系统输出普遍好，**不能当成数据缺陷去改**） | 🔵 **只披露，不擅自改**：不改阈值（`CALIBRATION_THRESHOLDS` 是「预先约定标准」的落点）、不改人工分（改它=伪造标注）。论文里应把校准表述为「30 条中 28 条人机完全一致；其余 2 条 judge 排序正确」，**不要**引用 `spearman=0.7321` 当「judge 与人工秩相关良好」的证据。是否给报告加一行「非众数占比」露出 = **待裁决 D6** |
-| 20 | **Phase 1.5 的 §4「L3 闸门」从未执行，且按当前语料无法执行**（此前**未登记**，两份台账里一条记录都没有） | §4 冻结的判定规则问的是「真题缺失是不是低质量回答的**主要因果原因**」，并指定测据：`question_id_recall@k` · `answer_availability` · `final_quality` + `primary_failure` 分布。实测：① gold 侧**有**标注 （`verify_cases` demo 15/15、probes 10/10、probes_phase1 10/10 都填了 `expected_question_ids`）；② **语料侧没有** `question_id` —— 扫 `questions` 集合的 metadata（50 个键）无任何 `question*`/`qid*` 字段；③ 归档里 `question_id_recall` 字段**出现 0 次**，只有代理指标 `exam_hit`（194 条记录：True 69 / False 125）。⇒ `question_id_recall@k` **不是「没跑」，是「算不出来」**：检索结果里没有可与 gold `expected_question_ids` 对齐的字段。★ 这也解释了 P3 为什么保留 `question_id_recall` / `question_id_hit` / `exam_rank` 三个零调用函数 —— 它们就是为 §4 预留的，**接口在、数据源不在** | 🔵 **只披露，不擅自动**：补齐要 ①ingest 时把 `question_id` 写进 metadata ②**全量重建索引** ③重建即改变检索侧指纹 ⇒ 触发新版本锚点 + 四路由门禁重跑（`EFFECT_PLAN §11` 的「时间紧」退路正是 「L2/L3 全走披露、不修」）。⇒ 建议：论文里把 §4 明确写成**未判定**（附上述三点证据），或按 §11 走披露退路；**不要**引用 `exam_hit` 冒充 `question_id_recall` 回答 §4 的问题 |### 20.5.1 ★ Generate 主指标解剖（#2 的取证，2026-10-07）
+| 20 | **Phase 1.5 的 §4「L3 闸门」从未执行，且按当前语料无法执行**（此前**未登记**，两份台账里一条记录都没有） | §4 冻结的判定规则问的是「真题缺失是不是低质量回答的**主要因果原因**」，并指定测据：`question_id_recall@k` · `answer_availability` · `final_quality` + `primary_failure` 分布。实测：① gold 侧**有**标注 （`verify_cases` demo 15/15、probes 10/10、probes_phase1 10/10 都填了 `expected_question_ids`）；② **语料侧没有** `question_id` —— 扫 `questions` 集合的 metadata（50 个键）无任何 `question*`/`qid*` 字段；③ 归档里 `question_id_recall` 字段**出现 0 次**，只有代理指标 `exam_hit`（194 条记录：True 69 / False 125）。⇒ `question_id_recall@k` **不是「没跑」，是「算不出来」**：检索结果里没有可与 gold `expected_question_ids` 对齐的字段。★ 这也解释了 P3 为什么保留 `question_id_recall` / `question_id_hit` / `exam_rank` 三个零调用函数 —— 它们就是为 §4 预留的，**接口在、数据源不在** | 🔵 **只披露，不擅自动**：补齐要 ①ingest 时把 `question_id` 写进 metadata ②**全量重建索引** ③重建即改变检索侧指纹 ⇒ 触发新版本锚点 + 四路由门禁重跑（`EFFECT_PLAN §11` 的「时间紧」退路正是 「L2/L3 全走披露、不修」）。⇒ 建议：论文里把 §4 明确写成**未判定**（附上述三点证据），或按 §11 走披露退路；**不要**引用 `exam_hit` 冒充 `question_id_recall` 回答 §4 的问题 |
+| 21 | **我自己 #4 的修复从未生效**：同一条主指标存在**两套实现**，落盘用的是旧的那套 | `memory_scorer.MemoryJudgement.correct_use` 在 #4 改成「按样本极性分定义」，但 `runner.CaseRecord` 上**另有一个同名 property** 仍是旧三元 AND（`retrieved ∧ used ∧ correct`），而 `to_dict()` 用的正是那个 property ⇒ 极性版从未写进归档、`report.py` 读的也是旧值。★ 实测：报告对 `phase1_memory_step5_store_on` 印 `correct_use = 2/6 = 0.333`，而 #4 之后应为 **4/6 = 0.667**；两份归档里 `mem-004`/`mem-005` 两条负样本全被旧公式记 False。而 ③d~③h 当时全绿 —— 因为它们测的是 scorer 的**函数**，没测「函数结果如何被写出」（正是「只测 helper、不测接线」那一类） | ✅ **已修（本轮）**：公式收敛到 `metrics.memory_correct_use()` 一处；`memory_correct_use_from_record()` 从**原始字段**推导 ⇒ 旧归档也能按现口径重渲而**不改写归档**；`CaseRecord.memory_correct_use` 由 property 改为字段、由 scorer 写入。护栏 **⑱a~⑱e**（⑱a 用报告路径复现 4/6、⑱b 逐条断言两套账一致、⑱c 反向「同一负样本旧 False / 新 True」、⑱d 走真实 `_apply_memory_judgement` 验接线、⑱e 正样本未召回必须 False，防「修复」退化成负样本一律放行）。★ **连带更正**：#4 里写的「ON 组 correct_use 2→4（0.333→0.667）」当时只有手工重算成立，**报告路径并未产出该数**；现在两者一致 |
+| 22 | **正样本可能天然测不到召回**：`MEMORY_WEAK_MIN_HITS=2` 按 **KP 精确名**计 hit，而 A 段两道题落在**不同考点** ⇒ 画像恒空 ⇒ 「0 张卡」不是召回失败而是**样本设计缺陷** | Step 9 实跑：Store ON 的 `mem-002` 两次批改都是 0 分（低分前置条件**满足**），却 `memory_cards=0`、B 段召不回。纯函数复现（零 LLM）：`compute_weak_topics` 喂「图的基本性质 + 图的存储」⇒ `[]`；喂「平衡二叉树 ×2」⇒ `['平衡二叉树']`；一道题给两个 KP ⇒ 各 1 hit ⇒ 仍 `[]`。★ 取证曾不可能：工具回文 `format_grading_for_chat` 只输出 评分/结论/错因，**不含 KP**，而 harness 跑完就把 Store 清了 | ✅ **已修（本轮，取证通道 + 判据）**：`run_sessions` 在**清理之前**读出 episodes 落进 `CaseRecord.episodes`（`topic/score/knowledge_points/type`）；护栏 **⑲a~⑲e**（⑲d 用最小假 store 驱动**真实** `run_sessions` 验接线，⑲e 把读到的 episodes 直接喂聚合复现同一条链）。⇒ 剩下的属**样本设计决策**（A 段改成同一考点 / 按章聚合 / 只披露）= **D8** |
+
+### 20.5.1 ★ Generate 主指标解剖（#2 的取证，2026-10-07）
 
 **真正的问题不是"选哪个公式"，而是"五项"里只有两项有区分力。**
 
@@ -1152,7 +1156,7 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 Gate **129 项全绿**（101 → 116 → 128 → 129，末项为 ③j+：数据集学科码全体「可测且自命中」）、`pyrefly` **0 errors**、ruff check/format 通过、
 `task_eval sanity` 66 条 ERROR 0、两份归档 12 条 validity **逐条不变**（新 gold 不动已发表数字）。
 
-**20 条已知偏离**全部登记；**#2 已由 D1 定夺并落地（2026-10-07）**：主指标 = 逐题「适用项全过」**0.80**，项级池化 0.9423 降级为诊断（护栏 ⑭）。
+**22 条已知偏离**全部登记；**#2 已由 D1 定夺并落地（2026-10-07）**：主指标 = 逐题「适用项全过」**0.80**，项级池化 0.9423 降级为诊断（护栏 ⑭）。
 —— **#2 的解剖与采纳状态见 §20.5.1**（核心结论：五项里只有
 `correctness` 与 `coverage` 有区分力；8 个 `coverage` N/A **疑似旧索引**产物——全量扫描显示四个学科集合
 KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块），但归档未存每块来源 ⇒ **待 Step 9 定论**；
@@ -1226,3 +1230,56 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块），但
 ⇒ 所以这 2 条的正确读法是：**分母里的 13 条是「工具出了分」的样本**，
    另有 2 条属产品侧批改链失败（缺陷 A 的残留症状），两者不可混为一谈。
    报告已强制披露「⚠ N 条未产出可解析分数」，本轮复核确认该披露与实际一致。
+
+#### 20.8.3 Memory 配对重跑（3 次重复，实测 252 次 LLM 调用）：**本轮观察不到跨会话召回**，且原因已归因到三轮的逐轮证据
+
+| 归档（`evals/results/task_eval/`） | 调用 | 用途 | 关键产出 |
+|---|---|---|---|
+| `..._step9_20261007.jsonl` | **126** | 6 条全量重跑（新 hash `2f485d2d7ef7`） | 正样本 ON 组 **0/3 有效** |
+| `..._step9_diag.jsonl` | **65** | 逐轮日志上线后的诊断重复（3 条正样本 × 2 臂） | 证明「第 2 轮没调批改工具」 |
+| `..._step9_kp.jsonl` | **61** | episodes 捕获上线后的归因重复 | 证明「KP 不重复 ⇒ 画像恒空」 |
+
+★ 调用数是**按端点分别数 HTTP POST** 得到的（不是 dry-run 的估算 —— 它把全量那跑估成 ≈84，
+    实际 126）：`api.deepseek.com` = agent 侧（`DEFAULT_MODEL=deepseek:deepseek-flash`），
+    `dashscope.aliyuncs.com` = 批改结构化调用（`LLM_MODEL=qwen3.7-flash`）；
+    本地 TEI/Chroma 请求（同三跑分别 1735 / 660 / 630 次）**不花 token**，故不计入。
+
+★ 三次都是**独立重复**，不是「跑到绿为止」：第 2、3 次的目的写在名字里（`diag`/`kp`），
+且每一次都完整报告自己的 `valid` 计数（见下），不挑好的用。
+
+**汇总（三条正样本 mem-001/002/003 × Store ON）**
+
+| 重复 | 前置条件满足 | 有记忆卡 | 召回成功 | 失败形态 |
+|---|---|---|---|---|
+| Step 5（旧，2026-10-06） | 1/3 | 1/3 | **1/3（`mem-001`）** | —— 这是论文里目前唯一的召回正例 |
+| Step 9 全量 | **0/3** | 0/3 | 0/3 | A 段只捕获 1 次批改 |
+| Step 9 diag | 1/3 | 0/3 | 0/3 | 同上 + 错题被判 100 |
+| Step 9 kp | 1/3 | **0/3** | 0/3 | KP 不重复 ⇒ 画像空 |
+
+**三重归因（每条都有逐轮/逐 episode 证据，不再是推测）**
+
+1. **A 段第 2 轮有时不调用批改工具** —— `turn_log` 直接显示：
+   `mem-001` 三次重复里 `tools=[['grade_student_answer'], [], []]`，第 2 轮空。
+   ⇒ 「≥2 次批改」的前置条件不成立 ⇒ `case_invalid`（与产品召回能力无关）。
+2. **错题被判 100 分**（缺陷 A 的现存症状）—— `mem-003` 第 2 次批改 `[100.0]`，
+   gold 要求落在 `[0,59]` ⇒ `case_invalid`。另见 OFF 臂 `mem-003` 第 1 次抓到 `None`
+   （调了工具但没抓到分）—— 与 §20.8.2 那 2 条 Grade 不可解析同源。
+3. **正样本设计缺陷 #22** —— 即使前两条都不发生（`mem-002` 两次都 0 分、前置条件满足），
+   `episodes` 显示两次批改的 KP 是 `['图的存储','数组与特殊矩阵']` 与 `['图']`：
+   **没有任何考点重复** ⇒ `compute_weak_topics(...)` 现算 = `[]` ⇒ 0 张卡 ⇒ 召不回。
+   同一函数喂「同一 KP 两次」立即得到 `['平衡二叉树']`（护栏 ⑲a/⑲b），
+   ⇒ 不是聚合坏了，是**样本假设「同章不同考点会累计」与 `MIN_HITS=2` 按精确名计 hit 不符**。
+
+**Store OFF 臂**：三条正样本的 `episodes` 全为 **0 条**（无 store ⇒ 无写入），
+`memory_cards=0`、`recalled_actual=False` ⇒ 对照侧干净；但注意这也意味着
+「OFF 侧未召回」在正样本上是**平凡真**（压根没东西可召回），它证明的是
+「召回不可能凭空来自别处」，不是「OFF 也会召回」的反证。
+
+**结论（论文该怎么写）**
+
+- 核心断言「**新 thread + 同 user_id 能跨会话召回**」的**直接证据只有 1 例**
+  （2026-10-06 `mem-001`，ON 组 1 卡 1 召回）。Step 9 的三次重复**没有增加正例**，
+  反而暴露上述三个前置/设计问题 ⇒ **不能**改口说「多次验证通过」。
+- 可以说的是：指标侧的因果链已经**可归因**（`turn_log` + `episodes` + 极性口径），
+  「测不到」不再会被误记成「产品差」。
+- 要真正补上正例，需要 **D8** 的决定（下面登记）。
