@@ -297,6 +297,33 @@ async def run_turns(agent, turns: list[str]) -> CaseResult:
     return case
 
 
+def _off_arm_disable(agent, store) -> Any | None:
+    """OFF 臂：摘掉**两处** store，返回需恢复的进程级旧值（#24）。
+
+    ★ 必须两处一起摘：`teaching_graph.load_memory` 与 `remember._record_episode` 都在
+      **调用时**取进程级 `get_store()`，只看 `agent.store` 是关不掉记忆的 ——
+      旧实现因此「OFF 组照样写、照样召回」，paired control 一直是假的。
+    """
+    from memory.runtime import get_store, set_store
+
+    prev_global = get_store()
+    if store is not None:
+        agent.store = None
+    set_store(None)
+    return prev_global
+
+
+def _off_arm_restore(agent, store, prev_global: Any | None) -> None:
+    """恢复两处。★ 进程级那条若忘恢复，之后所有 case 会**静默**失去记忆
+    （`_record_episode` 见 None 只打 debug 日志、不报错）—— 比不恢复 agent 严重得多。
+    """
+    from memory.runtime import set_store
+
+    set_store(prev_global)
+    if store is not None:
+        agent.store = store
+
+
 async def run_sessions(
     agent,
     sessions: list[list[str]],
@@ -356,10 +383,17 @@ async def run_sessions(
     used_threads: list[str] = []
 
     # ── paired control：Store OFF 组——临时摘掉 store ──────────────────
-    #   ★ 只摘本函数作用域内的引用，跑完在 finally 恢复，不影响其它 case。
-    if not store_enabled and store is not None:
-        agent.store = None
-        case.notes.append("paired control：Store OFF（临时摘除 agent.store，B 段不应召回）")
+    #   ★★ 2026-10-07 修正（D8 重跑时暴露，登记为 #24）：光置 `agent.store=None` 不生效，
+    #     必须连进程级 `get_store()` 一起置空 —— 见 `_off_arm_disable` 的说明。
+    #     Step 5 当时 OFF 显示「0 卡 0 召回」被当成对照生效的证据，那其实是 #22
+    #     让画像恒空造成的**假象**：两个缺陷互相掩盖，修好一个才露出另一个。
+    prev_global_store = None
+    if not store_enabled:
+        prev_global_store = _off_arm_disable(agent, store)
+        case.notes.append(
+            "paired control：Store OFF（同时置空 agent.store 与进程级 get_store() —— "
+            "缺后者则 load_memory/record_grade 仍在读写，对照无效）"
+        )
     eff_store = store if store_enabled else None
 
     # ── 跑前清理（Step 4 硬要求：起点必须干净）─────────────────────────
@@ -428,8 +462,10 @@ async def run_sessions(
             case.session_replies.append("".join(reply_parts).strip())
 
         # ★ 读 Store 里本次真正写入的 episodes（**必须在 finally 清理之前**）
-        #   OFF 组 `eff_store is None` ⇒ 不读（本来就无写入，读了也是空，容易误读成
-        #   「产品没写」，所以用 store 是否存在来区分「不该有」与「没查到」）。
+        #   OFF 组 `eff_store is None` ⇒ 不读，用 store 是否存在来区分「不该有」与「没查到」。
+        #   ★★ 读旧归档时的口径（#24）：**修好之前的 OFF 记录里 `episodes=[]` 不是「没写入」的证据** ——
+        #     那时进程级 store 还活着，`record_grade` 照样写，只是这条取证通道拿的是 `eff_store=None`
+        #     而什么都没读。真正的证据是同一记录里 `memory_cards` 非空（读链开着）。
         if eff_store is not None:
             try:
                 eps = await arecent_episodes(eff_store, user_id, limit=20)
@@ -450,11 +486,11 @@ async def run_sessions(
             case.hard_fails.append("最终回复为空")
         return case
     finally:
-        # ── paired control：先恢复被临时摘掉的 store ──────────────────
-        #   ★ 必须在清理**之前**恢复，且放在 finally 最前 —— 否则中途抛错会让
-        #     后续 case 的 agent.store 一直是 None（静默污染整轮后续样本）。
-        if not store_enabled and store is not None:
-            agent.store = store
+        # ── paired control：先恢复被临时摘掉的 store（进程级 + agent 两处）────────
+        #   ★ 必须在清理**之前**恢复，且放在 finally 最前 —— 中途抛错时若忘了恢复，
+        #     后续 case 会**静默**失去记忆（`_record_episode` 见 None 只打 debug 日志）。
+        if not store_enabled:
+            _off_arm_restore(agent, store, prev_global_store)
         # ── 跑后清理（Step 4 硬要求：跑完必须干净）──────────────────────
         # ★ 放 finally：中途抛错/提前 return 也要清 —— 失败重跑最需要干净起点。
         if eff_store is not None:

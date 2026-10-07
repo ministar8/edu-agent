@@ -770,22 +770,38 @@ def check_7() -> None:
         str(sig),
     )
 
-    src = inspect.getsource(harness.run_sessions)
-    tree = ast.parse(textwrap.dedent(src))
-    # Store OFF 时必须有「临时摘除 store」的动作
-    has_detach = any(
-        isinstance(n, ast.Assign)
-        and any(isinstance(t, ast.Attribute) and t.attr == "store" for t in n.targets)
-        and isinstance(n.value, ast.Constant)
-        and n.value.value is None
-        for n in ast.walk(tree)
-    )
-    check("⑦b Store OFF 时临时摘除 agent.store（置 None）", has_detach)
+    # ★ ⑦b/⑦c 原本是**源码文本断言**（在 `run_sessions` 里 AST 找 `agent.store = None`），
+    #   2026-10-07 把 OFF 臂摘除逻辑抽成 `_off_arm_disable/_off_arm_restore`（#24 修正）后
+    #   它们立刻变红 —— 正好演示了这类断言的脆弱：**代码搬家了，行为没变，红灯却响了**。
+    #   ⇒ 改成对 helper 的**行为断言**：真的调用它、真的看 `get_store()`/`agent.store` 变成什么。
+    import agent_behavior_smoke as _smoke
 
-    # 必须在 finally 里恢复（否则污染后续 case）
-    try_final = [n for n in ast.walk(tree) if isinstance(n, ast.Try) and n.finalbody]
-    fin_src = "\n".join(ast.unparse(s) for node in try_final for s in node.finalbody)
-    check("⑦c finally 内恢复 agent.store（不污染后续 case）", "agent.store = store" in fin_src)
+    from memory.runtime import get_store as _get_store
+    from memory.runtime import set_store as _set_store
+
+    class _ProbeAgent:
+        def __init__(self, st) -> None:
+            self.store = st
+
+    _sentinel = object()
+    _prev = _get_store()
+    try:
+        _set_store(_sentinel)
+        _pa = _ProbeAgent(_sentinel)
+        _saved = _smoke._off_arm_disable(_pa, _sentinel)
+        detached = _pa.store is None and _get_store() is None
+        check(
+            "⑦b OFF 臂摘除：agent.store 与**进程级 get_store()** 两处都置空",
+            detached,
+            f"agent={_pa.store!r} global={_get_store()!r}",
+        )
+        _smoke._off_arm_restore(_pa, _sentinel, _saved)
+        check(
+            "⑦c 恢复：两处都回来（进程级忘恢复 ⇒ 后续 case 静默失去记忆且不报错）",
+            _pa.store is _sentinel and _get_store() is _sentinel,
+        )
+    finally:
+        _set_store(_prev)
 
     from evaluation.task_eval.runner import _run_agent
 
@@ -2382,6 +2398,96 @@ def check_21() -> None:
     )
 
 
+def check_22() -> None:
+    """㉒ paired control 的 OFF 臂必须真的关掉 Store（2026-10-07 D8 重跑暴露，登记为 #24）。
+
+    事故：D8 把正样本改成「同考点两次低分」之后，**OFF 组也召回了**（`卡=1`、
+    `recalled_actual=True`，而 harness 自己抓的 `episodes=0`）。查因：
+    `teaching_graph.load_memory` 与 `remember._record_episode` 都在**调用时**取进程级
+    `get_store()`，而 OFF 组原先只置 `agent.store = None` ⇒ Store 从未关闭，
+    「ON 有卡 / OFF 无卡」的对照一直不成立。
+    ★ 更糟的是：Step 5 当时 OFF 显示「0 卡 0 召回」被当成对照生效的证据，
+      那其实是 #22（画像恒空）造成的假象 —— **两个缺陷互相掩盖**。
+      D8 修好了 #22，才让 #24 露头。
+    """
+    section("㉒ OFF 组须真空白进程级 store（#24，防对照失效）")
+
+    import asyncio as _aio
+
+    import agent_behavior_smoke as smoke
+    from langchain_core.messages import AIMessageChunk
+
+    from memory.runtime import get_store, set_store
+
+    class _SpyAgent:
+        """在轮内观测 `get_store()` —— 这才是「变量到底有没有被控制」的直接证据。"""
+
+        checkpointer = None
+
+        def __init__(self, store) -> None:
+            self.store = store
+            self.seen: list[bool] = []
+
+        async def astream(self, _inp, *, config, stream_mode, subgraphs):  # noqa: ARG002
+            self.seen.append(get_store() is not None)
+            yield (("supervisor",), "messages", (AIMessageChunk(content="回复"), {}))
+
+    class _NullStore:
+        """只为让 `store is not None` 成立的最小对象（OFF 臂要摘的就是它）。"""
+
+        async def asearch(self, ns, query=None, filter=None, limit=None, offset=0):  # noqa: A002
+            return []
+
+        async def adelete(self, ns, key) -> None:
+            return None
+
+    async def _run(store_enabled: bool) -> tuple[_SpyAgent, bool]:
+        spy = _SpyAgent(_NullStore())
+        res = await smoke.run_sessions(
+            spy,
+            [["批改：题一"], ["换个会话：我哪里薄弱？"]],
+            user_id=f"gate-off-arm-{store_enabled}",
+            cleanup_first=False,
+            store_enabled=store_enabled,
+        )
+        # 轮内观测：True = 那一轮 `get_store()` 有值（Store 开着）
+        observed = spy.seen[0] if spy.seen else None
+        return res, observed
+
+    sentinel = _NullStore()
+    old = get_store()
+    try:
+        set_store(sentinel)
+        res_on, obs_on = _aio.run(_run(True))
+        check(
+            "㉒a ON 臂：轮内 `get_store()` 有值（对照的前提：这一臂确实开着 Store）",
+            obs_on is True,
+            f"observed={obs_on}",
+        )
+        res_off, obs_off = _aio.run(_run(False))
+        check(
+            "㉒b ★ OFF 臂：轮内 `get_store()` 必须为 None（旧实现只摘 agent.store ⇒ 这里会是 True）",
+            obs_off is False,
+            f"observed={obs_off}",
+        )
+        check(
+            "㉒c OFF 臂跑完后进程级 store 已恢复（忘恢复会让后续所有 case 静默失去记忆）",
+            get_store() is sentinel,
+            f"get_store() is sentinel = {get_store() is sentinel}",
+        )
+        check(
+            "㉒d OFF 臂的 notes 里写明了摘除方式（报告能自证对照到底控了什么变量）",
+            any("get_store" in n for n in res_off.notes),
+            str([n[:48] for n in res_off.notes]),
+        )
+    finally:
+        set_store(old)
+    check(
+        "㉒e 护栏自身不污染进程（跑完 store 回到入口前的状态）",
+        get_store() is old,
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -2405,6 +2511,7 @@ def main() -> int:
     check_19()
     check_20()
     check_21()
+    check_22()
 
     print()
     print("=" * 72)

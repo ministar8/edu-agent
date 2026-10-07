@@ -909,9 +909,16 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 > ★ **自指限制（不是漏更）**：这两行由标签**之后**的 docs 提交回填 —— 一个提交写不下自己的 SHA，所以 `git show V-2026-10-07:docs/EXPERIMENTS.md` 里看到的仍是占位文字。**锚点的权威解析不依赖本文字**：`git rev-parse "V-2026-10-07^{}"` → `0f24891599c194179755753d06e0d53f106d116e`。（§18.0 的 `V-2026-10-02` 是同一做法：落点 `e36c766` 记在其后的 `e2ec6a6`。）
 | **批改 prompt 版本** | `PROMPT_SET_VERSION = 2f485d2d7ef7`（E-3 注入词表 + **#8 过滤课程根节点**后；词表 **158 个** = 162 − 4，批改 system **1293 字符**）。★ E-5 的 `0.875` 是在**旧 hash `f09c75642029`**（词表 162 个）下测得 ⇒ 严格说 E-5 归「E-3 完成后、#8 前」的中间态，新 hash 下的复测（12 次调用）**建议并入 Step 9** |
 | **黄金集 sha256** | `be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66`（156 条，**与 §18.0 逐字相同 ⇒ 黄金集自 V-2026-10-02 未变**） |
-| **效果集指纹**（`evals/datasets/demo/`，sha256 前 16 位，现值） | `generate 02e12e13bdcef4f7` · `grade 4e47351d03ede7c9` · **`memory b5619085d7979a36`** · `qa e4ceeafabcc488fc` · `verify 5daad346d24f7100` |
+| **效果集指纹**（`evals/datasets/demo/`，sha256 前 16 位，现值） | `generate 02e12e13bdcef4f7` · `grade 4e47351d03ede7c9` · **`memory 3c938365da7ce614`** · `qa e4ceeafabcc488fc` · `verify 5daad346d24f7100` |
 
-> ★ **`memory` 这条是 2026-10-07 回填的**：旧值 `dbcfe0b809c084e3` 记于 B4（修 #17）之前 —— 该修复给 `mem-005` 的 gold 加了 `max_grade_calls: 0`（负样本对照的前置条件从「永真」变成真约束），**改了 gold 本体** ⇒ 指纹必然漂。其余四集与黄金集**逐字未变**（`generate/grade/qa/verify` 与 `be98912a…` 都对得上 §18.0）。教训：**改 gold 与打标签是同一件事**，锚点必须在打标签之前重算。
+> ★ **`memory` 这条改过四次**（其余四集与黄金集**逐字未变**，都对得上 §18.0）：
+> - `dbcfe0b809c084e3` → `b5619085d7979a36`：B4（修 #17）给 `mem-005` 的 gold 加了 `max_grade_calls: 0`，负样本对照的前置条件从「永真」变成真约束 —— **改了 gold 本体** ⇒ 指纹必然漂。
+> - `b5619085d7979a36` → `6b91953493865c16`：**D8 第一次**（§20.8.6）把 `mem-002`/`mem-003` A 段**第一题**换成与第二题**同一考点**的题（修 #22 的样本设计缺陷：两道题落不同 KP ⇒ `MEMORY_WEAK_MIN_HITS=2` 永远凑不满 ⇒ 画像恒空）。
+> - `6b91953493865c16` → `ffcf2b3233fc5595`：**D8 第二次**，补上第一次漏掉的 `mem-003` **第二题**。Step 9 归档实证：那题的学生作答「38, 49, 65, 97, 76」在一趟 Hoare 划分下**就是正确结果**（已用教材算法复算）⇒ 模型判 100 分是**判对了**，而 gold 的 `grade_score_bands=[[0,59],[0,59]]` 要求两次都低分 ⇒ **前置条件天然不可满足**，属 case 设计错、**不是**产品缺陷。已换成一道作答确实错、仍落在「快速排序」的辨析题。★ 连带**作废** §20.8.3 里「错题被判 100 分 = 缺陷 A 现存症状」的归因（该节已更正；同一归档里真正的误判是**反方向**的：`小根堆判定` 那题作答正确却被判 0 分）。
+> - `ffcf2b3233fc5595` → `3c938365da7ce614`：**D8 第三次**，把 `mem-002`/`mem-003` 的 `expected_memory.values` 由**章名**（`图` / `排序`）收到**具体考点**（`图的存储` / `快速排序`）。原写法的判定是**子串包含** ⇒ 「任何含『图』字的卡都算召回」，正样本的「召回成功」测不出「召回的是不是设计的那个薄弱点」（登记为 **#26**）。D8 已让 A 段两题落在同一具体 KP ⇒ 现在**有资格**要求精确名（改前核对：两值均在 `canonical_names()` 里，`task_eval sanity` 复跑 **ERROR 0**）。
+> - ★ **换进去的题面是「自拟辨析题」，不是真题原文**。核对方式：在 `knowledge/questions/*.md`（17 个年份）里检索「邻接矩阵…度」「快速排序…稳定」，命中的是**解析段落**而非同一题干 ⇒ 题干与 L3 语料的关系由「引用」降级为「自拟」，论文里必须这样标。这不构成造假：Memory 正样本要的是「两次低分批改落在同一考点」，**不依赖**真题；且**没有**造 `human_score`、**没有**动 L3 语料本体。（对照：`grade`/`verify` 那些任务**必须**用真题，因为它们的 gold 就是人工分。）
+>
+> 教训同前：**改 gold 与打标签是同一件事**，锚点必须在打标签之前重算。
 
 > ★ **指纹口径 = 工作副本字节的 sha256**（与 `scripts/freeze_precheck.py:65` 一致），**不是 git blob 哈希**。因为 `.gitattributes` 声明 `*.jsonl text` ⇒ 入库时 CRLF 会归一成 LF，实测同一份黄金集：工作副本（CRLF）`be98912a4c91fb88…` / 归一后（LF）`979b7f96537cb147…`。⇒ **在纯 LF 环境（如 Linux/CI）checkout 后重算会得到另一个值**，那不是数据被改；复算要么在本机工作副本上跑，要么比较前先做行尾归一。
 | **归档 `code_version` 现状** | 全部为 **`648d819-dirty`**（见 §20.5 第 3 条——这是本节存在的理由） |
@@ -1016,9 +1023,13 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 17 | `min_grade_calls: 0` 单独存在是**永真** ⇒ mem-005 负样本对照的前提从未被校验 | `len(calls) < 0` 不可能成立，而 `is_valid()` 只看「字段非 None」⇒ **gold_sanity 全绿、其实没校验**。mem-005 的 note 写的正是「全新用户无写入⇒卡必空」，即意图是「**恰好 0 次**」。★ 同时**推翻**另一条 review 结论：「`forbidden_values` 未校验是否 canonical」是**错的规则** —— 该字段喂给 `memory_scorer._hits(reply, ...)`，是**回复文本里的自由词**（`['栈','队列']`），不是 KP 名；gold_sanity 已在查「未标注」与「与期望值重叠（自相矛盾）」 | ✅ **已修（B4）**：`SetupConditions` 新增 `max_grade_calls`，mem-005 改为 `min:0 + max:0` ⇒ 对照真被验收；gold_sanity 加「空标」lint（`min=0` 且无 max/bands ⇒ ERROR 并给出改写建议）。护栏 **⑬h~⑬l**，其中 **⑬l** 锁「两份归档 12 条 validity **逐条不变**」⇒ `grade_scores` 实测本就是 `[]`，**不改动任何已发表数字** |
 | 18 | **整个「效果层」都不在版本控制里**（比原登记的「gold 没入库」大得多，2026-10-07 实测扩大） | `git ls-files` 全为 **0** 且**均未被 ignore**：`src/evaluation/task_eval/`（**12 个 .py**：cases / metrics / memory_scorer / gold_sanity / judge / report / runner / cli / retrieval_probe / assets / `__init__` / `__main__`）、`src/core/kp_vocab.py`（缺陷 E 的**单一事实源**）、`scripts/` 下 **12 个**护栏与探针（含 `memory_step4fix_gate.py` 本身、E-5 探针、e2e 兜底探针）、`evals/datasets/demo / probes / probes_phase1 三个目录/` + `exam_answer_corrections.json`。✅ **已解决（2026-10-07 提交）**：`src/evaluation/task_eval/`（12 个 .py）+ `src/core/kp_vocab.py` + `scripts/` 的 12 个护栏/探针已入库；gold 数据集单独一次 `data(evals)` 提交。`evals/results/task_eval/`（3.7MB，其中 1.9MB 是单个 log）**维持不入库**，可复现性由本节的文件指纹 + 已入库的生成/护栏脚本承担。另：`.claude/` 未跟踪（**该 ignore、不该入库**）；`.workbuddy-ai/` 未跟踪但**将被删除** ⇒ 不写忽略规则 | ✅ 见上一格 |
 | 19 | **judge 校准表的 PASS 只有 2/30 的信息量** —— 门槛过了，但它测不出「judge 会不会打分」 | `evals/datasets/demo/calibration_30.jsonl` 的 `human_score` 分布 = `{5: 28, 0: 1, 2: 1}`（众数占 **93.3%**，不同取值仅 3 个）。基线复算：`exact 0.9333 / within_1 1.0 / mae 0.0667 / spearman 0.7321` ⇒ **PASS**（阈值 0.60/0.90/0.50/0.70，`spearman` 仅高出 0.032）。★ 三条**破坏性检验**（零 LLM，只改内存里的副本，未回写文件）：① 把第 8 行（human=0）**单独**改成 5 ⇒ `spearman 0.4902` ⇒ **FAIL**；② 把第 17 行（human=2）改成 5 ⇒ `spearman 0.5265` ⇒ **FAIL**；③ 反向：把这 2 行的 **`llm_score` 改成 0**（即 judge 在唯一可判别的地方完全打错）⇒ 仍然 **PASS**（`spearman 0.7315`）—— 因为秩相关只看排序，不看量级。⇒ 结论：**整个 PASS 压在 6.7% 的样本上，且对「量级完全错」不敏感**（与 #7 同类的分布退化，但成因不同：#7 是 gold 造不出中间档，这里 28 个 5 是**真实人工判断**，说明系统输出普遍好，**不能当成数据缺陷去改**） | 🔵 **只披露，不擅自改**：不改阈值（`CALIBRATION_THRESHOLDS` 是「预先约定标准」的落点）、不改人工分（改它=伪造标注）。论文里应把校准表述为「30 条中 28 条人机完全一致；其余 2 条 judge 排序正确」，**不要**引用 `spearman=0.7321` 当「judge 与人工秩相关良好」的证据。是否给报告加一行「非众数占比」露出 = **待裁决 D6** |
-| 20 | **Phase 1.5 的 §4「L3 闸门」从未执行，且按当前语料无法执行**（此前**未登记**，两份台账里一条记录都没有） | §4 冻结的判定规则问的是「真题缺失是不是低质量回答的**主要因果原因**」，并指定测据：`question_id_recall@k` · `answer_availability` · `final_quality` + `primary_failure` 分布。实测：① gold 侧**有**标注 （`verify_cases` demo 15/15、probes 10/10、probes_phase1 10/10 都填了 `expected_question_ids`）；② **语料侧没有** `question_id` —— 扫 `questions` 集合的 metadata（50 个键）无任何 `question*`/`qid*` 字段；③ 归档里 `question_id_recall` 字段**出现 0 次**，只有代理指标 `exam_hit`（194 条记录：True 69 / False 125）。⇒ `question_id_recall@k` **不是「没跑」，是「算不出来」**：检索结果里没有可与 gold `expected_question_ids` 对齐的字段。★ 这也解释了 P3 为什么保留 `question_id_recall` / `question_id_hit` / `exam_rank` 三个零调用函数 —— 它们就是为 §4 预留的，**接口在、数据源不在** | 🔵 **只披露，不擅自动**：补齐要 ①ingest 时把 `question_id` 写进 metadata ②**全量重建索引** ③重建即改变检索侧指纹 ⇒ 触发新版本锚点 + 四路由门禁重跑（`EFFECT_PLAN §11` 的「时间紧」退路正是 「L2/L3 全走披露、不修」）。⇒ 建议：论文里把 §4 明确写成**未判定**（附上述三点证据），或按 §11 走披露退路；**不要**引用 `exam_hit` 冒充 `question_id_recall` 回答 §4 的问题 |
+| 20 | **Phase 1.5 的 §4「L3 闸门」从未执行，且按当前语料无法执行**（此前**未登记**，两份台账里一条记录都没有） | §4 冻结的判定规则问的是「真题缺失是不是低质量回答的**主要因果原因**」，并指定测据：`question_id_recall@k` · `answer_availability` · `final_quality` + `primary_failure` 分布。实测：① gold 侧**有**标注 （`verify_cases` demo 15/15、probes 10/10、probes_phase1 10/10 都填了 `expected_question_ids`）；② **语料侧没有** `question_id` —— 扫 `questions` 集合的 metadata（50 个键）无任何 `question*`/`qid*` 字段；③ 归档里 `question_id_recall` 字段**出现 0 次**，只有代理指标 `exam_hit`（194 条记录：True 69 / False 125）。⇒ `question_id_recall@k` **不是「没跑」，是「算不出来」**：检索结果里没有可与 gold `expected_question_ids` 对齐的字段。★ 这也解释了 P3 为什么保留 `question_id_recall` / `question_id_hit` / `exam_rank` 三个零调用函数 —— 它们就是为 §4 预留的，**接口在、数据源不在** | 🔵 **只披露，不擅自动**：补齐要 ①ingest 时把 `question_id` 写进 metadata ②**全量重建索引** ③重建即改变检索侧指纹 ⇒ 触发新版本锚点 + 四路由门禁重跑（`EFFECT_PLAN §11` 的「时间紧」退路正是 「L2/L3 全走披露、不修」）。✅ **已裁决（D7，2026-10-07）：按 §11 走披露，不补 `question_id`、不重建索引。** 论文口径固定为：「§4 的判定**未做出**（既不是『是』也不是『否』），原因是判据所需的 `question_id_recall@k` 在当前语料下不可计算」，并附上述三条证据；**禁止**用代理指标 `exam_hit@k` 冒充 `question_id_recall` 去回答 §4 的因果问题 （`exam_hit` 只说『top-5 里有没有真题块』，不说『是不是当年那道题』） |
 | 21 | **我自己 #4 的修复从未生效**：同一条主指标存在**两套实现**，落盘用的是旧的那套 | `memory_scorer.MemoryJudgement.correct_use` 在 #4 改成「按样本极性分定义」，但 `runner.CaseRecord` 上**另有一个同名 property** 仍是旧三元 AND（`retrieved ∧ used ∧ correct`），而 `to_dict()` 用的正是那个 property ⇒ 极性版从未写进归档、`report.py` 读的也是旧值。★ 实测：报告对 `phase1_memory_step5_store_on` 印 `correct_use = 2/6 = 0.333`，而 #4 之后应为 **4/6 = 0.667**；两份归档里 `mem-004`/`mem-005` 两条负样本全被旧公式记 False。而 ③d~③h 当时全绿 —— 因为它们测的是 scorer 的**函数**，没测「函数结果如何被写出」（正是「只测 helper、不测接线」那一类） | ✅ **已修（本轮）**：公式收敛到 `metrics.memory_correct_use()` 一处；`memory_correct_use_from_record()` 从**原始字段**推导 ⇒ 旧归档也能按现口径重渲而**不改写归档**；`CaseRecord.memory_correct_use` 由 property 改为字段、由 scorer 写入。护栏 **⑱a~⑱e**（⑱a 用报告路径复现 4/6、⑱b 逐条断言两套账一致、⑱c 反向「同一负样本旧 False / 新 True」、⑱d 走真实 `_apply_memory_judgement` 验接线、⑱e 正样本未召回必须 False，防「修复」退化成负样本一律放行）。★ **连带更正**：#4 里写的「ON 组 correct_use 2→4（0.333→0.667）」当时只有手工重算成立，**报告路径并未产出该数**；现在两者一致 |
 | 22 | **正样本可能天然测不到召回**：`MEMORY_WEAK_MIN_HITS=2` 按 **KP 精确名**计 hit，而 A 段两道题落在**不同考点** ⇒ 画像恒空 ⇒ 「0 张卡」不是召回失败而是**样本设计缺陷** | Step 9 实跑：Store ON 的 `mem-002` 两次批改都是 0 分（低分前置条件**满足**），却 `memory_cards=0`、B 段召不回。纯函数复现（零 LLM）：`compute_weak_topics` 喂「图的基本性质 + 图的存储」⇒ `[]`；喂「平衡二叉树 ×2」⇒ `['平衡二叉树']`；一道题给两个 KP ⇒ 各 1 hit ⇒ 仍 `[]`。★ 取证曾不可能：工具回文 `format_grading_for_chat` 只输出 评分/结论/错因，**不含 KP**，而 harness 跑完就把 Store 清了 | ✅ **已修（本轮，取证通道 + 判据）**：`run_sessions` 在**清理之前**读出 episodes 落进 `CaseRecord.episodes`（`topic/score/knowledge_points/type`）；护栏 **⑲a~⑲e**（⑲d 用最小假 store 驱动**真实** `run_sessions` 验接线，⑲e 把读到的 episodes 直接喂聚合复现同一条链）。⇒ 剩下的属**样本设计决策**（A 段改成同一考点 / 按章聚合 / 只披露）= **D8** |
+| 23 | **检索链上有一层「实现了但从未开启」**：`verifier` 的 LLM 相关性校验层，全仓 **24 处调用一律 `use_llm_verify=False`** ⇒ 该层对最终指标**没有任何贡献证据** | `retriever.py:377/403` 在 `use_llm_verify=True` 时会 `await _arun_llm_relevance_check(...)`（⇒ §20.5.2 已纠正审计件把它称作的「死代码」：它是**接了线的开关**，不是死码）。但实测所有调用点（`agents/tools.py`、`evaluation/adapters.py`、`retrieval_gate`、`task_eval/retrieval_probe` 及 `scripts/` 下 20 个实验脚本）都传 `False`；全仓 `use_llm_verify=True` **出现 0 次** ⇒ 这一层今天实际不执行 | 🔵 **已裁决（D10，2026-10-07）：承认未验证并披露，不跑消融、也不删。** 论文里检索章描述该层时必须写「已实现，**默认关闭且未做消融**，本文所有检索数字均不含该层的贡献」；❌ 不得写成「相关性校验提升了检索质量」（无证据）。不删的理由：删要连 `use_llm_verify` 参数一起动，波及 20+ 脚本的签名，收益只是少一段不调用的代码 |
+| 24 | **paired control 的 OFF 臂从未真正关掉 Store**：旧实现只置 `agent.store = None`，而 `teaching_graph.load_memory` 与 `remember._record_episode` 都在**调用时**取进程级 `get_store()`、根本不看 `agent.store` ⇒ 两组是同一条件，**Step 5 起的「ON 有卡 / OFF 无卡」对照一直是假的** | 直接证据就在归档里：`phase1_memory_step5_store_off_step9_d8.jsonl` 的 `mem-002`（`store_enabled=False`；user_id 每 case 带随机后缀 ⇒ **不可能**是别的 case 残留）：A 段两次批改 `scores=[0.0, 0.0]`，B 段**注入了记忆卡**「薄弱：图的存储」，回复「根据你的做题记录，薄弱点在「图的存储」」⇒ 写链与读链都没关。★ **两个缺陷互相掩盖**：Step 5 当时 OFF 显示「0 卡 0 召回」被当作对照生效的证据，那其实是 #22（画像恒空 ⇒ 谁都召不回）造成的假象 —— 修好 #22 之后 OFF 才露出「照样有卡」。该记录的 `episodes=[]` **不能**当反证：OFF 臂 `eff_store=None`，取证通道压根没读 | ✅ **已修（本轮）**：抽成 `_off_arm_disable/_off_arm_restore`，**两处一起摘**（`agent.store` + `set_store(None)`），并在 `finally` **最前**恢复 —— 进程级那条忘恢复 ⇒ 之后所有 case **静默**失去记忆且不报错，比不恢复 agent 严重得多。护栏 **㉒a~㉒e**（㉒a/㉒b 按构造断言 ON/OFF 轮内 `get_store()` 的**实际值**；㉒c 锁恢复；㉒d 锁 notes 自证控了什么变量；㉒e 锁护栏自身不污染进程）。★ 连带把 **⑦b/⑦c 从源码文本断言改成行为断言**：抽 helper 后它们立刻变红，正好演示了那类断言的脆弱（**代码搬家、行为没变、红灯却响**）；反向验证 = 把 `_off_arm_disable` 临时换成旧实现 ⇒ ⑦b 必然红（实测 `tamper_red=True restored_green=True`，脚本为一次性件、未入库）。⇒ **既有 OFF 组的对照证据作废**，须用修好的 OFF 重跑（`step9_d8b`，见 §20.8.6） |
+| 25 | **批改会把「作答正确」的题判成低分**（方向与缺陷 A 相反：不是把错题判满分，而是**把对题判零分**） | 实测 `phase1_memory_step5_store_on_step9_kp.jsonl` 的 `mem-003` 第 1 题：「判断序列 5, 8, 12, 19, 28, 20, 15, 22 是否构成小根堆，我认为构成」⇒ 逐层校验（1-based：5≺8,12；8≺19,28；12≺20,15；19≺22）**无违例、确为小根堆**，学生答对；批改却输出 **0.0 分**、KP 归到 `['堆排序','二叉树']`。★ 判定用的是当场写的 12 行堆校验器（`违例=[]`），不是人工肉眼 | 🔵 **只披露，不擅自改产品**。三点边界：① **单次观察**（Step 9 三次重复里只有这一处方向错），不足以定「批改普遍过严」；② **不进任何已发表指标** —— 该题只存在于 `memory` case，`grade` 的 15 条另有 `verdict_agreement`（13/13）覆盖；③ 原 §20.8.3 把它**误记**成「错题被判 100 分」，该归因已作废（那 100 分是判对的，错在 gold 要求两次都低分 ⇒ 属 D8/#26 的 case 设计问题）。是否值得为它扩评测集 = 后续决定，本轮不动 |
+| 26 | **`recalled` / `used` 用子串包含判定，而正样本的 gold `values` 写的是章名** ⇒ 「召回成功」这句话偏松：任何含该字的记忆卡都算命中 | 口径写在 `memory_scorer` 顶部（`recalled_actual = 任一 card 含 values 中任一值`）。旧 `mem-002` 的 values = `["图"]`，而实测卡面是「薄弱：**图**的存储」⇒ 靠子串通过；`mem-003` 的 `["排序"]` 会被「快速排序 / 希尔排序 / 堆排序」**任一**满足 ⇒ 「召回成功」**测不出「召回的是不是设计的那个薄弱点」** | ✅ **已收紧（D8 第三次）**：两条正样本的 `values` 改为具体考点（`图的存储` / `快速排序`；改前核对两值均在 `canonical_names()`，`task_eval sanity` 复跑 **ERROR 0**）⇒ 正样本现在断言精确薄弱点。★ **子串口径本身不改**：记忆卡是自由文本「薄弱：X」，改全等会把排版差异也算成未召回（另一种错）。★ **负样本刻意保留章名**（`mem-005`/`mem-006` 的 `["图"]`）：对 `should_be_recalled=False` 来说偏松匹配让它**更难通过**（方向保守），无假通过风险 ⇒ 不动。指纹 `ffcf2b3233fc5595` → `3c938365da7ce614`（§20.0） |
 
 ### 20.5.1 ★ Generate 主指标解剖（#2 的取证，2026-10-07）
 
@@ -1115,7 +1126,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 项 | 实测状态 | 处置 |
 |---|---|---|
 | `memory/vector_search.asearch_episodes` | **真死**：全仓零调用，只在 `memory/__init__` 导出 | ✅ **已删**（模块文件 + 两行导出）。护栏 **⑮a/⑮b**：⑮b 用 **AST** 扫 import / 名字引用 —— 第一版用「文件文本里有没有这个词」，结果**扫到护栏自己**（注释里就写着这个函数名）⇒ 假红灯，已改；植入一个 `from memory.vector_search import asearch_episodes` 的探针文件后 ⑮b 确实变红（证明它会咬） |
-| `rag/verifier._arun_llm_relevance_check` | **不是死代码**：`retriever.py:377/403` 在 `use_llm_verify=True` 时会 `await` 它；只是**全仓 24 处调用都传 `False`** ⇒ 「接了线但没人开的开关」 | 🟡 **保留，建议接线做一次消融**（开 / 关各跑一遍检索门禁，回答「LLM 校验层有没有贡献」）。★ 不删的理由：删要连 `use_llm_verify` 参数一起动，波及 20+ 脚本的签名 |
+| `rag/verifier._arun_llm_relevance_check` | **不是死代码**：`retriever.py:377/403` 在 `use_llm_verify=True` 时会 `await` 它；只是**全仓 24 处调用都传 `False`** ⇒ 「接了线但没人开的开关」 | 🟡 **保留。★ 已裁决（D10）：不做消融，改为披露** ⇒ 登记为偏离 **#23**（「实现了但从未开启，本文检索数字不含其贡献」）。不删的理由：删要连 `use_llm_verify` 参数一起动，波及 20+ 脚本的签名 |
 | `service.py:89` handoff 过滤 | **by-design 惰性**，且源码注释已自陈「没有活路径…属有备无患，勿据此认为系统依赖它」 | ✅ **不动**（已如实披露；改掉反而丢信息） |
 
 ⇒ §7.1 的口径应读作「**1 删 / 1 做消融 / 1 已披露**」，而不是三处一刀切删除。
@@ -1153,10 +1164,12 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 「`forbidden_values` 应校验是否 canonical」是错的规则（它是回复文本里的自由词，不是 KP 名）。
 **#13**（tool call 缺失 ⇒ 无原文可救）与 **#18**（gold 数据集本体未入版本控制）**只披露、不擅自修**。
 第三批落 **D1/D3/D4** 三项决定：#2 主指标改逐题聚合（⑭ 6 项）、§7.1 三处「死代码」按实测**只删真死的那一条**（另两条一条是「接了线没人开的开关」、一条注释已自陈惰性，见 §20.5.2）、record 落 `prompt_set_version`（⑮ 6 项）。
-Gate **148 项全绿**（101→116→128→129→134→138→148：③s~③u、⑩e/⑩f、⑬、⑭、⑮、③j+、⑯、⑰、⑱、⑲）、`pyrefly` **0 errors**、ruff check/format 通过、
+Gate **162 项全绿**（101→116→128→129→134→138→148→157→**162**； increments：③s~③u、⑩e/⑩f、⑬、⑭、⑮、③j+、⑯、⑰、⑱、⑲ 到 148，**⑳ 4 + ㉑ 5 = 157**（`6e71fed` 已记，本节当时漏同步）、**㉒ 5 = 162** 本轮）、`pyrefly` **0 errors**、ruff check/format 通过、
 `task_eval sanity` 66 条 ERROR 0、两份归档 12 条 validity **逐条不变**（新 gold 不动已发表数字）。
 
-**22 条已知偏离**全部登记；**#2 已由 D1 定夺并落地（2026-10-07）**：主指标 = 逐题「适用项全过」**0.80**，项级池化 0.9423 降级为诊断（护栏 ⑭）。
+**26 条已知偏离**全部登记；**#2 已由 D1 定夺并落地（2026-10-07）**：主指标 = 逐题「适用项全过」**0.80**，项级池化 0.9423 降级为诊断（护栏 ⑭）。
+★ **#24 是 Step 9 之后新登记的**：paired control 的 OFF 臂从未真正关掉进程级 Store ⇒ **既有 OFF 组的对照证据全部作废**，须用修好的 OFF 重跑（§20.8.6）。
+★ **#25/#26 是同批次复核时新增的**：#25 更正了 §20.8.3 的一处**误归因**（批改其实把对题判成了 0 分，不是把错题判成 100 分）；#26 是 D8 改 case 过程中发现的「正样本 values 写章名 ⇒ 召回判定偏松」，已把两条正样本收到具体考点。
 —— **#2 的解剖与采纳状态见 §20.5.1**（核心结论：五项里只有
 `correctness` 与 `coverage` 有区分力；8 个 `coverage` N/A **疑似旧索引**产物——全量扫描显示四个学科集合
 KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块），但归档未存每块来源 ⇒ **待 Step 9 定论**；
@@ -1270,10 +1283,23 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块），但
    同一函数喂「同一 KP 两次」立即得到 `['平衡二叉树']`（护栏 ⑲a/⑲b），
    ⇒ 不是聚合坏了，是**样本假设「同章不同考点会累计」与 `MIN_HITS=2` 按精确名计 hit 不符**。
 
-**Store OFF 臂**：三条正样本的 `episodes` 全为 **0 条**（无 store ⇒ 无写入），
-`memory_cards=0`、`recalled_actual=False` ⇒ 对照侧干净；但注意这也意味着
-「OFF 侧未召回」在正样本上是**平凡真**（压根没东西可召回），它证明的是
-「召回不可能凭空来自别处」，不是「OFF 也会召回」的反证。
+**★ 归因 #2 的更正（2026-10-07 D8 二次修正时复核，原判**不成立**）**
+原判「错题被判 100 分（缺陷 A 的现存症状）」搞反了方向。逐题复核：`mem-003` 第二题「对
+49, 38, 65, 97, 76 以 49 为枢轴做一趟划分，我写成 38, 49, 65, 97, 76」—— 用教材 Hoare 双指针
+复算的结果**正是** `38, 49, 65, 97, 76` ⇒ **学生答对了，模型判 100 分是判对的**；错的是 gold
+要求「两次都 <60」⇒ **前置条件天然不可满足**（case 设计错，见 §20.0 指纹第三次漂移）。
+同一批归档里**真正的**误判是反方向的、且只有一处：`mem-003` 第一题「序列 5,8,12,19,28,20,15,22
+是否构成小根堆，我认为构成」—— 逐层校验该序列**确实是小根堆**（无违例），却被判 **0 分**。
+⇒ 症状应记为「**批改把正确作答判成低分**（过严）」，而不是「把错题判满分」。
+这条与 #13（tool call 缺失 ⇒ 无原文可救）无关，也不在缺陷 A 的既有形态里 ⇒ **新增登记为 #25**。
+
+**Store OFF 臂**：三条正样本的 `episodes` 全为 **0 条**，`memory_cards=0`、`recalled_actual=False`
+⇒ 当时读作「对照侧干净」。
+**★ 该结论已被 #24 作废**：① `episodes=0` 是**取证通道没读**（OFF 臂 `eff_store=None`），不是
+「没写入」的证据；② 修好 OFF 臂后重跑（`..._step9_d8.jsonl`，OFF 侧 `mem-002`）**照样注入记忆卡**
+⇒ 那三次重复里 OFF 与 ON 是**同一条件**，「对照侧干净」不成立。
+另需说明：即便当时的 0 卡为真，它在正样本上也是**平凡真**（#22 让画像恒空 ⇒ 谁都召不回），
+证明不了「召回不可能来自 Store 之外」⇒ **OFF 对照必须用修好的接线重做**（§20.8.6）。
 
 **结论（论文该怎么写）**
 
