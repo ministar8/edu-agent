@@ -1,0 +1,34 @@
+{
+  "_comment": [
+    "真题 answer_key 人工核验修正表（评测侧覆盖，**不改 KB 原文**）。",
+    "为什么需要：knowledge/exams/*/items.md 的 answer_key 来自扫描（explanation_status: scan、",
+    "third_party），实测 24% 缺失（answer_key: null）+ 15 条抽样中 5 条错误（33%）。",
+    "若不修正，Grade 的 score_tolerance 测的是「gold 质量」而非「系统能力」。",
+    "为什么放评测侧：items.md 同时是**检索语料**，改它会影响 retrieval（动检索链）；",
+    "本表只被 evaluation.task_eval.assets 读取，仅影响评测的 gold，不触碰 KB 与检索。",
+    "核验人：AI 逐条判定（408 领域常识题），2026-10-06。",
+    "格式：question_id -> {answer_key, note}"
+  ],
+  "corrections": {
+    "2009-Q11": {
+      "answer_key": "C",
+      "note": "源数据写 D（指令和数据所在的存储单元）。正确答案是 C：CPU 靠**指令周期的不同阶段**区分（取指周期取指令、执行周期取数据）。"
+    },
+    "2010-Q40": {
+      "answer_key": "B",
+      "note": "源数据写 A（一条、一条）。递归查询下用户主机发 1 条，本地域名服务器替其以迭代方式发**多条** ⇒ 一条、多条。"
+    },
+    "2011-Q23": {
+      "answer_key": "B",
+      "note": "源数据写 C（时间片轮转）。短任务优先且不饥饿的是**高响应比优先**（响应比随等待时间上升）。"
+    },
+    "2011-Q33": {
+      "answer_key": "A",
+      "note": "源数据写 D（有连接可靠虚电路，那是传输层 TCP 的特性）。TCP/IP 网络层（IP）提供**无连接不可靠的数据报服务**。"
+    },
+    "2010-Q20": {
+      "answer_key": "D",
+      "note": "源数据写 A（含 CRT，非总线标准）。ISA/EISA/PCI/PCI-Express **均为总线标准** ⇒ D。"
+    }
+  }
+}
