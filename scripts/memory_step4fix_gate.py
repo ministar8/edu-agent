@@ -370,6 +370,43 @@ def check_3() -> None:
         category_hit("kexue_not_exists", ["computer_network"]) is None,
     )
 
+    # ③j+ ★ 全体扫描（2026-10-07 补）：`cn` 这类漏洞的本质是「数据集里出现的学科码，
+    #   映射表不认得」—— 单点断言防不住**下一个**新码。故扫遍 `evals/datasets/` 全部
+    #   jsonl，取出实际出现过的学科码，逐个要求：① 能在 `SUBJECT_TO_CATEGORY` 里查到
+    #   （查不到 = 该 case 的 `category_hit` 会静默变 N/A，等于悄悄减少样本）；
+    #   ② 用映射到的真实类目自测必须 True（自测 False = 恒不命中，正是 `cn` 的老 bug）。
+    import json as _json
+
+    from evaluation.retrieval_gate import SUBJECT_TO_CATEGORY
+    from evaluation.task_eval.metrics import _SUBJECT_ALIASES
+
+    codes: set[str] = set()
+    for f in sorted((ROOT / "evals" / "datasets").rglob("*.jsonl")):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                obj = _json.loads(line)
+            except _json.JSONDecodeError:
+                continue
+            if isinstance(obj, dict) and obj.get("subject"):
+                codes.add(str(obj["subject"]))
+    unmapped = sorted(
+        c for c in codes if SUBJECT_TO_CATEGORY.get(_SUBJECT_ALIASES.get(c, c)) is None
+    )
+    selfmiss = sorted(
+        c
+        for c in codes
+        if (w := SUBJECT_TO_CATEGORY.get(_SUBJECT_ALIASES.get(c, c))) is not None
+        and category_hit(c, [w]) is not True
+    )
+    check(
+        "③j+ 数据集里出现过的每个学科码都「可测且自命中」（防下一个 cn）",
+        bool(codes) and not unmapped and not selfmiss,
+        f"码={sorted(codes)} 未登记={unmapped} 自测不命中={selfmiss}",
+    )
+
     # ── ③l~③n Grade 的两极 gold（2026-10-07 修 #7）──
     #   实测 0B 的 human_score 分布 = {100: 8, 0: 7} ⇒ `score_tolerance` 报 1.000
     #   只证明"模型跟着说了 0/100"。必须置为不可判，且**不能把被隐藏的原始值弄丢**。

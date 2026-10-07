@@ -37,7 +37,7 @@
 | 命令 | 成本 | 说明 |
 |---|---|---|
 | `PYTHONPATH=src uv run python -m evaluation.task_eval sanity` | 零 LLM | Gold 体检（canonical / 可机械判定 / gold 泄漏 / 任务专有）。**进 0B 前必跑，有 ERROR 不得跑** |
-| `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step4fix_gate.py` | 零 LLM | **现 128 项**全绿：⑭ Generate 主指标改逐题「适用项全过」（含「两口径必须分叉且池化偏高」的方向性判据）/ ⑮ 死代码删净（AST 级）+ record 落 `prompt_set_version`（反向验证值必须是活的）/ ⑦ paired control 接口 / ⑧ 示例名 canonical / ⑨ 抗格式飘移 / ⑩ context-fallback（含 ⑩e 并发隔离、⑩f 显式 config 契约）/ ⑪ topic 归一 / ⑫ 词表同源（含 ⑫i 双读、⑫k 根节点双向）/ ⑬ 重判归因保全 + jsonl 尾换行 + 负样本前置条件 / ③a~③u 评测器口径（含两极 gold 不可判 + `verdict_agreement` + 分数解析遮蔽「满分」） |
+| `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step4fix_gate.py` | 零 LLM | **现 129 项**全绿（含 ③j+ 学科码全体扫描）：⑭ Generate 主指标改逐题「适用项全过」（含「两口径必须分叉且池化偏高」的方向性判据）/ ⑮ 死代码删净（AST 级）+ record 落 `prompt_set_version`（反向验证值必须是活的）/ ⑦ paired control 接口 / ⑧ 示例名 canonical / ⑨ 抗格式飘移 / ⑩ context-fallback（含 ⑩e 并发隔离、⑩f 显式 config 契约）/ ⑪ topic 归一 / ⑫ 词表同源（含 ⑫i 双读、⑫k 根节点双向）/ ⑬ 重判归因保全 + jsonl 尾换行 + 负样本前置条件 / ③a~③u 评测器口径（含两极 gold 不可判 + `verdict_agreement` + 分数解析遮蔽「满分」） |
 | 同上 `scripts/memory_step4_gate.py` | 零 LLM | 14 项：每 case 独立 `user_id` + 跑前清理 Store（含反向验证） |
 | 同上 `scripts/memory_step2_gate.py` | 2 次批改 LLM | 11 项：批改 → KP → episode → `weak_topics` → 记忆卡 全链路 |
 | 同上 `scripts/memory_e5_probe.py` | 12 次批改 LLM | ★ **测量，不是门禁**（退出码恒 0）：配对对照「词表版 vs 8 示例版」的跟随率。`--reanalyse --write` 可**零成本**用新 gold 原地重析 |
