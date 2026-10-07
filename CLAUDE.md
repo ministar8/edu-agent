@@ -107,7 +107,7 @@ docker compose up --build                # 容器化启动
   **必须本机手动重跑** `scripts/memory_step*_gate.py`（带 `PYTHONIOENCODING=utf-8`）。
 - **保留**的自研门禁：`evaluation.retrieval_gate` / `probe_gate`（检索）+ 上述 Memory Gate（效果）。
 - 检索数字的版本归属见 `docs/EXPERIMENTS.md` §18（`V-2026-10-02`），
-  效果数字见 **§20**（`V-2026-10-07`，标签待打）；两处都列了「已知偏离」，引用前先核对归属矩阵。
+  效果数字见 **§20**（`V-2026-10-07`，标签对象 `abc115b` → 落点提交 `0f24891`）；两处都列了「已知偏离」，引用前先核对归属矩阵。
 
 ## 注意事项
 
