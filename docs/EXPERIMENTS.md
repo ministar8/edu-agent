@@ -1059,6 +1059,8 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 29 | **护栏自己不合格**：㉑c 把 `EMBEDDING_API_BASE` 留在死端口、㉑b 是弱预言、`scripts/` 从来不在 pyrefly 范围内（新写的 ㉒ 里就有一个真类型错） | ① `check_21` 的 `㉑c` 在原 `finally` **之后**改 settings 却只还原 `USE_FAKE_EMBEDDING` ⇒ 跑完 `EMBEDDING_API_BASE=http://127.0.0.1:1`（实测），同进程后续任何 embedding 调用都会 ConnectTimeout。今天没造成红灯**只是因为 ㉑ 后面恰好只剩 ㉒**（不碰 embedding）—— 而「护栏全绿但它描述的路径已不可达」正是本仓反复踩的那一类。② `㉑b` 写的是 `len(probs2) >= 1`，标题却声称「两条路径不互相掩盖」⇒ 删掉 health 那一支它照样绿。③ `pyproject.toml` 的 `project-includes = ["src"]` ⇒ `scripts/` 从未被检查；显式跑 `pyrefly check scripts/memory_step4fix_gate.py` 得 14 errors，其中 **`㉒d` 访问 `res_off.notes` 而 `_run()` 的返回注解写成了 `tuple[_SpyAgent, bool]`**（实返 `CaseResult`）—— 即「不污染进程」这套信任基础的类型从没被静态看过 | ✅ **已修（零 token）**：`㉑c` 包进 `try/finally` 两个字段一起还原，并新增 **`㉑c'`「跑完 settings 已还原」**（还原被删 ⇒ 必红）；`㉑b` 改**双向**断言（`不可达` 与 `推理` 两句都必须在）；`HTTPServer` 补 `server_close()`；`_run()` 注解改成它实际返回的形状（`tuple[smoke.CaseResult, bool 或 None]`） ⇒ 该文件 pyrefly 由 14 → **13 errors**（余下 13 条是 scripts 里的历史噪音：langgraph `Checkpoint` TypedDict 键、`sys.path` 注入导致的 `missing-import` 等，**不在本轮范围**，但口径必须改写）。★ 文档纪律：以后写「pyrefly 0 errors」一律注明**范围 = `src/`**，不能说成全仓 |
 | 30 | **护栏的「判据数量」本身不可复现**（I6，与 #29 同属「护栏自己不合格」）：文档与标签里那句「175 项全绿」，在**干净克隆**上其实是「167 项跑过 + 8 项压根没跑」，而 `main()` 照样打印「GATE 通过 · exit 0」 | `⑬l×2`、`⑭d~⑭f`、`⑱a~⑱b`、`⑳d` 这 **8 项**读 `evals/results/task_eval/*.jsonl` 与 `calibration_30.jsonl`；按 **D11** 那些归档刻意不入库 ⇒ 缺文件时旧写法只 `print` 一行 `⏭`、**不进任何计数**，于是总数悄悄变小而退出码不变。★ 这是「**绿灯的数量**不可信」：我们反复防的是「绿而路径不可达」，这次坏的是计数口径本身。实测（一次性篡改脚本，未入库）：把 `check_20` 换成空函数 ⇒ `判定项 171 ≠ 声明 175` 且 exit 1；把 `ROOT` 指向空目录、只跑那四组 ⇒ `⏭` 恰好 **8 项**（另执行 24 项） | ✅ **已修（零 token；选「让数量自己说话」而不是「把归档入库」—— 后者与 D11 冲突）**：新增 `skip()`（跳过必须计数，一个 `if` 挡掉多项时用 `count=`）与模块级 `_EXPECTED_ITEMS = 175`；收尾两条不变量 —— ① 执行数（含跳过）必须等于声明值，② 跳过数必须为 0 —— 任一不满足 ⇒ `_flag()` 置红 + **exit 1**，文案写明「本次不能称为全绿，只能说跑了的那几项绿」。⇒ 新克隆上看到的是一行带原因的红灯，而不是一行更小的绿。★ 维护契约：**加判据必须同步改 `_EXPECTED_ITEMS`**，忘了就红（不靠人记性）。本轮护栏计数不变（仍 **175**，本机 skip=0） |
 | 31 | 对**自己代码**的 review 余下 **12 条 Minor** 的处置：8 修 / 1 删 / 2 留（另 1 条被新护栏取代）——全部零 token | M7 是实测的：同一个「`/health` 404 但 `/embeddings` 正常」的本地桩，旧写法 `problems=['embedding 服务异常 HTTP 404…']`（会把能用的 TEI 拦在门外、`cli` 直接 return 3），新写法 `problems=[]`。护栏 **㉔a~㉔c**（正向 + 反向 + 「负样本用章名不报」三条一起，证明 lint 不是一刀切）、**㉑h**（M7）、**㉔d**（#26 不动已发表数字）；其余 6 条是小改（见处置） | ✅ **修**：M2 `_off_arm_*` 恢复状态改用 `_UNSET` 哨兵（原先 `None` 把「无需恢复」与「恢复成 None」压成一种）；M3 `cli` 打印 `informative_share` 加 `or 0`；M4 `⑳b` 改引用 `CALIBRATION_THRESHOLDS["spearman_min"]` 而不是写死 0.70；M5 `_INFORMATIVE_SHARE_MIN` 改公开名（原先 `cli`/护栏跨模块取私有成员）；M6 `judge.py` 两处过期**行号**引用改成**符号**引用；M7 预检的 health 抱怨只在推理也失败时才计入；M9 护栏的 `HTTPServer` 补 `server_close()`；M10 正样本 `values` 粒度 lint。★ **删**：`㉒d`（它读的是 harness 自己写的 note 文本，突变「OFF 臂什么都不做」时照样绿、措辞一改就假红 ⇒ 是文档不是护栏；note 仍留在 harness 里供报告引用）。**留**：M8（预检沿用产品的 `get_embeddings()` 客户端 ⇒ 不另加短超时；探针必须走产品那条路，最坏 60s 可接受因为它在开跑前且失败即中止）、M12（非 memory 的 record 不存 `grade_scores`/`episodes`；C1 修好后该分支不再影响判定，没有消费者就不扩字段）。⇒ 护栏计数 175 → **179**（`−㉒d` 1、`+㉑h` 1、`+㉔a~d` 4） |
+| 32 | Grade 的「工具未返回 docs」**跨批次落在同两条 case**（`PHASE1_VERIFY.md` TODO-1 的形态升级） | Phase 1 报「批改失败（工具未返回评分结果）」的是 `grd-004`/`grd-011`；本轮 §6 **同一对 case** 报「来源: 未检索到（工具未返回 docs）」，而**同一份归档里评测探针给这两条 query 各 5 条证据、`retrieval_status=ok`、`top_items` 非空** ⇒ 「检索链没结果」这个解释被归档自身否证。其余 13 条 grade 无此措辞 | ⏳ **未修、未确证**（本轮只登记）。归因边界：agent 运行时的工具调用与评测侧探针是**两条独立通道**，探针成功**不能**证明 agent 那次调用成功 —— 要确证仍然只有 TODO-1 写的前提：**per-case tool-call logging**（`tool_calls` 字段对 Grade 15/15 全空、不具诊断性，这条没变）。★ 不做的事：不凭推测改 prompt，也不为了 D16 变绿去放宽判据（D16 实测五任务全 0.000，本行**不影响门槛判定**，只把定性从「偶发」改成「case-specific 可复现」）。⇒ 顺带：`grd-004` 恰是本轮两条 verdict 不一致之一（给 100 而 gold 0）⇒ **无证据时给满分**比「报失败」更值得在答辩上解释 |
+| 33 | Generate 在同一张报告里给出**两个看着打架的数**：主指标 0.733（11/15）与失败率 0.600（9/15），差集是 6 条「4 分但带失败原因」 | 逐条交叉表（零 LLM、直读归档）：`pf=generation_wrong` 的 6 条里有 **3 条适用项全过**（`gen-006`/`gen-014`/`gen-015`，均 fq=4.0）、另 3 条不过；`pf=generation_incomplete` 的 2 条 fq=4.0 **全过**。⇒ 两个数都没错，只是定义不同：主指标 = 逐题机械项 AND（`correctness` 取 `fq≥4`），失败率 = judge 记的首要失败原因非 none | ✅ **只登记口径、不改判据**（改了就不是 §21 冻结的那条门槛）。★ 答辩若问「73% 通过和 60% 失败怎么共存」，答案就是这 6 条。⇒ 本轮 4 条不达的缺陷是**可举证**的，不是 judge 心情：`gen-003` 标准答案第 (4) 问同时写「共 1001 个序号」与「1+600+1=602？」再改口 602；`gen-007` 标准答案说「能聚合为 192.168.8.0/22」、解析却说「严格意义上三者不能合并为单个 CIDR 块」；`gen-009` 标准答案里带「= 3.2？——若按理想流水则 S 趋近 k = 4」；`gen-010` 推导中途自我改写（「地址 8：4」后接「→ 实际为 8」）。⇒ 定性：**题干 + 自相矛盾的答案键**对教学型 agent 是真缺陷，judge 判低分可辩护；同字段 Phase 1 只有 1 条 False ⇒ 存在**批次间翻转**，引用 Generate 数字必须说明单批 n=15 |
 > ★ **#31 的两个意外收获（比修复本身更值得记）**：**① 新 lint 与既有护栏撞车** —— `⑤c` 的 fixture 一直用 `图` 当「canonical **name**（不是 ID）」的正面例子，而新的粒度 lint 判 `图` 是 `domain`、正样本 ERROR ⇒ `⑤c` 当场变红。**发现它的是 #30 那条计数不变量**（`判定项 179 ≠ 178`、exit 1），不是人肉看出的。修的是 fixture 的取值（`图` → `图的存储`，意图不变），**不是**放宽 lint。★ 撞车的根因是两条护栏各自用同一个词表达**不同**的意思（⑤c 说「名字合法」，㉔ 说「粒度够细」）。**② ㉔d 的第一版绑了两个变量** —— 它比「归档值 vs 当前代码重算」，于是立刻红在 `mem-006`：归档 `(T,T,T)` → 当前 `(T,F,F)`，而那是 **#4 已发表**的口径修正（负样本的 `used` 需要召回事实前提），不是 #26 的回归。⇒ 改成「**同一份代码**下，归档 gold vs 当前 gold」，只让 gold 改动说话。教训：**一条判据只能绑一个变量**，否则红灯无法解释；而这条教训本身是被 ① 那套计数机制暴露的。
 
 ### 20.5.1 ★ Generate 主指标解剖（#2 的取证，2026-10-07）
@@ -1506,3 +1508,55 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.task_eval run 
   **不达标就照实写不达标**（Verify 的 ge4 与 grade 的 tool error 当前**预判不达**）。
 - ★ 本锚点之后新增的只有**一个只读诊断脚本** `scripts/s6_baseline_distribution.py`（纯新增，
   没有改动任何既有 `src/`+`scripts/` 文件），⇒ `git diff V-2026-10-08 HEAD -- src scripts` 应只显示该文件新增。
+
+### 22. §6 Final Gate 实测（2026-10-08 实跑 · 只填「实测 vs 门槛」，门槛一字未动）
+
+> **数据来源**：`evals/results/task_eval/phase1_final_gate_20261008.jsonl`（66 条，全部本轮新产出，**未回写任何旧档**）
+> + `evals/results/task_eval/retrieval_gate_final_20261008.log`（检索门禁本轮重跑）。
+> **代码态**：`eb8112f`，且 `git diff V-2026-10-08B HEAD -- src scripts` = **0 行** ⇒ 这一跑就是锚点④的代码态。
+> **门槛全部来自 §21**（定稿早于本次实跑，反循环理由见 §21 首段）。
+> **调用数**（不打管道、逐端点数 POST）：`api.deepseek.com/chat/completions` **255** ·
+> `dashscope/.../chat/completions` **198** ⇒ chat 合计 **453**（§21 的成本参照是 405 ⇒ **+11.9%，本轮未归因**，照实记）；
+> 本地 TEI `/embeddings` **3665**（不计费）；**非 200 响应 0 条**、`env_error` 0 条。
+> ★ **表外的拦路项**：本轮 66 条的 `gold_status` 全是 **draft**，报告头自己印着「含 draft，**不得出论文数字**」
+> ⇒ §7.2 的表格与 §7.3 的 Final Freeze 都必须等**人工审核 gold** 之后才能出。这一步是人的动作，
+> 脚本代签等于伪造审核痕迹（与「不得伪造 `human_score`」同一条纪律）。
+
+| §6 行 | 门槛（§21 冻结） | 实测（本轮） | 判定 | 必须一起说的话 |
+|---|---|---|---|---|
+| QA | ≥80% `final_quality≥4`（分母 = 判了分的 case） | **14/15 = 0.933** | ✅ 达线 | 未判分 0 条 ⇒ 分母就是 15。唯一 `retrieval_miss` 是 `qa-009`（探针 `retrieval_status=empty`） |
+| Generate | ≥75% 逐题「适用项全过」 | **11/15 = 0.733** | ❌ **不达**（差 1 题） | 失败项只有一个：`correctness` 0.733；`structure` / `answerability` / `coverage` 均 15/15、`difficulty` 全 N/A。★ **不是口径造成**：同字段 Phase 1 只有 1 条 False，且当时失败的 `gen-012` 本轮 5.0 通过。★ **也不是截断**：4 条都以 `来源:` 页脚正常收尾，逐条查过（先按截断假设查，被否证）。缺陷原文见 #33；同表「失败率 0.600」与本行并存 ⇒ 定义不同，亦见 #33 |
+| Grade | `verdict_agreement ≥75%` | **13/15 = 0.867** | ✅ 达线 | 本轮 `n/a=0`（Phase 1 那个 n_a=2 别再引用）。两极 gold 的天花板披露不变：`score_tolerance` 仍判**不可测**（`n_distinct_gold=2`，被隐藏的 raw=0.8667）。失败两条**方向相反**：`grd-004` 给 100 而 gold 0、`grd-009` 给 0 而 gold 100 ⇒ 不是单边偏差 |
+| Verify 硬条件 | 仍出题率 = 0 | **0/15**（15 条 `ver_fabricated` 全 False） | ✅ 达线 | §6 里唯一「必须为 0」的行，也正是 Verify 存在的理由；机械判据逐条命中 0 条，与人工读数一致 |
+| Verify L1 | ≥6/15 | **7/15 = 0.467** | ✅ 达线 | 命中 `ver-001`/`004`/`005`/`006`/`008`/`012`/`014`（case_id 已留，可当场翻归档核对） |
+| Verify L1+L2 | ≥9/15（辅助披露，非门槛） | **9/15**（7 + 2） | ✅ 达线 | L2 两条 `ver-011`/`ver-015` |
+| Verify `final_quality≥4` | 诊断（§21 已预判不达） | **0/15** | ➖ 照实写不达 | 与 §21 的论证一致：未达成 case 是 `exam_hit=False` 下的诚实拒答 ⇒ ge4 测的是**检索覆盖**，不是回答质量 |
+| Memory 断言① 配对成立 | `paired_control_verdict` 通过 | **本轮未测** —— 6 条全 `store_enabled=True`（单臂） | ➖ 引 §20.8.6 | §6 整轮不含 OFF 臂 ⇒ 配对证据只有 d8b 两份归档（其代码态早于锚点③，差异仅在评测层与护栏，prompt 未变）。★ 不把「本轮没测」写成「通过」，也不为补这一行现在去打 token：三种历史情形已由护栏 **㉗g** 拿 d8b/d8/kp 真归档做过回归 |
+| Memory 断言② 可追溯 | `memory_traceable` 全真 | **6/6 = 1.000** | ✅ 达线 | 逐轮日志 + 记忆卡通道 + `episodes` 字段 + `store_enabled` 齐备（`episodes=[]` 是合法结果，缺字段才是没测） |
+| Memory 断言③ 分母摊开 | 报告印出分母 | 印出 **正样本 3 / 前置成立 2 / 可追溯 2** | ✅ 达线 | 同段还印 `used=0.400`、`correct=0.200` —— 这两率**混极性**（负样本本就不该 used），引用必须带分母；`correct-use=0.800` 是**极性定义**下的结果（负样本按「未召回 ∧ 未误用」记通过），不是旧三元 AND（#21） |
+| Retrieval | `retrieval_gate` exit 0（各指标不低于 V-2026-10-02，容差 0.02） | **exit 0，9 项全过**，且与 §20.2 的锚点③复现值**逐位相同**：`kp_mrr 0.8048`、`kp_hit@k 0.9103`、`category_hit@1 0.9423`、`kp_annotated 156/156` | ✅ 达线 | `mean_evidence_count=3.9231` 落在 §20.2 记过的抖动带（3.9295 vs 3.9231）⇒ 引用要带抖动。★ 口径披露：门禁把 LLM 拉回**桩**（`USE_FAKE_MODEL=True`）并关语义缓存、用独立 persist dir ⇒ 日志里成排的「结构化输出类型不符 [classify]」是桩的正常产物（分类退回规则），不是故障；这行测的是**纯检索链**、不含 LLM 查询改写，基线也在同一套桩下产出 ⇒ 可比 |
+| hard failure | <5%（分母 = 有效 n） | **0/66**（有效 n=65） | ✅ 达线 | 分子 = 有 `hard_fails` 的 case，本轮一条都没有 |
+| tool error | 任务级 <5%（D16） | **五任务全 0.000** | ✅ 达线 | §21 预判的 grade 13.3% **未复现**；但那两条换了形态、且落在同两个 case ⇒ 见 #32（定性从「偶发」变「case-specific」，根因仍未确证） |
+| provenance | ③ 之后每条 100% 带 5 个字段 | `code_version` / `prompt_set_version` / `retrieval_cfg` / `top_items` / `turn_log` **键存在 66/66、非 None 66/66** | ✅ 达线 | ★ 「值为空」≠「缺字段」：`top_items=[]` 是 `qa-009`/`mem-005` 两条**真实空检索**的结果（`retrieval_status=empty`）；`turn_log=[]` 是单轮任务的合法空值，6 条 memory 各带 2~3 轮。本轮 `prompt_set_version=2f485d2d7ef7`、`code_version=eb8112f` |
+| Docker / TEI | manual：`docker compose up -d` → 预检返回空 | 跑前预检通过（0 条 `env_error`、非 200 响应 0） | ✅（人工项） | 答辩现场要能一键起；半死 TEI 由 ㉑a / ㉑h 拦在开跑前 |
+| 四任务链 | manual：qa / generate / grade / verify 各 1 条 + memory 跨会话 | 五任务全量跑完（各 15/15、memory 6/6）；跨会话实物见 §20.8.6 的 `mem-002` | ✅（人工项） | 演示要能当场指出记忆卡（`MEMORY_CARD_MESSAGE_ID`），否则「有记忆」不可证 |
+
+#### 三个预判 vs 实测（这一节值得记的地方在于：预判可以被推翻）
+
+| §21 的预判 | 实测 | 结果 |
+|---|---|---|
+| Verify 的 `final_quality≥4` 不达 | 0/15 | ✅ 判对 |
+| grade 的任务级 tool error 13.3% 不达 | 本轮 0.000（同两条 case 换了措辞，见 #32） | ❌ 判错 |
+| Generate 达线（历史两批均 12/15 = 0.80） | 11/15 = 0.733，唯一不达的门槛行 | ❌ 漏判 |
+
+⇒ **16 行：13 行达线 / 1 行不达（Generate）/ 1 行诊断性不达（Verify ge4，本就不当判据）/ 1 行本轮未测（Memory 配对）**；
+再叠加表外那条 **gold 全 draft**，就是 §7.2 与 §7.3 之前剩下的全部工作。
+
+#### 引用这一节时的三条硬约束
+
+1. **门槛没有因为结果动过**：§21 定稿于实跑之前（反循环条款见 §21 首段），本节只填实测；Generate 不达就写不达，
+   不回头把 0.75 调成 0.70。
+2. **本轮数字全部出自 draft gold** ⇒ 在 gold 转 `reviewed` 之前，论文表格不得直接引用 §22 的数字，
+   只能引用「已复核的历史值 + 本节达不达成的判定」。
+3. **不覆写旧档**：`phase1_final_gate_20261008.jsonl` 是新增；0B / Phase 1 / d8b 各归档保持原样，
+   历史数字按当时读数引用（#27/D12 的成对读数另见 §20.5.1）。
