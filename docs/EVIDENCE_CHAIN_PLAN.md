@@ -1036,6 +1036,10 @@ git commit -m "feat(eval): predicate registry + 四态 + R5 复合语义（corre
 **Files:**
 - Modify: `src/evaluation/task_eval/report.py:144-162`
 - Modify: `src/evaluation/task_eval/cli.py:295-307`（`_backfill`；Task 3 实测行号，原稿 282-322 已漂移）
+- Modify: `scripts/s6_baseline_distribution.py:65-75`（★ Task 4 探路实测：它也调 `every_item_passes`，
+  不在原稿 Files 里 —— 删旧聚合会把它弄崩，必须一并重指向 registry）
+- Modify: `src/evaluation/task_eval/judge.py:406-413`（★ 实测第三份 `gen_correctness` 本地公式
+  藏在 `apply_judge_to_dict` 里 —— 不切过去，rejudge 与新跑就会分叉出两套口径）
 - Modify: `src/evaluation/task_eval/judge.py:265-279`（`_sync_generate_correctness`）
 - Modify: `src/evaluation/task_eval/metrics.py:432-443`
 - Test: `scripts/evidence_chain_gate.py`
@@ -1051,17 +1055,43 @@ git commit -m "feat(eval): predicate registry + 四态 + R5 复合语义（corre
 
 ```python
 def check_4() -> None:
-    """报告必须只从 registry 取数；旧 `every_item_passes` 不得再被生产代码引用。"""
+    """报告必须只从 registry 取数；旧 `every_item_passes` 不得再被生产代码引用。
+
+    ★ 夹具即 §4.2 事故的形状（checkpoint 4 裁定，替代原稿的空 reply 夹具——
+      空 reply 在旧代码下本就 rate=None，红→绿不可达）：
+      四件套齐全的 reply + 无 gold ⇒ 旧代码 1.000（None 被剔出合取），
+      registry 下 correctness/answerability missing_premise ⇒ 复合 missing_premise ⇒ rate=None。
+    """
     import ast
     import pathlib
 
     from evaluation.task_eval.report import summarize_task
 
+    # 旧式存储布尔（Task 2 之前的归档形状）：旧代码聚合出 1.000；
+    # 同时 reply 四件套齐全 + gold 为空：新 registry 算出 missing_premise。
+    # 两个世界共用这一条 record，红→绿才在 Step 2 前后各占一边。
     recs = [
         {
             "task": "generate",
             "case_id": "g1",
-            "reply": "",
+            "gen_structure": True,
+            "gen_answerability": True,
+            "gen_coverage": True,
+            "gen_correctness": True,
+            "gen_difficulty": None,
+            "reply": (
+                "题目：设 Cache 采用 2-Way 组相联，主存 64 块，Cache 8 行，问组号需要几位。
+"
+                "A. 2
+B. 3
+C. 4
+D. 6
+"
+                "标准答案：B
+"
+                "解析：8 行分 2 路，8/2=4 组，组号需 2 位，因此选 B。"
+            ),
+            "top_items": [{"kp": ["co.overview"]}],
             "gold": {},
             "item_reasons": {},
         }
@@ -1124,6 +1154,13 @@ grep -n "every_item_passes\|delivery_rate" /tmp/ec_callsites.txt
 删除 `metrics.py:418-443` 两个函数。`scripts/memory_step4fix_gate.py` 里引用它们的判据
 **改成引用 registry 的复合**（不是删掉判据 —— 删了会让护栏计数变小，那是 #30 明确禁止的
 「更小的绿」），并同步该脚本的 `_EXPECTED_ITEMS`（数量不变则不动）。
+★ Step 5/6 的两处实测调用点也一并切（都在本 Task Files 里）：
+  ① `scripts/s6_baseline_distribution.py:65-75` 的 generate 分支改调 registry 复合；
+  ② `judge.py:406-413`（`apply_judge_to_dict` 内）的第三份 `fq>=4` 本地公式改调
+     `registry.get("gen_correctness").fn(rec)` —— 不切的话 **rejudge 与新跑分叉成两套口径**，
+     且旧公式正是 #36 登记过的「测的是像不像能用的答案」。
+     切换后 rejudge 产物里 `gen_correctness` 变 `missing_premise`（无 gold）——
+     这是语义修正的预期结果，不是回归；`judge_failure_reasons` 等诊断字段不动。
 
 - [ ] **Step 4: `_backfill` 改为按 registry 重算所有任务**
 
