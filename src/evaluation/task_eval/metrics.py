@@ -450,12 +450,16 @@ def difficulty_of(reply: str) -> str | None:
     return m.group(1) if m else None
 
 
-# ★ 分段名与 `structure_completeness` 用的是**同一批** `_STRUCTURE_*` 常量（本节上方）
+# ★ 分段名与 `structure_completeness` 用的是**同一批** `_STRUCTURE_*` 常量（本节上方）。
+#   `difficulty` 是 Task 5 追加的第五段（`_DIFFICULTY_LINE`，本节上方）：它不是结构要素、
+#   不进 `structure_completeness`，但 gen_difficulty 的契约点名了 `reply#difficulty`，
+#   falsify 的 omit mutation 需要能删掉难度行 —— 分段知识仍然只有 metrics 一份。
 _REPLY_PART_PATTERNS: dict[str, re.Pattern[str]] = {
     "stem": _STRUCTURE_STEM,
     "options_or_task": _STRUCTURE_OPTIONS,
     "answer": _STRUCTURE_ANSWER,
     "explanation": _STRUCTURE_EXPLAIN,
+    "difficulty": _DIFFICULTY_LINE,
 }
 
 
@@ -472,15 +476,34 @@ def strip_reply_part(reply: str, part: str) -> str:
 
 
 def rewrite_reply_part(reply: str, part: str, new_text: str) -> str:
-    """把某个片段换成给定文本（Task 5 的 `dual_answer` / `flip_conclusion` 用）。
+    """替换某个语义片段的**整段**（label + 正文），不是只换 label（Task 5 Step 2.5）。
 
-    ★ 与 `strip_reply_part` 共用 `_REPLY_PART_PATTERNS`：分段知识仍然只有 metrics 一份，
-      falsify 只声明「换哪一段成什么」，不认识正则。
+    `strip_reply_part` 只删 label 是**够用的**（`structure_completeness` 按 label 判存在）；
+    但 rewrite 若也只换 label，旧正文会残留在后面被解析器读到，mutation 就不生效
+    （实测：`flip_conclusion` 后 `analysis_key_of()` 仍返回 B，`gen_analysis_agreement` 保持
+    pass，取证拿不到红）。段边界沿用 `_REPLY_PART_PATTERNS` 的同一批 label：从本 label
+    匹配处开始，到**下一个别的** label 匹配处（或文本末）结束 —— 同名 pattern 的后续匹配
+    是本段的延续（如选项块 A-D 的 B/C/D 行），不是边界。段尾紧邻下一 label 的空白原样
+    保留，避免两段被拼进同一行。
     """
     pattern = _REPLY_PART_PATTERNS.get(part)
     if pattern is None:
         raise ValueError(f"未知的 reply 片段名：{part}")
-    return pattern.sub(new_text, str(reply or ""), count=1)
+    text = str(reply or "")
+    m = pattern.search(text)
+    if not m:
+        return text
+    start = m.start()
+    ends = [
+        hit.start()
+        for name, rex in _REPLY_PART_PATTERNS.items()
+        if name != part
+        for hit in rex.finditer(text)
+        if hit.start() > start
+    ]
+    end = min(ends) if ends else len(text)
+    segment = text[start:end]
+    return text[:start] + new_text + segment[len(segment.rstrip()) :] + text[end:]
 
 
 def answerability_pass(reply: str) -> bool | None:

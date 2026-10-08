@@ -1,0 +1,88 @@
+[
+  {
+    "predicate": "gen_structure",
+    "inputs": [
+      "reply#stem",
+      "reply#options_or_task",
+      "reply#answer",
+      "reply#explanation"
+    ],
+    "all_flipped": true,
+    "no_collateral": true,
+    "no_raise": true,
+    "baselines_pass": true
+  },
+  {
+    "predicate": "gen_answerability",
+    "inputs": [
+      "gold.gold_answer",
+      "gold.gold_source_ref.gold_answer"
+    ],
+    "all_flipped": false,
+    "no_collateral": true,
+    "no_raise": true,
+    "baselines_pass": false
+  },
+  {
+    "predicate": "gen_coverage",
+    "inputs": [
+      "top_items[].kp",
+      "gold.expected_kp"
+    ],
+    "all_flipped": true,
+    "no_collateral": true,
+    "no_raise": true,
+    "baselines_pass": true
+  },
+  {
+    "predicate": "gen_correctness",
+    "inputs": [
+      "reply#answer",
+      "reply#answer",
+      "gold.gold_answer",
+      "gold.gold_source_ref.gold_answer",
+      "reply#options_or_task"
+    ],
+    "all_flipped": true,
+    "no_collateral": true,
+    "no_raise": true,
+    "baselines_pass": true
+  },
+  {
+    "predicate": "gen_difficulty",
+    "inputs": [
+      "gold.expected_difficulty",
+      "reply#difficulty"
+    ],
+    "all_flipped": false,
+    "no_collateral": true,
+    "no_raise": true,
+    "baselines_pass": false
+  },
+  {
+    "predicate": "gen_answer_key_validity",
+    "inputs": [
+      "reply#answer",
+      "reply#answer",
+      "reply#options_or_task"
+    ],
+    "all_flipped": true,
+    "no_collateral": true,
+    "no_raise": true,
+    "baselines_pass": true
+  },
+  {
+    "predicate": "gen_analysis_agreement",
+    "inputs": [
+      "reply#answer",
+      "reply#answer",
+      "reply#explanation",
+      "reply#explanation",
+      "reply#options_or_task"
+    ],
+    "all_flipped": false,
+    "no_collateral": true,
+    "no_raise": true,
+    "baselines_pass": true
+  }
+]

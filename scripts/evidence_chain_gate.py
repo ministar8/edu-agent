@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 21
+_EXPECTED_ITEMS = 26
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -83,7 +84,7 @@ def check_3() -> None:
 
 
 def check_4() -> None:
-    """报告必须只从 registry 取数；旧 `every_item_passes` 不得再被生产代码引用。
+    """报告必须只从 registry 取数；旧 `every_item_passes`/`delivery_rate` 不得再被引用。
 
     ★ 夹具即 §4.2 事故的形状（checkpoint 4 裁定，替代原稿的空 reply 夹具——
       空 reply 在旧代码下本就 rate=None，红→绿不可达）：
@@ -125,15 +126,19 @@ def check_4() -> None:
     )
     check("4b 报告里带出 missing_n", isinstance(rep.gen_case_pass.get("n_a_missing_premise"), int))
 
-    banned = ("every_item_passes",)
+    # ★ Task 4 评审 defer 的两词落点：`delivery_rate` 也在旧副本禁用名单里，且扫描
+    #   从 src/ 扩到 ("src", "scripts") —— 当初逼出这条约束的调用点就长在 scripts 侧，
+    #   只扫 src 等于把教训留在门外。（实测：scripts 侧仅剩 docstring 提及，AST 无命中。）
+    banned = ("every_item_passes", "delivery_rate")
     hits = []
-    for py in pathlib.Path("src").rglob("*.py"):
-        tree = ast.parse(py.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and node.id in banned:
-                hits.append(f"{py}:{node.lineno}")
-            if isinstance(node, ast.Attribute) and node.attr in banned:
-                hits.append(f"{py}:{node.lineno}")
+    for base_dir in ("src", "scripts"):
+        for py in pathlib.Path(base_dir).rglob("*.py"):
+            tree = ast.parse(py.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Name) and node.id in banned:
+                    hits.append(f"{py}:{node.lineno}")
+                if isinstance(node, ast.Attribute) and node.attr in banned:
+                    hits.append(f"{py}:{node.lineno}")
     check("4c 生产代码不再引用旧合取函数", not hits, "; ".join(hits))
 
     import inspect
@@ -148,11 +153,123 @@ def check_4() -> None:
     )
 
 
+def _gen_reply(
+    *,
+    stem: str = "题干：设 Cache 采用 2-Way 组相联，主存 64 块，Cache 8 行，问组号需要几位。",
+    options: str = "A. 2\nB. 3\nC. 4\nD. 6",
+    answer: str = "标准答案：B",
+    explanation: str = "解析：8 行分 2 路，故 8/2=4 组，组号需 2 位……因此选 B。",
+) -> str:
+    """Task 5 的分段夹具：四段拼接，缺省全给（`falsify.apply` 逐段弄坏的原料）。"""
+    parts = {"stem": stem, "options_or_task": options, "answer": answer, "explanation": explanation}
+    return "\n\n".join(v for v in parts.values() if v)
+
+
+def _base_record(**overrides: Any) -> dict:
+    """falsify 的基线 record：四段齐全、答案键与解析结论**自洽**（都指 B）。"""
+    rec = {
+        "task": "generate",
+        "case_id": "falsify-1",
+        "reply": _gen_reply(),
+        "top_items": [{"kp": ["co.overview"]}],
+        "gold": {
+            "gold_answer": "B",
+            "gold_source_ref": {"gold_answer": "knowledge/co/ch3.md#组相联"},
+            "expected_kp": ["co.overview"],
+        },
+        "item_reasons": {},
+    }
+    rec.update(overrides)
+    return rec
+
+
+def _falsify_all() -> dict[str, list[Any]]:
+    """generate 每条判据 × 全部声明 mutation 的一次取证（check_5 与 --emit 共用）。"""
+    from evaluation.task_eval import falsify
+    from evaluation.task_eval.predicates import registry
+
+    preds = registry.for_task("generate")
+    out: dict[str, list[Any]] = {}
+    for pred in preds:
+        base = _base_record()
+        siblings = {q.name: (q, base) for q in preds if q.name != pred.name}
+        out[pred.name] = [
+            falsify.evaluate(
+                pred,
+                base,
+                falsify.apply(mutation=mut, record=base),
+                mutation_input=mut["input"],
+                siblings=siblings,
+            )
+            for mut in falsify.declared_mutations(pred)
+        ]
+    return out
+
+
+def check_5() -> None:
+    """R1-A：声明式 mutation 取证 —— 弄坏契约点名的每个输入，判据必须恰好变红。"""
+    from evaluation.task_eval import falsify
+    from evaluation.task_eval.predicates import registry
+
+    all_results = _falsify_all()
+    # ★ 5a-5d 按 brief 压在 gen_structure 上：它是唯一「夹具能使其 pass」的全 reply# 判据；
+    #   冻结名（answerability/difficulty）基线本就 missing_premise（P-1 未做），
+    #   那是诚实状态，不是夹具能修的前提（其余判据的逐 mutation 结果由 --emit 落盘披露）。
+    p = registry.get("gen_structure")
+    results = all_results[p.name]
+    covered = {r.input for r in results}
+    check(
+        "5a 每个 contract_input 都有声明过的 mutation",
+        covered == set(p.contract_inputs),
+        f"缺 {set(p.contract_inputs) - covered}",
+    )
+    check(
+        "5b 基线为 pass 且弄坏后不 pass（★ 基线本身就是红的话，这条必然红）",
+        all(r.flipped for r in results),
+        str(results),
+    )
+    check("5c 其余判据不受牵连", all(not r.collateral for r in results))
+    check("5d 弄坏后不得抛异常", not any(r.raised for r in results))
+    gaps = falsify.coverage(
+        registry.for_task("generate"),
+        {name: {r.input for r in rs} for name, rs in all_results.items()},
+    )
+    check("5e generate 判据无未覆盖契约输入", not gaps, str(gaps))
+
+
+def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
+    """把取证结果落盘成 ledger 的输入（Task 6 的 `falsify_passed` 读它，不靠人回忆）。"""
+    import json
+    from pathlib import Path
+
+    rows = []
+    for name, results in _falsify_all().items():
+        rows.append(
+            {
+                "predicate": name,
+                "inputs": [r.input for r in results],
+                "all_flipped": all(r.flipped for r in results),
+                "no_collateral": all(not r.collateral for r in results),
+                "no_raise": all(not r.raised for r in results),
+                # ★ baselines_pass 是夹具不变量（基线必须 pass）的落盘形式；
+                #   冻结名此处为 False 属预期（P-1 未做），由 Task 6 按任务语义解读。
+                "baselines_pass": all(r.baseline == "pass" for r in results),
+            }
+        )
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"falsify_latest.json 已写入 {path}")
+
+
 def main() -> int:
     check_1()
     check_2()
     check_3()
     check_4()
+    check_5()
+    if "--emit" in sys.argv:
+        emit_falsify_report()
     total = len(_ITEMS)
     for label, passed, detail in _ITEMS:
         print(f"{'PASS' if passed else 'FAIL'}  {label}{'  ' + detail if detail else ''}")

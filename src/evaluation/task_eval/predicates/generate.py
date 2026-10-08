@@ -80,12 +80,41 @@ def _difficulty(rec: dict) -> Verdict:
     return "missing_premise" if v is None else ("pass" if v else "fail")
 
 
+# 多小问分节痕迹（（1）（2）… 式编号小问）：checkpoint 3 裁定的「混合卷」识别信号之一。
+# 形状与 `_STRUCTURE_OPTIONS` 的（n）分支同源，但语义是**排除门**，不是结构要素。
+_MULTI_PART_MARK = re.compile(r"(?:^|\n)\s*[（(]\s*[1-9]\s*[）)]")
+
+
+def _is_pure_mcq(reply: str) -> bool:
+    """可靠识别：恰有一个 A–D 选项块、恰有一条答案行、且没有多小问分节痕迹。
+
+    依据是 Task 3 标定的实测：15 条真实产物里 14 条是「综合应用+选择+填空」混合卷，
+    答案键/解析结论/难度行在多小问之间互相污染（`answer_keys_of` 10/15 误读、
+    十六进制 41C8 / 单位 4KB / Baud / SYN-ACK 全被当选项字母）。
+    ★ 代价要如实接受：加上这道门之后，机械判据的适用域从 15 条收缩到「真纯选择题」那几条
+      （标定表里只有 gen-002/004/008/011/013/014 等带完整 A-D 选项块的才算，
+       且仍需人工抽查确认不是混合卷）——收缩是**诚实**，不是退化。
+    """
+    text = str(reply or "")
+    if not text:
+        return False
+    # metrics 的抽取正则仍是唯一真源：这里只复用它做**形状**判定，不另写第二套抽取。
+    if metrics._OPTION_LINE.findall(text) != ["A", "B", "C", "D"]:
+        return False  # 恰一个完整 A–D 选项块（缺项/重复/乱序都不可靠）
+    if len(metrics._ANSWER_LINE.findall(text)) != 1:
+        return False  # 恰一条答案行
+    return not _MULTI_PART_MARK.search(text)
+
+
 def _correctness(rec: dict) -> Verdict:
     """§3.1 冻结原文是「gold 判定正确」⇒ 需要外部 gold，且必须带出处（盲标规程）。"""
     gold = rec.get("gold") or {}
     if not gold.get("gold_answer") or not (gold.get("gold_source_ref") or {}).get("gold_answer"):
         return "missing_premise"
-    keys = metrics.answer_keys_of(str(rec.get("reply") or ""))
+    reply = str(rec.get("reply") or "")
+    if not _is_pure_mcq(reply):
+        return "missing_premise"  # checkpoint 3：混合卷答案键不可靠，测不到 ≠ 不合格
+    keys = metrics.answer_keys_of(reply)
     return (
         "pass" if len(keys) == 1 and keys[0] == str(gold["gold_answer"]).strip().upper() else "fail"
     )
@@ -98,9 +127,11 @@ def _answer_key_validity(rec: dict) -> Verdict:
       ① 答案键可解析  ② 键数**恰好为 1**  ③ 该键 ∈ 选项集
     """
     reply = str(rec.get("reply") or "")
+    if not _is_pure_mcq(reply):
+        return "missing_premise"  # checkpoint 3：无可靠选项集 = 没资格谈唯一性，测不到 ≠ 失败
     opts = metrics.option_letters(reply)
     if not opts:
-        return "missing_premise"  # 连选项集都读不出来 = 没资格谈唯一性
+        return "missing_premise"  # 连选项集都读不出来 = 没资格谈唯一性（纯选择题门下不触发）
     keys = metrics.answer_keys_of(reply)
     if len(keys) != 1:
         return "fail"  # 0 个键（没给答案）与多键（A、B 都算对）在这里都是失败
@@ -113,6 +144,8 @@ def _analysis_agreement(rec: dict) -> Verdict:
     ★ 它不证明答案对不对 —— #36 手验 5 道里 2 道客观错、1 道满分漏检就是这件事的证据。
     """
     reply = str(rec.get("reply") or "")
+    if not _is_pure_mcq(reply):
+        return "missing_premise"  # checkpoint 3：混合卷的解析结论被多小问污染，测不到 ≠ 失败
     keys, cited = metrics.answer_keys_of(reply), metrics.analysis_key_of(reply)
     if cited is None or len(keys) != 1:
         return "missing_premise"  # 点不出可比的「键 ↔ 解析结论」= 测不到，不是不合格
@@ -176,7 +209,15 @@ register(
         task="generate",
         tier=1,
         contract_ref="EFFECT_PLAN.md §3.1 内容正确",
-        contract_inputs=("reply#answer", "gold.gold_answer", "gold.gold_source_ref.gold_answer"),
+        # ★ checkpoint 5 裁定（supersede checkpoint 3 的「contract_inputs 不变」字面）：
+        #   纯选择守卫让选项块成为**真实输入**（omit options ⇒ 经 `_is_pure_mcq`
+        #   pass→missing_premise），contract_inputs 必须声明现实依赖，包括经守卫引入的间接依赖。
+        contract_inputs=(
+            "reply#answer",
+            "gold.gold_answer",
+            "gold.gold_source_ref.gold_answer",
+            "reply#options_or_task",
+        ),
         required_when=_required_always,
         fn=_correctness,
         falsifier="dual_answer",
@@ -214,7 +255,8 @@ register(
         task="generate",
         tier=2,
         contract_ref="EFFECT_PLAN.md §3.1 内容正确（机械替身，必要非充分）",
-        contract_inputs=("reply#answer", "reply#explanation"),
+        # ★ checkpoint 5 裁定（同 gen_correctness）：守卫引入的间接依赖必须补实为真实契约输入
+        contract_inputs=("reply#answer", "reply#explanation", "reply#options_or_task"),
         required_when=_required_always,
         fn=_analysis_agreement,
         falsifier="flip_conclusion",
