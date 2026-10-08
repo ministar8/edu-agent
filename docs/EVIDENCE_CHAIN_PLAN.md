@@ -543,9 +543,14 @@ Expected:
 uv run ruff check src/ scripts/ && uv run ruff format --check src/ scripts/ && uv run pyrefly check
 git add src/evaluation/provenance.py src/evaluation/task_eval/runner.py \
         src/evaluation/task_eval/cases.py src/evaluation/task_eval/gold_sanity.py \
-        scripts/evidence_chain_gate.py docs/README.md
-git commit -m "feat(eval): 扩展唯一 provenance 源 + 整包落盘（不再丢弃 script/argv）+ gold 出处字段"
+        scripts/evidence_chain_gate.py docs/README.md evals/datasets/demo/grade_cases.jsonl
+git commit -m "feat(eval): 扩展唯一 provenance 源 + 整包落盘（不再丢弃 script/argv）+ gold 出处字段（含 grade 15 条派生出处）"
 ```
+
+★ **D4 裁定（checkpoint 2 的执行注记）**：原清单漏了 `evals/datasets/demo/grade_cases.jsonl`。
+只提交那六个文件会得到一个**不自洽的树**——干净检出后 sanity 是 ERROR 15，直接违反 Step 5 的
+「ERROR 必须回到 0」。裁 A（数据与代码同一 commit）而非 B（另立 commit，中间态坏）：
+Step 4.5 的出处数据是本 Task 判据成立的组成部分，拆开就等于提交一个已知红灯的中间态。
 
 ---
 
