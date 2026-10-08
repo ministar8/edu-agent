@@ -683,19 +683,27 @@ def is_reply_part(address: str) -> bool:
 
 
 def has_path(rec: object, dotted: str) -> bool:
-    """点分路径的**键存在性**检查。`top_items[].knowledge_points` = 逐元素，任一可达即存在。"""
+    """点分路径的**键存在性**检查。
+
+    `top_items[].kp` = `rec["top_items"]` 是**列表**，逐元素须含 `kp`，任一可达即算存在。
+    ★ 实测修正（Task 3 标定）：原稿把 `x[]` 当「属性 x 已在上一层取到」处理，
+      导致 `x[]` 出现在**首段**时（rec 本身是 dict）恒返回 False ——
+      而 `top_items[].kp` 恰恰就是首段形式，V0 会对它永远报缺键。
+    """
     parts = dotted.split(".")
     cur = rec
     for i, part in enumerate(parts):
         if part.endswith("[]"):
-            if not isinstance(cur, list):
+            name = part[:-2]
+            if not isinstance(cur, dict) or name not in cur:
                 return False
-            head = part[:-2]  # `x[].y` 里 head=x 已在上一层取到，这里通常为 ""
-            target = cur if not head else [getattr(item, head, None) for item in cur]
-            tail = parts[i + 1 :]
+            items = cur[name]
+            if not isinstance(items, list):
+                return False
+            tail = ".".join(parts[i + 1 :])
             if not tail:
-                return bool(target)
-            return any(has_path(item, ".".join(tail)) for item in target)
+                return bool(items)
+            return any(has_path(item, tail) for item in items)
         if not isinstance(cur, dict) or part not in cur:
             return False
         cur = cur[part]
@@ -703,10 +711,26 @@ def has_path(rec: object, dotted: str) -> bool:
 
 
 def drop_path(rec: dict, dotted: str) -> None:
-    """按点分路径删键（falsify 的 `drop_path` op 用）。路径不存在时静默返回。"""
+    """按点分路径删键（falsify 的 `drop_path` op 用）。路径不存在时静默返回。
+
+    列表段（`x[]`）⇒ 对**每个**元素删除剩余路径的键（取证要的是「该证据在整条列表上缺席」）。
+    """
     parts = dotted.split(".")
     cur = rec
-    for part in parts[:-1]:
+    for i, part in enumerate(parts):
+        if part.endswith("[]"):
+            name = part[:-2]
+            if not isinstance(cur, dict) or name not in cur:
+                return
+            items = cur[name]
+            tail = ".".join(parts[i + 1 :])
+            if isinstance(items, list):
+                for item in items:
+                    if tail:
+                        drop_path(item, tail)
+                    elif isinstance(item, dict):
+                        item.pop(name, None)
+            return
         if not isinstance(cur, dict) or part not in cur:
             return
         cur = cur[part]
@@ -965,7 +989,7 @@ metrics.difficulty_of(reply))`，并加两条前置：`gold.expected_difficulty`
 | `gen_answer_key_validity` | `("reply#answer", "reply#options_or_task")` |
 | `gen_analysis_agreement` | `("reply#answer", "reply#explanation")` |
 | `gen_correctness` | `("reply#answer", "gold.gold_answer", "gold.gold_source_ref.gold_answer")` |
-| `gen_coverage` | `("top_items[].knowledge_points", "gold.expected_kp")` |
+| `gen_coverage` | `("top_items[].kp", "gold.expected_kp")`（★ 实测键名是 `kp`：`runner.py:592` 写 `"kp": list(i.knowledge_points)`；checkpoint 3 采纳） |
 | `gen_difficulty` | `("gold.expected_difficulty", "reply#difficulty")` |
 | `gen_answerability` | `("gold.gold_answer", "gold.gold_source_ref.gold_answer")`（人工判定为主 ⇒ 无 gold 即 `missing_premise`） |
 `contract_ref` 一律写 `EFFECT_PLAN.md §3.1 <对应项名>`，`contract_inputs` 写真实字段名。
@@ -978,7 +1002,7 @@ metrics.difficulty_of(reply))`，并加两条前置：`gold.expected_difficulty`
 - [ ] **Step 4: 判据转绿**
 
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
-Expected: `全绿（16 项）`
+Expected: `全绿（17 项）`
 
 - [ ] **Step 5: 找到旧合取的全部调用点（不许凭记忆）**
 
@@ -1001,7 +1025,7 @@ git commit -m "feat(eval): predicate registry + 四态 + R5 复合语义（corre
 
 **Files:**
 - Modify: `src/evaluation/task_eval/report.py:144-162`
-- Modify: `src/evaluation/task_eval/cli.py:282-322`（`_backfill`）
+- Modify: `src/evaluation/task_eval/cli.py:295-307`（`_backfill`；Task 3 实测行号，原稿 282-322 已漂移）
 - Modify: `src/evaluation/task_eval/judge.py:265-279`（`_sync_generate_correctness`）
 - Modify: `src/evaluation/task_eval/metrics.py:432-443`
 - Test: `scripts/evidence_chain_gate.py`
@@ -1235,7 +1259,7 @@ Run 预期：`ModuleNotFoundError: evaluation.task_eval.falsify`。
 |---|---|---|---|
 | `reply#stem` 等 | `reply` 文本内部的语义片段 | gate 的分段夹具（重组 reply，少掉那一段） | **否** —— 由 R1-A 覆盖检查负责 |
 | `gold.gold_answer` 等点分路径 | record 里的真实嵌套键 | `pop` / 置 None | **是**（`has_path()`） |
-| `top_items[].knowledge_points` | 列表元素下的键 | 逐元素删 | **是**（任一路径可达即算存在） |
+| `top_items[].kp` | 列表元素下的键 | 逐元素删 | **是**（任一路径可达即算存在） |
 
 ★ 这张表就是「P0-2 的取证模型」与「P1-6 的 schema 检查」之间的胶水：两边都用同一套地址，
 V0 才不会对 `reply` 内部的片段报「缺键」，R1-A 才不会去 diff 猜输入。
@@ -1390,7 +1414,7 @@ def _base_record(**overrides) -> dict:
         "task": "generate",
         "case_id": "falsify-1",
         "reply": _gen_reply(),
-        "top_items": [{"knowledge_points": ["co.overview"]}],
+        "top_items": [{"kp": ["co.overview"]}],
         "gold": {
             "gold_answer": "B",
             "gold_source_ref": {"gold_answer": "knowledge/co/ch3.md#组相联"},
@@ -2283,7 +2307,7 @@ git commit -m "docs(evidence-chain): 勘误改命令 + 旧归档标 superseded +
 | `gen_structure` 四件套逐个删 | Task 5 `5a`/`5b`/`5c`（`contract_inputs` 全覆盖 + 恰好变红 + 无牵连） |
 | `gen_answer_key_validity` 键 ∉ 选项集 / 两正确项 | Task 3 判据实现 + Task 5 `5e`（registry 里声明 `contract_inputs` 后自动进覆盖检查） |
 | `gen_analysis_agreement` 解析结论反改 | Task 5 `_REPLY_OPS["explanation"]` 的 `flip_conclusion`（基线自洽，红由 mutation 制造） |
-| `gen_coverage` 抹掉一条 `knowledge_points` | Task 7 `7a`（缺键即报，不默认 False）+ Task 5 覆盖检查 |
+| `gen_coverage` 抹掉一条 `top_items[].kp` | Task 7 `7a`（缺键即报，不默认 False）+ Task 5 覆盖检查 |
 | Verify 归因（把 `retrieval_status` 改成 `empty` / `error`） | Task 8 Step 5 的 tier-0 归因门（B7 在同 Task Step 2 先落地）+ Task 7 `required_predicates("verify")` |
 | Memory 三种 `read_status` | Task 8 `8d`/`8e`/`8f`（failed/not_attempted ⇒ None，绝不出 False） |
 | `rerank_status` 注入降级 | Task 9 `9c`/`9d`（degraded ⇒ 派生 False；合法 0.0 分仍 success） |
