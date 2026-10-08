@@ -149,10 +149,15 @@ def preflight_check() -> list[str]:
     if not getattr(settings, "USE_FAKE_EMBEDDING", False):
         base = str(getattr(settings, "EMBEDDING_API_BASE", "") or "").rstrip("/")
         if base:
+            # ★ `/health` 的抱怨先**攒着**：有些 OpenAI 兼容服务根本没有 `/health` 路由
+            #   （实测 404），但 `/embeddings` 完全正常 —— 那种情况下报健康检查失败是**假红**，
+            #   会把一个能跑的 TEI 拦在门外（review M7）。判据：只有推理也失败时，
+            #   健康检查的抱怨才有资格一起进 `problems`（两条一起指认「服务不可用」）。
+            health_problem: str | None = None
             try:
                 resp = httpx.get(f"{base}/health", timeout=5.0)
                 if resp.status_code >= 400:
-                    problems.append(f"embedding 服务异常 HTTP {resp.status_code}：{base}")
+                    health_problem = f"embedding 服务异常 HTTP {resp.status_code}：{base}"
             except Exception as exc:  # noqa: BLE001
                 hint = ""
                 if any(
@@ -160,20 +165,30 @@ def preflight_check() -> list[str]:
                     for k in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
                 ):
                     hint = "（检测到本机设了 HTTP(S)_PROXY；已自动排除 localhost，若仍失败请检查代理配置）"
-                problems.append(f"embedding 服务不可达：{base}（{type(exc).__name__}）{hint}")
+                health_problem = f"embedding 服务不可达：{base}（{type(exc).__name__}）{hint}"
             # ★ 关键的一步：health 通过 ≠ 能推理。真发一次 embedding 请求。
+            infer_problem: str | None = None
             try:
                 from rag.embeddings import get_embeddings
 
                 vec = get_embeddings().embed_query("预检")
                 if not vec or len(vec) < 8:
-                    problems.append(
+                    infer_problem = (
                         f"embedding 返回异常向量（维度={len(vec) if vec else 0}）：{base}"
                     )
             except Exception as exc:  # noqa: BLE001
-                problems.append(
+                infer_problem = (
                     f"embedding **推理**失败（`/health` 可能仍是 200，别只看健康检查）：{base}"
                     f"（{type(exc).__name__}: {str(exc)[:120]}）"
+                )
+            if infer_problem is not None:
+                if health_problem is not None:
+                    problems.append(health_problem)
+                problems.append(infer_problem)
+            elif health_problem is not None:
+                logger.info(
+                    "预检：%s —— 但推理探针成功，判为无 `/health` 路由的兼容服务，不计为问题",
+                    health_problem,
                 )
     return problems
 

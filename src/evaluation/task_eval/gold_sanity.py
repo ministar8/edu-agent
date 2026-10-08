@@ -275,6 +275,29 @@ def _check_memory(case: TaskCase, kp_index: dict, out: list[SanityIssue]) -> Non
                             f"会导致 recalled/used 恒 False 的口径错配（应写规范名，如「图」而非「图论」）",
                         )
                     )
+            # ★ 粒度 lint（2026-10-08 review M10，接 #26）：**正样本**的 `values` 必须是
+            #   具体考点（`topic` / `point`），不能是章名（`domain`）或课程根节点（`subject`）。
+            #   为什么只管正样本：`recalled` 是**子串包含**判定，章名会被它下面任何
+            #   一个具体 KP 满足 ⇒ 「召回成功」测不出「召回的是不是设计的那个薄弱点」。
+            #   负样本（`should_be_recalled=False`）保留章名是**刻意**的：偏松匹配让它更难通过，
+            #   方向保守，不存在假通过（#26 已披露）。
+            #   ★ 没有这条 lint，D8 的「收到具体考点」只是人工承诺 —— 改回 `图` 依旧 ERROR 0。
+            if em.should_be_recalled:
+                from core.kp_vocab import node_kinds as _node_kinds  # 局部导入：core 侧较重
+
+                kinds = _node_kinds()
+                for v in em.values:
+                    if kinds.get(v) in ("domain", "subject"):
+                        out.append(
+                            SanityIssue(
+                                case.case_id,
+                                case.task,
+                                ERROR,
+                                "expected_memory.values",
+                                f"{v!r} 是 {kinds[v]}（粗粒度）节点，而这是正样本 —— "
+                                f"子串判定下任何子考点都算召回，请写具体薄弱点（如「图的存储」而非「图」）",
+                            )
+                        )
         if em.should_be_recalled is None:
             out.append(
                 SanityIssue(

@@ -150,7 +150,7 @@ def _calibrate(args: argparse.Namespace) -> int:
         print(
             f"\n⚠ 人工分**近似同值**：众数 {rep.human_mode} 占 "
             f"{1 - (rep.informative_share or 0):.1%}，非众数仅 {rep.informative_n}/{rep.n} 行"
-            f"（{rep.informative_share:.1%} < {judge_mod._INFORMATIVE_SHARE_MIN:.0%}）"
+            f"（{(rep.informative_share or 0):.1%} < {judge_mod.INFORMATIVE_SHARE_MIN:.0%}）"
         )
         print(
             "  ⇒ `spearman` 的判别力集中在那几行上，**不要**把本表当「judge 与人工秩相关良好」引用；"

@@ -302,6 +302,11 @@ async def run_turns(agent, turns: list[str]) -> CaseResult:
     return case
 
 
+# 「还没有需要恢复的东西」的哨兵 —— 不能用 `None` 表示，因为 `None` 本身是一个合法的
+# store 值（OFF 臂要写的就是它）。用 None 当哨兵会把「无需恢复」误同于「恢复成 None」。
+_UNSET = object()
+
+
 def _off_arm_disable(agent, store) -> Any | None:
     """OFF 臂：摘掉**两处** store，返回需恢复的进程级旧值（#24）。
 
@@ -392,7 +397,11 @@ async def run_sessions(
     #     必须连进程级 `get_store()` 一起置空 —— 见 `_off_arm_disable` 的说明。
     #     Step 5 当时 OFF 显示「0 卡 0 召回」被当成对照生效的证据，那其实是 #22
     #     让画像恒空造成的**假象**：两个缺陷互相掩盖，修好一个才露出另一个。
-    prev_global_store = None
+    # ★ `_UNSET` 而不是 `None`：`None` 同时表示「没摘过（无需恢复）」和「恢复成 None」，
+    #   两者压在一起时，若 `_off_arm_disable` 在 `set_store(None)` **之前**就抛错，
+    #   finally 仍会把进程级 store 写成 None（= 之后所有 case 静默失忆）。
+    #   顺序上今天不会发生（helper 先动 `agent.store`、最后才 `set_store`），但状态不该靠顺序兜。
+    prev_global_store = _UNSET
     if not store_enabled:
         prev_global_store = _off_arm_disable(agent, store)
         case.notes.append(
@@ -495,7 +504,7 @@ async def run_sessions(
         # ── paired control：先恢复被临时摘掉的 store（进程级 + agent 两处）────────
         #   ★ 必须在清理**之前**恢复，且放在 finally 最前 —— 中途抛错时若忘了恢复，
         #     后续 case 会**静默**失去记忆（`_record_episode` 见 None 只打 debug 日志）。
-        if not store_enabled:
+        if prev_global_store is not _UNSET:
             _off_arm_restore(agent, store, prev_global_store)
         # ── 跑后清理（Step 4 硬要求：跑完必须干净）──────────────────────
         # ★ 放 finally：中途抛错/提前 return 也要清 —— 失败重跑最需要干净起点。

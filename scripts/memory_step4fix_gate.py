@@ -73,7 +73,7 @@ _n_skip = 0
 #   ⇒ 加两个不变量：① 执行数（含跳过）必须等于本常量；② 跳过数必须为 0。
 #      少跑一项、或某组提前 `return`，都在这里变红，而不是安静地少几行。
 #   ★ 改判据时同步更新这个数（改完跑一次，末行会印实际值）。
-_EXPECTED_ITEMS = 175
+_EXPECTED_ITEMS = 179
 
 
 def check(label: str, passed: bool, detail: str = "") -> None:
@@ -719,17 +719,20 @@ def check_5() -> None:
         bad[0].message[:60] if bad else "",
     )
 
-    # canonical name（「图」）→ 无 ERROR
+    # canonical name（「图的存储」）→ 无 ERROR
+    # ★ 原先这里用的是「图」，被 #26 的粒度 lint（㉔）判成 ERROR —— 两条护栏撞了，
+    #   而 ⑤c 的本意是「校验的是 **name** 而不是 **ID**」，用哪个合法名并不重要
+    #   ⇒ 换成具体考点，意图不变。（撞车本身由计数不变量当场暴露，不是事后发现的。）
     c3 = TaskCase(
         case_id="mem-z",
         task="memory",
         query="q",
         turns=["a", "b"],
-        gold=_gold(True, ["图"], ["栈"]),
+        gold=_gold(True, ["图的存储"], ["栈"]),
     )
     rep3 = run_sanity([c3])
     check(
-        "⑤c canonical name（图）⇒ 无 ERROR",
+        "⑤c canonical name（图的存储，具体考点）⇒ 无 ERROR",
         not rep3.errors,
         f"{len(rep3.errors)} 个 ERROR：{[i.message[:40] for i in rep3.errors]}",
     )
@@ -2306,7 +2309,11 @@ def check_20() -> None:
     """
     section("⑳ 校准 PASS 的秩相关信息量必须自己露出（D6 / #19）")
 
-    from evaluation.task_eval.judge import _INFORMATIVE_SHARE_MIN, calibrate
+    from evaluation.task_eval.judge import (
+        CALIBRATION_THRESHOLDS,
+        INFORMATIVE_SHARE_MIN,
+        calibrate,
+    )
 
     real_h = [5.0] * 28 + [0.0, 2.0]
     real_l = [5.0] * 26 + [4.0, 4.0, 0.0, 2.0]
@@ -2321,8 +2328,13 @@ def check_20() -> None:
     )
     check(
         "⑳b 露出**不改变判定**：同一份表仍按原阈值给 PASS（阈值是预先约定的标准，不为好看调整）",
-        rep.passed is True and rep.spearman is not None and rep.spearman >= 0.70,
-        f"spearman={rep.spearman} passed={rep.passed}",
+        rep.passed is True
+        and rep.spearman is not None
+        # ★ 引用阈值表本身，不写死 0.70（review M4）：阈值被调整时这条应该**跟着变**，
+        #   而不是变成一条「恰好当时对的」的错断言。
+        and rep.spearman >= CALIBRATION_THRESHOLDS["spearman_min"],
+        f"spearman={rep.spearman} passed={rep.passed} "
+        f"阈值={CALIBRATION_THRESHOLDS['spearman_min']}",
     )
     # ★ 反向：分布正常的表不许误报（否则这条露出会退化成「永远警告」= 没有信息）
     hum = [0, 1, 2, 3, 3, 4, 5, 5, 2, 3, 1, 4, 5, 3, 2, 4, 1, 0, 5, 3, 4, 2, 3, 5, 1, 4, 2, 3, 5, 4]
@@ -2330,7 +2342,7 @@ def check_20() -> None:
     rep2 = calibrate([float(x) for x in llm], [float(x) for x in hum])
     check(
         f"⑳c 反向：分布正常（非众数 {rep2.informative_n}/30）⇒ 不误报退化",
-        rep2.rank_degenerate is False and (rep2.informative_share or 0) >= _INFORMATIVE_SHARE_MIN,
+        rep2.rank_degenerate is False and (rep2.informative_share or 0) >= INFORMATIVE_SHARE_MIN,
         f"share={rep2.informative_share} deg={rep2.rank_degenerate}",
     )
     # ⑳d 真实文件本身必须被报告成退化（读的是仓内校准表，不调 LLM）
@@ -2476,6 +2488,49 @@ def check_21() -> None:
         (memory_write_missing.__doc__ or "").splitlines()[0][:60],
     )
 
+    # ★ review M7：有些 OpenAI 兼容服务**没有 `/health` 路由**（404），但 `/embeddings` 完全正常。
+    #   旧预检会因为一句 HTTP 404 就 return 3 拒绝开跑 —— 那是**假红**，会把能用的 TEI 拦在门外。
+    #   ⇒ 健康检查的抱怨只在推理也失败时才允许一起进 problems。
+    import json as _json4h
+
+    class _NoHealth(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802
+            self.send_response(404)  # 没有 /health 这个路由
+            self.end_headers()
+            self.wfile.write(b"not found")
+
+        def do_POST(self):  # noqa: N802
+            length = int(self.headers.get("Content-Length") or 0)
+            self.rfile.read(length)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(
+                _json4h.dumps(
+                    {"data": [{"object": "embedding", "index": 0, "embedding": [0.01] * 16}]}
+                ).encode("utf-8")
+            )
+
+        def log_message(self, *_a):
+            pass
+
+    srv2 = HTTPServer(("127.0.0.1", 0), _NoHealth)
+    port2 = srv2.server_address[1]
+    threading.Thread(target=srv2.serve_forever, daemon=True).start()
+    try:
+        _s.EMBEDDING_API_BASE = f"http://127.0.0.1:{port2}"
+        _s.USE_FAKE_EMBEDDING = False
+        probs3 = preflight_check()
+    finally:
+        _s.EMBEDDING_API_BASE, _s.USE_FAKE_EMBEDDING = old_base, old_fake
+        srv2.shutdown()
+        srv2.server_close()
+    check(
+        "㉑h 没有 /health 路由（404）但推理可用 ⇒ 预检必须放行（否则是假红）",
+        probs3 == [],
+        str([p[:60] for p in probs3]),
+    )
+
 
 def check_22() -> None:
     """㉒ paired control 的 OFF 臂必须真的关掉 Store（2026-10-07 D8 重跑暴露，登记为 #24）。
@@ -2540,13 +2595,13 @@ def check_22() -> None:
     old = get_store()
     try:
         set_store(sentinel)
-        res_on, obs_on = _aio.run(_run(True))
+        _res_on, obs_on = _aio.run(_run(True))
         check(
             "㉒a ON 臂：轮内 `get_store()` 有值（对照的前提：这一臂确实开着 Store）",
             obs_on is True,
             f"observed={obs_on}",
         )
-        res_off, obs_off = _aio.run(_run(False))
+        _res_off, obs_off = _aio.run(_run(False))
         check(
             "㉒b ★ OFF 臂：轮内 `get_store()` 必须为 None（旧实现只摘 agent.store ⇒ 这里会是 True）",
             obs_off is False,
@@ -2557,11 +2612,10 @@ def check_22() -> None:
             get_store() is sentinel,
             f"get_store() is sentinel = {get_store() is sentinel}",
         )
-        check(
-            "㉒d OFF 臂的 notes 里写明了摘除方式（报告能自证对照到底控了什么变量）",
-            any("get_store" in n for n in res_off.notes),
-            str([n[:48] for n in res_off.notes]),
-        )
+        # ★ 原先这里还有一条「㉒d OFF 臂的 notes 里写明摘除方式」的判据，2026-10-08 删掉：
+        #   它检查的是 harness 自己写的** note 文本**，突变实验（把 OFF 臂换成什么都不做）时
+        #   它照样绿、而措辞一改就假红 —— 那是文档不是护栏（与本组 ⑦b/⑦c 从文本断言
+        #   改成行为断言是同一条理由）。note 本身继续留在 harness 里，报告照常能读。
     finally:
         set_store(old)
     check(
@@ -2736,6 +2790,115 @@ def check_23() -> None:
     )
 
 
+def check_24() -> None:
+    """㉔ 正样本 `values` 的**粒度**必须有机械约束（2026-10-08 review M10，接 #26）。
+
+    D8 把 `mem-002`/`mem-003` 的 `expected_memory.values` 从章名（`图` / `排序`）收到具体考点
+    （`图的存储` / `快速排序`），因为 `recalled` 是**子串包含**判定 —— 章名会被它下面
+    任何一个子考点满足 ⇒ 「召回成功」测不出「召回的是不是设计的那个薄弱点」。
+    ★ 但当时**只有人工承诺**：`章名` 本身就是 canonical（`node_kind=domain`），
+      旧的 lint 只查「是否 canonical」⇒ 改回 `图` 依旧 ERROR 0。这条补上机械约束。
+    """
+    section("㉔ 正样本 values 必须是具体考点（粒度 lint，#26 的可执行化）")
+
+    import copy
+
+    from evaluation.task_eval.cases import load_demo
+    from evaluation.task_eval.gold_sanity import run_sanity
+
+    cases = load_demo("memory")
+    pos = [c for c in cases if getattr(c.gold.expected_memory, "should_be_recalled", None) is True]
+    neg = [c for c in cases if getattr(c.gold.expected_memory, "should_be_recalled", None) is False]
+    assert pos and neg, f"数据集形状变了：正样本 {len(pos)} 条 / 负样本 {len(neg)} 条"
+
+    # ㉔a 反向：往正样本里种一个章名 ⇒ 必须报 ERROR（这才是「lint 有牙」的证据）
+    bad = copy.deepcopy(pos[0])
+    bad.gold.expected_memory.values = ["图"]  # domain 级：子串判定下任何子考点都算召回
+    rep_bad = run_sanity([bad])
+    check(
+        "㉔a 反向：正样本 values 换成章名「图」⇒ gold_sanity 必须报 ERROR",
+        any(
+            i.field_name.endswith("expected_memory.values") and i.level == "ERROR"
+            for i in rep_bad.errors
+        ),
+        str([(i.field_name, i.message[:40]) for i in rep_bad.errors]),
+    )
+
+    # ㉔b 现数据集必须真的过这条（否则 #26 的收紧本身就是假的）
+    rep_real = run_sanity(cases)
+    check(
+        "㉔b 仓内 6 条 memory gold 过粒度 lint（D8 收到的具体考点是真的）",
+        not [i for i in rep_real.errors if "正样本" in i.message],
+        str([(i.case_id, i.message[:44]) for i in rep_real.errors]),
+    )
+
+    # ㉔c 负样本**允许**保留章名（偏松匹配让它更难通过，方向保守，#26 刻意不动）
+    neg_case = copy.deepcopy(neg[0])
+    neg_case.gold.expected_memory.values = ["图"]
+    rep_neg = run_sanity([neg_case])
+    check(
+        "㉔c 负样本用章名不报（lint 不是一刀切禁用 domain）",
+        not [i for i in rep_neg.errors if "正样本" in i.message],
+        f"case={neg_case.case_id} errors={[(i.field_name, i.message[:36]) for i in rep_neg.errors]}",
+    )
+
+    # ㉔d #26 的收紧**不许动已发表数字**。
+    #   ★ 比的是「**归档内嵌 gold**」与「**当前数据集 gold**」两套 gold 在同一份代码下的结果
+    #     —— 而不是「归档值 vs 当前重算」：后者会把 **#4 的口径修正**（负样本的 `used` 要
+    #     召回事实前提）也算成"漂移"（实测 Step 5 ON 的 `mem-006`：归档 `(T,T,T)`、
+    #     当前代码重算 `(T,F,F)`，那是 #4 已发表的 2→1，不是 #26）。
+    #     一条判据只能绑一个变量 —— 绑两个的结论没法解释（本轮就差点把 #4 当成 #26 的回归）。
+    #   ★ 原 ⑬l 只重算 validity，名字大于覆盖（review M11）：真正支撑
+    #     「新 gold 不动已发表数字」的是三维，不是 validity。
+    import json as _json24
+
+    from evaluation.task_eval.cases import Gold as _Gold
+    from evaluation.task_eval.memory_scorer import judge_memory_mechanically
+
+    by_id = {c.case_id: c for c in cases}
+    drift: list[str] = []
+    n_cmp = 0
+    for fname in ("phase1_memory_step5_store_on.jsonl", "phase1_memory_step5_store_off.jsonl"):
+        fp = ROOT / "evals" / "results" / "task_eval" / fname
+        if not fp.exists():
+            skip(
+                f"㉔d {fname}",
+                "归档不在本机（D11 不入库）⇒ 两套 gold 的三维差异未验证",
+                count=1,
+            )
+            continue
+        for ln in fp.read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            r = _json24.loads(ln)
+            c = by_id.get(r.get("case_id"))
+            if c is None:
+                drift.append(f"{r.get('case_id')}(当前数据集里已无此 case)")
+                continue
+            cards = list(r.get("memory_cards") or [])
+            reply = str(r.get("reply") or "")
+            gold_now = judge_memory_mechanically(memory_cards=cards, reply=reply, gold=c.gold)
+            gold_then = judge_memory_mechanically(
+                memory_cards=cards, reply=reply, gold=_Gold.from_dict(r.get("gold") or {})
+            )
+            n_cmp += 1
+            for fld, a, b in (
+                ("recalled", gold_then.recalled_pass, gold_now.recalled_pass),
+                ("used", gold_then.used, gold_now.used),
+                ("correct", gold_then.correct, gold_now.correct),
+                ("correct_use", gold_then.correct_use, gold_now.correct_use),
+            ):
+                if bool(a) != bool(b):
+                    drift.append(f"{r['case_id']}.{fld}: {a}→{b}")
+    check(
+        f"㉔d 同一份代码下「归档 gold」与「当前 gold」的三维逐条一致（#26 收紧不动已发表数字；"
+        f"可比对 {n_cmp} 条）",
+        n_cmp >= 1 and not drift,
+        f"可比对 {n_cmp} 条；差异={drift[:4]}",
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -2761,6 +2924,7 @@ def main() -> int:
     check_21()
     check_22()
     check_23()
+    check_24()
 
     total = _n_pass + _n_fail + _n_skip
     print()

@@ -346,9 +346,12 @@ def apply_judge(record, output: JudgeOutput | None) -> None:
 
 
 # ★ 这两个 reason 由 **runner / 标注环节**写入，judge 从不产出，也不依赖本轮生成质量：
-#   `case_invalid` = A 段前置条件没成立（`runner.py:505`），`memory_miss` = gold 未标注/非法
-#   （`runner.py:382`，是「请人工补标」的记号）。重判把旧 reasons 整个清掉重算，
-#   若不显式保留它们，这二类记录会被**洗成 `primary_failure=none`（看起来像满分通过）**。
+#   `case_invalid` = A 段前置条件没成立（`runner.run_case` 的 memory 分支里 validity 为 False 那一支），
+#   `memory_miss` = gold 未标注/非法（`runner._apply_memory_judgement` 返回的 extra，是「请人工补标」的记号）。
+#   ★ 引用**符号**而不是行号：行号会随每次改动过期（这里就长期写着 `runner.py:505` / `:382`，
+#     实际两处早已搬家），而符号名变了 IDE/重命名会直接带我走。
+#   重判把旧 reasons 整个清掉重算，若不显式保留它们，这二类记录会被
+#   **洗成 `primary_failure=none`（看起来像满分通过）**。
 #   实测：`phase1_memory_step5_store_off.jsonl` 里 4 条 `case_invalid` 的
 #   `failure_reason` 恰好只有 `["case_invalid"]` ⇒ 重判后变 `[]`。
 _KEEP_ON_REJUDGE: frozenset[str] = frozenset({"case_invalid", "memory_miss"})
@@ -449,7 +452,9 @@ def _human_dispersion(human: list[float]) -> tuple[float | None, int, float | No
 
 
 # 阈值：非众数样本不足 20% ⇒ 秩相关由极少数行决定，必须显式标出（不是判失败，是禁止过度引用）
-_INFORMATIVE_SHARE_MIN = 0.20
+# ★ 用公开名：`cli` 与护栏都要引用它。原先是私有名，调用方只能跨模块取 `_xxx`（review M5）
+#   —— 那是耦合，不是复用。
+INFORMATIVE_SHARE_MIN = 0.20
 
 
 def calibrate(llm_scores: list[float], human_scores: list[float]) -> CalibrationReport:
@@ -473,7 +478,7 @@ def calibrate(llm_scores: list[float], human_scores: list[float]) -> Calibration
         human_mode=mode,
         informative_n=inf_n,
         informative_share=inf_share,
-        rank_degenerate=(inf_share is not None and inf_share < _INFORMATIVE_SHARE_MIN),
+        rank_degenerate=(inf_share is not None and inf_share < INFORMATIVE_SHARE_MIN),
     )
     checks = {
         "exact": exact >= CALIBRATION_THRESHOLDS["exact"],
