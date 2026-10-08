@@ -100,18 +100,34 @@ def ensure_localhost_no_proxy() -> None:
 
 
 def memory_write_missing(
-    *, store_enabled: bool, grade_calls: int, episodes: list[dict[str, Any]]
+    *,
+    store_enabled: bool,
+    grade_calls: int,
+    episodes: list[dict[str, Any]],
+    read_failed: bool = False,
 ) -> bool:
-    """A 段有批改、Store 开着，却**一条 episode 都没落库** ⇒ 写链断了（环境类）。
+    """A 段有批改、Store 开着，却**一条 episode 都没读到** ⇒ 记忆写入证据缺失。
 
-    ★ 为什么必须单独判（2026-10-07 实测）：TEI 的 `/embeddings` 返回 502 时，
-      `memory.safe` 只打一行 WARNING「长期记忆写入超时（grade，>1.5s），已忽略」就丢弃写入，
-      而 `/health` 仍是 200 ⇒ 预检拦不住。后果不是「跑失败」而是**跑出错的东西**：
-      画像为空 ⇒ B 段召不回 ⇒ 被记成 Memory 产品失败（我们当天刚把这类现象归因给 #22 的
-      KP 阈值）。⇒ 这种样本必须标成环境问题、不进指标。
+    ★ 为什么必须单独判（2026-10-07 实测）：TEI 的 `/embeddings` 返回 502 而 `/health` 仍 200 时，
+      `memory.safe` 只打一行 WARNING「长期记忆写入超时（grade，>1.5s），已忽略」就丢弃写入。
+      后果不是「跑失败」而是**跑出错的东西**：画像为空 ⇒ B 段召不回 ⇒ 被记成 Memory 产品失败
+      （我们当天刚把这类现象归因给 #22 的 KP 阈值）。⇒ 这种样本不进 Memory 分母。
       ★ 与 `MIN_HITS` 无关：这里看的是**原始 episode 是否落库**，不是画像有没有值。
+
+    ★★ 两条边界（2026-10-08 review C1/I2/I3，都是当初真踩的）：
+      ① **本函数不指认原因。** 「没落库」既可能是环境（TEI 挂），也可能是产品
+         （缺陷 C：工具拿不到 config ⇒ `record_grade` 被静默跳过 —— 本仓真实发生过）。
+         `memory/safe.py` 把写失败压成一行 WARNING、既不计数也不落到 record ⇒ 单凭
+         「episode 为空」**无法区分**。环境类判定另有两道：`preflight_check()` 真发一次
+         向量请求（㉑a），以及 `is_env_error()` 看真实报错文本。
+      ② **只对 memory 任务有意义**，调用点必须在 `case.task == "memory"` 之内 ——
+         非 memory 任务走 `run_turns`，它照抓 `grade_scores` 但从不读 Store，
+         `episodes` 恒空 ⇒ 放外面等于宣布「所有批改类 case 天生写链断裂」，
+         会让 grade/verify/qa 的实跑在第一条就被中止（C1）。
+      ③ `read_failed` —— 清理前那次读取自己抛过错 ⇒ 「没读到」是取证通道的故障，
+         不能推断写入（I3）。此时返回 False，交给 `episodes_read_failed` 单独披露。
     """
-    if not store_enabled or grade_calls <= 0:
+    if read_failed or not store_enabled or grade_calls <= 0:
         return False
     return not episodes
 
@@ -228,7 +244,14 @@ class CaseRecord:
     # ★ 本次跑在 Store 里真正写下的 episodes（清理前读）：`{topic, score, knowledge_points, type}`
     #   用途：判定「前置条件满足却没有记忆卡」是不是 **KP 分散**造成的
     #   （`MEMORY_WEAK_MIN_HITS=2` 要求同一 KP 命中两次）。老归档没有该字段 ⇒ 按空处理。
+    # ★★ `episodes` 为空有两种**完全不同**的来源，故另存两个标志位（2026-10-08 review I3）：
+    #   `episodes_read_failed` —— 清理前那次读取**抛错**了（取证通道自己坏了 ⇒ 写没写无从知道）；
+    #   `memory_write_missing` —— 读没坏、Store 也开着、A 段确有批改，却一条都没读到
+    #     ⇒ 「写入证据缺失」。★ 这**不等于**「环境挂了」：缺陷 C（`record_grade` 接线断）
+    #     与 TEI `/embeddings` 502 的症状一模一样，而 `memory/safe.py` 只留一行 WARNING。
     episodes: list[dict[str, Any]] = field(default_factory=list)
+    episodes_read_failed: bool = False
+    memory_write_missing: bool = False
     # paired control：本 case 是否开着 Store（False=对照组）
     store_enabled: bool = True
 
@@ -473,6 +496,7 @@ async def run_case(
     grade_scores: list[dict[str, Any]] = []
     turn_log: list[dict[str, Any]] = []
     episodes: list[dict[str, Any]] = []
+    episodes_read_failed = False
     if run_agent:
         try:
             result = await _run_agent(
@@ -489,6 +513,7 @@ async def run_case(
             grade_scores = list(getattr(result, "grade_scores", []) or [])
             turn_log = list(getattr(result, "turn_log", []) or [])
             episodes = list(getattr(result, "episodes", []) or [])
+            episodes_read_failed = bool(getattr(result, "episodes_read_failed", False))
         except Exception as e:  # noqa: BLE001
             logger.warning("case %s agent 执行失败: %s", case.case_id, e)
             hard_fails.append(f"invoke 抛错: {type(e).__name__}: {e}")
@@ -586,10 +611,36 @@ async def run_case(
         record.grade_scores = grade_scores
         record.turn_log = turn_log
         record.episodes = episodes
+        record.episodes_read_failed = episodes_read_failed
         record.store_enabled = store_enabled
 
-        if _validity.valid is False:
-            # 前置条件不成立 ⇒ Memory 三项**保持 None**（N/A，不进分母），
+        # ★ 写入证据缺失（2026-10-07 事故驱动；2026-10-08 review 修正**位置**与**归因**）
+        #   ① 位置：必须在 `case.task == "memory"` **之内**。非 memory 任务走 `run_turns`，
+        #      它照抓 `grade_scores`、却从不读 Store ⇒ `episodes` 恒空；放外面等于宣布
+        #      「所有批改类 case 天生写链断裂」⇒ grade/verify/qa 的实跑会在**第一条**就
+        #      被 `cli._run` 中止（且 `break` 在 `append_record` 之前，那条记录连盘都不落）。
+        #   ② 归因：**只说「证据缺失」，不指认环境。** 「没落库」既可能是 TEI 挂（环境），
+        #      也可能是缺陷 C 那种 `record_grade` 接线断（产品）—— 两者症状相同，而
+        #      `memory/safe.py` 只留一行 WARNING。环境类另有两道真判据：`preflight_check()`
+        #      与 `is_env_error()`（看真实报错文本）。
+        #   ③ 读链自己抛过错时（`episodes_read_failed`）不做任何写入推断。
+        record.memory_write_missing = memory_write_missing(
+            store_enabled=store_enabled,
+            grade_calls=sum(1 for g in grade_scores if g.get("score") is not None),
+            episodes=episodes,
+            read_failed=episodes_read_failed,
+        )
+        _valid = _validity.valid
+        if record.memory_write_missing and _valid is not False:
+            _valid = False
+            record.validity_reason = (
+                (f"{_validity.reason}；" if _validity.reason else "")
+                + "A 段有批改、Store 开着却没读到 episode ⇒ 记忆写入证据缺失（**未归因**），本条不进 Memory 分母"
+            )
+        record.validity_valid = _valid
+
+        if _valid is False:
+            # 前置条件不成立（或写入证据缺失）⇒ Memory 三项**保持 None**（N/A，不进分母），
             #   并标 `case_invalid`（**不**标 memory_miss —— 那会被读成「产品没召回」）。
             record.memory_cards = memory_cards
             if "case_invalid" not in record.failure_reason:
@@ -602,18 +653,13 @@ async def run_case(
     # ★ 环境类错误优先判定：命中则**不**把它计入 case 级 failure_reason，
     #   由调用方中止整轮（见 cli._run），避免「账号没额度」被记成「工具报错」。
     record.env_error = is_env_error(" ".join(hard_fails) + " " + probe.error)
-    # ★ 写链断了也算环境问题（2026-10-07：TEI /embeddings 502 而 /health 仍 200 ⇒
-    #   `memory.safe` 静默丢弃写入 ⇒ 画像为空 ⇒ 会被误读成「产品不召回」）。
-    #   这种样本**不进指标**，且应当中止整轮 —— 继续跑只会产出误导性数字。
-    if memory_write_missing(
-        store_enabled=store_enabled,
-        grade_calls=sum(1 for g in grade_scores if g.get("score") is not None),
-        episodes=episodes,
-    ):
-        record.env_error = True
-        record.validity_reason = (
-            f"{record.validity_reason}；" if record.validity_reason else ""
-        ) + "A 段有批改但 Store 无 episode ⇒ 记忆写链断开（环境类，非产品失败）"
+    if record.env_error and not (record.hard_fails or record.retrieval_error):
+        # 中止日志从 `hard_fails[0]` / `retrieval_error` 取文案；两者都空时那行会打成**空串**
+        # （review C1 的姊妹问题：运维看到的是一句没有原因的「中止」）。兜一句可操作的话。
+        record.hard_fails = [
+            *record.hard_fails,
+            "环境类错误（由 is_env_error 判据命中，未捕获到原始报错文本）",
+        ]
 
     if record.env_error:
         record.failure_reason = ["tool_error"]

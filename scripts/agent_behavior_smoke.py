@@ -109,6 +109,11 @@ class CaseResult:
     #   可 `grade_scores` 只有分数、工具回文里又不含 KP（`format_grading_for_chat` 只写
     #   评分/结论/错因）⇒ 这个解释**当时无法证明**。把 episode 的 KP 抓下来即可判定。
     episodes: list[dict[str, Any]] = field(default_factory=list)
+    # ★ 那次读取**自己抛过错**（2026-10-08 review I3）：此时 `episodes` 为空只说明
+    #   「取证通道没读到」，**不能**推断「产品没写入」⇒ 下游的写入证据判据必须闭嘴。
+    #   ★ 另注：OFF 臂走的是 `eff_store=None` 分支、压根不读 ⇒ 空属**按构造**，
+    #   由 `store_enabled=False` 挡住，不需要这个标志。
+    episodes_read_failed: bool = False
 
 
 def make_user_id(case_id: str) -> str:
@@ -479,6 +484,7 @@ async def run_sessions(
                         }
                     )
             except Exception as e:  # noqa: BLE001
+                case.episodes_read_failed = True
                 case.notes.append(f"读取 episodes 失败：{type(e).__name__}: {e}")
 
         case.reply = case.session_replies[-1] if case.session_replies else ""
