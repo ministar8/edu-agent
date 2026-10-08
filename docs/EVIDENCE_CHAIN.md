@@ -279,7 +279,7 @@ Generate/Grade 的百分数，G1a/G1b 就是正式实验的前置条件，排在
 |---|---|---|
 | `gen_structure` | schema 能解析即 True（15/15） | 按 §3.1 `completeness_pass` 查四件套**逐一非空**；`contract_inputs` = 四个组件，四个 mutation 各必须变红 |
 | `gen_coverage` | 15/15 True（#27 之后） | 保留 + R1-A 质询（抹掉任一 `knowledge_points` 必须变红，否则坐实判据没吃 KP） |
-| Verify 归因 | `retrieval_miss`×15 与 `retrieval_status=ok`×15 并存 | `metrics.py:47-60` 优先级不动，但 `retrieval_miss` 改由 tier-0 门供给；judge 原因落 `judge_failure_reasons` |
+| Verify 归因 | 同一归档 15/15 `retrieval_status=ok` **且** 15/15 `pack_nonempty=True`，而 `primary_failure=retrieval_miss`×15 | `metrics.py:47-60` 优先级不动，但 `retrieval_miss` 改由 tier-0 门供给；judge 原因落 `judge_failure_reasons`。★ 机械路径（`judge.py:375-376` 要求 `not pack_nonempty`）在这里没触发 ⇒ 那 15 条只能来自 judge |
 | Memory 三维 | 读链故障与「没有卡」同为 `""`（`teaching_graph.py:44-46`→`memory_scorer.py:164-166`） | 见 §5 B4 的四态 `memory_read_status` |
 | Grade `score_tolerance` | `degenerate_gold` 已披露（做法正确） | 泛化为 R1-A 的一个实例，无新逻辑 |
 
@@ -292,12 +292,15 @@ Generate/Grade 的百分数，G1a/G1b 就是正式实验的前置条件，排在
 
 ### 5.A P0 Runtime Correctness —— **不修就禁止正式实验**（证据链本身会失真）
 
+★ 执行顺序上 **B7 必须与 §4.3 的归因门同批、且先于它**（生产者先于消费者）：归因门要读
+`retrieval_status == "error"`，而 B7 之前这个值不可达。详见 `EVIDENCE_CHAIN_PLAN.md` 的依赖矩阵。
+
 | # | 位置 | 改法 | 数字影响 |
 |---|---|---|---|
 | B1 | `rag/layer_recall.py:128-131` + `evidence_policy.py:138` | R4 语义统一后排序方向自然转正 | **会变**（top-up 选中的文档变了）→ 重录受影响路由 + 差异登记 §20.7 |
 | B2 | `rag/pipeline.py:593` | ★ 不再只给布尔。新增 tier-0 枚举 **`rerank_status`**：`off` / `success` / `degraded`（调用成功但无分或空结果，回落原序）/ `failed`（抛错或超时走 `default`）。`rerank_used` 降级为**派生字段**：仅 `success ⇒ True`，其余全 `False`。派生条件判 **metadata 含 `rerank_score` 键**（`reranker.py:246` 有合法写 `0.0` 的路径，用真值判断会把假重排 `on` 路由误翻成 False，等于借修诚实度换基线）。★ `rerank_status` 要**落进 record**（含 `run --no-agent` 的检索探针归档），不能只进遥测 | **不变**（`RERANK_ENABLED=false` 时走 `:565-570` 已返回 False；`on` 路由 `_fake_rerank` 确实写分）。⇒ 消融从此能区分「重排关」与「重排开但坏了」 |
 | B4 | `agents/teaching_graph.py:44-46` + `memory/safe.py` | 新增 tier-0 **`memory_read_status`** 四值 + 映射：<br>`not_attempted`（`uid is None`，`:43` 那条分支就是它，今天被压成 `""`）→ 三维 `None`<br>`success` + 命中期望值 → `recalled=True`；`success` 未命中 → `recalled=False`<br>`empty`（读成功但无卡）→ `recalled=False`<br>`failed`（超时/异常）→ 三维 `None`<br>⇒ 「这个 0.5 是不是 Store 挂了」变成**有证据可答**的问题 | 只影响今后归档；已归档 Memory 数标 `superseded`，新状态待重跑 |
-| B7 | `rag/bm25.py:54-59`、`rag/vectorstore.py:142,340`、`evaluation/retrieval_gate.py:1262` | **检索失败必须传播**（本轮新增）：BM25 路由取 collection 失败时 `return []` 且**不写 `_query_failures`**（向量路径 `:340` 会写），而门禁的 `unexpected_query_failures` 只看 `_query_failures` ⇒ 词法路由整条坏掉时所有指标照常「健康」。改法：① 失败计入 `_query_failures`；② tier-0 的 `retrieval_status` 区分 `ok` / `empty` / `route_error`（供 §4.3 的归因门用）；③ `_query_failures` 可清零（append-only 在长跑服务里无界增长，且一次早期失败会污染整轮判定） | 基线数字预期不变（BM25 今天跑得通）；修的是「坏消息看不见」 |
+| B7 | `rag/bm25.py:54-59`、`rag/vectorstore.py:142,340`、`evaluation/retrieval_gate.py:1262`、`retrieval_probe.py:111,140,149` | **检索失败必须传播**：BM25 取 collection 失败时 `return []` 且**不写 `_query_failures`**（向量路径 `:340` 会写），门禁的 `unexpected_query_failures` 看不见它。★ 更深一层的后果是**归因被污染**：探针的契约是「异常收敛为 `status="error"`」，而咽掉的异常让探针看到「查到空」⇒ 写成 `empty`，于是 `error` **今天不可达**，归因层没有「路由坏了」这个证据可用。改法：① 失败计入 `_query_failures`；② 让 `retrieval_status` 真的能取到既有的 `error`（**不发明新枚举名** `route_error`：`judge.py:373` 与全部老归档都在用 `error`）；③ `_query_failures` 可清零，并钉死三个 reset 调用点（gate 每条 query / `run_case` 每次探针 / `_amulti_route_search` 每轮） | 基线数字预期不变（BM25 今天跑得通）；修的是「坏消息看不见」+「坏了被说成没查到」 |
 
 ### 5.B P1 Product Correctness —— **不修可以正式实验，但必须登记 limitation**
 
