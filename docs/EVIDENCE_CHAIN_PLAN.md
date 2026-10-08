@@ -1080,7 +1080,7 @@ def check_4() -> None:
             "gen_correctness": True,
             "gen_difficulty": None,
             "reply": (
-                "题目：设 Cache 采用 2-Way 组相联，主存 64 块，Cache 8 行，问组号需要几位。
+                "题干：设 Cache 采用 2-Way 组相联，主存 64 块，Cache 8 行，问组号需要几位。
 "
                 "A. 2
 B. 3
@@ -1161,6 +1161,10 @@ grep -n "every_item_passes\|delivery_rate" /tmp/ec_callsites.txt
      且旧公式正是 #36 登记过的「测的是像不像能用的答案」。
      切换后 rejudge 产物里 `gen_correctness` 变 `missing_premise`（无 gold）——
      这是语义修正的预期结果，不是回归；`judge_failure_reasons` 等诊断字段不动。
+  ③ ★ 首次执行者实测：重指向后对 `phase1_baseline_v2.jsonl` 的读数是「coverage 全 fail、rate 0.0」
+     —— 旧归档没有 `top_items` 键，按规则①这应是 **missing_premise（测不到）而非 fail**。
+     若你的重指向版本把「缺 top_items」判成 fail，停下报告；那是在把「没证据」记成「不合格」，
+     正是规则①禁止的方向。
 
 - [ ] **Step 4: `_backfill` 改为按 registry 重算所有任务**
 
