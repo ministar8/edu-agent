@@ -1375,6 +1375,16 @@ def declared_mutations(pred: Predicate) -> list[dict[str, str]]:
 
     每个契约输入至少一条；缺任一 ⇒ `coverage()` 列成缺口 —— 「形式覆盖但语义没覆盖」的拦网。
     ★ 条数会**多于** `len(contract_inputs)`，而 `coverage()` 比的是输入名集合，不受影响。
+
+    ★★ op 按**判据语义**收窄（checkpoint 5 裁定，修矛盾 1）：额外 op 只给真正读那份
+    信息的判据 —— `dual_answer`/`flip_conclusion` 保留全部 label，`_structure`（按 label
+    存在性判 pass）对它们天然不翻转；把这两种 op 塞给 `gen_structure` 是设计错误，
+    会让 5b 的 `all(r.flipped)` 永远红。规则：
+      - 读 label 存在性的判据（`gen_structure`）⇒ 只有 `omit_reply_part`；
+      - 读答案键的判据（`gen_answer_key_validity` / `gen_analysis_agreement` / `gen_correctness`）
+        ⇒ `omit_reply_part` + `dual_answer`（answer）；
+      - 读解析结论的（`gen_analysis_agreement`）⇒ 额外 `flip_conclusion`（explanation）。
+    覆盖检查（5a/5e）比的是**输入名**，op 收窄不影响覆盖完整性。
     """
     out: list[dict[str, str]] = []
     for name in pred.contract_inputs:
@@ -1502,7 +1512,13 @@ def _is_pure_mcq(reply: str) -> bool:
 
 三个消费它的判据（`gen_answer_key_validity` / `gen_analysis_agreement` / `_correctness` 的 actual 侧）
 在无 `reply` 或 `_is_pure_mcq` 为假时一律返回 `missing_premise`；`_structure`/`gen_coverage`
-不受此门影响（它们不读答案键）。`registry` 里这三个判据的 `contract_inputs` 不变。
+不受此门影响（它们不读答案键）。
+★ **contract_inputs 必须补实**（checkpoint 5 裁定，supersede checkpoint 3 裁定 3 的
+「contract_inputs 不变」字面）：纯选择守卫让选项块成了这三个判据的**真实输入** ——
+`gen_correctness` 与 `gen_analysis_agreement` 的 `contract_inputs` 追加 `reply#options_or_task`
+（gen_answer_key_validity 本来就有）。不补实的后果已被实测：omit options 会让这两个判据
+经守卫 pass→missing_premise，被 collateral 检查当成「无端牵连」而永远红。
+contract_inputs 必须声明**现实依赖**，包括经守卫引入的间接依赖。
 
 ★ 这一步是**诊断位收紧**，不改变任何门槛行：机械判据永不单独构成 Generate 证明门槛（裁定第 2 条），
 冻结名 `gen_correctness` / `gen_answerability` 继续走 `missing_premise`。
