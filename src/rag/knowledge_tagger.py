@@ -138,7 +138,7 @@ def tag_chunks_with_knowledge_points(
         names, difficulty, diff_src = _tag_single_chunk(chunk)
         # 存 JSON 字符串而非 list：Chroma metadata 只接受 str/int/float/bool，
         # list 会被 `_metadata_spec.sanitize_for_chroma` 丢掉。
-        # 读取端 `evidence._parse_knowledge_points` 会按 JSON 解析回来。
+        # 读取端 `evidence.parse_knowledge_points` 会按 JSON 解析回来。
         chunk.metadata["knowledge_points"] = json.dumps(names, ensure_ascii=False)
         chunk.metadata["difficulty"] = difficulty
         chunk.metadata["difficulty_source"] = diff_src

@@ -73,7 +73,7 @@ _n_skip = 0
 #   ⇒ 加两个不变量：① 执行数（含跳过）必须等于本常量；② 跳过数必须为 0。
 #      少跑一项、或某组提前 `return`，都在这里变红，而不是安静地少几行。
 #   ★ 改判据时同步更新这个数（改完跑一次，末行会印实际值）。
-_EXPECTED_ITEMS = 179
+_EXPECTED_ITEMS = 184
 
 
 def check(label: str, passed: bool, detail: str = "") -> None:
@@ -2899,6 +2899,99 @@ def check_24() -> None:
     )
 
 
+def check_25() -> None:
+    """㉕ #27 的处置（D12 选 (B)）：评测侧从 metadata 兜底解析 KP，**产品契约不动**。
+
+    缺陷：`rag/layer_recall.py:43` 的 top-up 路径把 `knowledge_points` 写死成 `[]`，
+    而同一份 `metadata` 里就带着 JSON 字符串 ⇒ 走这条路进 top-k 的证据在
+    `kp_hit` / `kp_mrr` / Generate 的 `coverage` 眼里等于没标考点（系统性假阴性）。
+    ⇒ (B) = 只在**评测读数**这一侧兜底；产品给 agent 的那份契约仍缺 KP，
+      这条偏差必须单独披露（不顺手改产品，是因为 `EvidenceDoc.knowledge_points` 是
+      对外契约字段，动它 = 动检索链 = 触发新锚点 + qa/generate 重跑）。
+    """
+    section("㉕ top-up 项的 KP 兜底解析（#27 / D12 选 B；产品契约保持不动）")
+
+    import json as _json25
+
+    from evaluation.task_eval.retrieval_probe import _to_item
+    from rag.evidence import TextEvidence, parse_knowledge_points
+    from rag.layer_recall import _doc_to_evidence
+
+    raw = _json25.dumps(["图的存储", "数组与特殊矩阵"], ensure_ascii=False)
+    meta = {
+        "chunk_id": "c-25",
+        "kb_depth": "advanced",
+        "doc_role": "method",
+        "category": "data_structure",
+        "knowledge_points": raw,
+    }
+
+    def _ev(kps: list[str]) -> TextEvidence:
+        return TextEvidence(
+            evidence_id="topup_data_structure_c-25",
+            content="正文",
+            source="knowledge/advanced/data_structure/01_graph.md",
+            score=0.31,
+            collection="data_structure",
+            chunk_id="c-25",
+            knowledge_points=kps,
+            metadata=dict(meta),
+        )
+
+    item = _to_item(_ev([]))  # ★ topup 形状：对象上 KP 为空、metadata 里有值
+    check(
+        "㉕a ★ topup 形状的经**真实 `_to_item`** 兜底解析出 KP（旧写法这里会是 []）",
+        item.knowledge_points == ["图的存储", "数组与特殊矩阵"],
+        str(item.knowledge_points),
+    )
+    check(
+        "㉕b 反向：metadata 里也没有 ⇒ 记空，**绝不虚构**标签",
+        _to_item(
+            TextEvidence(
+                evidence_id="x",
+                content="正文",
+                source="s",
+                score=0.1,
+                collection="data_structure",
+                chunk_id="c",
+                knowledge_points=[],
+                metadata={"doc_role": "exam_answer"},
+            )
+        ).knowledge_points
+        == [],
+    )
+    check(
+        "㉕c 复用同一份解析器（`_to_item` 的结果 == `parse_knowledge_points(meta)`，"
+        "防两套解析分叉 —— 与 #10/#21 是同一个教训）",
+        item.knowledge_points == parse_knowledge_points(meta["knowledge_points"]),
+        f"{item.knowledge_points} vs {parse_knowledge_points(meta['knowledge_points'])}",
+    )
+
+    # ㉕d **边界**：产品侧那条路今天仍然丢 KP —— 这条不是放行缺陷，而是把
+    #   「(B) 只改评测口径」这个决定钉成可检查的事实；将来若有人改成 (A)，这条会红，
+    #   那时必须同时更新 §20.5 #27 的披露与锚点。
+    class _Doc:
+        def __init__(self, m: dict, c: str) -> None:
+            self.metadata = m
+            self.page_content = c
+
+    prod = _doc_to_evidence(_Doc(dict(meta), "正文"), 0.42, "data_structure")
+    check(
+        "㉕d 产品契约仍不带宽 KP（(B) 的边界；改回 (A) 时这条必然红 ⇒ 提醒同步披露）",
+        prod.knowledge_points == [] and prod.metadata.get("knowledge_points") == raw,
+        f"契约={prod.knowledge_points} metadata={str(prod.metadata.get('knowledge_points'))[:40]}",
+    )
+
+    # ㉕e 下游聚合函数因此不再漏（`_all_kp` 是 kp_hit 的输入）
+    from evaluation.task_eval.runner import _all_kp
+
+    check(
+        "㉕e `_all_kp` 能看到兜底后的 KP（Generate `coverage` 的 N/A 来源之一被消除）",
+        _all_kp([item]) == ["图的存储", "数组与特殊矩阵"],
+        str(_all_kp([item])),
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -2925,6 +3018,7 @@ def main() -> int:
     check_22()
     check_23()
     check_24()
+    check_25()
 
     total = _n_pass + _n_fail + _n_skip
     print()

@@ -40,7 +40,14 @@ def _stable_id(prefix: str, text: str) -> str:
     return f"{prefix}_{digest}"
 
 
-def _parse_knowledge_points(value: Any) -> list[str]:
+def parse_knowledge_points(value: Any) -> list[str]:
+    """把 metadata 里的 `knowledge_points` 解析成名字列表（JSON 字符串 / list / 逗号分隔都吃）。
+
+    ★ 公开名（2026-10-08 D12 选 (B) 之后）：评测侧 `task_eval.retrieval_probe` 需要在
+      `EvidenceDoc.knowledge_points` 为空时**从 metadata 兜底解析**（#27：layer top-up 那条
+      路径写死成 `[]`，索引里明明带着标签）。原先这是 `_` 私有函数，跨模块调用就是耦合
+      —— 而「唯一正确的解析方式」正是必须共享的那一份，私有名只会诱导读的人另写一套。
+    """
     if value is None:
         return []
     if isinstance(value, list):
@@ -90,7 +97,7 @@ def text_evidence_from_document(doc: Document, fallback_score: float = 0.0) -> T
         # 唯一写入方是 `knowledge_tagger`（写扁平名 `knowledge_points`，JSON 字符串）。
         # 此处曾回退读 `section.knowledge_points` —— 那是**幽灵字段**（无任何写入方），
         # 2026-09-24 移除，避免"看起来有两条来源"的错觉。
-        knowledge_points=_parse_knowledge_points(meta.get("knowledge_points")),
+        knowledge_points=parse_knowledge_points(meta.get("knowledge_points")),
         metadata=meta,
     )
 

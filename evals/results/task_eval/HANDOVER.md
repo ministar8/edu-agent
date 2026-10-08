@@ -117,7 +117,8 @@
 > - **I4/I7（护栏自身不合格）**：`㉑c` 把 `EMBEDDING_API_BASE` 留在死端口（实测泄漏，与 ㉒e 自己立的标准矛盾）⇒ 包进 `finally` 并加 `㉑c'`；`㉑b` 是 `len(...)>=1` 的弱预言 ⇒ 改双向断言；`_run()` 返回注解写错（`scripts/` 从不在 pyrefly 的 `project-includes` 里，所以没人查过）⇒ 修正，该文件 14 → 13 errors（余下是 langgraph TypedDict / sys.path 注入这类历史噪音，**不在本轮范围**）。★ 口径改写：以后「pyrefly 0 errors」一律注明**范围 = `src/`**。
 > - **I6 / #30（计数本身不可复现）**：`⑬l×2 / ⑭d~⑭f / ⑱a~⑱b / ⑳d` 这 **8 项**读的是不入库的归档（D11 的裁决），缺文件时旧写法只 `print` 一行 `⏭`、**不进计数** ⇒ **干净克隆上「175 项全绿」其实是「167 项跑过 + 8 项没跑」而退出码仍 0**。⇒ 新增 `skip()`（跳过必须计数，一个 `if` 挡掉多项时用 `count=`）+ 模块级 `_EXPECTED_ITEMS = 175`；收尾两条不变量：执行数（含跳过）必须等于声明值、跳过数必须为 0，任一不满足 ⇒ `_flag()` 置红 + exit 1，文案写明「本次不能称为全绿，只能说跑了的那几项绿」。**没选**「把归档入库」（与 D11 冲突）。★ 维护契约：加判据必须同步改 `_EXPECTED_ITEMS`，忘了就红 —— 这条不靠人记性。
 > - **余下 12 条 Minor 的处置（登记为 #31）**：8 修（M2 `_UNSET` 哨兵 / M3 `or 0` / M4 ⑳b 引用阈值表不写死 0.70 / M5 `_INFORMATIVE_SHARE_MIN` 改公开名 / M6 过期行号改符号引用 / M7 预检不再因服务没有 `/health` 而假红 / M9 `server_close()` / M10 **正样本 `values` 粒度 lint**）+ 1 **删**（`㉒d`：读的是 harness 自己的 note 文本，突变下仍绿 ⇒ 是文档不是护栏）+ 2 留（M8/M12，理由见 §20.5 #31）。★ 两个意外收获写进 §20.5 的附注：① 新 lint 与既有 `⑤c` 撞车（它的 fixture 用 `图` 当「合法 name」的例子），**是 #30 的计数不变量把它拦下来的**（`判定项 179 ≠ 178`），修的是 fixture 取值不是放宽 lint；② `㉔d` 第一版绑了两个变量，立刻红在 `mem-006`（那是 **#4 已发表**的口径修正，不是 #26）⇒ 改成「同一份代码下归档 gold vs 当前 gold」。**一条判据只能绑一个变量。**
-> **验证**：护栏 **162 → 175 → 179 项全绿**（+`㉓` 10、+`㉑c'/f/g` 3）、step2/step4/`sanity` 均 exit 0、ruff check/format 通过、pyrefly(src) 0 errors。★ **㉓a 的牙齿是拿真篡改验的**：把调用点临时移回分支外 ⇒ `㉓a ❌ env_error=True primary=tool_error` 且整套 gate exit 1；随后还原（临时 Edit + 逆 Edit，未进任何提交）。★ **㉓a 测的是位置不是函数值**：把判据猴补丁成恒 `True`（模拟「对所有任务开火」）时 ㉓a **仍绿** ⇒ 只能靠源码级篡改验证；`check_20` 换成空函数 ⇒ `判定项 171 ≠ 声明 175` 且 exit 1；`ROOT` 指向空目录只跑那四组 ⇒ `⏭` 恰好 **8 项**（均为一次性脚本，未入库）。
+> - **D12 已落地（选 (B)）+ D13 保持现状** ⇒ 评测侧从 `metadata` 兜底解析 top-up 的 KP，护栏 ㉕a~㉕e；零 LLM 的成对读数实测 **coverage N/A 12 → 1、`kp_hit` 0.889 → 0.966**，救回的 generate 8 条与归档那 8 条 N/A 同号 ⇒ **§20.5.1 的「疑似旧索引」定论为读数通道问题**（但当年那批仍不可逐条证明：归档无 `evidence_id`）。产品契约不动，那条偏差单独披露（㉕d 钉住）。
+> **验证**：护栏 **162 → 175 → 179 → 184 项全绿**（+`㉓` 10、+`㉑c'/f/g` 3）、step2/step4/`sanity` 均 exit 0、ruff check/format 通过、pyrefly(src) 0 errors。★ **㉓a 的牙齿是拿真篡改验的**：把调用点临时移回分支外 ⇒ `㉓a ❌ env_error=True primary=tool_error` 且整套 gate exit 1；随后还原（临时 Edit + 逆 Edit，未进任何提交）。★ **㉓a 测的是位置不是函数值**：把判据猴补丁成恒 `True`（模拟「对所有任务开火」）时 ㉓a **仍绿** ⇒ 只能靠源码级篡改验证；`check_20` 换成空函数 ⇒ `判定项 171 ≠ 声明 175` 且 exit 1；`ROOT` 指向空目录只跑那四组 ⇒ `⏭` 恰好 **8 项**（均为一次性脚本，未入库）。
 
 ---
 
@@ -617,7 +618,7 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | `scripts/memory_step2_gate.py` | Step 2/3 Gate（11 项判据）（新增） |
 | `scripts/memory_step4_gate.py` | Step 4 Gate（独立 user_id + 清理，零 LLM，14 项）（新增） |
 | `src/evaluation/task_eval/{metrics,report,gold_sanity}.py` | **修 #7**：`metrics.degenerate_gold()`（样本 ≥5 且不同取值 ≤2）；`report` 把两极 gold 的 `score_tolerance` 置 N/A + 保留 `raw_rate` + 渲染 ⚠ 行；`gold_sanity` 新增**集合级 PENDING**（`_check_grade_score_spread`）并让 `render()` 打印其完整消息；**#7 续**：`metrics.verdict_agreement()` + `WRONG_SCORE_LINE=60`（引用 schema 定义）、`report` 新增 `verdict_agreement` 字段并把它列为 Grade **头号**、`n_a>0` 时打印「N 条未产出可解析分数」、`gold_sanity` 文案由"补部分分"更正为"改用 verdict_agreement" |
-| `scripts/memory_step4fix_gate.py` | **Step 4/5 Gate（现 179 项：⑧~㉔ + ③a~③u）**（新增；⑫ 组 = E-4；③d~③j = 修 #4/#6/#10；⑫k = 修 #8；③l~③n = 修 #7 退化检测；③o~③r' = 修 #7 换指标 `verdict_agreement`；③s~③u = 修 #11/#12；⑬a~⑬l + ⑩e/⑩f = 修 #14/#15/#17 并钉住 #16 的契约；⑭ = #2 逐题口径；⑮ = provenance/死代码；⑯⑰ = 检索配置与逐轮落盘；⑱ = #21 主指标单一公式；⑲ = #22 KP 聚合取证；⑳ = #19 非众数占比；㉑ = 预检探推理端点 + 写链断裂标环境类；**㉒ = #24 OFF 臂必须真空白进程级 store**；**㉑c'/f/g + ㉓a~㉓i = #28/#29（写入证据判据的位置/归因/下游 + 护栏自身卫生）**） |
+| `scripts/memory_step4fix_gate.py` | **Step 4/5 Gate（现 184 项：⑧~㉕ + ③a~③u）**（新增；⑫ 组 = E-4；③d~③j = 修 #4/#6/#10；⑫k = 修 #8；③l~③n = 修 #7 退化检测；③o~③r' = 修 #7 换指标 `verdict_agreement`；③s~③u = 修 #11/#12；⑬a~⑬l + ⑩e/⑩f = 修 #14/#15/#17 并钉住 #16 的契约；⑭ = #2 逐题口径；⑮ = provenance/死代码；⑯⑰ = 检索配置与逐轮落盘；⑱ = #21 主指标单一公式；⑲ = #22 KP 聚合取证；⑳ = #19 非众数占比；㉑ = 预检探推理端点 + 写链断裂标环境类；**㉒ = #24 OFF 臂必须真空白进程级 store**；**㉑c'/f/g + ㉓a~㉓i = #28/#29（写入证据判据的位置/归因/下游 + 护栏自身卫生）**） |
 | `scripts/memory_step5_paired.py` | **Step 5 paired control**（Store ON/OFF）（新增） |
 | 其余 `scripts/*.py` | 探针构建 / 成本估算 / review 导出等工具（新增） |
 
@@ -667,7 +668,7 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | **8** | 跑 6 条 Memory | ✅ **完成**（paired control，消耗 token） |
 | **9** | 若产品行为变化 → 重跑受影响基线 | ✅ **已跑（Step 9，2026-10-07）**：E-5 复测 12 次 + Memory 配对多轮 + grade/verify 探针补测；逐份 `code_version` 归属见 §20.8.5，配对终局见 §20.8.6。★ 未回写 0B 冻结基线（新结果一律 `phase1_` 前缀新档） |
 
-### ★ 现在的决定清单（**D1~D11 已裁决并落地 ⇒ 待决只剩 D12 / D13**）
+### ★ 现在的决定清单（**D1~D13 全部已裁决并落地**）
 
 | # | 决定 | 我的建议 | 代价 |
 |---|---|---|---|
@@ -682,8 +683,8 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | ~~D9~~ | **标签后 `src/` 又改了多个文件** ⇒ `V-2026-10-07` 不含产出 Step 9 数字的代码 | ✅ **已裁决（① 补 `V-2026-10-07B`）**：指向收尾验证通过后的 HEAD，并把 §20.8.5 的逐份版本归属并进 §20.4；§20.0 回填落点与**当时的**指纹/护栏计数（★ 自指限制照旧：落点 SHA 只能由后续提交回填） | 已完成（零成本） |
 | ~~D10~~ | **#23 检索链上有一层「实现了但从未开启」**（`use_llm_verify` 全仓 24 处调用一律 `False`） | ✅ **已裁决（② 承认未验证并披露，不跑消融、不删）**：论文里检索章描述该层必须写「已实现，**默认关闭且未做消融**，本文所有检索数字均不含该层的贡献」；❌ 不得写成「相关性校验提升了检索质量」（无证据）。不删的理由：删要连参数一起动，波及 20+ 脚本签名 | 已完成（零成本） |
 | ~~D11~~ | **交接与 findings 的 10 个 .md 是否在版本控制里** | ✅ **已裁决（① 入库）**：`evals/results/task_eval/*.md`（约 158KB）入版本控制；★ **`*.jsonl` / `*.log` / `*.report.json` 维持不入库**（3.7MB，其中单个 log 1.9MB）⇒ 归档的可追溯性仍由 §20.0 的文件指纹 + §20.8.5 的逐份 `code_version` 表承担，而不是靠二进制存档 | 已完成（零成本） |
-| **D12**（新） | **#27 layer top-up 路径把 `knowledge_points` 写死成 `[]`** ⇒ 走这条路的 top-k 证据在 `kp_hit`/`kp_mrr`/`coverage` 眼里「没标考点」，检索指标被**系统性低估**；并给 §20.5.1 那 8 条 `coverage` N/A 提供了比「旧索引」更可能的解释（但归档没存 `evidence_id` ⇒ 仍不能定论） | 三条路：**(A)** 改产品 1 行（`_doc_to_evidence` 用解析器）—— 指标与对外契约一起真，但 `EvidenceDoc.knowledge_points` 是契约字段（`agents/tools.py:54` 带给 agent）⇒ **动检索链 ⇒ 新锚点 + qa/generate agent 侧要重跑（要 token）**；**(B)** 只改评测口径（`retrieval_probe._to_item` 空值时从 `metadata` 兜底解析）—— 零 token、不触发版本，`retrieval_gate`/探针当场可重测，代价是「指标」与「模型实际看到的」不一致；**(C)** 只披露。我建议 **(B) + 单独披露产品侧那半**（与 #10 同构） | (B) 零 token；(A) 需 agent 侧重跑 |
-| **D13**（新） | **#28 的行为变化**：写入证据缺失**不再中止整轮**，改为逐条标「不可测」并从分母剔除 ⇒ 若 TEI 在跑到一半时挂掉，剩下的 case 仍会照常烧 token（开跑前的那一次由 `preflight_check()` 拦住） | 三条：①**保持现状**（预检已拦在最前面，中止逻辑属「无流量的假设性加固」）；②加「**连续 N 条**写链证据缺失即中止」（N=3 较自然，约 20 行 + 2 项护栏）；③加「**任一** memory case 命中即中止」。我倾向 **①**，除非 §6 那次整轮要跑很久、担心中途故障白烧 | ①零成本；②≈20 行 |
+| ~~D12~~ | **#27 layer top-up 路径把 `knowledge_points` 写死成 `[]`** ⇒ 走这条路的 top-k 证据在 `kp_hit`/`kp_mrr`/`coverage` 眼里「没标考点」，检索指标被系统性低估 | ✅ **已裁决并落地（② 只改评测口径 (B) + 单独披露产品侧那半）**：`retrieval_probe._to_item` 在 `ev.knowledge_points` 为空时从 `ev.metadata` 兜底解析（复用 `rag.evidence.parse_knowledge_points`，并把该解析器改成公开名，防两套解析分叉）；护栏 **㉕a~㉕e**。★ **影响是实测的（零 LLM，`scripts/kp_paired_reading_probe.py`：同一次检索、两套读数）**：coverage N/A **12 → 1**（30 条有 `expected_kp` 的 case），`kp_hit` **0.889(16/18) → 0.966(28/29)**；被救回的 generate 8 条与两份归档里那 8 条 N/A **同号** ⇒ §20.5.1 那个「疑似旧索引」的悬案**定论为读数通道问题**。★ 边界照旧披露：产品契约 `EvidenceDoc.knowledge_points` 仍不带宽 KP（㉕d 钉住），且「当年那 8 条确由此因」仍**不可逐条证明**（归档无 `evidence_id`；本机 rerank 关） | 已完成（零 token） |
+| ~~D13~~ | **#28 的行为变化**：写入证据缺失不再中止整轮，改为逐条标「不可测」并从分母剔除 ⇒ 若 TEI 跑到一半挂掉，剩余 case 仍会烧 token | ✅ **已裁决（① 保持现状）**：开跑前由 `preflight_check()` 拦（㉑a 探真实推理端点、㉑h 不再因缺 `/health` 假红），「连续 N 条即中止」属无流量的假设性加固，不做。若 §6 整轮中途出现成批 N/A，按 ㉓b 的 `validity_reason` 逐条判读即可 | 零成本 |
 
 **⇒ ⑥b（agent 在新 thread 里实际召回）已由 Step 5 真跑验证成立（`mem-001`）。**
 
@@ -753,7 +754,7 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | **★ E-4 护栏（⑫ 组 9 项 + 探测器）** | `scripts/memory_step4fix_gate.py` → `check_12()` / `_vocab_tokens()` |
 | **★ E-5 效果探针（配对，零判定）** | `scripts/memory_e5_probe.py`（`--reanalyse --write` = 零成本重析） |
 | **E-5 归档** | `evals/results/task_eval/phase1_e5_prompt_following.jsonl`（12 条 = 6 题 × 2 臂） |
-| Gate 脚本（3 个） | `scripts/memory_step2_gate.py` · `memory_step4_gate.py` · **`memory_step4fix_gate.py`** |
+| Gate / 探针脚本 | `scripts/memory_step2_gate.py` · `memory_step4_gate.py` · **`memory_step4fix_gate.py`（184 项）** · **`scripts/kp_paired_reading_probe.py`**（#27/D12 的成对读数实测，零 LLM） |
 | Step 5 配对脚本 | `scripts/memory_step5_paired.py` |
 | 冻结基线（**只读**） | `evals/results/task_eval/phase0_baseline_final.jsonl` |
 | Phase 1 结果 | `evals/results/task_eval/phase1_baseline_v2.jsonl` |

@@ -472,8 +472,8 @@ flat（全层）/ ours（任务映射）/ prefer_l1 / prefer_l2 / prefer_l3
 
 ### 14.4 q052 摘要（诊断，不再继续优化）
 
-- vector_only：目标已入池（rank 2）→ `dropped_by=rrf_threshold`（0.0857<0.088）→ 保底 top-1 错学科  
-- full：L1 目标全程 rank 1 存活；多路召回救回  
+- vector_only：目标已入池（rank 2）→ `dropped_by=rrf_threshold`（0.0857<0.088）→ 保底 top-1 错学科
+- full：L1 目标全程 rank 1 存活；多路召回救回
 - **归因**：召回到了但被阈值滤掉；非召回失败
 
 ---
@@ -1044,7 +1044,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 24 | **paired control 的 OFF 臂从未真正关掉 Store**：旧实现只置 `agent.store = None`，而 `teaching_graph.load_memory` 与 `remember._record_episode` 都在**调用时**取进程级 `get_store()`、根本不看 `agent.store` ⇒ 两组是同一条件，**Step 5 起的「ON 有卡 / OFF 无卡」对照一直是假的** | 直接证据就在归档里：`phase1_memory_step5_store_off_step9_d8.jsonl` 的 `mem-002`（`store_enabled=False`；user_id 每 case 带随机后缀 ⇒ **不可能**是别的 case 残留）：A 段两次批改 `scores=[0.0, 0.0]`，B 段**注入了记忆卡**「薄弱：图的存储」，回复「根据你的做题记录，薄弱点在「图的存储」」⇒ 写链与读链都没关。★ **两个缺陷互相掩盖**：Step 5 当时 OFF 显示「0 卡 0 召回」被当作对照生效的证据，那其实是 #22（画像恒空 ⇒ 谁都召不回）造成的假象 —— 修好 #22 之后 OFF 才露出「照样有卡」。该记录的 `episodes=[]` **不能**当反证：OFF 臂 `eff_store=None`，取证通道压根没读 | ✅ **已修（本轮）**：抽成 `_off_arm_disable/_off_arm_restore`，**两处一起摘**（`agent.store` + `set_store(None)`），并在 `finally` **最前**恢复 —— 进程级那条忘恢复 ⇒ 之后所有 case **静默**失去记忆且不报错，比不恢复 agent 严重得多。护栏 **㉒a~㉒e**（㉒a/㉒b 按构造断言 ON/OFF 轮内 `get_store()` 的**实际值**；㉒c 锁恢复；㉒d 锁 notes 自证控了什么变量；㉒e 锁护栏自身不污染进程）。★ 连带把 **⑦b/⑦c 从源码文本断言改成行为断言**：抽 helper 后它们立刻变红，正好演示了那类断言的脆弱（**代码搬家、行为没变、红灯却响**）；反向验证 = 把 `_off_arm_disable` 临时换成旧实现 ⇒ ⑦b 必然红（实测 `tamper_red=True restored_green=True`，脚本为一次性件、未入库）。⇒ **既有 OFF 组的对照证据作废**，已用修好的 OFF 重跑（`step9_d8b` ⇒ **§20.8.6：配对第一次成立**，可测正样本 n=1） |
 | 25 | **批改会把「作答正确」的题判成低分**（方向与缺陷 A 相反：不是把错题判满分，而是**把对题判零分**） | 实测 `phase1_memory_step5_store_on_step9_kp.jsonl` 的 `mem-003` 第 1 题：「判断序列 5, 8, 12, 19, 28, 20, 15, 22 是否构成小根堆，我认为构成」⇒ 逐层校验（1-based：5≺8,12；8≺19,28；12≺20,15；19≺22）**无违例、确为小根堆**，学生答对；批改却输出 **0.0 分**、KP 归到 `['堆排序','二叉树']`。★ 判定用的是当场写的 12 行堆校验器（`违例=[]`），不是人工肉眼 | 🔵 **只披露，不擅自改产品**。三点边界：① **单次观察**（Step 9 三次重复里只有这一处方向错），不足以定「批改普遍过严」；② **不进任何已发表指标** —— 该题只存在于 `memory` case，`grade` 的 15 条另有 `verdict_agreement`（13/13）覆盖；③ 原 §20.8.3 把它**误记**成「错题被判 100 分」，该归因已作废（那 100 分是判对的，错在 gold 要求两次都低分 ⇒ 属 D8/#26 的 case 设计问题）。是否值得为它扩评测集 = 后续决定，本轮不动 |
 | 26 | **`recalled` / `used` 用子串包含判定，而正样本的 gold `values` 写的是章名** ⇒ 「召回成功」这句话偏松：任何含该字的记忆卡都算命中 | 口径写在 `memory_scorer` 顶部（`recalled_actual = 任一 card 含 values 中任一值`）。旧 `mem-002` 的 values = `["图"]`，而实测卡面是「薄弱：**图**的存储」⇒ 靠子串通过；`mem-003` 的 `["排序"]` 会被「快速排序 / 希尔排序 / 堆排序」**任一**满足 ⇒ 「召回成功」**测不出「召回的是不是设计的那个薄弱点」** | ✅ **已收紧（D8 第三次）**：两条正样本的 `values` 改为具体考点（`图的存储` / `快速排序`；改前核对两值均在 `canonical_names()`，`task_eval sanity` 复跑 **ERROR 0**）⇒ 正样本现在断言精确薄弱点。★ **子串口径本身不改**：记忆卡是自由文本「薄弱：X」，改全等会把排版差异也算成未召回（另一种错）。★ **负样本刻意保留章名**（`mem-005`/`mem-006` 的 `["图"]`）：对 `should_be_recalled=False` 来说偏松匹配让它**更难通过**（方向保守），无假通过风险 ⇒ 不动。指纹 `ffcf2b3233fc5595` → `3c938365da7ce614`（§20.0） |
-| 27 | **layer top-up 路径把 `knowledge_points` 写死成空列表**，而同一份 `metadata` 里就带着 JSON 字符串 ⇒ 凡走这条路径进 top-k 的证据，在 `kp_hit` / `kp_mrr` / `coverage` 眼里**等于没标考点**（系统性假阴性，与 #10 同属「指标侧读不到真值」那一类） | 三条**互相独立**的证据：① **按构造**：`rag/layer_recall.py:43` 写 `knowledge_points=[]`，而主路径 `rag/evidence.py:93` 用 `_parse_knowledge_points(meta.get("knowledge_points"))`。本轮用假 Document（metadata 带 `["cn.arch.performance","带宽与时延"]`）直接驱动 `_doc_to_evidence` ⇒ 解析器给 **2 项**、该函数给 **`[]`。② **索引侧不背锅**（对 6 个集合做**全量分页**扫描，不是抽样）：`data_structure 777/785=99.0%`、`computer_organization 462/464=99.6%`、`operating_system 405/405=100%`、`computer_network 357/357=100%`、`questions 1358/2050=66.2%`（空值集中在 `doc_role=exam_answer` 685 条 + `exam_item` 7 条）；分桶看 **`doc_role=method` 在四个学科集合都是 100%**，`textbook` 只有 `data_structure 36/44=81.8%` 与 `computer_organization 27/29=93.1%` 有空（os/cn 的 textbook 100%）—— 这正是 §20.5.1 说的「仅剩 10 条 basic 讲义 detail 块」。③ **归档侧对不上**：两份 Step 9 探针归档 `phase1_step9_probeonly_{grade,verify}.jsonl` 的 **123 条 `top_items` 有 60 条 `kp` 为空**，其中 **13 条 `*/method` + 2 条 `*/textbook`** —— 按 ② 这些桶应当全有标签；且同一 `source`（`knowledge/advanced/computer_network/04_comprehensive.md`）在同一份归档里**既有带 kp 的、也有空 kp 的** ⇒ 差异只能来自路径，不能来自索引 | 🔵 **本轮不改代码，登记 + 提决策（D12）**。影响：`kp_hit` / `kp_mrr`（⇒ Generate 的 `coverage` 项）被**系统性低估**。★ 同时给 §20.5.1 那 **8 条 `coverage` N/A** 提供了一个比「旧索引未打标」**更可能的解释**：某题 top-5 若全走 top-up ⇒ `_all_kp(top)=[]` ⇒ 判 N/A；但归档**没存 `evidence_id`**（⑯ 只存 source/category/doc_role/kp/score）⇒ 这条**仍不能定论**，不许写成结论。三条路：**(A) 改产品**（`_doc_to_evidence` 改用解析器，1 行）：指标与对外契约一起变真，但 `EvidenceDoc.knowledge_points` 是**契约字段**（`agents/tools.py:54` 会带给 agent）⇒ **动检索链 ⇒ 触发新版本 + qa/generate 的 agent 侧数字要重跑（要 token）**；**(B) 只改评测口径**（`retrieval_probe._to_item` 在 `ev.knowledge_points` 为空时从 `ev.metadata` 兜底解析）：零 token、不触发版本，`retrieval_gate` 与探针当场可重测；代价是「指标说的」与「模型实际看到的」不一致（模型看到的 top-up 项仍无考点标签）；**(C) 只披露**。我建议 **(B) + 把产品侧那半单独披露**：与 #10 完全同构（修指标侧、离线重算、归档不改写），而 (A) 的代价是在收尾锚点上换检索契约 |
+| 27 | **layer top-up 路径把 `knowledge_points` 写死成空列表**，而同一份 `metadata` 里就带着 JSON 字符串 ⇒ 凡走这条路径进 top-k 的证据，在 `kp_hit` / `kp_mrr` / `coverage` 眼里**等于没标考点**（系统性假阴性，与 #10 同属「指标侧读不到真值」那一类） | 三条**互相独立**的证据：① **按构造**：`rag/layer_recall.py:43` 写 `knowledge_points=[]`，而主路径 `rag/evidence.py:93` 用 `_parse_knowledge_points(meta.get("knowledge_points"))`。本轮用假 Document（metadata 带 `["cn.arch.performance","带宽与时延"]`）直接驱动 `_doc_to_evidence` ⇒ 解析器给 **2 项**、该函数给 **`[]`。② **索引侧不背锅**（对 6 个集合做**全量分页**扫描，不是抽样）：`data_structure 777/785=99.0%`、`computer_organization 462/464=99.6%`、`operating_system 405/405=100%`、`computer_network 357/357=100%`、`questions 1358/2050=66.2%`（空值集中在 `doc_role=exam_answer` 685 条 + `exam_item` 7 条）；分桶看 **`doc_role=method` 在四个学科集合都是 100%**，`textbook` 只有 `data_structure 36/44=81.8%` 与 `computer_organization 27/29=93.1%` 有空（os/cn 的 textbook 100%）—— 这正是 §20.5.1 说的「仅剩 10 条 basic 讲义 detail 块」。③ **归档侧对不上**：两份 Step 9 探针归档 `phase1_step9_probeonly_{grade,verify}.jsonl` 的 **123 条 `top_items` 有 60 条 `kp` 为空**，其中 **13 条 `*/method` + 2 条 `*/textbook`** —— 按 ② 这些桶应当全有标签；且同一 `source`（`knowledge/advanced/computer_network/04_comprehensive.md`）在同一份归档里**既有带 kp 的、也有空 kp 的** ⇒ 差异只能来自路径，不能来自索引 | ✅ **已按 (B) 修（D12 裁决 2026-10-08）**。影响：`kp_hit` / `kp_mrr`（⇒ Generate 的 `coverage` 项）被**系统性低估**。★ 同时给 §20.5.1 那 **8 条 `coverage` N/A** 提供了一个比「旧索引未打标」**更可能的解释**：某题 top-5 若全走 top-up ⇒ `_all_kp(top)=[]` ⇒ 判 N/A；但归档**没存 `evidence_id`**（⑯ 只存 source/category/doc_role/kp/score）⇒ 这条**仍不能定论**，不许写成结论。三条路：**(A) 改产品**（`_doc_to_evidence` 改用解析器，1 行）：指标与对外契约一起变真，但 `EvidenceDoc.knowledge_points` 是**契约字段**（`agents/tools.py:54` 会带给 agent）⇒ **动检索链 ⇒ 触发新版本 + qa/generate 的 agent 侧数字要重跑（要 token）**；**(B) 只改评测口径**（`retrieval_probe._to_item` 在 `ev.knowledge_points` 为空时从 `ev.metadata` 兜底解析）：零 token、不触发版本，`retrieval_gate` 与探针当场可重测；代价是「指标说的」与「模型实际看到的」不一致（模型看到的 top-up 项仍无考点标签）；**(C) 只披露**。我建议 **(B) + 把产品侧那半单独披露**：与 #10 完全同构（修指标侧、离线重算、归档不改写），而 (A) 的代价是在收尾锚点上换检索契约。**已落地**：`retrieval_probe._to_item` 在 `ev.knowledge_points` 为空时从 `ev.metadata` 兜底解析（复用 `rag.evidence.parse_knowledge_points` —— 原先是私有名，已改公开，防两套解析分叉）；护栏 **㉕a~㉕e**（㉕a 驱动真实 `_to_item`；㉕b 反向：metadata 也没有 ⇒ 记空、**绝不虚构**；㉕c 锁「与解析器同结果」；**㉕d 锁产品契约仍不带宽 KP**（(B) 的边界，改回 (A) 必然红）；㉕e `_all_kp` 不再漏）。⇒ 影响实测见 §20.5.1 末：coverage N/A **12 → 1**、`kp_hit` **0.889(16/18) → 0.966(28/29)**（成对读数、零 LLM）。★ **历史归档一律不回写**：0B/Phase 1 的 `gen_coverage` / `kp_hit` 仍按当时读数引用，论文里两处并列披露 |
 | 28 | **写入证据判据放错了位置、替原因下了结论、且没有下游读者**（2026-10-08 对自己代码的对抗性 review 抓到，四条同源问题一起修） | ① **位置**：`memory_write_missing` 的调用点原先在 `if case.task == "memory"` **之外**，而非 memory 任务走 `run_turns` —— 它照抓 `grade_scores`、却**从不**读 Store ⇒ `episodes` 恒空 ⇒ 任何一次 grade/verify/qa 实跑都会在**第一条**被判 `env_error`，而 `cli._run` 的 `break` 在 `append_record` **之前**（`cli.py:72-79`）⇒ 整轮中止**且那条记录连盘都不落**，中止日志取 `hard_fails[0]`/`retrieval_error`（两者皆空）⇒ 屏幕上是一行**没有原因的**「中止」。★ 这条直接卡住 `EFFECT_PLAN §6 Final Gate`。② **归因**：函数把「没落库」写成**环境类** —— 可缺陷 C（`record_grade` 拿不到 config 被静默跳过）的症状与 TEI 502 一模一样，而 `memory/safe.py:24-35` 把写失败压成一行 WARNING、既不计数也不落到 record ⇒ 单凭 `episodes==[]` **无法区分**，指认环境等于替缺陷 C 打掩护。③ **下游**：注释承诺「不进指标」，但 `report._is_invalid` 与 `memory_step5_paired.ArmSummary` **都不读 `env_error`**（全仓 grep 为零）⇒ 真正产出 Memory 数字的那条路径上，这种样本照样进分母。④ **读链**：清理前那次读取自己抛过错时只写进 `notes`（而 `notes` 从不进 record）⇒ 「没读到」会被下游当成「没写入」 | ✅ **已修（零 token）**：判据移入 memory 分支、**只报「证据缺失」不指认原因**（环境类仍由 `preflight_check()` 与 `is_env_error()` 判），命中时置 `validity_valid=False` ⇒ **复用既有排除链**，`report` 与配对脚本两侧同时生效；新增 record 字段 `memory_write_missing` / `episodes_read_failed`（读链坏了就**不做**写入推断）；`env_error` 兜一句可操作文案，中止日志不再可能为空。护栏 **㉓a~㉓i（10 项）**：㉓a 驱动**真实 `run_case`**（`_run_agent` 与检索探针打桩 ⇒ 零 LLM、零 TEI 依赖）证明 grade 任务不开火、㉓b/c 锁「命中 + 不指认原因」、㉓d/d' 三个反向（有 episode / 读链坏 / OFF 臂）都不报、㉓e+f **逐条验证两个下游读者**、㉓g/h 证明真实环境信号仍开火（没把闸拆没）、㉓i 锁字段落盘。★ **牙齿实测**：把调用点临时移回分支外 ⇒ `㉓a ❌ env_error=True primary=tool_error`、整套 gate 退出码 1；还原后 **175 项全绿 exit 0**（篡改是临时 Edit + 逆 Edit，未落进任何提交）。★ **行为变化要披露**：写链证据缺失**不再中止整轮**（改为逐条标不可测）⇒ 若 TEI 在跑到一半时挂掉，剩余 case 仍会烧 token；判断是不做「无流量的假设性加固」，且预检已在开跑前拦住（㉑a）。要不要加「连续 N 条写链缺失即中止」= **待裁决 D13**。 |
 | 29 | **护栏自己不合格**：㉑c 把 `EMBEDDING_API_BASE` 留在死端口、㉑b 是弱预言、`scripts/` 从来不在 pyrefly 范围内（新写的 ㉒ 里就有一个真类型错） | ① `check_21` 的 `㉑c` 在原 `finally` **之后**改 settings 却只还原 `USE_FAKE_EMBEDDING` ⇒ 跑完 `EMBEDDING_API_BASE=http://127.0.0.1:1`（实测），同进程后续任何 embedding 调用都会 ConnectTimeout。今天没造成红灯**只是因为 ㉑ 后面恰好只剩 ㉒**（不碰 embedding）—— 而「护栏全绿但它描述的路径已不可达」正是本仓反复踩的那一类。② `㉑b` 写的是 `len(probs2) >= 1`，标题却声称「两条路径不互相掩盖」⇒ 删掉 health 那一支它照样绿。③ `pyproject.toml` 的 `project-includes = ["src"]` ⇒ `scripts/` 从未被检查；显式跑 `pyrefly check scripts/memory_step4fix_gate.py` 得 14 errors，其中 **`㉒d` 访问 `res_off.notes` 而 `_run()` 的返回注解写成了 `tuple[_SpyAgent, bool]`**（实返 `CaseResult`）—— 即「不污染进程」这套信任基础的类型从没被静态看过 | ✅ **已修（零 token）**：`㉑c` 包进 `try/finally` 两个字段一起还原，并新增 **`㉑c'`「跑完 settings 已还原」**（还原被删 ⇒ 必红）；`㉑b` 改**双向**断言（`不可达` 与 `推理` 两句都必须在）；`HTTPServer` 补 `server_close()`；`_run()` 注解改成它实际返回的形状（`tuple[smoke.CaseResult, bool 或 None]`） ⇒ 该文件 pyrefly 由 14 → **13 errors**（余下 13 条是 scripts 里的历史噪音：langgraph `Checkpoint` TypedDict 键、`sys.path` 注入导致的 `missing-import` 等，**不在本轮范围**，但口径必须改写）。★ 文档纪律：以后写「pyrefly 0 errors」一律注明**范围 = `src/`**，不能说成全仓 |
 | 30 | **护栏的「判据数量」本身不可复现**（I6，与 #29 同属「护栏自己不合格」）：文档与标签里那句「175 项全绿」，在**干净克隆**上其实是「167 项跑过 + 8 项压根没跑」，而 `main()` 照样打印「GATE 通过 · exit 0」 | `⑬l×2`、`⑭d~⑭f`、`⑱a~⑱b`、`⑳d` 这 **8 项**读 `evals/results/task_eval/*.jsonl` 与 `calibration_30.jsonl`；按 **D11** 那些归档刻意不入库 ⇒ 缺文件时旧写法只 `print` 一行 `⏭`、**不进任何计数**，于是总数悄悄变小而退出码不变。★ 这是「**绿灯的数量**不可信」：我们反复防的是「绿而路径不可达」，这次坏的是计数口径本身。实测（一次性篡改脚本，未入库）：把 `check_20` 换成空函数 ⇒ `判定项 171 ≠ 声明 175` 且 exit 1；把 `ROOT` 指向空目录、只跑那四组 ⇒ `⏭` 恰好 **8 项**（另执行 24 项） | ✅ **已修（零 token；选「让数量自己说话」而不是「把归档入库」—— 后者与 D11 冲突）**：新增 `skip()`（跳过必须计数，一个 `if` 挡掉多项时用 `count=`）与模块级 `_EXPECTED_ITEMS = 175`；收尾两条不变量 —— ① 执行数（含跳过）必须等于声明值，② 跳过数必须为 0 —— 任一不满足 ⇒ `_flag()` 置红 + **exit 1**，文案写明「本次不能称为全绿，只能说跑了的那几项绿」。⇒ 新克隆上看到的是一行带原因的红灯，而不是一行更小的绿。★ 维护契约：**加判据必须同步改 `_EXPECTED_ITEMS`**，忘了就红（不靠人记性）。本轮护栏计数不变（仍 **175**，本机 skip=0） |
@@ -1060,12 +1060,12 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | `gen_structure` | 15/15 | — | **15** | ⚠️ **恒真**，零区分力（靠模板标签，实际只验"没崩"） |
 | `gen_answerability` | 15/15 | — | **15** | ⚠️ 同上 |
 | `gen_correctness` | 15/15 | — | 14 | ✅ 唯一稳定有区分力的轴 |
-| `gen_coverage` | **7/15** | 裸查 **15/15**（指示性，非结论） | 归档 5 → 现算 **13** | ⚠️ **疑似旧索引**，能否重跑救活待 **Step 9** 定论 |
+| `gen_coverage` | **7/15** | 裸查 **15/15**（指示性，非结论） | 归档 5 → 现算 **13** | ✅ **已定论（#27 / D12 选 (B)）**：主因是**读数通道**（top-up 丢 KP），不是索引缺标签 —— 见本节末「定论」段 |
 | `gen_difficulty` | **0/15** | **0/15** | — | ❌ **结构性死项** |
 
 平均每题**只有 3.47 项可测**（7 题 4 项 / 8 题 3 项）——所以"五项完整交付率"这个名字目前**名不副实**。
 
-#### 那 8 个 `gen_coverage` 的 N/A：最可能是**旧索引**，但**不可证明**（★ 本节结论降级过一次，过程留下）
+#### 那 8 个 `gen_coverage` 的 N/A：**已定论** —— 主因是读数通道（#27），不是索引缺标签（★ 本节结论降级过一次、这次升级回来，过程全留）
 
 我**先前用「每集合抽 400 条」外推成"六个内容集合 100%、重跑即救"——那是错的**。
 下面是**全量分页扫描**（只读，零 token）的真实数字：
@@ -1086,6 +1086,31 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 |---|---|---|---|
 | `doc_role=textbook` 的 `detail` 块 | **10 条**（ds 8 / co 2，如 `basic-ds-tree` / `basic-ds-intro` / `basic-co-bus`） | basic 讲义里少数没打上 KP 的正文块 | **相关** —— practice 模式可用层 = `["advanced","basic"]` |
 | `exam-*-answer` 块 | **692 条**（`questions` 集合） | 真题**答案**文档的块 | **无关** —— `schema/task_policy.py` 强制 practice 的 `exam_resources` 全 forbidden，这些块**不进证据包** |
+
+★ **定论（2026-10-08，零 token 的成对读数实验，`scripts/kp_paired_reading_probe.py`）**
+在同**一次** `probe_retrieval` 里对每条证据同时记两套读数 —— `old = ev.knowledge_points`（修复前评测看到的）
+与 `new = retrieval_probe._to_item(ev).knowledge_points`（#27 修好后从 `metadata` 兜底解析）——
+query / 索引 / 融合 / 截断 / gold 全部相同 ⇒ 差异只能来自**读数本身**。结果（30 条有 `expected_kp` 的 case = generate 15 + qa 15）：
+
+| 读数 | coverage N/A（整批无 KP 标签） | 可比对 | `kp_hit` |
+|---|---|---|---|
+| 修复前 | **12** 条 | 18 | 16/18 = **0.889** |
+| 修复后 | **1** 条（只剩 `qa-009`） | 29 | 28/29 = **0.966** |
+
+★ 被救回的 11 条里，generate 侧恰好是 `gen-002/003/005/006/008/009/012/014` —— **与两份归档里那 8 条 N/A 同号**；
+qa 侧是 `qa-007/010/015`（归档 4 条 N/A 里的 3 条）。
+⇒ 于是「最可能是旧索引、但不可证明」换成了**可证明的机制**：① 「索引没打标」不再是必要解释
+（现索引 + 旧读数照样能造出 12 条 N/A）；② 「走 top-up 那条路进来的证据会丢标签」是**充分**解释，
+且量级足以覆盖归档里那批 N/A。
+★ **仍然不许写成结论的部分**：本实验**不能**断言「0B 当年那 8 条就是这个原因」—— 归档既没存
+`evidence_id` 也没存 `top_items`（⑯ 之后才有），逐条溯源不可能；且本机 `settings.RERANK_ENABLED=false`
+⇒ 这次是「同一次检索的两套读数」，**不是**与 0B 可比的重跑。
+⇒ 论文口径：**coverage N/A 的成因已在机制层面定位并在评测侧修复**；历史归档那 8 条写作
+「与已修复的读数通道一致，但无法逐条证明」。
+★ 处置 = **#27 的 (B)**：只改评测读数，产品契约 `EvidenceDoc.knowledge_points` **不动**
+（它经 `agents/tools.py:54` 交给 agent ⇒ 动它 = 动检索链 = 换锚点 + qa/generate 重跑）。
+「模型实际看到的 top-up 证据仍无考点标签」这条**产品侧偏差单独披露**，并由护栏 **㉕d** 钉成可检查的事实
+（将来改成 (A) 时那条必然红，用来提醒同步披露）。
 
 ⇒ 现在学科集合的覆盖是 **99.0–100%**，残留无标签块只有 10 条；而一条 query 的 top-5 全部落在这 10 条上的概率极低。
 所以更一致的解释仍是：**归档（2026-10-06）跑在标签尚未打完的旧索引上**，此后索引重建过。
@@ -1184,7 +1209,7 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 「`forbidden_values` 应校验是否 canonical」是错的规则（它是回复文本里的自由词，不是 KP 名）。
 **#13**（tool call 缺失 ⇒ 无原文可救）与 **#18**（gold 数据集本体未入版本控制）**只披露、不擅自修**。
 第三批落 **D1/D3/D4** 三项决定：#2 主指标改逐题聚合（⑭ 6 项）、§7.1 三处「死代码」按实测**只删真死的那一条**（另两条一条是「接了线没人开的开关」、一条注释已自陈惰性，见 §20.5.2）、record 落 `prompt_set_version`（⑮ 6 项）。
-Gate **179 项全绿**（101→116→128→129→134→138→148→157→162→175→**179**；162→175 = 收尾修复批：`㉑c'`/`㉑f`/`㉑g` 3 项 + **`㉓a~㉓i` 10 项**，见 #28/#29；175→179 = Minor 批（`−㉒d`、`+㉑h`、`+㉔a~d`，见 #31）。★ **#30 之后这句「全绿」变成脚本自证的**：收尾会比对 `_EXPECTED_ITEMS` 声明值并要求跳过数为 0，少跑或静默 `⏭` 都是 exit 1，见 #30）、`pyrefly` **0 errors（范围 = `src/`；`scripts/` 不在 `project-includes` 内，见 #29）**、ruff check/format 通过、
+Gate **184 项全绿**（101→116→128→129→134→138→148→157→162→175→179→**184**；162→175 = 收尾修复批：`㉑c'`/`㉑f`/`㉑g` 3 项 + **`㉓a~㉓i` 10 项**，见 #28/#29；175→179 = Minor 批（`−㉒d`、`+㉑h`、`+㉔a~d`，见 #31）；179→184 = `+㉕a~e`（#27 / D12）。★ **#30 之后这句「全绿」变成脚本自证的**：收尾会比对 `_EXPECTED_ITEMS` 声明值并要求跳过数为 0，少跑或静默 `⏭` 都是 exit 1，见 #30）、`pyrefly` **0 errors（范围 = `src/`；`scripts/` 不在 `project-includes` 内，见 #29）**、ruff check/format 通过、
 `task_eval sanity` 66 条 ERROR 0、两份归档 12 条 validity **逐条不变**（新 gold 不动已发表数字）。
 
 **31 条已知偏离**全部登记（#31 = 对自己代码的 review 余下 12 条 Minor 的处置，含两条意外收获）（#28~#30 来自 2026-10-08 对自己代码的对抗性 review：#28 四条同源问题一起修、#29/#30 是**护栏自身**不合格 —— 进程污染 / 弱预言 / 计数不可复现）；**#2 已由 D1 定夺并落地（2026-10-07）**：主指标 = 逐题「适用项全过」**0.80**，项级池化 0.9423 降级为诊断（护栏 ⑭）。
@@ -1193,7 +1218,7 @@ Gate **179 项全绿**（101→116→128→129→134→138→148→157→162→1
 ★ **#25/#26 是同批次复核时新增的**：#25 更正了 §20.8.3 的一处**误归因**（批改其实把对题判成了 0 分，不是把错题判成 100 分）；#26 是 D8 改 case 过程中发现的「正样本 values 写章名 ⇒ 召回判定偏松」，已把两条正样本收到具体考点。
 —— **#2 的解剖与采纳状态见 §20.5.1**（核心结论：五项里只有
 `correctness` 与 `coverage` 有区分力；8 个 `coverage` N/A **疑似旧索引**产物——全量扫描显示四个学科集合
-KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块），但归档未存每块来源 ⇒ **待 Step 9 定论**；
+KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）—— ★ **已定论（#27/D12）**：主因是读数通道，成对读数实测 coverage N/A **12→1**（§20.5.1 末）；但归档无 `evidence_id` ⇒ 当年那 8 条只能写「与已修复的机制一致」；
 `difficulty` 是双重断开的死项）；**#3（provenance 无 prompt hash）/ #5（OFF 配对无正样本）** 需决定重跑口径；
 **#9（0B 的 Memory 四率口径不同）在论文引用该数字时必须标注**；#1 已披露不修。
 

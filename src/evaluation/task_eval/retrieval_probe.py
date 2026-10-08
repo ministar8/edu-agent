@@ -76,13 +76,24 @@ class RetrievalProbe:
 
 def _to_item(ev) -> RetrievedItem:
     meta = ev.metadata or {}
+    # ★ #27 / D12 选 (B)：`layer_recall._doc_to_evidence`（top-up 路径）把
+    #   `knowledge_points` 写死成 `[]`，而同一份 metadata 里就带着 JSON 字符串 ⇒
+    #   只看 `ev.knowledge_points` 会把「索引有标签、经这条路进来」的证据当成没标，
+    #   `kp_hit` / `kp_mrr` / Generate 的 `coverage` 因此**系统性低估**。
+    #   ⇒ 评测侧从 metadata 兜底解析。产品契约（`agents/tools.py:54` 给 agent 的那份）
+    #     **不改** —— 那条路的 KP 仍然缺失，属已披露的产品侧偏差（见 §20.5 #27）。
+    kps = list(ev.knowledge_points or [])
+    if not kps:
+        from rag.evidence import parse_knowledge_points
+
+        kps = parse_knowledge_points(meta.get("knowledge_points"))
     return RetrievedItem(
         source=str(ev.source or meta.get("source_file") or ""),
         chunk_id=str(ev.chunk_id or ""),
         kb_depth=str(meta.get("kb_depth") or ""),
         doc_role=str(meta.get("doc_role") or ""),
         category=str(meta.get("category") or ev.collection or ""),
-        knowledge_points=list(ev.knowledge_points or []),
+        knowledge_points=kps,
         score=float(ev.score or 0.0),
     )
 
