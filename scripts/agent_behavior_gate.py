@@ -13,8 +13,10 @@
 - verify          ：禁止无来源声称「已验证 / 已确认正确」
 - 通用            ：禁止编造来源文件名、编造页码
 
-**Soft Quality Score（只记分不阻断）** —— `evals/results/system_validation/agent_behavior/agent_behavior_quality.json`
+**Soft Quality Score（只记分不阻断）** —— 输出路径**默认带日期**（`agent_behavior_quality_YYYYMMDD.json`）
 - 解释完整度 / 来源引用率 / 回复长度 / evidence_usage
+- ★ 别把 `--quality-out` 指回 `agent_behavior_quality.json`：那份是 **V-2026-10-02 的 tracked 归档**
+  （落点 `e36c766`），本地跑一次就原地改掉已发表的数 —— 违反「归档不覆写」
 
 **Evidence-aware**
 - 回复必须利用 Evidence Pack（term overlap 计分），而非脱离 pack 空谈
@@ -26,7 +28,7 @@
 
 用法：
     uv run python scripts/agent_behavior_gate.py
-    uv run python scripts/agent_behavior_gate.py --quality-out evals/results/system_validation/agent_behavior/agent_behavior_quality.json
+    uv run python scripts/agent_behavior_gate.py --quality-out evals/results/system_validation/agent_behavior/agent_behavior_quality_20261008.json
 """
 
 from __future__ import annotations
@@ -441,15 +443,19 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--quality-out",
+        # ★ 默认值刻意**带日期**：原先默认直接写 `agent_behavior_quality.json`，
+        #   而那份是 V-2026-10-02 归档（tracked，落点 `e36c766`）⇒ 任何人本地跑一次护栏就把
+        #   已发表的归档原地改掉，且 git 里只表现为「数字变了」。违反的是「归档不覆写」，
+        #   所以修在默认值上（不靠人记得加参数）。要正式归档请显式传 `--quality-out`。
         default=str(
             ROOT
             / "evals"
             / "results"
             / "system_validation"
             / "agent_behavior"
-            / "agent_behavior_quality.json"
+            / f"agent_behavior_quality_{time.strftime('%Y%m%d')}.json"
         ),
-        help="软质量分输出路径",
+        help="软质量分输出路径（默认写带日期的新文件；显式传本参数才会覆写同名文件）",
     )
     args = ap.parse_args()
     return await run_all(Path(args.quality_out))
