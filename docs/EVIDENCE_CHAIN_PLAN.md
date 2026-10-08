@@ -114,7 +114,17 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
   ⇒ Grade 的行级判据改为 **`verdict_agreement` + 两极 gold 显式披露**；
   这是**偏离登记**，不改写冻结件 `EFFECT_PLAN.md` §3.1。
 - grade 15 条的 `human_score` 不新建值，只按 Task 2 Step 4.5 **派生出处**（`notes` 里已有
-  `2009-Q1` 这类定位，路径 `knowledge/exams/<年份>/items.md`）。
+  `2009-Q1` 这类定位，路径 `knowledge/exams/<年份>/items.md`）；出处已补齐（Task 2 落地）。
+- ★ **P−1 Generate 部分暂停**（checkpoint 3 人裁）：缺的不是标注人手，是 **gold_answer 的
+  单位/结构语义**——真实产物 14/15 是多小问混合卷，`gold_answer` 指整卷、某小问、选项键
+  还是结构化集合，schema 未定义前盲标只会得到「一致地填一个没有定义的字段」。
+  ⇒ Generate 的 P−1 等 gold schema 定义后再开；Task 3 交付的 `missing_premise` 分支是预期状态；
+  **Generate 门槛行在可预见的将来走 limitation 路线**（除非之后定义 per-小问 schema 或收窄产出契约）。
+- 机械 answer-key 判据的三条边界（checkpoint 3 裁定）：① `answer_keys_of()` 只对
+  「能可靠识别为纯选择题」的 reply 运行，其余一律 `missing_premise`，不得凭 regex 猜键；
+  ② 机械判据永远只是 diagnostic evidence，永不单独构成 Generate 的证明门槛（已是设计事实）；
+  ③ 落点：**Task 5** 在动这些判据的夹具/取证时一并实现纯选择判定（有界小改），Task 3 保持现状；
+  在那之前诊断位的假红/假绿只存在于诊断，且由 §20.7 披露。
 - 标注**只读**题面 + 选项 + `knowledge/` 原始依据；**不得打开** `evals/datasets/demo/calibration_30.jsonl`
   （它含 `system_output`，与本次 case_id 重合 20 个）。
 - 每条 gold 必须带出处 `gold_source_ref`（Task 2 会加字段并校验）。

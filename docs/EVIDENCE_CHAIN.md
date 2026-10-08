@@ -345,9 +345,14 @@ B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾�
 ## 7. 文档承载
 
 - **冻结件不动**；实现与冻结口径不一致 → 偏离登记进 `EXPERIMENTS.md` §20.7，不改原文。
-  本方案新增**四处**待登记偏离：① §3.1 五项中 `correctness`/`answerability`/`difficulty` 三项在无 gold 时为
-  `missing_premise`（走 G2 时）；② Grade gold 为两极 `{100:8, 0:7}`，`score_tolerance@±10` 的判别域受限；
-  ③ R5 改变了复合指标的聚合语义（旧归档按新规则重算会得到不同状态词）；④ 5.B 全部延后项的 limitation 清单。
+  本方案新增**五处**待登记偏离：① §3.1 五项中 `correctness`/`answerability`/`difficulty` 三项在无 gold 时为
+  `missing_premise`（走 G2 时）；② Grade gold 为两极 `{100:8, 0:7}`，判别域受限 → 行级判据改用
+  `verdict_agreement`；③ R5 改变了复合指标的聚合语义（旧归档按新规则重算会得到不同状态词）；
+  ④ 5.B 全部延后项的 limitation 清单；⑤ **corpus 结构偏离**：Task 3 标定实测 generate 产物
+  14/15 为多小问混合卷（综合应用+选择+填空），「一题一答案行」的机械解析前提不成立 ⇒
+  机械 answer-key 判据降级为「纯选择题诊断器」（checkpoint 3 裁定 C，边界见
+  `EVIDENCE_CHAIN_PLAN.md` 前置节），Generate 的 P−1 暂停待 gold schema 定义。
+  这是**语料/契约披露**，不是「实现错误因此重写产品」。
 - **活文档勘误**（4 处；★ 一律**改成命令**而不是写死数字 —— 本文件自己就先被这条打过：
   写「16 份 / 27 份 / 204 项」时，`3e77e01` 已经把护栏抬到 216、把跟踪清单变成 17 份）：
 
