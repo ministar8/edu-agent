@@ -982,8 +982,10 @@ def _correct_use(rec: dict) -> Verdict:
 （它们的门槛行是 `final_quality` 与 `score_tolerance`，由 `metrics.rate` 直接算，无合取风险）；
 若将来要进 registry，`for_task` 加两项即可，**不要**提前铺。
 
-`register()` 把这**七个**判据全部登记；`gen_coverage` 包一层 `metrics.kp_coverage`（`expected_kp`
-为空 ⇒ `not_applicable`）、`gen_difficulty` = `metrics.difficulty_match(gold.expected_difficulty,
+`register()` 把这**七个**判据全部登记；`gen_coverage` 包一层 `metrics.kp_coverage`
+（★ 两次实跑后补的守卫：record 缺 `top_items` 键 ⇒ `missing_premise`——老归档没这个字段是
+「测不到」，记成 fail 就把「没证据」当「不合格」，规则①禁止；`expected_kp` 为空 ⇒ `not_applicable`）
+、`gen_difficulty` = `metrics.difficulty_match(gold.expected_difficulty,
 metrics.difficulty_of(reply))`，并加两条前置：`gold.expected_difficulty` 缺失或 `difficulty_of()`
 抽不出来 ⇒ `missing_premise`；query 未指定难度 ⇒ `optional=True`（见 §1.6 族级零覆盖披露）。
 ★ 旧 `cli.py:306-307` 的 backfill 把 actual 侧**永远写成 `None`**，所以 `gen_difficulty` 才会
@@ -1040,6 +1042,8 @@ git commit -m "feat(eval): predicate registry + 四态 + R5 复合语义（corre
   不在原稿 Files 里 —— 删旧聚合会把它弄崩，必须一并重指向 registry）
 - Modify: `src/evaluation/task_eval/judge.py:406-413`（★ 实测第三份 `gen_correctness` 本地公式
   藏在 `apply_judge_to_dict` 里 —— 不切过去，rejudge 与新跑就会分叉出两套口径）
+- Modify: `src/evaluation/task_eval/predicates/generate.py`（★ checkpoint 5 裁定 A：`_coverage` 加
+  「缺 `top_items` 键 ⇒ `missing_premise`」守卫 —— 老归档没有该字段是「测不到」，规则①禁止记成 fail）
 - Modify: `src/evaluation/task_eval/judge.py:265-279`（`_sync_generate_correctness`）
 - Modify: `src/evaluation/task_eval/metrics.py:432-443`
 - Test: `scripts/evidence_chain_gate.py`
@@ -1161,10 +1165,12 @@ grep -n "every_item_passes\|delivery_rate" /tmp/ec_callsites.txt
      且旧公式正是 #36 登记过的「测的是像不像能用的答案」。
      切换后 rejudge 产物里 `gen_correctness` 变 `missing_premise`（无 gold）——
      这是语义修正的预期结果，不是回归；`judge_failure_reasons` 等诊断字段不动。
-  ③ ★ 首次执行者实测：重指向后对 `phase1_baseline_v2.jsonl` 的读数是「coverage 全 fail、rate 0.0」
-     —— 旧归档没有 `top_items` 键，按规则①这应是 **missing_premise（测不到）而非 fail**。
-     若你的重指向版本把「缺 top_items」判成 fail，停下报告；那是在把「没证据」记成「不合格」，
-     正是规则①禁止的方向。
+  ③ ★ 老归档缺 `top_items` 键（`phase1_baseline_v2.jsonl` 15/15 实测）⇒ 必须记
+     **missing_premise（测不到）而非 fail** —— 第二次 dispatch 已实测复现「coverage 全 fail、
+     rate 0.0」正是规则①禁止的方向。裁定 A：在 `_coverage`（`predicates/generate.py`）加守卫——
+     `rec` 缺 `top_items` 键 ⇒ 直接返回 `missing_premise`，不进 `kp_coverage`；
+     有键但列表为空 ⇒ 仍是 `fail`（那是「查了且没覆盖」，与「没证据」不同）。
+     ⑭d 的断言值随之锁定为 `rate=None, n_a_missing_premise=15`。
 
 - [ ] **Step 4: `_backfill` 改为按 registry 重算所有任务**
 
