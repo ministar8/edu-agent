@@ -103,7 +103,7 @@
 | **§3 Phase 1 — Verify 修复** | ✅ **完成并收尾** |
 | **§4 Phase 1.5 — Memory** | 🟡 **Step 1–9 全部完成**；**缺陷 E 已闭合（E-1~E-5）**，方案 A 实测有效（Δ 跟随率 +0.602、入桶 3/6→6/6；新 hash 下复测 Δ **+0.727**，§20.8.1）；**跨会话召回的证据等级已在 §20.8.6 升级**：`mem-002` 在严格配对下 ON 有卡并召回、OFF 零卡（★ 这是 **#24 修好 OFF 臂之后**才成立的第一条配对，可测正样本 **n=1**） |
 | §5 Phase 2 检索短板 | ❌ 未开始 |
-| §6 Final Gate 终评集 | ❌ 未开始 |
+| §6 Final Gate 终评集 | 🟡 **门槛已回填、实跑未做**（2026-10-08）：门槛表 = `EXPERIMENTS.md` **§21**，数据来源脚本 `scripts/s6_baseline_distribution.py`（只读归档、零 LLM）。★ 回填时发现**三个洞**（Verify 没有可机械判定的头号指标 / Memory 无法按 Phase 0 回填 / tool error 的口径决定成败）⇒ **D14 / D15 / D16 待裁决**；另当前**预判两行不达**：Verify `final_quality≥4` = 0/15（根因在检索层、agent 的诚实拒答是正确行为）、Grade tool error 任务级 13.3%（`PHASE1_VERIFY.md` TODO-1，root cause 未确证） |
 | §7 收尾 + Final Freeze | 🟡 **部分启动**：三个效果锚点 —— ① `V-2026-10-07`（落点 `0f24891`）、② `V-2026-10-07B`（落点 `c70ed03`，**Step 9 数字所属代码状态**）、③ **`V-2026-10-08`**（对象 `5471a9a` → 落点 `e65837a`，**评测层修复完成、Final Gate 之前**；相对 ② 是 6 个提交 / 10 文件 +827/−70，**无 gold 改动**）；对抗性 review（含**对自己代码的那一轮**）全部处置完毕，偏离表 **31 条**；`evals/results/task_eval/*.md` 已入库（D11），`*.jsonl/log/report.json` 维持不入库；**§6 Final Gate 未跑**、`§7.2` 一致性未做（`paper_tables.md` 仍标 V-2026-10-02）、`§7.3` Freeze 未开始 |
 
 
@@ -668,7 +668,7 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | **8** | 跑 6 条 Memory | ✅ **完成**（paired control，消耗 token） |
 | **9** | 若产品行为变化 → 重跑受影响基线 | ✅ **已跑（Step 9，2026-10-07）**：E-5 复测 12 次 + Memory 配对多轮 + grade/verify 探针补测；逐份 `code_version` 归属见 §20.8.5，配对终局见 §20.8.6。★ 未回写 0B 冻结基线（新结果一律 `phase1_` 前缀新档） |
 
-### ★ 现在的决定清单（**D1~D13 全部已裁决并落地**）
+### ★ 现在的决定清单（D1~D13 已落地 ⇒ **待决 D14 / D15 / D16**，全是 §6 门槛回填暴露出来的）
 
 | # | 决定 | 我的建议 | 代价 |
 |---|---|---|---|
@@ -685,6 +685,9 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | ~~D11~~ | **交接与 findings 的 10 个 .md 是否在版本控制里** | ✅ **已裁决（① 入库）**：`evals/results/task_eval/*.md`（约 158KB）入版本控制；★ **`*.jsonl` / `*.log` / `*.report.json` 维持不入库**（3.7MB，其中单个 log 1.9MB）⇒ 归档的可追溯性仍由 §20.0 的文件指纹 + §20.8.5 的逐份 `code_version` 表承担，而不是靠二进制存档 | 已完成（零成本） |
 | ~~D12~~ | **#27 layer top-up 路径把 `knowledge_points` 写死成 `[]`** ⇒ 走这条路的 top-k 证据在 `kp_hit`/`kp_mrr`/`coverage` 眼里「没标考点」，检索指标被系统性低估 | ✅ **已裁决并落地（② 只改评测口径 (B) + 单独披露产品侧那半）**：`retrieval_probe._to_item` 在 `ev.knowledge_points` 为空时从 `ev.metadata` 兜底解析（复用 `rag.evidence.parse_knowledge_points`，并把该解析器改成公开名，防两套解析分叉）；护栏 **㉕a~㉕e**。★ **影响是实测的（零 LLM，`scripts/kp_paired_reading_probe.py`：同一次检索、两套读数）**：coverage N/A **12 → 1**（30 条有 `expected_kp` 的 case），`kp_hit` **0.889(16/18) → 0.966(28/29)**；被救回的 generate 8 条与两份归档里那 8 条 N/A **同号** ⇒ §20.5.1 那个「疑似旧索引」的悬案**定论为读数通道问题**。★ 边界照旧披露：产品契约 `EvidenceDoc.knowledge_points` 仍不带宽 KP（㉕d 钉住），且「当年那 8 条确由此因」仍**不可逐条证明**（归档无 `evidence_id`；本机 rerank 关） | 已完成（零 token） |
 | ~~D13~~ | **#28 的行为变化**：写入证据缺失不再中止整轮，改为逐条标「不可测」并从分母剔除 ⇒ 若 TEI 跑到一半挂掉，剩余 case 仍会烧 token | ✅ **已裁决（① 保持现状）**：开跑前由 `preflight_check()` 拦（㉑a 探真实推理端点、㉑h 不再因缺 `/health` 假红），「连续 N 条即中止」属无流量的假设性加固，不做。若 §6 整轮中途出现成批 N/A，按 ㉓b 的 `validity_reason` 逐条判读即可 | 零成本 |
+| **D14** | **Verify 这一行没有可机械判定的头号指标**：§3.1 冻结的 `question_id_recall@k` 不可计算（#20/D7），而 `final_quality≥4` 实测 0B **0/15**、Phase 1 仍 **0/15**（μ 1.133→1.267）——未达成的 case 全是 `exam_hit=False`，agent **诚实说明无法确认是正确行为** ⇒ ge4 在 verify 上测的是**检索覆盖**而非回答质量 | 三条：①**机械化行为层断言**（`仍出题 6/15→0/15`、`有真题信息 3/15→9/15` 现在出自 `PHASE1_VERIFY.md` 的人工/半自动读数，要当 Gate 必须先写成 metric 函数 + 2 项护栏，零 token）；②Verify **不参与通过判定**，整行按「未达成 + 根因在检索层、本文不修」披露；③用代理指标 `exam_hit@k` 顶上去 —— ❌ **我反对**（#20 已禁止用代理指标冒充因果判据）。我建议 **① + 同时披露 ge4 不达** | ①≈1 个函数 + 2 项护栏，零 token |
+| **D15** | **Memory 的「≥80% correct-use」无法按 Phase 0 回填**：0B 那批 gold 里没有 `expected_memory` ⇒ 四率全 N/A（#9）；而新口径下可测正样本只有 **n=1**（§20.8.6） | 三条：①改成**结构断言**（配对成立 + 每条正样本可追溯 + 报「可测率」而非百分门槛）；②硬设 ≥80% 然后宣布「1/1 通过」；③扩正样本再测（要 token，且 A 段不调工具那条限制还在）。我建议 **①** —— n=1 上的百分数没有统计意义，写了答辩会被反问 | ①零成本 |
+| **D16** | **tool error 门槛的口径决定成败**：Phase 1 grade 任务级 **2/15 = 13.3%**，整体 **2/66 = 3.03%**，而 §6 写的是「<5%」 | 二选一：①**按任务级判**（则当前不达标，须等 #11/#12/#13 修完后用 §6 实跑重测）；②按整体判。我建议 **①** ——用整体口径把 13.3% 稀释成 3% 属于**挑对口径**，答辩时「你这条 <5% 是怎么算的」会站不住 | ①零成本（只定口径） |
 
 **⇒ ⑥b（agent 在新 thread 里实际召回）已由 Step 5 真跑验证成立（`mem-001`）。**
 
@@ -759,4 +762,5 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | 冻结基线（**只读**） | `evals/results/task_eval/phase0_baseline_final.jsonl` |
 | Phase 1 结果 | `evals/results/task_eval/phase1_baseline_v2.jsonl` |
 | Step 5 原始 record | `evals/results/task_eval/phase1_memory_step5_store_{on,off}.jsonl` |
+
 

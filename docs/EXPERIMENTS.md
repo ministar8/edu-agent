@@ -1450,3 +1450,46 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 只能给 `turn_log` 可查的**下界**：agent 轮次 **18**（两臂各 9），其中批改工具被调用 **9** 次
 （ON 4 / OFF 5）；每轮内部至少 1 次 chat completion ⇒ **≥18 次**，真实值更高且**不可考**。
 教训（写进纪律）：**跑带 token 的实跑不要把 stdout 管进 `tail`** —— 计费凭证只存在于日志里。
+
+### 21. `EFFECT_PLAN §6 Final Gate` 门槛回填（定稿于 2026-10-08，**早于 §6 那次实跑**）
+
+> ★ **为什么必须现在定稿**：冻结件 §6 写的是「门槛数字推迟到 Phase 0 回填 —— 先测量，再据真实分布设定」，
+> 而规则（怎么算）v1.0 已冻结。⇒ 门槛若等跑完再定，就是**看着结果画线**，等于没有门槛。
+> ★ **本节是 §6 的执行细则，不改 `docs/EFFECT_PLAN.md`**（冻结件只读，drift 记在活文档 —— 纪律 #20）。
+> ★ 数据来源全部可重跑：`PYTHONIOENCODING=utf-8 uv run python scripts/s6_baseline_distribution.py`
+>   （只读归档、零 LLM）；检索侧由门禁自己判（命令见该脚本末行输出）。
+
+| §6 维度 | 冻结的占位 | Phase 0 / Phase 1 实测 | 能否照原口径回填 | **回填门槛** | 依据与必须一起说的风险 |
+|---|---|---|---|---|---|
+| QA | ≥80% `final_quality≥4` | 0B **13/15=0.867** · Phase 1 **14/15=0.933** | ✅ 能 | **保留 ≥80%**（分母 = 判了分的 case；未判分记 N/A） | 有区分力：11/15=0.733 即 FAIL。主失败项 `generation_incomplete`(3) 与 `retrieval_miss`(2/1) |
+| Generate | ≥75% 「五项完整交付」 | 两批均 **12/15=0.80**（逐题适用项全过，#2 主指标） | ⚠️ **口径已换** | **≥75% 挂在「逐题适用项全过」**，N/A 项不进该题分母 | ★ 不得再叫「五项完整交付率」：§20.5.1 实测五项里只有 `correctness`/`coverage` 有区分力，`structure`/`answerability` 恒真、`difficulty` 是死项（严格 5/5 = **0.00**）。`coverage` 还受 **#27** 读数影响（已修，成对读数 12→1） |
+| Grade | ≥75% `score_tolerance@±10` | 两极 gold ⇒ 该率判为**不可测**（`rate=None`、`degenerate_gold=true`、`n_distinct_gold=2`、`raw_rate=1.0`） | ❌ **不能** | 换 **`verdict_agreement ≥75%`**（0B 15/15、Phase 1 13/13；`n_a=2` 必须披露） | ★ 天花板要写清：实测=1.000 ⇒ 门槛 0.75 只在掉到 11/13 以下才触发，**区分力有限**；这不是"补部分分"能解决的（#7：语料 674/674 都是 2 分选择题，无部分分可标） |
+| Verify | ≥80% `final_quality≥4` | **0B 0/15、Phase 1 仍 0/15**（μ 1.133→1.267）；剩余 case 全是 `exam_hit=False` | ❌ **不能照 ge4** | ⚑ **待裁决 D14**：见下方「三个洞」 | ★ 关键事实：这些 case 里 agent **诚实说明无法确认是正确行为** ⇒ `final_quality` 在 verify 任务上测的是**检索覆盖**，不是回答质量。把它当产品失败来卡门槛就是**指标效度错**（与 #7/#10 同类） |
+| Memory | ≥80% correct-use | 0B 该率 **全 N/A**（6/6；#9：0B 的 gold 里没有 `expected_memory`）；现可测正样本 **n=1**（§20.8.6） | ❌ **不能按 Phase 0** | ⚑ **待裁决 D15**：改成结构断言 | ★ n=1 上任何百分数门槛都没有统计意义；0B 的 Memory μ=2.833 与四率引用时必须标「口径与 Phase 1.5 之后不同」 |
+| Retrieval | 不低于 V-2026-10-02 | ③ 锚点复现：`kp_mrr 0.8048/0.8051` · `kp_hit@k 0.9103/0.9167` · `category_hit@1 0.9423` · `kp_annotated 156/156`（§20.2 末） | ✅ **已有机械实现** | **`retrieval_gate` exit 0**（各指标不低于基线，容差 **0.02**） | ★ `mean_evidence_count` 有**运行间抖动**（同一份代码连跑 3.9295 vs 3.9231）⇒ 引用它必须带上抖动，别写成三位小数稳定的量 |
+| hard failure | <5% | 两份归档都是 **0/66** | ✅ 能 | **<5%**，分子 = 有 `hard_fails` 的 case，分母 = **有效 n**（排除 `case_invalid`，#6） | 现状远低于门槛；分母口径必须与 `report.failure_rate` 一致，否则两处数字对不上 |
+| tool error | <5% | Phase 1 grade **2/15 = 13.3%**（`PHASE1_VERIFY.md` TODO-1，root cause **未确证**）；整体 2/66 = 3.03% | ⚠️ 口径决定成败 | ⚑ **待裁决 D16**：**任务级**判（则当前**不达标**）还是整体判（则"过"） | ★ 用整体口径把 13.3% 稀释成 3% 就是**挑对口径**。#11/#12/#13 已修分数解析与 KP 透传，真实值要等 §6 整轮测 |
+| provenance | 100% | 0B/Phase 1 归档 **0/66 带 `code_version`、0/66 带 `prompt_set_version`**（#3） | ❌ 对历史不可能 | **定义成「③ 之后新产出的每条 record 100% 带 `code_version` + `prompt_set_version` + `retrieval_cfg` + `top_items` + `turn_log`」** | 由护栏 ⑮d/⑮e/⑯/⑰/㉓i 保证；历史归档按 #3 披露「缺字段读作未知、**绝不回填当前 hash**」 |
+| Docker / TEI | 一键启动成功 | 非数字项 | ✅ | **manual**：`docker compose up -d` → `preflight_check()` 返回空（㉑a 探真实推理端点、㉑h 不因缺 `/health` 假红） | 半死 TEI（health 200 / embeddings 502）是**实发事故**，预检必须拦在开跑前 |
+| 四任务链 | 全部可演示 | 非数字项 | ✅ | **manual**：qa / generate / grade / verify 各跑 1 条 + memory 跑 1 条 A→B 跨会话（§20.8.6 那条 `mem-002`） | Memory 演示要能当场指出记忆卡（`MEMORY_CARD_MESSAGE_ID`），否则"有记忆"不可证 |
+
+#### 三个洞（回填时暴露出来的，比门槛本身更重要）
+
+1. **Verify 没有可机械判定的头号指标。** `EFFECT_PLAN §3.1` 冻结的头号指标是 `question_id_recall@k`，
+   但语料侧没有 `question_id` ⇒ **不可计算**（#20，已按 §11 走披露 = D7）。
+   于是 Verify 这一行只剩两个选择：**(a)** 用行为层断言（`仍出题 6/15→0/15`、`有真题信息 3/15→9/15`，
+   出自 `PHASE1_VERIFY.md`）——★ 但那两个数是**人工/半自动读出来的**，要当 Gate 必须先机械化成判据
+   （约 1 个 metric 函数 + 2 项护栏，零 token）；**(b)** Verify 不参与通过/失败，整行按「未达成 + 根因在
+   检索层、本文不修」披露。**我倾向 (a) 的机械化版 + 明确 ge4 不达标披露** = **待裁决 D14**。
+2. **Memory 无法按 Phase 0 回填**（0B 那批的 gold 结构不同，#9）⇒ 只能定结构断言：
+   ① 配对成立（同 case 同前置条件，ON 有卡且召回 / OFF 零卡）；② 每条正样本可追溯
+   （`validity` + `memory_cards` + `episodes` + `turn_log` 齐全）；③ 报「可测率」而非百分门槛。
+   = **待裁决 D15**。
+3. **tool error 的口径会决定成败**（13.3% 任务级 vs 3.03% 整体）= **待裁决 D16**；我建议**任务级**。
+
+#### 与 §6 实跑的关系
+
+- 上面这张表就是 §6 的**验收定义**；实跑产出 `phase1_final_gate_*.jsonl` 后逐行填「实测值 vs 门槛」，
+  **不达标就照实写不达标**（Verify 的 ge4 与 grade 的 tool error 当前**预判不达**）。
+- ★ 本锚点之后新增的只有**一个只读诊断脚本** `scripts/s6_baseline_distribution.py`（纯新增，
+  没有改动任何既有 `src/`+`scripts/` 文件），⇒ `git diff V-2026-10-08 HEAD -- src scripts` 应只显示该文件新增。
