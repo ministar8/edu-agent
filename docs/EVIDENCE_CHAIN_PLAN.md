@@ -249,36 +249,60 @@ git commit -m "feat(eval): Evidence Record 扩三状态枚举 + provenance 槽�
 
 ---
 
-## Task 2: provenance 落盘 + gold 出处字段
+## Task 2: provenance 整包落盘 + gold 出处字段
+
+> ★ **P0 计划修正（2026-10-08，checkpoint 1 由人裁定采纳 Task 2-A）**：原稿要求「在 `runner.py` 新增
+> `build_provenance(argv)`」。实测仓里**已有** `src/evaluation/provenance.py::build_provenance(script)`，
+> 它已产出 `recorded_at / code_version / golden_sha256 / **script** / **argv**`
+> （`provenance.py:79-94`），而 `runner.py:718-733` **已经在调用它**，只挑走
+> `code_version` / `golden_sha256` / `recorded_at`，把 `script` 与 `argv` 丢掉。
+> ⇒ 再造一个 builder 会造出第二套真源，正是本计划要消灭的形状。
+> **本 Task 因此改为：扩展现有函数 + 让 runner 整包落盘。**扩展之所以仍必要，是因为既有输出
+> 缺这四项：`model_refs` / `sampling` / `experiment_config_hash` / `dependency_lock_hash`。
 
 **Files:**
-- Modify: `src/evaluation/task_eval/runner.py`（`run_case` 里 `record.code_version = ...` 附近）
-- Modify: `src/evaluation/task_eval/cases.py:226-296`（`Gold`）、`:72-91`（`GOLD_FIELDS`）
+- Modify: `src/evaluation/provenance.py:79-94`（扩展 `build_provenance()`，签名不变）
+- Modify: `src/evaluation/task_eval/runner.py:718-733`（整包接收，不再 cherry-pick）
+- Modify: `src/evaluation/task_eval/cases.py:226-296`（`Gold`）、`:72-91`（`GOLD_FIELDS`）、`:343-388`（`_as_*` helper 区）
 - Modify: `src/evaluation/task_eval/gold_sanity.py`
+- Modify: `docs/README.md:64`（事实更正，见 Step 6）
 - Test: `scripts/evidence_chain_gate.py`
 
 **Interfaces:**
 - Consumes: `Task 1` 的 `CaseRecord.provenance`
 - Produces:
-  - `runner.build_provenance(argv: list[str]) -> dict[str, Any]`
+  - `evaluation.provenance.build_provenance(script=None) -> dict`（返回结构不变：顶层
+    `recorded_at` + 嵌套 `provenance`；嵌套里**新增**上述四项，既有五项一字不动）
+  - `CaseRecord.provenance` = 嵌套 `provenance` 的**完整副本**（含 `script` / `argv`）
   - `Gold.gold_source_ref: dict[str, str]`（键为被 gold 支撑的字段名，值为 `knowledge/` 下的相对路径或 `kp:<id>`）
+  - `cases._as_str_dict(value) -> dict[str, str]`（若不存在则新增；非法值返回 `{}` 不抛错）
+
+**主从关系（评审 Minor 带来的问题，这里定死，别留给以后吵）**：
+`record.code_version` / `golden_sha256` / `agent_model` 这些**标量字段仍是现有消费者的权威**
+（`report.py`、`reprobe`、`freeze_precheck` 都在读它们），`record.provenance` 是**完整证据副本**。
+两者必须由同一次 `build_provenance()` 调用的同一个 `_inner` 派生 —— 不允许出现
+「标量来自这次调用、dict 来自那次调用」。这一条要在 `runner.py` 的注释里写明。
 
 - [ ] **Step 1: 写红的判据**
 
 ```python
 def check_2() -> None:
-    """provenance 必须能区分「没记」与「记了且不同」；gold 必须有出处。"""
+    """provenance 必须能区分「没记」与「记了且不同」；gold 必须有出处。
+
+    ★ 断言打在**嵌套的 `provenance`** 上：`build_provenance()` 返回
+      `{"recorded_at": ..., "provenance": {...}}`（`provenance.py:85-93`）。
+      原稿在这里踩过坑 —— 顶层没有这些键，从顶层取会永远取到 None（就是 #3 那条 bug 的成因）。
+    """
     import json
-    import tempfile
-    from pathlib import Path as P
 
-    from evaluation.task_eval.runner import build_provenance
+    from evaluation.provenance import build_provenance
 
-    prov = build_provenance(["run", "--task", "generate"])
-    check("2a argv 落盘", prov.get("argv") == ["run", "--task", "generate"])
-    check("2b 含 experiment_config_hash", isinstance(prov.get("experiment_config_hash"), str))
-    check("2c 含 dependency_lock_hash", isinstance(prov.get("dependency_lock_hash"), str))
-    check("2d 不落任何密钥原值", "api_key" not in json.dumps(prov).lower())
+    inner = build_provenance("evaluation.task_eval.runner")["provenance"]
+    check("2a script/argv 已在既有输出里（本 Task 的活是不再丢弃，不是新造）",
+          bool(inner.get("script")) and isinstance(inner.get("argv"), list))
+    check("2b 含 experiment_config_hash", isinstance(inner.get("experiment_config_hash"), str))
+    check("2c 含 dependency_lock_hash", isinstance(inner.get("dependency_lock_hash"), str))
+    check("2d 不落任何密钥原值", "api_key" not in json.dumps(inner).lower())
 
     from evaluation.task_eval.cases import Gold
 
@@ -288,16 +312,19 @@ def check_2() -> None:
 `_EXPECTED_ITEMS = 10`（Task 1 结束时为 5，本步 +5），`main()` 里在 `check_1()` 后调 `check_2()`。
 
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
-Expected: `ImportError: cannot import name 'build_provenance'`
+Expected: **不是 ImportError**（函数已存在，这正是修正的理由），而是
+`FAIL 2b 含 experiment_config_hash` 与 `FAIL 2c 含 dependency_lock_hash` 两条红 + 退出码 1。
+★ 若 2a 直接红，说明既有函数签名或返回结构与上面实测不符 ⇒ 属偏差，停下报告，不要改判据。
 
-- [ ] **Step 2: 实现 `build_provenance`**
+- [ ] **Step 2: 扩展现有 `evaluation/provenance.py::build_provenance()`**
 
-`runner.py` 新增（放在 `preflight_check` 之后，避免 `CaseRecord` 之前引用）：
+★ **不新增第二个 builder**（人裁定）。在 `provenance.py` 里加一个模块级白名单常量与一个私有函数，
+把四项**并入既有嵌套 `provenance`**，既有五个键一字不动、签名不变：
 
 ```python
 # ★ 全部是 settings.py 里**真实存在**的字段名（`RERANK_MODE` 不存在，别写进白名单 ——
 #   白名单里一个不存在的键会静默变成 None，config_hash 就永远测不出它变了）。
-_PROVENANCE_CONFIG_KEYS: tuple[str, ...] = (
+CONFIG_KEYS: tuple[str, ...] = (
     "DEFAULT_MODEL",
     "LLM_MODEL",
     "RAGAS_JUDGE_MODEL",
@@ -313,25 +340,25 @@ _PROVENANCE_CONFIG_KEYS: tuple[str, ...] = (
 )
 
 
-def build_provenance(argv: list[str]) -> dict[str, Any]:
+def _config_evidence() -> dict:
     """结果 ↔ 配置的那一跳（EVIDENCE_CHAIN.md §3）。
 
-    ★ 只导出白名单里的**行为开关**，其余配置压成 hash —— 直接落 `settings` 会把密钥
-      带进归档（#29 修过的同一类泄漏，这次由结构挡住而不是靠自觉）。
+    ★ 只导出白名单里的**行为开关**，其余压成 hash —— 直接落 `settings` 会把密钥带进归档
+      （#29 修过的同一类泄漏，这次由结构挡住而不是靠自觉）。
+    ★ 这里 import settings 要**延迟到函数内**：provenance 是通用模块，检索门禁/RAGAS 也用它，
+      不能在导入期就把配置单例拉起来。
     """
-    import hashlib
     import json
 
     from core.settings import settings
 
-    cfg = {k: getattr(settings, k, None) for k in _PROVENANCE_CONFIG_KEYS}
-    lock = Path("uv.lock")
+    cfg = {k: getattr(settings, k, None) for k in CONFIG_KEYS}
     return {
         "model_refs": {
             "agent": str(settings.DEFAULT_MODEL),
             "rag_chain": str(settings.LLM_MODEL),
             # judge 走 `settings.ragas_judge_model`（= RAGAS_JUDGE_MODEL or LLM_MODEL，:378）
-            # —— judge 用比生成模型更强的模型是为了避免自评偏差，所以它换了就等于换了尺子
+            # —— judge 用比生成模型更强的模型是为了避免自评偏差，它换了就等于换了尺子
             "judge": str(settings.ragas_judge_model),
         },
         "sampling": {
@@ -343,17 +370,43 @@ def build_provenance(argv: list[str]) -> dict[str, Any]:
             json.dumps(cfg, sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()[:12],
         "dependency_lock_hash": (
-            hashlib.sha256(lock.read_bytes()).hexdigest()[:12] if lock.exists() else ""
+            hashlib.sha256((ROOT / "uv.lock").read_bytes()).hexdigest()[:12]
+            if (ROOT / "uv.lock").exists()
+            else ""
         ),
-        "argv": list(argv),
     }
 ```
 
-并在 `run_case` 里已有的 `record.code_version = ...` 同处补：
+并在 `build_provenance()` 的嵌套字典里追加一行（`script`/`argv` 保持原位）：
 
 ```python
-    record.provenance = build_provenance(list(sys.argv[1:]))
+        "provenance": {
+            "recorded_at": ts,
+            "code_version": code_version(),
+            "golden_sha256": golden_sha256(),
+            "script": script or Path(sys.argv[0]).name,
+            "argv": sys.argv[1:],
+            **_config_evidence(),
+        },
 ```
+
+★ 注意 `_config_evidence()` 会让**所有**用 `build_provenance()` 的归档（检索/RAGAS 类）都多这四个键。
+这是可接受的、也是想要的（同一份配置证据只有一处生产者）；但它改变了那些归档的形状 ⇒
+**Step 5** 必须确认 `retrieval_gate` / `stage_trace` / `freeze_precheck` 这些读 provenance 的地方
+不会因为多键而报错（它们都是按键取值，不是严格 schema 校验 —— 用 grep 证实，别假设）。
+
+然后 `runner.py:725` 那段改成**整包接收**，不再丢弃 `script`/`argv`：
+
+```python
+    _inner = prov.get("provenance") or {}
+    record.code_version = str(_inner.get("code_version") or "")
+    record.golden_sha256 = str(_inner.get("golden_sha256") or "")
+    # ★ 主从关系：上面的标量仍是现有消费者（report/reprobe/freeze_precheck）的权威，
+    #   record.provenance 是完整证据副本；两者必须来自**同一次** build_provenance() 调用。
+    record.provenance = dict(_inner)
+```
+
+（`record.agent_model` / `prompt_set_version` / `date` 三行**保持原样**，本 Task 不动它们。）
 
 - [ ] **Step 3: `Gold` 加出处字段并进 `GOLD_FIELDS`**
 
@@ -380,20 +433,37 @@ def build_provenance(argv: list[str]) -> dict[str, Any]:
                 errors.append(f"{case.case_id}: {field_name} 有值但无 gold_source_ref")
 ```
 
-- [ ] **Step 5: 转绿并复跑现有 sanity（零 LLM）**
+- [ ] **Step 5: 转绿、复跑 sanity、并证实下游不会因为多键报错（零 LLM）**
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.task_eval sanity
+grep -rn "build_provenance\|\"provenance\"\]" src/evaluation src/../scripts --include=*.py | head -20
 ```
-Expected: `全绿（10 项）`；sanity 对现有 66 条**不得新增 ERROR**（现有一切 gold 都没出处，
-所以该检查在未填 gold 上应为 0 命中 —— 若报出 66 条 ERROR，说明 Step 4 把「无 gold 值」也算错了）。
+Expected:
+- `全绿（10 项）`
+- sanity 对现有 66 条**不得新增 ERROR**（现有一切 gold 都没出处，所以该检查在未填 gold 上应为
+  0 命中 —— 若报出 66 条 ERROR，说明 Step 4 把「无 gold 值」也算错了）。
+- 那条 grep 的产物用来**证实**「读 provenance 的地方都是按键取值、不是严格 schema 校验」。
+  若某处对 provenance 的键集合做了全等/长度断言 ⇒ 属偏差，停下报告（不要自己改成宽松比对）。
 
-- [ ] **Step 6: 提交**
+- [ ] **Step 6: 事实更正 —— `docs/README.md:64` 那行 provenance 说明**
+
+该行现写「效果章归档**无 `script`/`argv`**」。真相是：`build_provenance()` 一直产出这两个字段，
+是 `runner.py` 的调用方只保存了 `code_version`/`golden_sha256` 而把它们丢弃。改成后者这种说法
+（并写明本 Task 起整包落进 `record.provenance`）。
+★ 这条更正本身就是「把无据断言换成有据描述」的示范：不要写成「已修复」，写成
+「字段此前由函数产出、被调用方丢弃；Task 2 起不再丢弃」，并给出可复核的位置。
+每次编辑 markdown 后立即 `grep -c "" docs/README.md` 复核行数未减少（本仓有替换吃掉整行的事故）。
+
+- [ ] **Step 7: 门禁与提交**
 
 ```bash
-git add src/evaluation/task_eval/runner.py src/evaluation/task_eval/cases.py src/evaluation/task_eval/gold_sanity.py scripts/evidence_chain_gate.py
-git commit -m "feat(eval): provenance 五项落盘 + gold 出处字段（密钥白名单隔离）"
+uv run ruff check src/ scripts/ && uv run ruff format --check src/ scripts/ && uv run pyrefly check
+git add src/evaluation/provenance.py src/evaluation/task_eval/runner.py \
+        src/evaluation/task_eval/cases.py src/evaluation/task_eval/gold_sanity.py \
+        scripts/evidence_chain_gate.py docs/README.md
+git commit -m "feat(eval): 扩展唯一 provenance 源 + 整包落盘（不再丢弃 script/argv）+ gold 出处字段"
 ```
 
 ---
@@ -415,9 +485,12 @@ git commit -m "feat(eval): provenance 五项落盘 + gold 出处字段（密钥�
   - `Verdict` 常量集 `PREDICATE_VERDICTS = ("pass", "fail", "not_applicable", "missing_premise")`
   - `Predicate` dataclass：`name / tier / contract_ref / contract_inputs / required_when / fn / falsifier`
   - `registry.get(name: str) -> Predicate`、`registry.for_task(task: str) -> list[Predicate]`
-  - `common.to_record_value(v: Verdict) -> bool | None`、`common.rate(verdicts) -> dict[str, int | float | None]`
-    （返回多两个键：`n_a_not_applicable` / `n_a_missing_premise`）
-  - `common.composite(name: str, verdicts: dict[str, Verdict]) -> Verdict`
+  - `common.to_record_value(v: Verdict) -> bool | None`、`common.from_record_value(value, reason) -> Verdict`、
+    `common.rate(verdicts) -> dict`（除 `rate`/`n` 外多两个键：`n_a_not_applicable` / `n_a_missing_premise`）
+  - `common.composite(verdicts: dict[str, Verdict], *, optional: frozenset[str] = frozenset()) -> Verdict`
+  - `common.is_reply_part(address) -> bool`、`common.has_path(rec, dotted) -> bool`、
+    `common.drop_path(rec, dotted) -> None`（★ 地址语法的唯一实现处：Task 5 的取证与 Task 7 的 V0 都从这里取）
+  - `metrics.option_letters / answer_keys_of / analysis_key_of / difficulty_of / strip_reply_part / rewrite_reply_part`
 
 - [ ] **Step 1: 写红的判据（含 R5 事故回归）**
 
