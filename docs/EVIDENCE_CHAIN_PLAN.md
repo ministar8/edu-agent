@@ -102,10 +102,19 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
 
 ## 前置：人工动作（不在任何 Task 内，阻塞 Task 3）
 
-**P−1 盲标 gold**（`docs/EVIDENCE_CHAIN.md` §4.2 规程）：**约 4 人时，零 token**。
+**P−1 盲标 gold**（`docs/EVIDENCE_CHAIN.md` §4.2 规程）：**约 2 人时，零 token**
+（原 4 人时含 G1b，G1b 已于 checkpoint 2 撤回 —— 两极 gold 是语料性质，改判据不换标签）。
 
-- 填 `evals/datasets/demo/generate_cases.jsonl` 对应 15 条的 `gold_answer` + `expected_difficulty`；
-  填 `grade_cases.jsonl` 15 条 `human_score` 的**非两极**值（现分布 `{100.0: 8, 0.0: 7}`）。
+- 填 `evals/datasets/demo/generate_cases.jsonl` 对应 15 条的 `gold_answer` + `expected_difficulty`
+  （**唯一剩下的补标工作**）。
+- ★ **G1b 已撤回**（checkpoint 2 人裁）：原要求「给 grade 15 条补**非两极** `human_score`」。
+  仓内证据否掉这个前提 —— `gold_sanity` 的集合级 PENDING 自己声明：L3 语料 674/674 全是
+  2 分选择题、学生作答仅 1 个字母 ⇒ **无部分分可标**，并指出正确处置是改用 `verdict_agreement`
+  （`metrics.py:475` 已实现，报告已自动输出）。为满足原指标硬造中间档就是造标签。
+  ⇒ Grade 的行级判据改为 **`verdict_agreement` + 两极 gold 显式披露**；
+  这是**偏离登记**，不改写冻结件 `EFFECT_PLAN.md` §3.1。
+- grade 15 条的 `human_score` 不新建值，只按 Task 2 Step 4.5 **派生出处**（`notes` 里已有
+  `2009-Q1` 这类定位，路径 `knowledge/exams/<年份>/items.md`）。
 - 标注**只读**题面 + 选项 + `knowledge/` 原始依据；**不得打开** `evals/datasets/demo/calibration_30.jsonl`
   （它含 `system_output`，与本次 case_id 重合 20 个）。
 - 每条 gold 必须带出处 `gold_source_ref`（Task 2 会加字段并校验）。
@@ -264,7 +273,8 @@ git commit -m "feat(eval): Evidence Record 扩三状态枚举 + provenance 槽�
 - Modify: `src/evaluation/provenance.py:79-94`（扩展 `build_provenance()`，签名不变）
 - Modify: `src/evaluation/task_eval/runner.py:718-733`（整包接收，不再 cherry-pick）
 - Modify: `src/evaluation/task_eval/cases.py:226-296`（`Gold`）、`:72-91`（`GOLD_FIELDS`）、`:343-388`（`_as_*` helper 区）
-- Modify: `src/evaluation/task_eval/gold_sanity.py`
+- Modify: `src/evaluation/task_eval/gold_sanity.py`（`:184-202` 归属扫描排除元数据字段，见 Step 3.5）
+- Modify: `evals/datasets/demo/grade_cases.jsonl`（15 条补 `gold_source_ref`，见 Step 4.5）
 - Modify: `docs/README.md:64`（事实更正，见 Step 6）
 - Test: `scripts/evidence_chain_gate.py`
 
@@ -313,8 +323,10 @@ def check_2() -> None:
 
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
 Expected: **不是 ImportError**（函数已存在，这正是修正的理由），而是
-`FAIL 2b 含 experiment_config_hash` 与 `FAIL 2c 含 dependency_lock_hash` 两条红 + 退出码 1。
-★ 若 2a 直接红，说明既有函数签名或返回结构与上面实测不符 ⇒ 属偏差，停下报告，不要改判据。
+**三条 FAIL：2b / 2c / 2e** + 退出码 1。
+★ 2e 测的正是 Step 3 要加的 `gold_source_ref` 字段，所以它在 Step 3 之前必须红 ——
+这是门禁顺序要求的，不是判据写坏了。若 2a 直接红，说明既有函数签名或返回结构与上面实测不符
+⇒ 属偏差，停下报告，不要改判据。
 
 - [ ] **Step 2: 扩展现有 `evaluation/provenance.py::build_provenance()`**
 
@@ -421,17 +433,83 @@ def _config_evidence() -> dict:
 `_as_str_dict(raw_gold.get("gold_source_ref"))`（若该 helper 不存在则在 `cases.py:343-388` 区间新增，
 照 `_as_str_list` 的写法：非法值返回 `{}` 不抛错）。
 
-- [ ] **Step 4: sanity 出 ERROR 级检查（有 gold 值但无出处）**
+- [ ] **Step 3.5: D2 裁定 —— `gold_source_ref` 是元数据，像 `full_marks` 一样排除在归属扫描外**
 
-`gold_sanity.py` 的错误收集处新增一条（沿用现有 `ERROR`/`WARN` 列表写法）：
+实测缺陷：`gold_sanity.py:186-191` 用
+`v not in (None, [], "")` 判断字段是否「出现」，而 **`{}` 不在这个缺席集合里** ⇒
+每个 case 上新增的 `gold_source_ref={}` 都算出现，且不在 grade/qa/verify/memory 的 `GOLD_FIELDS`
+里 ⇒ **51 条**（= 66 − generate 15）归属 ERROR。
+按人裁定 **B**：不把它复制进所有 `GOLD_FIELDS`，而是声明它是元数据、不参与 task 归属检查。
+改 `gold_sanity.py:187-191`（只动排除元组，加一行注释说明为什么）：
 
 ```python
-        for field_name in ("gold_answer", "expected_difficulty", "human_score"):
-            if getattr(case.gold, field_name, None) is not None and not (
-                case.gold.gold_source_ref or {}
-            ).get(field_name):
-                errors.append(f"{case.case_id}: {field_name} 有值但无 gold_source_ref")
+    # `full_marks`（有默认值的评分参数）与 `gold_source_ref`（gold 的**出处元数据**，
+    # 每个 task 都可能需要）都不属于「该 task 专属的 gold 字段」这一维度 ⇒ 不参与归属扫描。
+    ignored = ("full_marks", "gold_source_ref")
+    present = {
+        k for k, v in case.gold.__dict__.items() if k not in ignored and v not in (None, [], "")
+    }
 ```
+
+★ 不要顺手把缺席集合改成 `... not in (None, [], "", {})` —— 那会让「有 dict 但为空」在
+其它字段上也被当成缺席，是另一件事，本 Task 不管（要做就单开一条并说明影响面）。
+
+- [ ] **Step 4: sanity 出 ERROR 级检查（有 gold 值但无出处）**
+
+★ 用仓里真实的 `SanityIssue` 结构（`gold_sanity.py:176-180`、`:194-201` 的写法是
+`SanityIssue(case_id, task, level, field, message)` 追加进 `out: list[SanityIssue]`），
+**不要**自造 `errors.append("...")` 那种字符串列表。照现有 checker 的签名新增一个函数：
+
+```python
+def _check_gold_source_ref(case: TaskCase, out: list[SanityIssue]) -> None:
+    """gold 里有值，就必须能指回外部出处（EVIDENCE_CHAIN.md §4.2 盲标规程第 2 条）。
+
+    只检查**有值**的字段：无 gold 属 `missing_premise`，不是标注缺陷 ⇒ 不报 ERROR。
+    """
+    refs = case.gold.gold_source_ref or {}
+    for field_name in ("gold_answer", "expected_difficulty", "human_score"):
+        if getattr(case.gold, field_name, None) is not None and not refs.get(field_name):
+            out.append(
+                SanityIssue(
+                    case.case_id, case.task, ERROR, field_name,
+                    "有值但无 gold_source_ref（无出处的 gold 视为未填）",
+                )
+            )
+```
+
+并在驱动函数 `run_sanity(cases)`（`gold_sanity.py:465`）里、紧跟现有
+`_check_field_ownership(case, report.issues)`（`:482`）**同一处**加一行：
+
+```python
+        _check_gold_source_ref(case, report.issues)
+```
+
+（注意追加的是 `report.issues` 这个列表，函数形参名仍是 `out` —— 照 `:482` 的既有写法即可。）
+
+- [ ] **Step 4.5: D3 裁定 —— 给 grade 15 条补出处（人裁 A：ERROR 15 → 0）**
+
+实测事实让这一步**不需要造任何指针**：每条 grade case 的 `notes` 已经带着语料定位，例如
+`"notes": "2009-Q1（卷面 2 分）；answer_key=B；student_answer=B（答对）"`，
+而真题库路径就是 `knowledge/exams/<年份>/items.md`（实测 2009–2025 共 17 个目录）。
+所以 `gold_source_ref.human_score` = `knowledge/exams/2009/items.md#2009-Q1` 是**派生**，不是编造。
+
+规则（必须全部满足才写；任何一条不满足 ⇒ 该条留空并如实报告，不要猜）：
+
+1. `notes` 里的 `<年份>-Q<题号>` 用正则 `(\d{4})-Q(\d+)` 提取，且**只匹配到一个**；
+2. `knowledge/exams/<年份>/items.md` 文件存在；
+3. 该文件里能找到这个 `question_id`（`2009-Q1` 形式的锚点/字段）；
+4. `subject` 与该真题的学科不矛盾（`ds`/`os`/`co`/`cn`）。
+
+派生脚本一次性跑完并**打印逐条对照表**（case_id｜notes 里的题号｜找到的锚点｜写入值），
+人读一遍再落盘。落盘用整行替换（jsonl 每行一条记录），写完立即
+`grep -c "" evals/datasets/demo/grade_cases.jsonl` 复核行数不变（本仓有替换吃掉整行的事故）。
+
+★ 三条必须留在现场的注脚，别在补出处时顺手抹掉：
+- `needs_review` 里那句「`human_score`（机械预填：选择题客观可推，请抽查）」**保持原样**。
+  补出处 = 说明这分从哪来，**不等于**把它洗成「人工已审」。
+- 修改 gold 内容会改变**效果集指纹** ⇒ 把新旧指纹都记进报告，Task 10 负责同步 §20.0。
+- `gold_status` 仍是 `draft`，本 Step 不翻它（翻转器是 `scripts/gold_review_apply.py`，
+  只翻人确认过的 case，且属 P−1 的人工动作）。
 
 - [ ] **Step 5: 转绿、复跑 sanity、并证实下游不会因为多键报错（零 LLM）**
 
@@ -442,8 +520,11 @@ grep -rn "build_provenance\|\"provenance\"\]" src/evaluation src/../scripts --in
 ```
 Expected:
 - `全绿（10 项）`
-- sanity 对现有 66 条**不得新增 ERROR**（现有一切 gold 都没出处，所以该检查在未填 gold 上应为
-  0 命中 —— 若报出 66 条 ERROR，说明 Step 4 把「无 gold 值」也算错了）。
+- sanity **ERROR 必须回到 0**。这条预期是被 Step 3.5 与 Step 4.5 撑起来的，不是愿望：
+  Step 3.5 消掉 51 条归属 ERROR（= 66 − generate 15），Step 4.5 给 grade 15 条补上派生出处，
+  消掉剩下 15 条「有值无出处」。执行前它会红成 **66 ERROR**（我已实跑复现），这是预期的中间态。
+  若 Step 4.5 之后仍有残留 ERROR，**按 case 列出并停下报告**（多半是某条 `notes` 里的题号
+  不唯一、或该锚点在 `items.md` 里找不到 —— 那正是规则 1-4 要拦的情况，不许放宽检查凑零）。
 - 那条 grep 的产物用来**证实**「读 provenance 的地方都是按键取值、不是严格 schema 校验」。
   若某处对 provenance 的键集合做了全等/长度断言 ⇒ 属偏差，停下报告（不要自己改成宽松比对）。
 

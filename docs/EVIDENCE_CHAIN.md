@@ -250,16 +250,18 @@ provenance 字段（现状只有 `code_version`/`golden_sha256`/`date`，`docs/R
 **generate 的 `gold_answer` 与 `expected_difficulty` 各 0/15 已填**，
 **grade 的 `human_score` 已 15/15 填满，分布 `{100.0: 8, 0.0: 7}`**。
 后一半正是 `metrics.py:450` docstring 里描述的**两极退化 gold**（独立核对吻合）。
-⇒ 待补工作量比我原先估的小一半，但暴露出**第二个**前置缺口（G1b）。
+⇒ 待补工作量比我原先估的小一半，但暴露出**第二个**缺口 —— 事后证明那不是缺口而是指标本身的前提不成立（见下面 G1b 已撤回）。
 
 | 项 | 内容 | 状态 | 成本 |
 |---|---|---|---|
 | **G1a** | 填 generate 15 行的 `gold_answer` + `expected_difficulty` ⇒ `gen_correctness`、`gen_answerability`、`gen_difficulty` 三项从 `missing_premise` 变可测 | **P0 前置：不补 ⇒ Generate 五项主指标无定义域，禁止出现在正式效果章** | 零 token，15 行 × 2 字段 ≈ **2 人时** |
-| **G1b** | grade gold 只有 `{0, 100}` 两极 ⇒ `score_tolerance@±10` 目前只证明「模型有没有跟着说 0 或 100」，**没有中间地带可供 ±10 判别**。补非两极的 `human_score`（按真题扣分点折算）才能让该行主张「判分能力」 | **P0 前置（若保留 Grade 门槛行）**；不补则该行必须按 R5 记 `missing_premise`，不得记「已证明」 | 零 token，15 行 ≈ **2 人时** |
+| **G1b（已撤回，2026-10-08 checkpoint 2）** | 原要求「补非两极 `human_score`」，好让 `score_tolerance@±10` 有中间地带可判别 | **前提不成立**：`gold_sanity` 的集合级 PENDING 声明 L3 语料 674/674 全是 2 分选择题、case 作答仅 1 个字母 ⇒ **无部分分可标**。为满足原指标硬造中间档就是造标签 | 改为 **`verdict_agreement` 作 Grade 行级判据 + 两极 gold 显式披露**（`metrics.py:475` 已实现、报告已自动输出）。属**偏离登记**，不改写冻结件 `EFFECT_PLAN.md` §3.1 |
 | **G2** | 只披露：主指标标「未测量」并登记 §20.7，机械两项作辅助呈现 | **降级方案**（不是平行选项） | 零成本，效果章少两行能拍胸脯的数 |
 
 规则写成一句：**只有当 §6 门槛行愿意改标「未测量」时，G1 才可以不做。** 若效果章要保留
-Generate/Grade 的百分数，G1a/G1b 就是正式实验的前置条件，排在 P0 之前。
+Generate 的百分数，G1a 就是正式实验的前置条件，排在 P0 之前。
+Grade 不再要求补标 —— 它的两极 gold 是语料性质决定的，改用 `verdict_agreement` 承担行级判据
+（见上面 G1b 已撤回一行），并把「gold 仅两极」作为已知偏离披露。
 
 **★ 盲标规程（防止「自标自证」）**：gold 必须是外部事实，不能从模型输出反推。
 `model_answer → gold → correctness` 等于自己给自己出答案。
@@ -367,7 +369,7 @@ B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾�
 
 | 步 | 内容 | 判据 |
 |---|---|---|
-| **V0** | **Evidence Record schema 完整性 + 未测量 predicate 拦截**（阻塞 P4） | ① 每条 `已证明` 主张所依赖的 tier-0/1 字段，**在归档里键真实存在**（键存在，非真值）。禁止 `.get(k, False)` / `.get(k, 0)` 掩盖缺字段（AST 检查，沿用 step4fix gate 已有的 AST 手法）；`gold_source_ref` 缺失的 gold 视为未填。② ★ **正式实验禁止依赖未测量 predicate**：`claim → required predicates → 任一 missing_premise ⇒ claim = unmeasurable ⇒ 禁止进入正式效果章的门槛行`。这条就是 §4.2 里「`gen_case_pass = 1.000` 而 correctness/answerability/difficulty 全 missing」的机械拦网，也是 G1a/G1b 排在 P0 之前的原因 |
+| **V0** | **Evidence Record schema 完整性 + 未测量 predicate 拦截**（阻塞 P4） | ① 每条 `已证明` 主张所依赖的 tier-0/1 字段，**在归档里键真实存在**（键存在，非真值）。禁止 `.get(k, False)` / `.get(k, 0)` 掩盖缺字段（AST 检查，沿用 step4fix gate 已有的 AST 手法）；`gold_source_ref` 缺失的 gold 视为未填。② ★ **正式实验禁止依赖未测量 predicate**：`claim → required predicates → 任一 missing_premise ⇒ claim = unmeasurable ⇒ 禁止进入正式效果章的门槛行`。这条就是 §4.2 里「`gen_case_pass = 1.000` 而 correctness/answerability/difficulty 全 missing」的机械拦网，也是 G1a 排在 P0 之前的原因 |
 | V1 | 按 registry 重算（`reanalyse`，零 token） | 每项带 tier + 四态 + reason；无恒真项被当门槛证据 |
 | V2 | `task_eval sanity` | ERROR 0（现有护栏不变） |
 | V3 | `falsify` 全矩阵 | 每条主张「恰好它变红」；且 mutation 覆盖其 `contract_inputs` 全集；红不了的自动降级并在 ledger 可见 |
@@ -380,8 +382,9 @@ B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾�
 - **阻塞**：把 `missing_premise` 的族写进 §6 门槛行；把无鉴别力的行标成 `已证明`；5.A 或 V0 未过时进 P4 正式重跑。
 - **不阻塞**：把某族明确披露为「未测量 + 原因 + 补救路线」。这类行可以出现在论文里，
   但只能以 **limitation** 的身份出现，不能以**成绩**的身份出现。
-- ⇒ 落地成一句可执行的话：**Generate 与 Grade 两个门槛行，要么补 gold（G1a/G1b，零 token，合计约 4 人时），
-  要么整族降为 limitation。没有第三条路。**
+- ⇒ 落地成一句可执行的话：**Generate 门槛行要么补 gold（G1a，零 token，约 2 人时），
+  要么整族降为 limitation；Grade 的行级判据改用 `verdict_agreement` 并披露两极 gold。**
+  没有第三条路。
 
 ---
 
@@ -389,7 +392,7 @@ B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾�
 
 | 阶段 | 内容 | 估量 | token |
 |---|---|---|---|
-| **P−1（前置，非可选路线）** | **G1a + G1b 盲标**：generate 15 行的 `gold_answer`+`expected_difficulty`；grade 15 行的非两极 `human_score`。按 §4.2 盲标规程执行 | **约 4 人时**（2+2） | **0** |
+| **P−1（前置，非可选路线）** | **G1a 盲标**：generate 15 行的 `gold_answer` + `expected_difficulty`（grade 侧只按 Task 2 Step 4.5 **派生出处**，不新建分值）。按 §4.2 盲标规程执行 | **约 2 人时** | **0** |
 | P0.1 | Evidence Record schema（含 `rerank_status` / `memory_read_status` / `retrieval_status` 三个枚举）+ provenance 五项扩展 | 0.5 天 | 0 |
 | P0.2 | tier 表 / registry / 单项四态 / `required_when` / **R5 复合与分母语义** | 0.5 天 | 0 |
 | P0.3 | `predicates/` 拆包 + generate/verify/memory 判据（改名 + `missing_premise`）+ **删掉 `metrics.py`/`report.py` 的本地公式副本** | 1 天 | 0 |
