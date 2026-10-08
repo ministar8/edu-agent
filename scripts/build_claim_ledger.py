@@ -271,6 +271,27 @@ def signed_for(backing: tuple[str, ...], sigs: dict[str, Any]) -> tuple[bool, st
 # ── 数值格式化（全部来自重算块，无字面量） ─────────────────
 
 
+def _na_tail(block: dict[str, Any]) -> str:
+    """§1.6 分母语义：**单项率必须并列 N/A 计数**——rate 有值时同样要摊开分母。
+
+    否则 `0.966（已测 n=29）` 读不出池子是 60 条非 memory 记录、另有 31 条 None
+    被静默剔出分母（`metrics.rate` 的口径是「N/A 从分母剔除」）。
+
+    ★ 四态块（`predicates.common.rate`）按 §1.6「不得合并成一个 `n/a`」分列
+      `missing_premise` 与 `not_applicable`；`metrics.rate` 块只有单个 `n_a`
+      （None 计数，该函数不区分后两态）⇒ 只能并列一个。两种键名都是代码里的真实键。
+    ★ 纯显示：不改任何计数/分母的计算。
+    """
+    if "n_a_missing_premise" in block:
+        return (
+            f", missing_premise={block.get('n_a_missing_premise')}, "
+            f"not_applicable={block.get('n_a_not_applicable')}"
+        )
+    if "n_a" in block:
+        return f", n/a={block.get('n_a')}"
+    return ""
+
+
 def fmt_rate(block: dict[str, Any] | None) -> str:
     if block is None:
         return "N/A（无可算的归档证据）"
@@ -283,7 +304,7 @@ def fmt_rate(block: dict[str, Any] | None) -> str:
                 f"not_applicable={block.get('n_a_not_applicable')}）"
             )
         return f"N/A（rate=None；已测 n={block.get('n', 0)}, n/a={block.get('n_a', 0)}）"
-    return f"{r:.3f}（已测 n={block.get('n')}）"
+    return f"{r:.3f}（已测 n={block.get('n')}{_na_tail(block)}）"
 
 
 def _count_block(k: int, n: int) -> dict[str, Any]:
@@ -660,6 +681,17 @@ def render_predicate_table(ctx: dict[str, Any]) -> list[str]:
             )
             notes.append(f"- `{p.name}`：{fp_note}")
     out = ["## 判据级三态（registry 全量重算 · 诊断附表）", ""]
+    out += [
+        "> ★ `falsify=✓` 但「归档重算」n=0 有效测量（全 missing_premise，如 `gen_correctness`）时，"
+        "状态词仍是「已测量未证明」——这来自**冻结公式**（brief Step 2 / `claims.derive_status`："
+        "只有 `not discriminating and not falsify_passed` 才判「未测量」），本表逐字执行、不改判。",
+        "> ★ 该格里 mutation 取证测的是**判据对契约输入的敏感性**（取证夹具自带 gold ⇒ 能翻转），"
+        "**不是主张的数值**；数值一侧在真实归档上仍全 missing_premise（P−1 盲标暂停中）。"
+        "§1.1 表把「gold 前提不存在」列为未测量，与 Step 2 公式在这一格上口径不一致"
+        "（证据：`docs/EVIDENCE_CHAIN.md` §1.1 ↔ 本 brief Step 2 冻结公式）—— "
+        "属计划级缺口，已登记，待 Task 10 文档收口。",
+        "",
+    ]
     out += _table(
         [
             "判据",
