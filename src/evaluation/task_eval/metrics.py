@@ -497,6 +497,88 @@ def verdict_agreement(
     return model_says_right == human_says_right
 
 
+# ── Verify 的行为层判据（D14，2026-10-08 机械化）────────────────────────
+#
+# 为什么必须有：`EFFECT_PLAN §3.1` 给 Verify 冻结的头号指标 `question_id_recall@k`
+# **在当前语料上不可计算**（#20：ingest 时没把 `question_id` 写进 metadata，D7 已裁决走披露），
+# 而 §6 的占位门槛「≥80% `final_quality≥4`」在 verify 上是**指标效度错**：
+# 实测 0B 与 Phase 1 都是 **0/15**，因为未达成的 case 全是 `exam_hit=False`
+# （检索层没给真题证据），而那种情况下 agent **诚实说明"无法确认"是正确行为**
+# ⇒ `final_quality` 在这里测的是**检索覆盖**，不是回答质量。
+# ⇒ Verify 这一行改由下面两个可机械复现的断言把门（`fabricated` 是硬条件）。
+#
+# ★ 与历史人工读数的关系（必须一起披露，别装作一致）：`PHASE1_VERIFY.md` 记的
+#   「仍出题 6/15→0/15」被 `verify_fabricated` **逐条复现**（case_id 完全相同）；
+#   但「有真题信息 3/15→9/15」是**混级计数**（给出题干/题号 与 只列了年份来源文件
+#   被数在一起），且人工件没留 case_id ⇒ 无法逐条对账。本判据改为**分两级**：
+#   `exam_item_cited`（给出可核对的真题条目）与 `exam_year_only`（只报年份来源）。
+
+_V_YEAR_RE = re.compile(r"(?:19|20)\d{2}\s*年")
+_V_ITEM_RE = re.compile(r"第\s*\d+\s*题|\bQ\d{1,3}\b")
+_V_EXAM_WORD_RE = re.compile(r"真题")
+_V_TOPIC_RE = re.compile(r"考点|考查|涉及|归纳|变式|题型")
+# 自我否定句：年份只是「来源文件 / 被列出的等年份」，**不算**给出真题条目。
+# ★ 少了这层过滤，「未包含任何真题的年份、题号」这种句子会反过来制造假命中。
+_V_DENIAL_RE = re.compile(
+    r"仅作为|来源文件|来源列表|来源[:：]|等年份|未检索到|无法确认|并未给出|未给出"
+)
+_V_STEM_RE = re.compile(r"题干[：:]")
+_V_ANSWER_KEY_RE = re.compile(r"(标准答案|参考答案)[：:]")
+_V_GEN_ITEM_RE = re.compile(r"(\*\*题目\s*1\*\*|练习题|模拟题)")
+# 表格式清单：`| 2021 | Q14 | 题干… |` —— 年份那一格**没有"年"字**，所以年份正则盖不到，
+# 必须单独认（实测归档里 `ver-006` 就是这种形态，漏了它 L1 会假阴）。
+_V_TABLE_ROW_RE = re.compile(r"^\|\s*(?:19|20)\d{2}\s*\|\s*Q?\d{1,3}\s*\|")
+
+
+def verify_fabricated(reply: str) -> bool:
+    """**仍出题**：在「问历年真题」的意图下生成了新练习题（题干 + 答案键 + 出题标题三者同现）。
+
+    这是 §6 Verify 行的**硬条件**（必须为 0）—— 它测的正是 Verify 存在的意义：
+    用户要历史真题时不得编新题。实测 0B 命中 6/15、Phase 1 命中 **0/15**，case_id 与
+    `PHASE1_VERIFY.md` 的人工记录逐条一致。
+    """
+    text = str(reply or "")
+    return bool(
+        _V_STEM_RE.search(text) and _V_ANSWER_KEY_RE.search(text) and _V_GEN_ITEM_RE.search(text)
+    )
+
+
+def verify_exam_item_cited(reply: str) -> bool:
+    """**L1**：给出可核对的真题条目 —— 同一行里既有年份、又有题号或题目描述。
+
+    两种真实形态都要认（都是从归档里长出来的，不是设想）：
+    散文式 `- 2010 年 第 33 题：…`、表格式 `| 2021 | Q14 | …`。
+    ★ 判定是**逐行**的：跨行拼出来的"年份 + 题号"不算（否则整篇回复里随便两处凑成命中）。
+    """
+    for ln in str(reply or "").splitlines():
+        s = ln.strip()
+        if _V_TABLE_ROW_RE.match(s):
+            return True
+        if not s or not _V_YEAR_RE.search(s):
+            continue
+        if _V_ITEM_RE.search(s):
+            return True
+        if _V_EXAM_WORD_RE.search(s) and not _V_DENIAL_RE.search(s) and len(s) >= 25:
+            return True
+    return False
+
+
+def verify_exam_year_only(reply: str) -> bool:
+    """**L2**：只报出年份/来源文件与考点归属，没给到可核对的题目条目。
+
+    与 L1 **互斥**（L1 成立就不算 L2）—— 否则一个回复同时命中两级，两个率就没法相加解读。
+    L2 高、L1 低 的含义是"说得出发过什么方向、但给不出具体题" ⇒ 属检索覆盖不足，
+    不是回答质量问题（这正是 #20 的那条链）。
+    """
+    if verify_exam_item_cited(reply):
+        return False
+    for ln in str(reply or "").splitlines():
+        s = ln.strip()
+        if _V_YEAR_RE.search(s) and (_V_TOPIC_RE.search(s) or _V_DENIAL_RE.search(s)):
+            return True
+    return False
+
+
 # ── 内部 ──────────────────────────────────────────────────
 
 

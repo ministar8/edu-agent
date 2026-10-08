@@ -224,6 +224,12 @@ class CaseRecord:
     gen_coverage: bool | None = None  # 知识点覆盖率（= kp_hit；无可靠 expected_kp 则 N/A）
     gen_correctness: bool | None = None  # 内容正确率（校准后质量判断 final_quality≥阈值）
     gen_difficulty: bool | None = None  # 难度匹配（本批全 N/A：query 未指定难度）
+    # ★ Verify 的行为层三判据（D14）：§3.1 冻结的头号指标 `question_id_recall@k` 不可计算（#20/D7），
+    #   而 `final_quality≥4` 在 verify 上测的是**检索覆盖**（未达成 case 的诚实拒答是正确行为）
+    #   ⇒ 由这三条把 §6 的 Verify 行 gate 住。None = **没测**（无回复 / 探针跑），不是"没出题"。
+    ver_fabricated: bool | None = None  # 仍出题（编了新练习题）—— §6 的**硬条件**：必须 0
+    ver_exam_item_cited: bool | None = None  # L1：给出可核对的真题条目（年份 + 题号/题干）
+    ver_exam_year_only: bool | None = None  # L2：只报年份/来源与考点归属（与 L1 互斥）
     failure_reason: list[str] = field(default_factory=list)
     primary_failure: str = "none"
 
@@ -610,6 +616,14 @@ async def run_case(
         #   （用户 2026-10-06 裁决）⇒ 第二个入参恒为 None，`difficulty_match` 必返 None。
         record.gen_difficulty = metrics.difficulty_match(case.gold.expected_difficulty, None)
     record.failure_reason = mechanical_failures(case.task, probe, reply, hard_fails)
+    # ── Verify 行为层三判据（D14，2026-10-08）────────────────────────────
+    #   ★ 只在**真有回复**时记：`--no-agent` 的探针跑或 agent 抛错时 `reply=""`，
+    #     此时记 False/False/False 会被读成「没出题、引用了真题」= 把**没测**说成**测过**。
+    #     所以一律 None（N/A，不进分母）—— 与 #4/#6/#7 的 N/A 纪律一致。
+    if case.task == "verify" and reply.strip():
+        record.ver_fabricated = metrics.verify_fabricated(reply)
+        record.ver_exam_item_cited = metrics.verify_exam_item_cited(reply)
+        record.ver_exam_year_only = metrics.verify_exam_year_only(reply)
     # ── Memory：**先验 case validity，再判三维**（2026-10-06 Step 5）────────
     #   ★ 顺序不可颠倒：若 A 段没凑成前置条件（如要求两次高分、实际 100/52），
     #     则 B 段「没召回」是**前置条件没成立**的结果，不是产品失败。

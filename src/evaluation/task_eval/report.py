@@ -55,6 +55,10 @@ class TaskReport:
     gen_delivery: dict[str, Any] = field(default_factory=dict)
     gen_items: dict[str, Any] = field(default_factory=dict)
     memory_correct_use: dict[str, Any] = field(default_factory=dict)
+    # ★ Verify 行为层（D14）：仍出题率（**必须 0**）+ 两级引用率
+    ver_fabrication: dict[str, Any] = field(default_factory=dict)
+    ver_item_cited: dict[str, Any] = field(default_factory=dict)
+    ver_year_only: dict[str, Any] = field(default_factory=dict)
     memory_recalled: dict[str, Any] = field(default_factory=dict)
     memory_used_rate: dict[str, Any] = field(default_factory=dict)
     memory_correct_rate: dict[str, Any] = field(default_factory=dict)
@@ -166,6 +170,16 @@ def summarize_task(task: str, records: list[dict[str, Any]]) -> TaskReport:
         rep.memory_correct_use = metrics.rate(
             [metrics.memory_correct_use_from_record(r) for r in records]
         )
+
+    if task == "verify":
+        # ★ D14：Verify 这一行改由行为层把门（`question_id_recall@k` 不可计算 = #20；
+        #   `final_quality≥4` 在 verify 上测的是**检索覆盖**，见 `metrics.verify_*` 的说明）。
+        #   `rate()` 天然排除 None ⇒ 探针跑/无回复的 case 不会被算成「没出题」。
+        #   ★ 读 JSON 时注意：`ver_fabrication` 是**坏事率**，里面的 `passed` 数的是
+        #     「判为 True（= 仍出题）」的条数，不是「通过」。门槛要求它的 rate **= 0**。
+        rep.ver_fabrication = metrics.rate([r.get("ver_fabricated") for r in records])
+        rep.ver_item_cited = metrics.rate([r.get("ver_exam_item_cited") for r in records])
+        rep.ver_year_only = metrics.rate([r.get("ver_exam_year_only") for r in records])
 
     return rep
 
@@ -350,6 +364,29 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(
             f"- **`correct-use rate`**（retrieved ∧ used ∧ correct，**主指标**）："
             f"{_pct(memory['memory_correct_use'])}"
+        )
+        lines.append("")
+
+    ver = (report.get("tasks") or {}).get("verify")
+    if ver and (ver.get("ver_fabrication") or {}).get("n"):
+        lines.append("## Verify 专有（行为层三判据 · D14）")
+        lines.append("")
+        lines.append(
+            "> §3.1 冻结的头号指标 `question_id_recall@k` 在当前语料**不可计算**（#20，按 §11 走披露）；"
+            "`final_quality≥4` 在 verify 上测的是**检索覆盖**（未达成 case 的诚实拒答是正确行为）"
+            "⇒ 这两项都**不能**当 Verify 的通过判据，本表按行为层把门。"
+        )
+        lines.append("")
+        lines.append(
+            f"- **仍出题率（硬条件：必须 0）**：{_pct(ver['ver_fabrication'])}"
+            f"（可测 {ver['ver_fabrication'].get('n')} 条；未测/无回复 "
+            f"{ver['ver_fabrication'].get('n_a')} 条已剔除）"
+        )
+        lines.append(f"- L1 给出可核对真题条目：{_pct(ver['ver_item_cited'])}")
+        lines.append(f"- L2 只报年份/来源与考点归属：{_pct(ver['ver_year_only'])}")
+        lines.append(
+            "- ★ `final_quality` 与 `exam_hit@k` 只作诊断保留；"
+            "**不得**用 `exam_hit` 冒充 `question_id_recall` 回答 §4 的因果问题（#20/D7）。"
         )
         lines.append("")
     return "\n".join(lines)

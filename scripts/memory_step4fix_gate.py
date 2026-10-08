@@ -73,7 +73,7 @@ _n_skip = 0
 #   ⇒ 加两个不变量：① 执行数（含跳过）必须等于本常量；② 跳过数必须为 0。
 #      少跑一项、或某组提前 `return`，都在这里变红，而不是安静地少几行。
 #   ★ 改判据时同步更新这个数（改完跑一次，末行会印实际值）。
-_EXPECTED_ITEMS = 184
+_EXPECTED_ITEMS = 194
 
 
 def check(label: str, passed: bool, detail: str = "") -> None:
@@ -2992,6 +2992,186 @@ def check_25() -> None:
     )
 
 
+def check_26() -> None:
+    """㉖ Verify 行为层判据（D14）—— §3.1 冻结的头号指标不可计算时，这一行由谁把门。
+
+    背景：`question_id_recall@k` 算不出来（#20/D7），而 `final_quality≥4` 在 verify 上
+    测的是**检索覆盖**（未达成 case 全是 `exam_hit=False`，agent 诚实说"无法确认"是**正确行为**）
+    ⇒ 拿它当 Gate 就是指标效度错。D14 选① = 把 `PHASE1_VERIFY.md` 里那两个人工读数**机械化**。
+    """
+    section("㉖ Verify 行为层判据（D14；仍出题必须为 0）")
+
+    import asyncio as _aio26
+    import json as _json26
+    from dataclasses import dataclass, field
+
+    import evaluation.task_eval.runner as R26
+    from evaluation.task_eval import metrics as _m26
+    from evaluation.task_eval.cases import load_demo
+    from evaluation.task_eval.report import summarize_task
+
+    FAB = (
+        "以下为网络体系结构相关练习题：\n\n**题目1**\n类型：选择\n"
+        "题干：关于网络协议的三要素，下列说法正确的是（　）。\nA. 语法\nB. 语义\n"
+        "C. 时序\nD. 都不对\n标准答案：C\n解析：协议三要素为语法、语义、时序。"
+    )
+    CITE_PROSE = (
+        "## 真题清单\n\n- **2010 年 第 33 题**：下列选项中，不属于网络体系结构描述内容的是（　）。"
+    )
+    CITE_TABLE = "## 历年真题\n\n| 年份 | 题号 | 考查内容 |\n|---|---|---|\n| 2021 | Q14 | 不能用 IEEE 754 精确表示的是 |\n"
+    YEAR_ONLY = "- 涉及的年份来源文件：2010、2011、2012 年 408 真题（仅作为来源文件出现，未检索到各题具体题干）。"
+    DENIAL = "检索到的内容只有知识点讲解，未包含任何真题的年份、题号或题目原文，因此无法确认具体考过哪些真题。"
+    SPLIT_LINES = "某处提到 2011 年。\n另一处才写着 第 33 题。"  # ★ 跨行**不得**拼成 L1
+
+    check(
+        "㉖a 仍出题（题干+标准答案+出题标题同现）⇒ True",
+        _m26.verify_fabricated(FAB) is True,
+    )
+    check(
+        "㉖b 反向：列真题清单（散文 / 表格）都不算「仍出题」——否则修好反而更像在失败",
+        _m26.verify_fabricated(CITE_PROSE) is False
+        and _m26.verify_fabricated(CITE_TABLE) is False
+        and _m26.verify_fabricated(YEAR_ONLY) is False,
+    )
+    check(
+        "㉖c L1 认两种真实形态（散文「2010 年 第 33 题」+ 表格「| 2021 | Q14 |」）",
+        _m26.verify_exam_item_cited(CITE_PROSE) is True
+        and _m26.verify_exam_item_cited(CITE_TABLE) is True,
+    )
+    check(
+        "㉖d 三个反向：自我否定句、跨行拼凑都不算 L1；L1 成立则 L2 必 False（两级互斥）",
+        _m26.verify_exam_item_cited(DENIAL) is False
+        and _m26.verify_exam_item_cited(SPLIT_LINES) is False
+        and _m26.verify_exam_year_only(DENIAL) is False  # 整篇没给年份行命中 ⇒ 既非 L1 也非 L2
+        and _m26.verify_exam_year_only(YEAR_ONLY) is True
+        and (_m26.verify_exam_item_cited(CITE_PROSE) and _m26.verify_exam_year_only(CITE_PROSE))
+        is False,
+    )
+
+    # ★ ㉖e 归档复现：机械判据必须复现 `PHASE1_VERIFY.md` 的人工读数（含 case_id 级）
+    def _archive_rates(fname: str):
+        fp = ROOT / "evals" / "results" / "task_eval" / fname
+        if not fp.exists():
+            return None
+        v = [
+            _json26.loads(ln)
+            for ln in fp.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+        v = [r for r in v if r.get("task") == "verify"]
+        fab = [r["case_id"] for r in v if _m26.verify_fabricated(str(r.get("reply") or ""))]
+        l1 = [r["case_id"] for r in v if _m26.verify_exam_item_cited(str(r.get("reply") or ""))]
+        l2 = [r["case_id"] for r in v if _m26.verify_exam_year_only(str(r.get("reply") or ""))]
+        return fab, l1, l2, len(v)
+
+    a0, a1 = (
+        _archive_rates("phase0_baseline_final.jsonl"),
+        _archive_rates("phase1_baseline_v2.jsonl"),
+    )
+    if a0 is None or a1 is None:
+        skip("㉖e", "0B / Phase 1 归档不在本机（D11 不入库）⇒ 未与人工读数对账", count=1)
+    else:
+        (fab0, l10, l20, n0), (fab1, l11, l21, _n1) = a0, a1
+        check(
+            "㉖e 归档复现人工读数：仍出题 6/15→0/15；有真题信息 0B L1=3、Phase1 L1+L2=9",
+            len(fab0) == 6
+            and len(fab1) == 0
+            and len(l10) == 3
+            and len(l11) + len(l21) == 9
+            and n0 == 15,
+            f"仍出题 {len(fab0)}/{n0}→{len(fab1)}/15（id={fab0}）| L1 {len(l10)}→{len(l11)} | L2 {len(l20)}→{len(l21)}",
+        )
+
+    # ★ ㉖f/㉖g 接线：真实 `run_case` 必须写字段，且**没跑 agent 时一律 N/A**
+    @dataclass
+    class _Res26:
+        reply: str = "回复"
+        hard_fails: list[str] = field(default_factory=list)
+        tool_payloads: list[dict] = field(default_factory=list)
+        memory_cards: list[str] = field(default_factory=list)
+        grade_scores: list[dict] = field(default_factory=list)
+        turn_log: list[dict] = field(default_factory=list)
+        episodes: list[dict] = field(default_factory=list)
+        episodes_read_failed: bool = False
+
+    class _Probe26:
+        ok = True
+        status = "ok"
+        pack_len = 120
+        evidence_count = 2
+        error = ""
+
+        def top_k(self, k: int):  # noqa: ARG002
+            return []
+
+    async def _fake_probe26(*_a, **_kw):
+        return _Probe26()
+
+    def _drive26(reply: str, *, run_agent: bool = True, task: str = "verify"):
+        async def _fake_agent26(_turns, **_kw):
+            return _Res26(reply=reply)
+
+        old_agent, old_probe = R26._run_agent, R26.probe_retrieval
+        R26._run_agent, R26.probe_retrieval = _fake_agent26, _fake_probe26
+        try:
+            case = load_demo(task, limit=1)[0]
+            return _aio26.run(R26.run_case(case, run_agent=run_agent))
+        finally:
+            R26._run_agent, R26.probe_retrieval = old_agent, old_probe
+
+    rec_fab = _drive26(FAB)
+    rec_cite = _drive26(CITE_TABLE)
+    check(
+        "㉖f 接线：verify case 的三判据真的落进 record（仍出题 case ⇒ fabricated=True）",
+        rec_fab.ver_fabricated is True
+        and rec_fab.ver_exam_item_cited is False
+        and rec_cite.ver_fabricated is False
+        and rec_cite.ver_exam_item_cited is True,
+        f"出题={rec_fab.ver_fabricated}/{rec_fab.ver_exam_item_cited} "
+        f"引用={rec_cite.ver_fabricated}/{rec_cite.ver_exam_item_cited}",
+    )
+    rec_probe = _drive26("", run_agent=False)
+    check(
+        "㉖g ★ 没跑 agent（或空回复）⇒ 三条全是 None（N/A）——探针跑不得被读成「没出题」",
+        rec_probe.ver_fabricated is None
+        and rec_probe.ver_exam_item_cited is None
+        and rec_probe.ver_exam_year_only is None,
+        f"{rec_probe.ver_fabricated}/{rec_probe.ver_exam_item_cited}/{rec_probe.ver_exam_year_only}",
+    )
+    rep26 = summarize_task(
+        "verify",
+        [rec_fab.to_dict(), rec_cite.to_dict(), rec_probe.to_dict()],
+    )
+    check(
+        "㉖h 报告层：N/A 不进分母（3 条 record ⇒ 可测 2 条、仍出题 1 条）",
+        rep26.ver_fabrication["n"] == 2
+        and rep26.ver_fabrication["passed"] == 1
+        and rep26.ver_fabrication["n_a"] == 1,
+        str(rep26.ver_fabrication),
+    )
+    # ★ 反向：同一段「带题目模板」的回复放在 **qa** 任务上不该产生这三条判据
+    #   （QA 出题是正常行为 ⇒ 判据只属 verify）
+    rec_qa = _drive26(FAB, task="qa")
+    check(
+        "㉖i 判据只在 verify 分支写：同样的回复放在 qa ⇒ 三条保持 None",
+        rec_qa.ver_fabricated is None
+        and rec_qa.ver_exam_item_cited is None
+        and rec_qa.ver_exam_year_only is None,
+        f"qa record: {rec_qa.ver_fabricated}/{rec_qa.ver_exam_item_cited}/{rec_qa.ver_exam_year_only}",
+    )
+
+    # ★ ㉖j 老归档兼容：没有 `ver_*` 键的 record 必须读成**未测量**，
+    #   绝不能把「字段缺失」读成「仍出题 0%」——那正是 #21 那类「读不到就当真」的错。
+    legacy = {k: v for k, v in rec_fab.to_dict().items() if not k.startswith("ver_")}
+    rep_legacy = summarize_task("verify", [legacy, legacy])
+    fb = rep_legacy.ver_fabrication
+    check(
+        "㉖j 老归档（无 ver_* 键）读成未测量：rate=None、n=0、n_a=2 ⇒ 不会被印成「仍出题 0%」",
+        fb["rate"] is None and fb["n"] == 0 and fb["n_a"] == 2,
+        str(fb),
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -3019,6 +3199,7 @@ def main() -> int:
     check_23()
     check_24()
     check_25()
+    check_26()
 
     total = _n_pass + _n_fail + _n_skip
     print()
