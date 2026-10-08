@@ -1250,10 +1250,16 @@ git commit -m "refactor(eval): report/backfill 驱动 registry，删 every_item_
 **Files:**
 - Create: `src/evaluation/task_eval/falsify.py`
 - Modify: `scripts/evidence_chain_gate.py`（`check_5` + 夹具 + `--emit`）
+- Modify: `src/evaluation/task_eval/metrics.py`（★ `rewrite_reply_part` 语义修正，见 Step 2.5）
 - Test: `scripts/evidence_chain_gate.py`
 
 **Interfaces:**
 - Consumes: `Task 3` 的 `Predicate.fn / contract_inputs / for_task`
+- 顺带修（Task 4 评审 defer 的两词，属本 Task 的 gate 文件范围）：`check_4` 的 4c 里
+  `banned` 元组补上 `delivery_rate`，扫描目录从 `src/` 扩到 `("src", "scripts")` ——
+  当初逼出这条约束的调用点就长在 scripts 侧（`s6_baseline_distribution.py`），
+  只扫 src 等于把教训留在门外。不新增判据、不动 `_EXPECTED_ITEMS`。
+
 - Produces: `falsify.declared_mutations(pred) -> list[dict]`、
   `falsify.apply(mutation=..., record=...) -> dict`、
   `falsify.evaluate(pred, base_rec, broken_rec, *, mutation_input, siblings=None) -> FalsifyResult`、
@@ -1415,7 +1421,10 @@ def evaluate(
     broken_v = _safe(pred, broken_rec)
     collateral = False
     for _name, (other, rec) in (siblings or {}).items():
-        if other.name == pred.name:
+        # ★ 实测收窄（原定义不可满足）：`reply#answer` 同时是 gen_answer_key_validity /
+        #   gen_analysis_agreement / gen_correctness 的契约输入，弄坏它必然牵连兄弟判据 ——
+        #   原样实现会让 5c 永远红。collateral 只统计**不消费该地址**的判据被改动的情形。
+        if other.name == pred.name or mutation_input in other.contract_inputs:
             continue
         if _safe(other, rec) != _safe(other, broken_rec):
             collateral = True
@@ -1448,6 +1457,29 @@ def coverage(preds: list[Predicate], covered: dict[str, set[str]]) -> dict[str, 
 `falsify.py` **不需要** `to_record_value`（它比较的是 verdict 字符串）；verdict→落盘三态的映射只在
 Task 4 的 `report.py`/`cli.py` 里用 `common.to_record_value`。★ 别在 falsify 里留未使用的导入，
 ruff 钩子会在 commit 时直接拦下。
+
+- [ ] **Step 2.5: `rewrite_reply_part` 必须替换整段，不是只换 label**
+
+控制器实测（把 Task 5 夹具跑过冻结解析器）：现实现 `pattern.sub(new_text, reply, count=1)`
+只替换匹配到的**标签**（如「解析」二字），原正文留在后面 ⇒ `flip_conclusion` mutation 无效：
+重写后 `analysis_key_of()` 仍返回 `B`（原句「因此选 B」还在），`gen_analysis_agreement` 保持
+`pass`，取证拿不到红。修正：替换**从 label 起、到下一个 label 或段末为止**的整段。
+
+```python
+def rewrite_reply_part(reply: str, part: str, new_text: str) -> str:
+    """替换某个语义片段的**整段**（label + 正文），不是只换 label。
+
+    `strip_reply_part` 只删 label 是**够用的**（`structure_completeness` 按 label 判存在）；
+    但 rewrite 若也只换 label，旧正文会残留在后面被解析器读到，mutation 就不生效。
+    段边界沿用 `_REPLY_PART_PATTERNS` 的同一批 label：从本 label 匹配处开始，
+    到下一个任一 label 匹配处（或文本末）结束。
+    """
+```
+
+实现要求：定位 `part` 的 label 起点；用同一张 `_REPLY_PART_PATTERNS` 找**所有** label 的起点，
+取大于起点的最近者作终点，无则到文本末；用 `new_text` 替换该区间。未知片段名照旧抛错。
+★ 改完必须重跑一遍控制器的实测序列并贴进报告（四件套齐全基线 ⇒ `flip_conclusion` 让
+`analysis_key_of` 变 `A`、`gen_analysis_agreement` 变 `fail`、其余不动）。
 
 - [ ] **Step 3: gate 里的分段夹具（record 层弄坏的唯一手段）**
 
