@@ -73,7 +73,7 @@ _n_skip = 0
 #   ⇒ 加两个不变量：① 执行数（含跳过）必须等于本常量；② 跳过数必须为 0。
 #      少跑一项、或某组提前 `return`，都在这里变红，而不是安静地少几行。
 #   ★ 改判据时同步更新这个数（改完跑一次，末行会印实际值）。
-_EXPECTED_ITEMS = 201
+_EXPECTED_ITEMS = 204
 
 
 def check(label: str, passed: bool, detail: str = "") -> None:
@@ -3300,6 +3300,62 @@ def check_27() -> None:
         )
 
 
+def check_28() -> None:
+    """㉘ Generate 的「答案键自相矛盾」修在**真源**上（§22 唯一不达行 + #33）。
+
+    实测缺陷（§6 整轮 `gen-003`/`007`/`009`/`010`，judge 判低分**可举证**）：
+    `standard_answer` 与 `explanation` 是**两个字段各写各的** —— 答案说「能聚合为 /22」、
+    解析说「三者不能合并为单个 CIDR 块」；或答案里留着「=602？」「→实际为 8」的自我改口。
+    ⇒ 修在 schema 字段描述（模型填这个字段的瞬间看得到）+ `[规则]` 里一条。
+
+    ★ 三项各挡一种「绿而路径不可达」：
+      ㉘a 只改 prompt 不改 schema（或反之）⇒ 两条真源都要有；
+      ㉘b 只改 `_QUESTION_AGENT_RULES` 这个源常量、组合进最终 prompt 的那步被改掉 ⇒ 断言**最终**字符串；
+      ㉘c prompt 与 schema 都对，但 `question_core` 构造 agent 时换了实参 ⇒ AST 锁 wiring。
+    """
+    section("㉘ Generate 答案键与解析同结论（#33）")
+
+    from prompts import QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
+    from schema.questions import GeneratedQuestion
+
+    f_sa = str(GeneratedQuestion.model_fields["standard_answer"].description or "")
+    f_ex = str(GeneratedQuestion.model_fields["explanation"].description or "")
+    check(
+        "㉘a schema 两个字段描述都带约束（同结论 + 不改口）⇒ 驱动的是真 Pydantic 字段，不是文本 grep",
+        "同结论" in f_sa and "改口" in f_ex,
+        f"standard_answer={f_sa[:26]!r} explanation={f_ex[:26]!r}",
+    )
+    check(
+        "㉘b 约束进了 question_gen_agent **实际使用的那条** system prompt（不是只待在源常量里）",
+        "同结论" in QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
+        and "算不清" in QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
+        f"len={len(QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT)}",
+    )
+
+    tree = ast.parse((ROOT / "src" / "agents" / "question_core.py").read_text(encoding="utf-8"))
+    wired = False
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "build_agent"
+        ):
+            kw = {k.arg: getattr(k.value, "id", "") for k in node.keywords}
+            if (
+                kw.get("system_prompt") == "QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT"
+                and kw.get("response_format") == "GeneratedQuestionSet"
+            ):
+                wired = True
+    check(
+        "㉘c `question_core` 确实把这条 prompt + 这个 schema 交给 build_agent（换实参就红）",
+        wired,
+        ""
+        if wired
+        else "AST 里没找到 system_prompt=QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT "
+        "且 response_format=GeneratedQuestionSet 的 build_agent 调用",
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -3329,6 +3385,7 @@ def main() -> int:
     check_25()
     check_26()
     check_27()
+    check_28()
 
     total = _n_pass + _n_fail + _n_skip
     print()
