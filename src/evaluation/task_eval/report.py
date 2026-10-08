@@ -55,6 +55,9 @@ class TaskReport:
     gen_delivery: dict[str, Any] = field(default_factory=dict)
     gen_items: dict[str, Any] = field(default_factory=dict)
     memory_correct_use: dict[str, Any] = field(default_factory=dict)
+    # ★ D15：分母摊开（不算率）+ 证据链可追溯性
+    memory_measure_scope: dict[str, Any] = field(default_factory=dict)
+    memory_traceability: dict[str, Any] = field(default_factory=dict)
     # ★ Verify 行为层（D14）：仍出题率（**必须 0**）+ 两级引用率
     ver_fabrication: dict[str, Any] = field(default_factory=dict)
     ver_item_cited: dict[str, Any] = field(default_factory=dict)
@@ -169,6 +172,30 @@ def summarize_task(task: str, records: list[dict[str, Any]]) -> TaskReport:
         #   直接读会把已修掉的负样本假阴性继续印出来；推导**不改写归档**。
         rep.memory_correct_use = metrics.rate(
             [metrics.memory_correct_use_from_record(r) for r in records]
+        )
+        # ★ D15：Memory 的 §6 行不写百分数门槛 ⇒ 这里必须把**分母从哪来**摊开，
+        #   否则读报告的人会把「1/1 = 100%」当成品能力率。三条都计数、不算率：
+        #     positives_total     = 声明为正样本的 case 数
+        #     positives_valid     = 其中前置条件成立的（= 有资格进分母的）
+        #     positives_traceable = 其中结论有证据链可查的（断言 ②）
+        pos = [
+            r
+            for r in records
+            if ((r.get("gold") or {}).get("expected_memory") or {}).get("should_be_recalled")
+            is True
+        ]
+        pos_valid = [r for r in pos if r.get("validity_valid") is True]
+        rep.memory_measure_scope = {
+            "positives_total": len(pos),
+            "positives_valid": len(pos_valid),
+            "positives_invalid": len(pos) - len(pos_valid),
+            "positives_traceable": sum(1 for r in pos_valid if metrics.memory_traceable(r)),
+        }
+        rep.memory_traceability = metrics.rate(
+            [
+                metrics.memory_traceable(r) if r.get("validity_valid") is not False else None
+                for r in records
+            ]
         )
 
     if task == "verify":
@@ -365,6 +392,22 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- **`correct-use rate`**（retrieved ∧ used ∧ correct，**主指标**）："
             f"{_pct(memory['memory_correct_use'])}"
         )
+        sc = memory.get("memory_measure_scope") or {}
+        if sc:
+            lines.append(
+                f"- **分母摊开（D15，§6 的 Memory 行不设百分数门槛就看这三行）**："
+                f"正样本共 {sc.get('positives_total')} 条 ⇒ 前置条件成立 "
+                f"{sc.get('positives_valid')} 条（不可测 {sc.get('positives_invalid')} 条）、"
+                f"其中有证据链可查的 {sc.get('positives_traceable')} 条"
+            )
+            lines.append(
+                f"- `memory_traceable`（逐轮日志 + 记忆卡通道 + `episodes` 字段 + `store_enabled` 齐备）："
+                f"{_pct(memory['memory_traceability'])}"
+            )
+            lines.append(
+                "> ★ 上面任何「率」都必须连同本行的分母一起引用："
+                "**n=1 的 100% 不是能力率**（`EXPERIMENTS.md` §21 D15）。"
+            )
         lines.append("")
 
     ver = (report.get("tasks") or {}).get("verify")

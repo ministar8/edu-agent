@@ -197,6 +197,22 @@ def _render(store_on: ArmSummary, store_off: ArmSummary) -> str:
         f"「recalled_actual=True」= {store_off.n_recalled_actual} "
         f"⇒ {'✅ 干净（无卡、无召回 —— 证明 ON 组的召回确实来自 Store）' if clean else '❌ 不干净（OFF 组仍有卡/召回 ⇒ 存在旁路，需排查）'}"
     )
+    # ★ D15 断言 ①（§6 的 Memory 行就看这一条）：**两臂都满足前置条件的正样本交集**上，
+    #   ON 侧必须召回、OFF 侧必须不召回，且 OFF 侧出现任何记忆卡一律判失败 ——
+    #   后者就是 #24 的探测器（旧 OFF 臂没空白进程级 store，照样有卡）。
+    from evaluation.task_eval import metrics as _mt
+
+    pv = _mt.paired_control_verdict(store_on.records, store_off.records)
+    lines.append(
+        f"- **配对断言（D15①，逐 case 而不是汇总数）**：交集 {pv['n_pairs']} 条 ⇒ "
+        f"通过 {pv['n_ok']} 条；反例 {pv['failed'] or '无'}；OFF 侧有卡 {pv['off_has_card'] or '无'} "
+        f"⇒ {'✅ 成立' if pv['passed'] else '❌ 不成立'}"
+    )
+    lines.append(
+        f"- **可追溯断言（D15②）**：ON 组 `memory_traceable` = "
+        f"{_mt.rate([_mt.memory_traceable(x) if x.get('validity_valid') is not False else None for x in store_on.records])}"
+        "（逐轮日志 + 记忆卡通道 + `episodes` 字段 + `store_enabled` 齐备）"
+    )
     on_pos = [
         x
         for x in store_on.records

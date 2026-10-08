@@ -579,6 +579,81 @@ def verify_exam_year_only(reply: str) -> bool:
     return False
 
 
+# ── Memory 的可测性 / 配对对照（D15，2026-10-08）───────────────────────
+#
+# 为什么 §6 的 Memory 行**不写百分数门槛**：
+#   * 0B 那批的 `gold` 里根本没有 `expected_memory` ⇒ 四率**全 N/A**（#9），
+#     所以「≥80% correct-use」**无法按 Phase 0 回填** —— 回填不出一个当时没测的量。
+#   * 新口径下可测正样本只有 **n=1**（§20.8.6）。n=1 上任何百分数都没有统计意义，
+#     答辩被问「你这个 100% 是几条？」就崩（与 §9「硬上统计指标」的禁令同向）。
+#   ⇒ 改为**三条结构断言**：① 配对成立（`paired_control_verdict`）
+#     ② 每条被计入的正样本可追溯（`memory_traceable`）③ 报「可测率」作为披露量。
+
+
+def memory_traceable(rec: dict[str, Any]) -> bool:
+    """**断言 2**：这条 Memory record 的结论是不是**有证据支撑**的。
+
+    要求四样都在：逐轮日志（能指出"哪一轮没调工具"）、记忆卡捕获通道、
+    episodes 字段（OFF 臂**可以**是空列表，但字段必须在 ⇒ 区分「没写」与「没读」）、
+    `store_enabled`（paired control 的自证）。
+    ★ 不看 `memory_cards` 是否为空 —— 空卡是**合法结果**（负样本就该空）。
+    """
+    return bool(
+        rec.get("turn_log")
+        and "memory_cards" in rec
+        and "episodes" in rec
+        and isinstance(rec.get("store_enabled"), bool)
+    )
+
+
+def paired_control_verdict(
+    on_records: list[dict[str, Any]], off_records: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """**断言 1**：Store ON/OFF 是不是真的**只差 Store** 这一个变量。
+
+    只统计「两臂都 `validity_valid is True` 的正样本」= **交集** ——
+    一条臂前置条件没凑成的 case 不参与配对（否则结论会被 case 有效性污染，#5/#18 都是这类）。
+    对交集里每条 case 要求：ON 侧实际召回为真、OFF 侧为假；
+    并额外报 OFF 侧**出现记忆卡**的条数 —— 那正是 **#24** 的机械探测器
+    （旧实现只置 `agent.store=None`、进程级 store 还活着 ⇒ OFF 侧照样有卡，
+    当时的「OFF 0 卡」其实是 #22 造成的假象，两个缺陷互相掩盖）。
+    """
+
+    def positives(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        out: dict[str, dict[str, Any]] = {}
+        for r in records:
+            em = (r.get("gold") or {}).get("expected_memory") or {}
+            if em.get("should_be_recalled") is not True:
+                continue
+            if r.get("validity_valid") is not True:
+                continue
+            out[str(r.get("case_id"))] = r
+        return out
+
+    on, off = positives(on_records), positives(off_records)
+    common = sorted(set(on) & set(off))
+    ok: list[str] = []
+    bad: list[str] = []
+    off_has_card: list[str] = []
+    for cid in common:
+        a, b = on[cid], off[cid]
+        if bool(a.get("memory_recalled_actual")) and not bool(b.get("memory_recalled_actual")):
+            ok.append(cid)
+        else:
+            bad.append(cid)
+        if b.get("memory_cards"):
+            off_has_card.append(cid)
+    return {
+        "n_pairs": len(common),
+        "n_ok": len(ok),
+        "failed": bad,
+        "off_has_card": off_has_card,
+        # ★ 通过条件：至少一对、且**一对都不许有反例**；OFF 侧出现卡一律判失败
+        "passed": bool(common) and not bad and not off_has_card,
+        "note": "只统计两臂都满足前置条件的正样本；OFF 侧有卡即失败（#24 探测器）",
+    }
+
+
 # ── 内部 ──────────────────────────────────────────────────
 
 

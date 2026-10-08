@@ -95,10 +95,37 @@ def report_one(name: str) -> None:
     )
 
 
+def tool_error_verdict(name: str) -> None:
+    """D16：tool error 门槛按**任务级**判 ⇒ 直接把每个任务的比率对 5% 判一遍。
+
+    ★ 为什么不能按整体：Phase 1 的 grade 任务级是 **13.3%**，而整体只有 **3.03%** ⇒
+      用整体口径等于「挑一个能过的分母」（§21 D16 就是为这个才定任务级）。
+    """
+    path = ROOT / name
+    if not path.exists():
+        return
+    rows = load(path)
+    print(f"\n### D16：tool error（任务级，门槛 <5%，含 hard failure）← {name}")
+    for task in TASKS:
+        sub = [r for r in rows if r.get("task") == task]
+        if not sub:
+            continue
+        bad = [
+            str(r.get("case_id"))
+            for r in sub
+            if r.get("primary_failure") == "tool_error" or r.get("hard_fails")
+        ]
+        rate = len(bad) / len(sub)
+        mark = "✅ 达标" if rate < 0.05 else "❌ 不达标"
+        print(f"  {task:9s} {len(bad)}/{len(sub)} = {rate:6.1%}  {mark}  {bad if bad else ''}")
+
+
 def main() -> int:
     print("§6 门槛回填的数据来源（真实分布，非门槛）。门槛表与口径讨论见 docs/EXPERIMENTS.md §21。")
     for name in ARCHIVES:
         report_one(name)
+    for name in ARCHIVES:
+        tool_error_verdict(name)
     print(
         "\n############ 检索侧（不进本脚本：由门禁自己判）############\n"
         "  `PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 "

@@ -73,7 +73,7 @@ _n_skip = 0
 #   ⇒ 加两个不变量：① 执行数（含跳过）必须等于本常量；② 跳过数必须为 0。
 #      少跑一项、或某组提前 `return`，都在这里变红，而不是安静地少几行。
 #   ★ 改判据时同步更新这个数（改完跑一次，末行会印实际值）。
-_EXPECTED_ITEMS = 194
+_EXPECTED_ITEMS = 201
 
 
 def check(label: str, passed: bool, detail: str = "") -> None:
@@ -3172,6 +3172,134 @@ def check_26() -> None:
     )
 
 
+def check_27() -> None:
+    """㉗ Memory 的 §6 判定改为**结构断言**（D15）—— 不再试图在 n=1 上写百分数门槛。
+
+    为什么不能写百分数：0B 的 Memory 四率**全 N/A**（#9，那批 gold 里没有 `expected_memory`）
+    ⇒ 「≥80% correct-use」根本没法按 Phase 0 回填；新口径下可测正样本只有 n=1（§20.8.6）。
+    ⇒ 三条断言：① 配对成立（`paired_control_verdict`，含 **#24 探测器**）
+      ② 被计入的正样本结论可追溯（`memory_traceable`）③ 分母摊开（`memory_measure_scope`）。
+    """
+    section("㉗ Memory 结构断言（D15：配对成立 / 可追溯 / 分母摊开）")
+
+    import json as _json27
+
+    from evaluation.task_eval import metrics as _m27
+    from evaluation.task_eval.report import summarize_task
+
+    def rec(cid, *, recalled, cards, valid=True, positive=True, trace=True):
+        r = {
+            "case_id": cid,
+            "task": "memory",
+            "validity_valid": valid,
+            "memory_recalled_actual": recalled,
+            "memory_cards": list(cards),
+            "store_enabled": True,
+            "gold": {"expected_memory": {"should_be_recalled": positive, "values": ["图的存储"]}},
+        }
+        if trace:
+            r["turn_log"] = [{"session": 0, "turn": 0}]
+            r["episodes"] = []
+        return r
+
+    v_ok = _m27.paired_control_verdict(
+        [rec("m1", recalled=True, cards=["薄弱：图的存储"])],
+        [rec("m1", recalled=False, cards=[])],
+    )
+    check(
+        "㉗a 断言①：两臂都 valid 的正样本上 ON 召回、OFF 未召回 ⇒ 通过",
+        v_ok["passed"] is True and v_ok["n_pairs"] == 1 and v_ok["n_ok"] == 1,
+        str(v_ok),
+    )
+    v_card = _m27.paired_control_verdict(
+        [rec("m1", recalled=True, cards=["薄弱：图的存储"])],
+        [rec("m1", recalled=True, cards=["薄弱：图的存储"])],  # OFF 侧照样有卡 = #24
+    )
+    check(
+        "㉗b ★ #24 探测器：OFF 侧出现记忆卡 ⇒ 一律判失败（旧代码正是这个形状）",
+        v_card["passed"] is False and v_card["off_has_card"] == ["m1"],
+        str(v_card),
+    )
+    v_no_pair = _m27.paired_control_verdict(
+        [rec("m1", recalled=True, cards=["卡"])],
+        [rec("m1", recalled=False, cards=[], valid=False)],  # 该臂前置条件没凑成
+    )
+    check(
+        "㉗c 交集为 0 ⇒ **不许**声称通过（防「压根没配对」被印成「OFF 干净」）",
+        v_no_pair["n_pairs"] == 0 and v_no_pair["passed"] is False,
+        str(v_no_pair),
+    )
+    v_miss = _m27.paired_control_verdict(
+        [rec("m1", recalled=False, cards=[])],
+        [rec("m1", recalled=False, cards=[])],
+    )
+    check(
+        "㉗d ON 侧没召回 ⇒ 进 failed（不是「两边都空所以干净」）",
+        v_miss["passed"] is False and v_miss["failed"] == ["m1"],
+        str(v_miss),
+    )
+    check(
+        "㉗e 断言②：可追溯 = 逐轮日志 + 卡通道 + `episodes` 字段 + `store_enabled`；缺任一即 False"
+        "（OFF 臂 `episodes=[]` 仍算可追溯 —— 空是合法结果，缺字段才是没测）",
+        _m27.memory_traceable(rec("m", recalled=True, cards=["x"])) is True
+        and _m27.memory_traceable(rec("m", recalled=True, cards=["x"], trace=False)) is False,
+    )
+
+    recs = [
+        rec("p1", recalled=True, cards=["卡"]),
+        rec("p2", recalled=False, cards=[], valid=False),
+        rec("p3", recalled=False, cards=[], valid=False),
+    ]
+    sc = summarize_task("memory", recs).memory_measure_scope
+    check(
+        "㉗f 断言③：报告把分母摊开（正样本 3、valid 1、不可测 2、可追溯 1）⇒ 100% 旁边必须能看到 1/3",
+        sc
+        == {
+            "positives_total": 3,
+            "positives_valid": 1,
+            "positives_invalid": 2,
+            "positives_traceable": 1,
+        },
+        str(sc),
+    )
+
+    # ★ ㉗g 真实归档回归：这三份合起来就是「断言能不能分辨历史上那三种情形」
+    def _read(fname: str):
+        fp = ROOT / "evals" / "results" / "task_eval" / fname
+        if not fp.exists():
+            return None
+        return [
+            _json27.loads(ln)
+            for ln in fp.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+
+    def _load_pair(tag: str):
+        on, off = (
+            _read(f"phase1_memory_step5_store_on_step9_{tag}.jsonl"),
+            _read(f"phase1_memory_step5_store_off_step9_{tag}.jsonl"),
+        )
+        if on is None or off is None:
+            return None
+        return _m27.paired_control_verdict(on, off)
+
+    d8b, d8, kp = _load_pair("d8b"), _load_pair("d8"), _load_pair("kp")
+    if not (d8b and d8 and kp):
+        skip("㉗g", "Step 9 的 d8/d8b/kp 归档不在本机（不入库）⇒ 未做历史三情形回归", count=1)
+    else:
+        check(
+            "㉗g 历史三情形可分辨：d8b（修好后）通过 / d8（OFF 有卡）被探测器抓住 / kp（无交集）不算通过",
+            d8b["passed"] is True
+            and d8b["n_pairs"] == 1
+            and d8["passed"] is False
+            and d8["off_has_card"] == ["mem-002"]
+            and kp["n_pairs"] == 0
+            and kp["passed"] is False,
+            f"d8b={d8b['n_pairs']}/{d8b['n_ok']} pass={d8b['passed']} | "
+            f"d8 off_has_card={d8['off_has_card']} | kp pairs={kp['n_pairs']}",
+        )
+
+
 def main() -> int:
     check_1()
     check_2()
@@ -3200,6 +3328,7 @@ def main() -> int:
     check_24()
     check_25()
     check_26()
+    check_27()
 
     total = _n_pass + _n_fail + _n_skip
     print()
