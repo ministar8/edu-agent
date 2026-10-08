@@ -61,7 +61,7 @@
 | 归档类别 | 自带的追溯字段 | 反查能力 |
 |---|---|---|
 | 检索 / RAGAS 类 | `code_version` / `golden_sha256` / **`script`** / **`argv`** | 可从论文数字反查到脚本与命令行 |
-| **`task_eval/`（效果章）** | 只有 `code_version` / `golden_sha256` / `date` —— **无 `script` / `argv`，也无 `prompt_set_version`** | ⇒ 效果数字的版本归属**靠 `EXPERIMENTS.md` §20.4 的归属矩阵人工对账**；且 `code_version` 在工作区未提交时恒为 `<sha>-dirty`，区分不出先后 |
+| **`task_eval/`（效果章）** | 逐条 record 带 `code_version` / `golden_sha256` / `date` / `prompt_set_version`（`runner.py:726-736`）。★ **更正（Task 2）**：`script` / `argv` **从来就不是「没产出」** —— `build_provenance()` 一直输出这两个字段（`src/evaluation/provenance.py:141-157`），是此前的调用方只挑 `code_version` / `golden_sha256` 两个标量、把其余丢弃（原 `runner.py:725-727`）；**Task 2 起整包落进 `record.provenance`**（同一次调用的同一个 `_inner`，含 `script` / `argv` / `model_refs` / `sampling` / `experiment_config_hash` / `dependency_lock_hash`，见 `runner.py:725-730`） | ⇒ **Task 2 之前**产出的归档（含 `phase0/phase1` 冻结集）里没有 `provenance` 整包，效果数字的版本归属仍**靠 `EXPERIMENTS.md` §20.4 的归属矩阵人工对账**；且 `code_version` 在工作区未提交时恒为 `<sha>-dirty`，区分不出先后 |
 
 | 路径 | 内容 |
 |---|---|

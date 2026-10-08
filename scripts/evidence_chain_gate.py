@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 5
+_EXPECTED_ITEMS = 10
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -30,8 +30,34 @@ def check_1() -> None:
     )
 
 
+def check_2() -> None:
+    """provenance 必须能区分「没记」与「记了且不同」；gold 必须有出处。
+
+    ★ 断言打在**嵌套的 `provenance`** 上：`build_provenance()` 返回
+      `{"recorded_at": ..., "provenance": {...}}`（`provenance.py:85-93`）。
+      原稿在这里踩过坑 —— 顶层没有这些键，从顶层取会永远取到 None（就是 #3 那条 bug 的成因）。
+    """
+    import json
+
+    from evaluation.provenance import build_provenance
+
+    inner = build_provenance("evaluation.task_eval.runner")["provenance"]
+    check(
+        "2a script/argv 已在既有输出里（本 Task 的活是不再丢弃，不是新造）",
+        bool(inner.get("script")) and isinstance(inner.get("argv"), list),
+    )
+    check("2b 含 experiment_config_hash", isinstance(inner.get("experiment_config_hash"), str))
+    check("2c 含 dependency_lock_hash", isinstance(inner.get("dependency_lock_hash"), str))
+    check("2d 不落任何密钥原值", "api_key" not in json.dumps(inner).lower())
+
+    from evaluation.task_eval.cases import Gold
+
+    check("2e Gold 有 gold_source_ref 字段", "gold_source_ref" in Gold.__dataclass_fields__)
+
+
 def main() -> int:
     check_1()
+    check_2()
     total = len(_ITEMS)
     for label, passed, detail in _ITEMS:
         print(f"{'PASS' if passed else 'FAIL'}  {label}{'  ' + detail if detail else ''}")

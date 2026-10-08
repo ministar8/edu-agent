@@ -725,6 +725,9 @@ async def run_case(
     _inner = prov.get("provenance") or {}
     record.code_version = str(_inner.get("code_version") or "")
     record.golden_sha256 = str(_inner.get("golden_sha256") or "")
+    # ★ 主从关系：上面的标量仍是现有消费者（report/reprobe/freeze_precheck）的权威，
+    #   record.provenance 是完整证据副本；两者必须来自**同一次** build_provenance() 调用。
+    record.provenance = dict(_inner)
     # ★ 修 #3：`-dirty` 区分不了一次改造里的多轮 ⇒ 直接把提示词内容 hash 落到每条 record
     from prompts import PROMPT_SET_VERSION
 

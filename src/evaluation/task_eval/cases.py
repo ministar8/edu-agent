@@ -71,7 +71,7 @@ TASKS: tuple[str, ...] = ("qa", "generate", "grade", "verify", "memory")
 # 各 task 的 gold 字段白名单：用于校验与「缺字段 → 不适用」判定
 GOLD_FIELDS: dict[str, tuple[str, ...]] = {
     "qa": ("gold_points", "expected_kp", "reference"),
-    "generate": ("expected_kp", "expected_difficulty", "gold_answer"),
+    "generate": ("expected_kp", "expected_difficulty", "gold_answer", "gold_source_ref"),
     "grade": ("question_stem", "student_answer", "human_score", "full_marks"),
     "verify": ("expected_question_ids",),
     "memory": ("expected_memory", "expected_answer_property", "setup_conditions"),
@@ -242,6 +242,10 @@ class Gold:
     expected_answer_property: ExpectedAnswerProperty | None = None
     # ★ case-validity：A 段（写入前提）是否成立（2026-10-06 Step 5）
     setup_conditions: SetupConditions | None = None
+    # gold 的**外部出处**（EVIDENCE_CHAIN.md §4.2 盲标规程第 2 条）：
+    #   键 = 被支撑的字段名（gold_answer / expected_difficulty / human_score），
+    #   值 = `knowledge/` 相对路径或 `kp:<id>`。无出处视为未填 ⇒ missing_premise。
+    gold_source_ref: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> Gold:
@@ -268,6 +272,7 @@ class Gold:
                 else None
             ),
             setup_conditions=SetupConditions.from_dict(raw.get("setup_conditions")),
+            gold_source_ref=_as_str_dict(raw.get("gold_source_ref")),
         )
 
     def memory_mechanizable(self) -> bool:
@@ -356,6 +361,25 @@ def _as_str_list(value: Any) -> list[str] | None:
     if isinstance(value, list):
         return [str(v).strip() for v in value if str(v).strip()]
     return None
+
+
+def _as_str_dict(value: Any) -> dict[str, str]:
+    """解析「gold 字段名 → 出处」映射（`gold_source_ref` 用）。
+
+    ★ 照 `_as_str_list` 的写法：畸形输入**不抛错**，只把该项丢掉 / 整体返回 `{}`。
+      理由是出处的语义是「有没有」—— 非法值等于「没填」，由 `gold_sanity` 报
+      「有值但无出处」，而不是在这里把整条 case 的解析中断。
+    ★ 空串值同样丢弃：`{"gold_answer": ""}` 不等于有出处。
+    """
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in value.items():
+        key = _as_str(k)
+        text = _as_str(v)
+        if key and text:
+            out[key] = text
+    return out
 
 
 def _as_str_list_2d(value: Any) -> list[list[str]] | None:

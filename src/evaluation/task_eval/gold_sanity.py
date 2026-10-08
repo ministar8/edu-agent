@@ -184,10 +184,11 @@ def _check_generate(case: TaskCase, out: list[SanityIssue]) -> None:
 def _check_field_ownership(case: TaskCase, out: list[SanityIssue]) -> None:
     """gold 里出现**不属于该 task** 的字段 → 标错位置（ERROR，会导致指标读不到）。"""
     allowed = set(GOLD_FIELDS.get(case.task, ()))
+    # `full_marks`（有默认值的评分参数）与 `gold_source_ref`（gold 的**出处元数据**，
+    # 每个 task 都可能需要）都不属于「该 task 专属的 gold 字段」这一维度 ⇒ 不参与归属扫描。
+    ignored = ("full_marks", "gold_source_ref")
     present = {
-        k
-        for k, v in case.gold.__dict__.items()
-        if k not in ("full_marks",) and v not in (None, [], "")
+        k for k, v in case.gold.__dict__.items() if k not in ignored and v not in (None, [], "")
     }
     stray = present - allowed
     if stray:
@@ -200,6 +201,25 @@ def _check_field_ownership(case: TaskCase, out: list[SanityIssue]) -> None:
                 f"出现不属于 task={case.task} 的字段 {sorted(stray)}（允许 {sorted(allowed)}）",
             )
         )
+
+
+def _check_gold_source_ref(case: TaskCase, out: list[SanityIssue]) -> None:
+    """gold 里有值，就必须能指回外部出处（EVIDENCE_CHAIN.md §4.2 盲标规程第 2 条）。
+
+    只检查**有值**的字段：无 gold 属 `missing_premise`，不是标注缺陷 ⇒ 不报 ERROR。
+    """
+    refs = case.gold.gold_source_ref or {}
+    for field_name in ("gold_answer", "expected_difficulty", "human_score"):
+        if getattr(case.gold, field_name, None) is not None and not refs.get(field_name):
+            out.append(
+                SanityIssue(
+                    case.case_id,
+                    case.task,
+                    ERROR,
+                    field_name,
+                    "有值但无 gold_source_ref（无出处的 gold 视为未填）",
+                )
+            )
 
 
 def _check_memory(case: TaskCase, kp_index: dict, out: list[SanityIssue]) -> None:
@@ -458,6 +478,7 @@ def run_sanity(cases: list[TaskCase]) -> SanityReport:
 
         _check_structure(case, report.issues)
         _check_field_ownership(case, report.issues)
+        _check_gold_source_ref(case, report.issues)
         if case.task in ("qa", "generate"):
             _check_kp(case, kp_index, report.issues)
         if case.task == "generate":
