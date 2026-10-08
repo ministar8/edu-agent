@@ -1251,6 +1251,7 @@ git commit -m "refactor(eval): report/backfill 驱动 registry，删 every_item_
 - Create: `src/evaluation/task_eval/falsify.py`
 - Modify: `scripts/evidence_chain_gate.py`（`check_5` + 夹具 + `--emit`）
 - Modify: `src/evaluation/task_eval/metrics.py`（★ `rewrite_reply_part` 语义修正，见 Step 2.5）
+- Modify: `src/evaluation/task_eval/predicates/generate.py`（★ checkpoint 3 裁定的纯选择题判定守卫，见 Step 2.6）
 - Test: `scripts/evidence_chain_gate.py`
 
 **Interfaces:**
@@ -1480,6 +1481,33 @@ def rewrite_reply_part(reply: str, part: str, new_text: str) -> str:
 取大于起点的最近者作终点，无则到文本末；用 `new_text` 替换该区间。未知片段名照旧抛错。
 ★ 改完必须重跑一遍控制器的实测序列并贴进报告（四件套齐全基线 ⇒ `flip_conclusion` 让
 `analysis_key_of` 变 `A`、`gen_analysis_agreement` 变 `fail`、其余不动）。
+
+- [ ] **Step 2.6: checkpoint 3 裁定的落点 —— 机械 answer-key 判据只对纯选择题运行**
+
+裁定：`answer_keys_of()` 只对**能可靠识别为纯选择题**的 reply 运行；混合卷/无可靠选项集
+⇒ `missing_premise`；**不得凭 regex 猜一个键**。落到 `predicates/generate.py`：
+
+```python
+def _is_pure_mcq(reply: str) -> bool:
+    """可靠识别：恰有一个 A–D 选项块、恰有一条答案行、且没有多小问分节痕迹。
+
+    依据是 Task 3 标定的实测：15 条真实产物里 14 条是「综合应用+选择+填空」混合卷，
+    答案键/解析结论/难度行在多小问之间互相污染（`answer_keys_of` 10/15 误读、
+    十六进制 41C8 / 单位 4KB / Baud / SYN-ACK 全被当选项字母）。
+    ★ 代价要如实接受：加上这道门之后，机械判据的适用域从 15 条收缩到「真纯选择题」那几条
+      （标定表里只有 gen-002/004/008/011/013/014 等带完整 A-D 选项块的才算，
+       且仍需人工抽查确认不是混合卷）——收缩是**诚实**，不是退化。
+    """
+```
+
+三个消费它的判据（`gen_answer_key_validity` / `gen_analysis_agreement` / `_correctness` 的 actual 侧）
+在无 `reply` 或 `_is_pure_mcq` 为假时一律返回 `missing_premise`；`_structure`/`gen_coverage`
+不受此门影响（它们不读答案键）。`registry` 里这三个判据的 `contract_inputs` 不变。
+
+★ 这一步是**诊断位收紧**，不改变任何门槛行：机械判据永不单独构成 Generate 证明门槛（裁定第 2 条），
+冻结名 `gen_correctness` / `gen_answerability` 继续走 `missing_premise`。
+Task 5 的夹具本来就是纯选择题形状（题干/四个选项/一条答案/一条解析），因此 5a-5e 不受影响；
+若受影响说明夹具或守卫写错了，停下报告。
 
 - [ ] **Step 3: gate 里的分段夹具（record 层弄坏的唯一手段）**
 
