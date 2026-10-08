@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 26
+_EXPECTED_ITEMS = 36
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -237,6 +237,44 @@ def check_5() -> None:
     check("5e generate 判据无未覆盖契约输入", not gaps, str(gaps))
 
 
+def check_6() -> None:
+    from evaluation.task_eval import claims as cl
+
+    ok = dict(
+        falsify_passed=True, tier_ok=True, discriminating=True, provenance_match=True, signed=True
+    )
+    check("6a 五条件齐 ⇒ proven", cl.derive_status({}, **ok) == cl.CLAIM_PROVEN)
+    for key in ok:
+        bad = {**ok, key: False}
+        check(
+            f"6b 缺 {key} ⇒ 不得 proven",
+            cl.derive_status({}, **bad) != cl.CLAIM_PROVEN,
+        )
+    check(
+        "6c provenance 不符自动降级（§9 三态推导取证行）",
+        cl.derive_status({}, **{**ok, "provenance_match": False}) == cl.CLAIM_MEASURED,
+    )
+    # tier_ok 的两个前置必须是**算出来的**，不是文档里写「已有抖动数据」
+    check(
+        "6d 边界档不足 ⇒ boundary_calibrated=False（实测 calibration_30 = {5:28,2:1,0:1}）",
+        cl.boundary_calibrated([5.0] * 28 + [2.0, 0.0]) is False,
+    )
+    check("6e 边界两侧各 ≥3 ⇒ True", cl.boundary_calibrated([5.0, 5.0, 5.0, 3.0, 3.0, 3.0]) is True)
+    # ★ 读**真实校准集**（不放夹具值，防止以后有人只测夹具）：当前边界档（3/4）零样本
+    #   ⇒ False 是诚实状态。若将来补齐边界标注使此判据变 True，就把断言改成 True
+    #   并在 commit message 里引用 EVIDENCE_CHAIN.md §7.2 —— 判据跟着事实走。
+    import json
+
+    human = [
+        float(json.loads(line)["human_score"])
+        for line in Path("evals/datasets/demo/calibration_30.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
+    check("6f 真实校准集的边界覆盖状态被如实记录", cl.boundary_calibrated(human) is False)
+
+
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
     """把取证结果落盘成 ledger 的输入（Task 6 的 `falsify_passed` 读它，不靠人回忆）。"""
     import json
@@ -268,6 +306,7 @@ def main() -> int:
     check_3()
     check_4()
     check_5()
+    check_6()
     if "--emit" in sys.argv:
         emit_falsify_report()
     total = len(_ITEMS)
