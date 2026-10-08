@@ -965,7 +965,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 `category_hit@1 0.9423/0.9423` · `category_hit@k 0.9679/0.9615` · `category_mrr 0.9551/0.9519` ·
 `kp_hit@k 0.9103/0.9167` · `kp_mrr 0.8048/0.8051` · `kp_annotated 156/156` · `empty_result_rate 0.0`
 ⇒ **与 §20.2 上表逐位相同**（D12(B) 只改评测读数 `retrieval_probe`，本来就不在这条链上，此处得到确认）。
-★ 唯一有差的是 `mean_evidence_count`：**3.9295 → 3.9231**（基线仍 3.8846，两次跑的是同一份代码）。
+★ 唯一有差的是 `mean_evidence_count`：**3.9295 → 3.9231**（基线仍 3.8846，两次跑的是同一份代码）；打锚点 ④ 前又跑了一次同一份代码 ⇒ **3.9295** —— 三次落在 **[3.9231, 3.9295]** 之间，确认这是**运行间抖动**而不是代码效应（其余指标三次都逐位相同）。
 ⇒ 这说明该指标有**运行间抖动**（其余全部逐位相同 ⇒ 不是抖动在扩散）。可疑来源是那条
 「阈值过滤后为空 ⇒ 保底返回 top-1」的分支（fake LLM 分类失败时 `query_type`/路由会变 ⇒ 证据条数会变）。
 判定不受影响（阈值判定是「不低于基线」，本次仍高于）。★ 但引用 `mean_evidence_count` 时**必须带上这个抖动**，
@@ -1484,6 +1484,23 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 ★ 三个洞的**收尾状态：全部关闭**（D14 机械化 / D15 结构断言 / D16 任务级口径）⇒ §6 这张表每一行都有确定的算法与分母，不再有「等实跑再想」的空格。
 
 #### 与 §6 实跑的关系
+
+**怎么跑（写在这里，免得跑完争论口径）**
+
+```bash
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.task_eval run   --judge --out evals/results/task_eval/phase1_final_gate_20261008.jsonl
+```
+
+- 成本参照：同规模历史整轮 `phase1_baseline_v2.log` 实测 **405 次** `chat/completions`
+  （agent 与 RAG 链各端点分别数 POST，不用 dry-run 估算 —— 它的估算曾把 126 报成 84）。
+- **检索配置必须是生产态**：本机 `.env` 是 `RERANK_ENABLED=false` + `use_rerank=True`
+  ⇒ 实际 `rerank_effective=False`（`ARCHITECTURE.md:351-356` 解释了这对组合，§19 也把 Rerank 记为默认关闭）。
+  新归档会把这个事实写进每条 record 的 `retrieval_cfg`（⑯），所以**可比性是可证的而不是假设的**。
+- 模型：`DEFAULT_MODEL=deepseek:deepseek-flash`（agent）· `LLM_MODEL=dashscope:qwen3.7-flash`（RAG 链）
+  · `RAGAS_JUDGE_MODEL=dashscope:qwen3.8-flash`（judge）⇒ 与 0B / Phase 1 两张表同源。
+- 产出**一律新档**（`phase1_final_gate_*`），**不回写** 0B 与 Phase 1 的任何归档。
+- 跑完按本节表格逐行填「实测值 vs 门槛」，**不达就照实写不达**（预期不达的两行：Verify 的 `final_quality≥4`、
+  Grade 的任务级 tool error 13.3%）。
 
 - 上面这张表就是 §6 的**验收定义**；实跑产出 `phase1_final_gate_*.jsonl` 后逐行填「实测值 vs 门槛」，
   **不达标就照实写不达标**（Verify 的 ge4 与 grade 的 tool error 当前**预判不达**）。
