@@ -44,10 +44,17 @@ def _coverage(rec: dict) -> Verdict:
     """§3.1 冻结项「知识点覆盖」：包一层 `metrics.kp_coverage`（唯一公式）。
 
     `expected_kp` 为空 ⇒ `not_applicable`（族级零覆盖披露，§1.6）。
+    ★ checkpoint 5 裁定 A：record 缺 `top_items` 键（老归档检索探针未落盘，
+      phase1_baseline_v2 15/15 实测）⇒ 「证据不存在」= `missing_premise`，
+      **不得**把空 retrieved 集喂进 `kp_coverage` 读成 fail（规则①禁止
+      「没证据 = 不合格」）。键存在但列表为空 ⇒ 仍是 `fail`
+      （「查了且没覆盖」≠「没证据」）。
     """
     expected = (rec.get("gold") or {}).get("expected_kp") or []
     if not expected:
         return "not_applicable"
+    if "top_items" not in rec or rec.get("top_items") is None:
+        return "missing_premise"
     retrieved = [
         kp
         for item in (rec.get("top_items") or [])

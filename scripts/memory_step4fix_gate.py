@@ -1698,53 +1698,64 @@ def check_13() -> None:
 
 
 def check_14() -> None:
-    """⑭ Generate 主指标口径（#2 定稿，2026-10-07）：主指标 = 逐题「适用项全过」。
+    """⑭ Generate 主指标（Task 4 registry 化后）：主指标 = registry 逐题复合（四态）。
 
-    背景：`EFFECT_PLAN §3.1` 冻结的是**逐题 AND**，而 `report.py` 实为**项级池化**
-    （把 15 题 × 每题 3~4 项倒进一个池子数通过率）。同一归档三个数并存：
-    池化 **0.9423** / 逐题适用项全过 **0.80** / 严格 5/5 **0.00**。
-    ⇒ 采纳「逐题适用项全过」为主指标，池化**降级为诊断**（不删，便于对照）。
+    背景：`EFFECT_PLAN §3.1` 冻结的是**逐题 AND**；§4.2 事故 —— 旧布尔合取把
+    None 剔出分母，0.733 被读成 1.000。Task 4 起布尔合取/池化的本地副本已删
+    （`metrics.every_item_passes` / `metrics.delivery_rate`），判据只在
+    `predicates.registry` 一处，复合走 `pc.composite`：fail 优先 → required 项
+    missing_premise 毒化（rate=None，**不冒充通过率**）→ not_applicable 有权缺席。
+    checkpoint 5 裁定 A：老归档缺 `top_items` 键（证据不存在）⇒ `missing_premise`，
+    **不得**记成 fail；键存在但列表为空 ⇒ 仍是 fail（查了且没覆盖 ≠ 没证据）。
     """
-    section("⑭ Generate 主指标：逐题「适用项全过」（#2）")
+    section("⑭ Generate 主指标：registry 逐题复合（四态，Task 4 起）")
 
-    from evaluation.task_eval import metrics
+    from evaluation.task_eval.predicates import common as pc
     from evaluation.task_eval.report import build_report, render_markdown
 
     keys = ("gen_structure", "gen_answerability", "gen_coverage", "gen_correctness")
 
-    # ⑭a 整题无可测项 ⇒ N/A（**绝不能算通过**，否则索引缺标签会被洗成满分）
+    # ⑭a 整题测不到 ⇒ 复合 missing_premise ⇒ rate=None、n=0（**绝不能算通过**，
+    #    否则「测不到」被洗成满分/合格 —— 规则①）
+    all_mp: dict[str, pc.Verdict] = {k: "missing_premise" for k in keys}
+    r_a = pc.rate([pc.composite(all_mp)])
     check(
-        "⑭a 全 None 的题 ⇒ N/A（不进分母），不是 True",
-        metrics.every_item_passes([None, None, None]) is None,
+        "⑭a 全 missing_premise ⇒ 复合 missing_premise（rate=None、n=0），不是 pass",
+        pc.composite(all_mp) == "missing_premise" and r_a["rate"] is None and r_a["n"] == 0,
+        str(r_a),
     )
-    # ⑭b 逐题 AND + N/A 项不参与该题判定
+    # ⑭b 逐题 AND：fail 优先；not_applicable 有权缺席、不拉低该题
+    one_fail = {**{k: "pass" for k in keys}, "gen_coverage": "fail"}
+    one_na = {**{k: "pass" for k in keys}, "gen_coverage": "not_applicable"}
     check(
-        "⑭b 一题有 1 项 False ⇒ 该题不过；N/A 项不拉低该题",
-        metrics.every_item_passes([True, False, True]) is False
-        and metrics.every_item_passes([True, None, True]) is True,
+        "⑭b 一题有 fail ⇒ 复合 fail；not_applicable 不毒化该题",
+        pc.composite(one_fail) == "fail" and pc.composite(one_na) == "pass",
     )
 
     # ⑭c ★ 方向性：池化**系统性偏乐观** —— 一道题崩得越集中、其他题可测项越多，
-    #    稀释越狠。构造样本锁这个方向（真实归档上的差值是 0.9423 vs 0.80，由 ⑭d 钉住）。
-    diluted = [{k: False for k in keys[:2]}] + [{k: True for k in keys}] * 13
-    pooled = metrics.delivery_rate([r.get(k) for r in diluted for k in keys])["value"]
-    per_case = metrics.rate([metrics.every_item_passes([r.get(k) for k in keys]) for r in diluted])[
-        "value"
-    ]
+    #    稀释越狠。同构样本锁这个方向（旧归档的 0.9423 vs 0.80 已随旧口径退役，见 ⑭d）。
+    diluted = [{k: "fail" for k in keys[:2]}] + [{k: "pass" for k in keys}] * 13
+    pooled = pc.rate([v for r in diluted for v in r.values()])["rate"]
+    per_case = pc.rate([pc.composite(r) for r in diluted])["rate"]
     check(
-        "⑭c 同一样本两口径必须分叉，且池化**偏高**（证明换口径有信息量）",
-        float(pooled) - float(per_case) > 0.02,
-        f"池化={pooled} vs 逐题={per_case}（崩掉的题只算 1 题，却被 52 个好项摊薄）",
+        "⑭c 同一样本两口径必须分叉，且池化**偏高**（证明逐题复合有信息量）",
+        isinstance(pooled, float) and isinstance(per_case, float) and pooled - per_case > 0.02,
+        f"池化={pooled} vs 逐题={per_case}（崩掉的题只算 1 题，却被 54 个好项摊薄）",
     )
 
-    # ⑭d 真实归档复现（锁已发表数字）：15 条 ⇒ 主指标 0.80 / 诊断 0.9423
+    # ⑭d 真实归档锁定形态（checkpoint 5 裁定 A 后）：phase1_baseline_v2 的 15 条
+    #    generate **全部没有 `top_items` 键**（老归档，检索探针未落盘）⇒ coverage
+    #    missing_premise（测不到，不记 fail）；无 gold ⇒ answerability/correctness
+    #    同为 missing_premise ⇒ 逐题复合全部 missing_premise ⇒ rate=None、n=0、
+    #    n_a_missing_premise=15。（旧读数 0.80/0.9423 是「归档字段 + 旧布尔口径」的
+    #    历史值，随 registry 化退役 —— 语义修正，须随改动披露，非回归。）
     import json as _json
 
     fp = ROOT / "evals" / "results" / "task_eval" / "phase1_baseline_v2.jsonl"
     if not fp.exists():
         skip(
             "⑭d~⑭f",
-            "phase1_baseline_v2.jsonl 不在本机（未入库）⇒ 三项锁已发表数字的判据未执行",
+            "phase1_baseline_v2.jsonl 不在本机（未入库）⇒ 三项判据未执行",
             count=3,
         )
         return
@@ -1756,15 +1767,13 @@ def check_14() -> None:
     gen = [r for r in gen if r.get("task") == "generate"]
     rep = build_report(gen)
     g = rep["tasks"]["generate"]
+    cp = g["gen_case_pass"]
     check(
-        "⑭d 归档 15 条复现：主指标 0.80、诊断池化 0.9423（两数已发表，不许漂）",
-        abs(float(g["gen_case_pass"]["value"]) - 0.80) < 1e-9
-        and abs(float(g["gen_delivery"]["value"]) - 0.9423) < 1e-4
-        and g["gen_case_pass"]["n"] == len(gen) == 15,
-        f"主={g['gen_case_pass']['value']}({g['gen_case_pass']['passed']}/{g['gen_case_pass']['n']} 题) "
-        f"池={g['gen_delivery']['value']}({g['gen_delivery']['passed']}/{g['gen_delivery']['n']} 项)",
+        "⑭d 归档 15 条缺 top_items ⇒ 复合全测不到：rate=None、n=0、n_a_missing_premise=15",
+        cp["rate"] is None and cp["n"] == 0 and cp["n_a_missing_premise"] == len(gen) == 15,
+        f"n={len(gen)} gen_case_pass={cp}",
     )
-    # ⑭e 报告文案：主指标必须是逐题数，池化数必须自标「非主指标」，旧名必须消失
+    # ⑭e 报告文案：主指标必须是逐题复合，池化数必须自标「非主指标」，旧名必须消失
     md = render_markdown(rep)
     check(
         "⑭e 报告：逐题数挂「主指标」、池化数挂「诊断，非主指标」、旧名「交付完整率（主指标）」已消失",
@@ -1772,14 +1781,26 @@ def check_14() -> None:
         and "诊断，非主指标" in md
         and "交付完整率（主指标）" not in md,
     )
-    # ⑭f 整题不可测的题必须**显式露出**，不许静默进分母
-    all_na = [
-        {"task": "generate", **{k: None for k in keys + ("gen_difficulty",)}} for _ in range(3)
+    # ⑭f 整题测不到的题必须**显式露出**，不许静默进分母（夹具：结构完整 + 无 gold）
+    full_reply = (
+        "题干：设 Cache 采用 2-Way 组相联，主存 64 块，Cache 8 行，问组号需要几位。\n"
+        "A. 2\nB. 3\nC. 4\nD. 6\n"
+        "标准答案：B\n"
+        "解析：8 行分 2 路，8/2=4 组，组号需 2 位，因此选 B。"
+    )
+    all_mp_recs = [
+        {
+            "task": "generate",
+            "reply": full_reply,
+            "top_items": [{"kp": ["co.overview"]}],
+            "gold": {},
+        }
+        for _ in range(3)
     ]
-    st = build_report(all_na)["tasks"]["generate"]["gen_case_pass"]
+    st = build_report(all_mp_recs)["tasks"]["generate"]["gen_case_pass"]
     check(
-        "⑭f 3 题全不可测 ⇒ 主指标 n=0、n_a=3（分母不会假装是 3）",
-        st["n"] == 0 and st["n_a"] == 3,
+        "⑭f 3 题全测不到 ⇒ 主指标 n=0、n_a_missing_premise=3（分母不会假装是 3）",
+        st["n"] == 0 and st["n_a_missing_premise"] == 3,
         str(st),
     )
 

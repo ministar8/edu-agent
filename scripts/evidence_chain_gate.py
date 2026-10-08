@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 17
+_EXPECTED_ITEMS = 21
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -82,10 +82,77 @@ def check_3() -> None:
     )
 
 
+def check_4() -> None:
+    """报告必须只从 registry 取数；旧 `every_item_passes` 不得再被生产代码引用。
+
+    ★ 夹具即 §4.2 事故的形状（checkpoint 4 裁定，替代原稿的空 reply 夹具——
+      空 reply 在旧代码下本就 rate=None，红→绿不可达）：
+      四件套齐全的 reply + 无 gold ⇒ 旧代码 1.000（None 被剔出合取），
+      registry 下 correctness/answerability missing_premise ⇒ 复合 missing_premise ⇒ rate=None。
+    """
+    import ast
+    import pathlib
+
+    from evaluation.task_eval.report import summarize_task
+
+    # 旧式存储布尔（Task 2 之前的归档形状）：旧代码聚合出 1.000；
+    # 同时 reply 四件套齐全 + gold 为空：新 registry 算出 missing_premise。
+    # 两个世界共用这一条 record，红→绿才在 Step 2 前后各占一边。
+    recs = [
+        {
+            "task": "generate",
+            "case_id": "g1",
+            "gen_structure": True,
+            "gen_answerability": True,
+            "gen_coverage": True,
+            "gen_correctness": True,
+            "gen_difficulty": None,
+            "reply": (
+                "题干：设 Cache 采用 2-Way 组相联，主存 64 块，Cache 8 行，问组号需要几位。\n"
+                "A. 2\nB. 3\nC. 4\nD. 6\n"
+                "标准答案：B\n"
+                "解析：8 行分 2 路，8/2=4 组，组号需 2 位，因此选 B。"
+            ),
+            "top_items": [{"kp": ["co.overview"]}],
+            "gold": {},
+            "item_reasons": {},
+        }
+    ]
+    rep = summarize_task("generate", recs)
+    check(
+        "4a gen_case_pass 变 missing_premise 而非 1.000（§4.2 回归）",
+        isinstance(rep.gen_case_pass, dict) and rep.gen_case_pass.get("rate") is None,
+    )
+    check("4b 报告里带出 missing_n", isinstance(rep.gen_case_pass.get("n_a_missing_premise"), int))
+
+    banned = ("every_item_passes",)
+    hits = []
+    for py in pathlib.Path("src").rglob("*.py"):
+        tree = ast.parse(py.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in banned:
+                hits.append(f"{py}:{node.lineno}")
+            if isinstance(node, ast.Attribute) and node.attr in banned:
+                hits.append(f"{py}:{node.lineno}")
+    check("4c 生产代码不再引用旧合取函数", not hits, "; ".join(hits))
+
+    import inspect
+
+    from evaluation.task_eval import cli
+
+    sig = inspect.signature(cli._update_retrieval_fields)
+    check(
+        "4d reprobe 必须显式接 k 与 cfg（不再硬编码 5）",
+        {"k", "cfg"} <= set(sig.parameters),
+        str(sig),
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
     check_3()
+    check_4()
     total = len(_ITEMS)
     for label, passed, detail in _ITEMS:
         print(f"{'PASS' if passed else 'FAIL'}  {label}{'  ' + detail if detail else ''}")

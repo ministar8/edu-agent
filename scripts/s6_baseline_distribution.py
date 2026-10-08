@@ -7,7 +7,7 @@
 否则就是看着结果画线，等于没有门槛。
 
 本脚本只读 `evals/results/task_eval/*.jsonl`，用**现口径**（`report.summarize_task` +
-`metrics.every_item_passes`）重算，不调用任何 LLM、不写任何文件。
+`predicates.registry` 的逐题复合）重算，不调用任何 LLM、不写任何文件。
 ⇒ 门槛表里每个数字都能用一行命令重跑核对：
 
     PYTHONIOENCODING=utf-8 uv run python scripts/s6_baseline_distribution.py
@@ -24,7 +24,6 @@ from collections import Counter
 
 sys.path.insert(0, "src")
 
-from evaluation.task_eval import metrics  # noqa: E402
 from evaluation.task_eval.report import summarize_task  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "evals" / "results" / "task_eval"
@@ -67,19 +66,14 @@ def report_one(name: str) -> None:
         )
         print(f"            primary_failure={dict(fails)}")
         if task == "generate":
-            flags = [
-                metrics.every_item_passes(
-                    [
-                        r.get("gen_structure"),
-                        r.get("gen_answerability"),
-                        r.get("gen_coverage"),
-                        r.get("gen_correctness"),
-                        r.get("gen_difficulty"),
-                    ]
-                )
-                for r in sub
-            ]
-            print(f"            逐题适用项全过（#2 主指标）= {metrics.rate(flags)}")
+            # ★ Task 4：旧布尔合取（every_item_passes）已删 —— 改调 registry 逐题复合。
+            from evaluation.task_eval.predicates import common as pc
+            from evaluation.task_eval.predicates import registry
+
+            preds = registry.for_task("generate")
+            optional = frozenset(p.name for p in preds if p.optional)
+            comp = [pc.composite({p.name: p.fn(r) for p in preds}, optional=optional) for r in sub]
+            print(f"            逐题适用项全过（registry 复合，#2 主指标）= {pc.rate(comp)}")
         if task == "grade":
             print(
                 f"            verdict_agreement={d.get('verdict_agreement')}\n"

@@ -265,17 +265,19 @@ _RETRIEVAL_LAYER_REASONS = frozenset({"retrieval_miss", "retrieval_dropped", "ev
 def _sync_generate_correctness(record) -> None:
     """judge 写入 `final_quality` 后，**同步刷新** Generate 的「内容正确率」。
 
-    ★ 2026-10-06 修：`gen_correctness` 原在 `runner.run_case` 里计算，但那时
-      **judge 还没跑**（`final_quality` 仍为 None）⇒ 15 条 Generate 全被判 N/A，
-      交付完整率的分母少了 15 项（37 而非 52）。
-      ⇒ 归属改到 judge：**谁写 `final_quality`，谁负责刷新依赖它的派生指标**。
+    ★ 「谁写 `final_quality`，谁负责刷新依赖它的派生指标」这条归属规则保留（2026-10-06 修：
+      runner 里算时 judge 还没跑 ⇒ 15 条全 N/A 的教训），只是公式来源从本地 `fq>=4`
+      副本换成 `predicates.registry` 的唯一定义（Task 4：三份本地公式删净，rejudge 与
+      新跑同源）。无 gold ⇒ `missing_premise`（落盘 None + item_reasons 记原因）。
     """
     if getattr(record, "task", "") != "generate":
         return
-    from evaluation.task_eval import metrics
+    from evaluation.task_eval.predicates import common as pc
+    from evaluation.task_eval.predicates import registry
 
-    fq = getattr(record, "final_quality", None)
-    record.gen_correctness = None if fq is None else float(fq) >= metrics.QUALITY_PASS_THRESHOLD
+    v = registry.get("gen_correctness").fn(record.to_dict())
+    record.gen_correctness = pc.to_record_value(v)
+    record.item_reasons["gen_correctness"] = "" if v in ("pass", "fail") else v
 
 
 def _quarantine_judge_memory(output: JudgeOutput) -> None:
@@ -404,13 +406,16 @@ def apply_judge_to_dict(rec: dict, output: JudgeOutput | None, *, judge_model: s
         rec.update(_judge_memory_diagnostics(output))
     rec["judge"] = judge_model
     if rec.get("task") == "generate":
-        from evaluation.task_eval import metrics
+        # ★ Task 4：第三份 `fq>=4` 本地公式删除，与 `_sync_generate_correctness` 同源
+        #   到 registry —— 不切的话 rejudge 与新跑会分叉成两套口径（#36 的旧病）。
+        #   切换后 rejudge 产物里 `gen_correctness` 变 missing_premise（无 gold）——
+        #   语义修正的预期结果，不是回归；`judge_failure_reasons` 等诊断字段不动。
+        from evaluation.task_eval.predicates import common as pc
+        from evaluation.task_eval.predicates import registry
 
-        rec["gen_correctness"] = (
-            None
-            if rec.get("final_quality") is None
-            else float(rec["final_quality"]) >= metrics.QUALITY_PASS_THRESHOLD
-        )
+        v = registry.get("gen_correctness").fn(rec)
+        rec["gen_correctness"] = pc.to_record_value(v)
+        rec.setdefault("item_reasons", {})["gen_correctness"] = "" if v in ("pass", "fail") else v
 
 
 # ── 校准 ──────────────────────────────────────────────────

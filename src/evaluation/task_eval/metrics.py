@@ -330,7 +330,8 @@ def parse_grade_score(text: str) -> float | None:
 def rate(flags: Sequence[bool | None]) -> dict[str, float | int | None]:
     """通过率：**N/A（None）从分母剔除**。
 
-    这是本项目所有率值指标的统一口径 —— 见下方 `delivery_rate` 的说明。
+    这是本项目所有布尔率指标的统一口径（Generate 四态判据的四态聚合见
+    `predicates.common.rate` —— Task 4 起布尔合取/池化的旧副本已删，定义只在 registry）。
 
     ★ 返回**超集键**（`rate` 与 `value` 同值，另附 passed/failed/n/n_a）：
       历史上本函数曾先后用过 `rate` 与 `value` 两个键名，而消费方（`report._pct`
@@ -361,7 +362,8 @@ def rate(flags: Sequence[bool | None]) -> dict[str, float | int | None]:
 #   2. **不适用项（None）一律从分母剔除**（2026-10-06 定，仍不变）：
 #      例：coverage=T, difficulty=N/A, answerability=T, correctness=T, structure=T
 #          ⇒ 该题按 **4 项**判定，**不是**按 5 项打 80%。
-#      ★ 聚合口径已于 2026-10-07（#2 定稿）改为**逐题 AND**（`every_item_passes`，对齐
+#      ★ 聚合口径已于 2026-10-07（#2 定稿）定为**逐题 AND**（Task 4 起由
+#        `predicates.registry` 的逐题复合 `pc.composite` 实现，对齐
 #        `EFFECT_PLAN §3.1`「五项全过才算这题完整」）；原先的**项级池化**
 #        （适用项通过数 / 适用项数，跨题累加）**降级为诊断**，不再当主指标 ——
 #        因为池化会把「一道题崩掉 3 项」被另外十几道好题摊薄（实测同一归档：
@@ -494,34 +496,6 @@ def answerability_pass(reply: str) -> bool | None:
     if not m:
         return False
     return not _VAGUE_ANSWER.search(m.group(1))
-
-
-def delivery_rate(flags: Sequence[bool | None]) -> dict[str, float | int | None]:
-    """Generate **项级池化通过率** = 适用项通过数 / 适用项数（不适用项剔除）。
-
-    与 `rate` 同为 N/A 剔除口径，单列此函数是为了让**语义显式**：
-    报告里必须写明「分母 = 适用项数」，避免被误读成「必须 5/5」。
-
-    ★ 2026-10-07（#2 定稿）：这一口径**降级为诊断**，主指标改 `every_item_passes`
-      的逐题聚合。原因：池化把「15 题 × 每题 4 项」和「4 题 × 每题 15 项」算成
-      同一个数 —— 一道题崩掉 3 项会被另外 14 道题的通过**稀释**，于是它测的是
-      「项平均健康度」而不是「系统能否交付一道完整的题」。§3.1 冻结的是逐题 AND。
-    """
-    return rate(flags)
-
-
-def every_item_passes(flags: Sequence[bool | None]) -> bool | None:
-    """**逐题**聚合：一题的若干交付项，全部适用项都通过才算这题通过。
-
-    - 全是 `None`（这题一项都测不了）⇒ 返回 `None`（N/A，**不进分母**）。
-      ★ 不能返回 `True`：那等于「测不了的题算通过」，会把 #10 那类索引缺标签
-      导致的不可测直接洗成满分。
-    - 有适用项 ⇒ 全部为真才 `True`（对齐 `EFFECT_PLAN §3.1` 的逐题 AND 口径）。
-    """
-    applicable = [f for f in flags if f is not None]
-    if not applicable:
-        return None
-    return all(applicable)
 
 
 def degenerate_gold(values: Sequence[float]) -> tuple[bool, int]:

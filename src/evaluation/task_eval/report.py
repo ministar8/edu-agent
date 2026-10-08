@@ -49,8 +49,8 @@ class TaskReport:
     # ★ 二值 gold 上合法的 Grade 头号指标（见 metrics.verdict_agreement 的说明）
     verdict_agreement: dict[str, Any] = field(default_factory=dict)
     score_mae: float | None = None
-    # Generate 交付五项（§3.1 v1.0 冻结口径；N/A 从分母剔除）
-    # ★ `gen_case_pass` = 主指标（逐题「适用项全过」）；`gen_delivery` = 项级池化，仅诊断。
+    # Generate 交付判据（§3.1 v1.0 冻结项 + 机械替身，定义只在 `predicates.registry`）：
+    # ★ `gen_case_pass` = 主指标（registry 逐题复合，四态）；`gen_delivery` = 项级池化，仅诊断。
     gen_case_pass: dict[str, Any] = field(default_factory=dict)
     gen_delivery: dict[str, Any] = field(default_factory=dict)
     gen_items: dict[str, Any] = field(default_factory=dict)
@@ -139,26 +139,25 @@ def summarize_task(task: str, records: list[dict[str, Any]]) -> TaskReport:
         rep.score_mae = metrics.score_mae(pairs)
 
     if task == "generate":
-        # 交付五项（§3.1 v1.0；2026-10-06 按用户裁决重构，2026-10-07 #2 定聚合口径）：
-        #   不适用项（None）从分母剔除 —— 但**主指标是逐题「适用项全过」**，
-        #   项级池化只作诊断（详见 `metrics.delivery_rate` 与护栏 ⑭）。
-        #   ❌ 不要求「5 项永远齐全」；❌ 难度匹配本批全 N/A（query 未指定难度）。
-        item_keys = (
-            ("gen_structure", "结构完整率"),
-            ("gen_answerability", "答案可判定率"),
-            ("gen_coverage", "知识点覆盖率"),
-            ("gen_correctness", "内容正确率"),
-            ("gen_difficulty", "难度匹配"),
-        )
-        rep.gen_items = {}
-        for key, label in item_keys:
-            rep.gen_items[label] = metrics.rate([r.get(key) for r in records])
-        flat = [r.get(k) for r in records for k, _ in item_keys]
-        rep.gen_delivery = metrics.delivery_rate(flat)
-        # ★ 主指标（2026-10-07 #2 定稿）：**逐题**「适用项全过」——每题只看它自己
-        #   能测的项，全过才算这题过。上面的池化数降级为诊断（见 `delivery_rate` docstring）。
-        rep.gen_case_pass = metrics.rate(
-            [metrics.every_item_passes([r.get(k) for k, _ in item_keys]) for r in records]
+        # ★ Task 4（registry 化）：判据定义只有 `predicates.registry` 一处，报告层只读——
+        #   逐题复合走 `pc.composite`（fail 优先 → missing_premise 毒化 → not_applicable 有权缺席），
+        #   「整题测不到」⇒ rate=None、missing_premise 显式计数，不再被剔出分母（§4.2 的教训）。
+        #   裁决 1：本函数**不得改写**传入的 record —— 落盘（判据值 + item_reasons）只归 `cli._backfill`。
+        from evaluation.task_eval.predicates import common as pc
+        from evaluation.task_eval.predicates import registry
+
+        preds = registry.for_task("generate")
+        verdicts_per_case: list[dict[str, pc.Verdict]] = []
+        for r in records:
+            verdicts_per_case.append({p.name: p.fn(r) for p in preds})
+        rep.gen_items = {p.name: pc.rate([v[p.name] for v in verdicts_per_case]) for p in preds}
+        optional = frozenset(p.name for p in preds if p.optional)
+        comp = [pc.composite(v, optional=optional) for v in verdicts_per_case]
+        # ★ 主指标：逐题「required 项复合全过」（对齐 §3.1 的逐题 AND）。
+        rep.gen_case_pass = pc.rate(comp)
+        # 项级池化（**诊断，非主指标**）：required 项的判定倒进一个池子数通过率。
+        rep.gen_delivery = pc.rate(
+            [v for per in verdicts_per_case for k, v in per.items() if k not in optional]
         )
 
     if task == "memory":
@@ -249,9 +248,15 @@ def build_report(records: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _pct(block: dict[str, Any]) -> str:
+    """渲染率块。★ 兼容两代形状：`metrics.rate`（`n_a` 单键）与 `pc.rate`（四态双键）。"""
     rate = block.get("rate")
     if rate is None:
-        return f"n/a({block.get('n_a', 0)})"
+        if "n_a" in block:
+            return f"n/a({block.get('n_a', 0)})"
+        return (
+            f"n/a(mp={block.get('n_a_missing_premise', 0)},"
+            f" na={block.get('n_a_not_applicable', 0)})"
+        )
     return f"{rate:.3f}"
 
 
@@ -347,35 +352,38 @@ def render_markdown(report: dict[str, Any]) -> str:
 
     gen = (report.get("tasks") or {}).get("generate")
     if gen and gen.get("gen_items"):
-        lines.append("## Generate 专有（交付五项，§3.1 v1.0）")
+        lines.append("## Generate 专有（registry 判据，§3.1 v1.0）")
         lines.append("")
         lines.append(
-            "> **主指标口径**：逐题「**适用项全过**」率 —— 每题只看它自己**可测**的项"
-            "（`None` 项不进该题分母），可测项全过才算这题过（对齐 §3.1 的逐题 AND）。"
+            "> **主指标口径**：registry 判据的**逐题复合**（`predicates.common.composite`）——"
+            "任一 required 项 fail ⇒ 该题 fail；required 项测不到（missing_premise）⇒ "
+            "该题复合为 missing_premise ⇒ **rate=None，不冒充通过率**（§4.2：旧布尔合取把"
+            " None 剔出分母，0.733 被读成 1.000）。"
         )
         lines.append(
             "> ★ **不用项级池化当主指标**：池化会把「一道题崩掉 3 项」被另外十几道题的通过稀释，"
             "它测的是「项平均健康度」，不是「能否交付一道完整的题」⇒ 只列作诊断。"
         )
-        lines.append(
-            "> ❌ 不要求「5 项永远齐全」；❌ 难度匹配本批全 N/A（query 未指定难度，无可靠 gold）。"
-        )
         lines.append("")
-        lines.append("| 交付项 | 通过率 | n（适用） | n/a（剔除） |")
-        lines.append("|---|---|---|---|")
+        lines.append("| 判据 | 通过率 | n（已测） | missing_premise | not_applicable |")
+        lines.append("|---|---|---|---|---|")
         for label, st in gen["gen_items"].items():
-            lines.append(f"| {label} | {_pct(st)} | {st.get('n')} | {st.get('n_a')} |")
+            lines.append(
+                f"| {label} | {_pct(st)} | {st.get('n')} "
+                f"| {st.get('n_a_missing_premise')} | {st.get('n_a_not_applicable')} |"
+            )
         cp = gen.get("gen_case_pass") or {}
         d = gen.get("gen_delivery") or {}
         lines.append("")
         lines.append(
             f"- **Generate 适用项全过率（主指标）**：{_pct(cp)}"
-            f"（通过 {cp.get('passed')} / 适用 {cp.get('n')} 题；"
-            f"整题无可测项的 {cp.get('n_a')} 题已从分母剔除）"
+            f"（已测 n={cp.get('n')}; 测不到 missing_premise={cp.get('n_a_missing_premise')}、"
+            f"不适用 not_applicable={cp.get('n_a_not_applicable')}，均已剔除出分母）"
         )
         lines.append(
             f"- 项级池化通过率（**诊断，非主指标**）：{_pct(d)}"
-            f"（通过 {d.get('passed')} / 适用 {d.get('n')} 项；不适用 {d.get('n_a')} 项已剔除）"
+            f"（已测 n={d.get('n')} 项；missing_premise={d.get('n_a_missing_premise')}、"
+            f"not_applicable={d.get('n_a_not_applicable')} 项已剔除）"
         )
         lines.append("")
 

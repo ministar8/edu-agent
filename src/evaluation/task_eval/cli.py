@@ -231,6 +231,18 @@ async def _reprobe(args: argparse.Namespace) -> int:
     cases = {c.case_id: c for c in load_demo()}
     logger.info("重跑检索探针 %d 条（零 LLM 调用）", len(records))
 
+    # ★ provenance 与新读数同源：`retrieval_cfg` 用 runner 落盘的同一形状（runner.py 的
+    #   `record.retrieval_cfg`），`k` 来自 `--k`（不再硬编码 5）。
+    from core.settings import settings as _prov
+
+    cfg = {
+        "k": args.k,
+        "use_rerank_requested": not args.no_rerank,
+        "rerank_effective": bool(_prov.RERANK_ENABLED) and not args.no_rerank,
+        "use_fake_embedding": bool(_prov.USE_FAKE_EMBEDDING),
+        "semantic_cache_enabled": bool(_prov.SEMANTIC_CACHE_ENABLED),
+    }
+
     out: list[dict] = []
     for i, rec in enumerate(records, 1):
         case = cases.get(str(rec.get("case_id") or ""))
@@ -241,7 +253,7 @@ async def _reprobe(args: argparse.Namespace) -> int:
         probe = await probe_retrieval(
             case.query, task_mode=case.task_mode, k=args.k, use_rerank=not args.no_rerank
         )
-        _update_retrieval_fields(rec, case, probe)
+        _update_retrieval_fields(rec, case, probe, k=args.k, cfg=cfg)
         out.append(rec)
 
     if args.out:
@@ -257,12 +269,25 @@ async def _reprobe(args: argparse.Namespace) -> int:
     return 0
 
 
-def _update_retrieval_fields(rec: dict, case, probe) -> None:
-    """把探针结果写回 dict record 的检索侧字段（与 `runner.run_case` 同口径）。"""
+def _current_code_version() -> str:
+    """当前代码版本（与 `runner` 同源：`build_provenance()` **嵌套** `provenance.code_version`）。"""
+    from evaluation.provenance import build_provenance
+
+    inner = build_provenance("evaluation.task_eval.cli").get("provenance") or {}
+    return str(inner.get("code_version") or "")
+
+
+def _update_retrieval_fields(rec: dict, case, probe, *, k: int, cfg: dict) -> None:
+    """只重算检索侧指标；provenance 必须与新的读数同源，否则归档会自相矛盾。
+
+    ★ §3「旧输入新输出」：旧版用**当前**检索覆盖 `kp_hit`/`category_hit`/`exam_hit`，
+      却把 `retrieval_cfg`/`code_version`/`prompt_set_version` 留在旧值上，且把
+      `k` 硬编码成 5（无视 `--k`）。规则：**覆盖指标必须同写 provenance，否则拒绝写入**
+      —— `k` 与 `cfg` 由调用方显式传入；被覆盖前的读数归属记入 `reprobe_of`。
+    """
     from evaluation.task_eval import metrics
     from evaluation.task_eval.runner import _all_kp
 
-    k = 5
     rec["pack_nonempty"] = probe.ok
     rec["pack_len"] = probe.pack_len
     rec["evidence_count"] = probe.evidence_count
@@ -277,37 +302,39 @@ def _update_retrieval_fields(rec: dict, case, probe) -> None:
     rec["kp_mrr"] = metrics.kp_mrr(case.gold.expected_kp, [i.knowledge_points for i in top])
     rec["category_hit"] = metrics.category_hit(case.subject, [i.category for i in top])
     rec["exam_hit"] = metrics.exam_hit_at_k([i.is_exam for i in top], k)
+    # ── provenance 与新读数同源（先记旧归属，再覆盖）──
+    rec["reprobe_of"] = str(rec.get("code_version") or "")
+    rec["retrieval_cfg"] = dict(cfg)
+    rec["code_version"] = _current_code_version()
+    from prompts import PROMPT_SET_VERSION
+
+    rec["prompt_set_version"] = str(PROMPT_SET_VERSION)
 
 
 def _backfill(args: argparse.Namespace) -> int:
-    """回填**机械可算**的字段到已归档 record（**零 LLM 成本**）。
+    """回填机械可算字段到已归档 record（**零 LLM 成本**）。
 
-    当前支持 Generate 交付五项 —— 它们只依赖 `reply`（机械判据）与既有的
-    `final_quality`（judge 已给），故**口径变更后可即时重算，不必重跑 agent/judge**。
+    ★ Task 4（registry 化）：按 `predicates.registry` 重算**所有**任务的判据
+      （不止 Generate）—— 判据定义只有 registry 一处，报告/回填/rejudge 同源。
+      缺前置（gold、top_items 等）⇒ 落盘 None + `item_reasons` 记原因（四态无损）；
+      本函数是**唯一**允许写回 record 的聚合入口（裁决 1：报告层只读）。
     """
-    from evaluation.task_eval import metrics
+    from evaluation.task_eval.predicates import common as pc
+    from evaluation.task_eval.predicates import registry
 
     records = _load_all_records(args.records)
     if not records:
         logger.error("读不到 record：%s", args.records)
         return 2
-    cases = {c.case_id: c for c in load_demo()}
     n = 0
     for rec in records:
-        if rec.get("task") != "generate":
-            continue
-        case = cases.get(str(rec.get("case_id") or ""))
-        reply = str(rec.get("reply") or "")
-        rec["gen_structure"] = metrics.structure_pass(reply)
-        rec["gen_answerability"] = metrics.answerability_pass(reply)
-        rec["gen_coverage"] = rec.get("kp_hit")
-        fq = rec.get("final_quality")
-        rec["gen_correctness"] = None if fq is None else float(fq) >= metrics.QUALITY_PASS_THRESHOLD
-        rec["gen_difficulty"] = metrics.difficulty_match(
-            (case.gold.expected_difficulty if case else None), None
-        )
-        n += 1
-    logger.info("回填 Generate 交付五项：%d 条", n)
+        task = str(rec.get("task") or "")
+        for pred in registry.for_task(task):
+            v = pred.fn(rec)
+            rec[pred.name] = pc.to_record_value(v)
+            rec.setdefault("item_reasons", {})[pred.name] = "" if v in ("pass", "fail") else v
+            n += 1
+    logger.info("按 registry 回填判据：%d 条判定", n)
 
     if args.out:
         p = Path(args.out)
