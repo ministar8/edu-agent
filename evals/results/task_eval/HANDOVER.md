@@ -115,7 +115,8 @@
 > - **I2**：判据原先替原因下结论（写成「环境类」）—— 缺陷 C 的症状与 TEI 502 一模一样，`memory/safe.py` 只留一行 WARNING ⇒ 无法区分。现在**只报「证据缺失」**，环境类仍由 `preflight_check()` / `is_env_error()` 判（㉓c/㉑g 锁住）。★ 行为变化：写链证据缺失**不再中止整轮**（逐条标不可测）⇒ TEI 中途挂掉会烧完剩余 token；是否加「连续 N 条即中止」= **待裁决 D13**。
 > - **I3**：读 episodes 失败原先只进 `notes`（而 notes 不进 record）⇒ 会被下游读成「没写入」。新增 record 字段 `episodes_read_failed` / `memory_write_missing`（㉓d/d'/i）。
 > - **I4/I7（护栏自身不合格）**：`㉑c` 把 `EMBEDDING_API_BASE` 留在死端口（实测泄漏，与 ㉒e 自己立的标准矛盾）⇒ 包进 `finally` 并加 `㉑c'`；`㉑b` 是 `len(...)>=1` 的弱预言 ⇒ 改双向断言；`_run()` 返回注解写错（`scripts/` 从不在 pyrefly 的 `project-includes` 里，所以没人查过）⇒ 修正，该文件 14 → 13 errors（余下是 langgraph TypedDict / sys.path 注入这类历史噪音，**不在本轮范围**）。★ 口径改写：以后「pyrefly 0 errors」一律注明**范围 = `src/`**。
-> **验证**：护栏 **162 → 175 项全绿**（+`㉓` 10、+`㉑c'/f/g` 3）、step2/step4/`sanity` 均 exit 0、ruff check/format 通过、pyrefly(src) 0 errors。★ **㉓a 的牙齿是拿真篡改验的**：把调用点临时移回分支外 ⇒ `㉓a ❌ env_error=True primary=tool_error` 且整套 gate exit 1；随后还原（临时 Edit + 逆 Edit，未进任何提交）。
+> - **I6 / #30（计数本身不可复现）**：`⑬l×2 / ⑭d~⑭f / ⑱a~⑱b / ⑳d` 这 **8 项**读的是不入库的归档（D11 的裁决），缺文件时旧写法只 `print` 一行 `⏭`、**不进计数** ⇒ **干净克隆上「175 项全绿」其实是「167 项跑过 + 8 项没跑」而退出码仍 0**。⇒ 新增 `skip()`（跳过必须计数，一个 `if` 挡掉多项时用 `count=`）+ 模块级 `_EXPECTED_ITEMS = 175`；收尾两条不变量：执行数（含跳过）必须等于声明值、跳过数必须为 0，任一不满足 ⇒ `_flag()` 置红 + exit 1，文案写明「本次不能称为全绿，只能说跑了的那几项绿」。**没选**「把归档入库」（与 D11 冲突）。★ 维护契约：加判据必须同步改 `_EXPECTED_ITEMS`，忘了就红 —— 这条不靠人记性。
+> **验证**：护栏 **162 → 175 项全绿**（+`㉓` 10、+`㉑c'/f/g` 3）、step2/step4/`sanity` 均 exit 0、ruff check/format 通过、pyrefly(src) 0 errors。★ **㉓a 的牙齿是拿真篡改验的**：把调用点临时移回分支外 ⇒ `㉓a ❌ env_error=True primary=tool_error` 且整套 gate exit 1；随后还原（临时 Edit + 逆 Edit，未进任何提交）。★ **㉓a 测的是位置不是函数值**：把判据猴补丁成恒 `True`（模拟「对所有任务开火」）时 ㉓a **仍绿** ⇒ 只能靠源码级篡改验证；`check_20` 换成空函数 ⇒ `判定项 171 ≠ 声明 175` 且 exit 1；`ROOT` 指向空目录只跑那四组 ⇒ `⏭` 恰好 **8 项**（均为一次性脚本，未入库）。
 
 ---
 

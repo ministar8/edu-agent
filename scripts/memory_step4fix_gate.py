@@ -31,6 +31,13 @@ Step 5 真跑暴露的 4 个产品缺陷，已各自的回归护栏（2026-10-06
     ⑪ `normalize_topic` 不得改坏 canonical name（缺陷 D）
     ⑫ `GRADE_PROMPT` 的词表与 `kp_index` 同源（缺陷 E · 方案 A，2026-10-07 E-4 追加）
     ⑬ 重判归因保全 / jsonl 尾换行 / 负样本前置条件（2026-10-07 review B 组）
+    ㉓ 写入证据判据的位置 / 归因 / 下游（2026-10-08 review C1+I1+I3）
+
+**判据数量本身也是判据**（2026-10-08 review I6）：`_EXPECTED_ITEMS` 声明总数，收尾比对实际
+执行数（含 `skip()` 登记的「未执行」项）。少一项（某组提前 return、抛错被吞、改了没同步常量）
+⇒ 退出码 1；有 `⏭ 未执行` ⇒ 同样不算「全绿」。背景：`⑬l/⑭d~f/⑱a~b/⑳d` 这 8 项读的是
+`evals/results/task_eval/*.jsonl`，而按 D11 那些归档**不入库** ⇒ 干净克隆上它们会静默消失、
+`main()` 却照样绿 —— 「175 项全绿」这句话在别的机器上其实只是「167 项跑过」。
 
 用法::
 
@@ -53,14 +60,50 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 _ok_all = True
+_n_pass = 0
+_n_fail = 0
+_n_skip = 0
+
+# ★ 判据总数必须**声明**出来（2026-10-08 review I6）。
+#   背景：`⑬l×2 / ⑭d~⑭f / ⑱a~⑱b / ⑳d` 这 8 项读的是 `evals/results/task_eval/*.jsonl`，
+#   而按 D11 的裁决那些归档**不入库** ⇒ 干净克隆上它们会静默消失，`main()` 照样打印
+#   「GATE 通过 · exit 0」。于是文档与标签里那句「175 项全绿」在别的机器上其实是
+#   「167 项跑过 + 8 项压根没跑」，两者根本不等价（这是「护栏全绿而它描述的路径不可达」
+#   那一类的镜像：**绿灯的数量本身不可信**）。
+#   ⇒ 加两个不变量：① 执行数（含跳过）必须等于本常量；② 跳过数必须为 0。
+#      少跑一项、或某组提前 `return`，都在这里变红，而不是安静地少几行。
+#   ★ 改判据时同步更新这个数（改完跑一次，末行会印实际值）。
+_EXPECTED_ITEMS = 175
 
 
 def check(label: str, passed: bool, detail: str = "") -> None:
-    global _ok_all
+    global _ok_all, _n_pass, _n_fail
     mark = "✅" if passed else "❌"
     if not passed:
         _ok_all = False
+        _n_fail += 1
+    else:
+        _n_pass += 1
     print(f"  {mark} {label}" + (f"  — {detail}" if detail else ""))
+
+
+def skip(label: str, reason: str, count: int = 1) -> None:
+    """显式登记「这一项**没跑**」—— 计数、并在收尾时把绿灯降级成红灯。
+
+    ★ 与 `check(..., True)` 的区别：跳过**不是**通过。旧写法只 `print` 一行 `⏭`，
+      不进任何计数 ⇒ 总数悄悄变小而退出码仍为 0（正是 I6）。
+    `count`：一个 `if` 挡掉多项判据时用它（如 ⑭d~⑭f = 3 项）。
+    """
+    global _n_skip
+    _n_skip += count
+    print(f"  ⏭ {label} ×{count}：{reason}")
+
+
+def _flag(message: str) -> None:
+    """收尾阶段的失败判据（不参与计数：计数本身正是它检查的对象）。"""
+    global _ok_all
+    _ok_all = False
+    print(f"  ❌ {message}")
 
 
 def section(title: str) -> None:
@@ -1617,7 +1660,7 @@ def check_13() -> None:
     for fname in ("phase1_memory_step5_store_off.jsonl", "phase1_memory_step5_store_on.jsonl"):
         fp = ROOT / "evals" / "results" / "task_eval" / fname
         if not fp.exists():
-            print(f"  ⏭ ⑬l {fname} 缺失（本机归档未入库，新克隆上会跳过）")
+            skip(f"⑬l {fname}", "本机归档未入库（D11 裁决 `*.jsonl` 不入库）⇒ 该项未执行", count=1)
             continue
         by_id = {c.case_id: c for c in cases}
         changed = []
@@ -1696,7 +1739,11 @@ def check_14() -> None:
 
     fp = ROOT / "evals" / "results" / "task_eval" / "phase1_baseline_v2.jsonl"
     if not fp.exists():
-        print("  ⏭ ⑭d~⑭f phase1_baseline_v2.jsonl 缺失（本机归档未入库，新克隆上会跳过）")
+        skip(
+            "⑭d~⑭f",
+            "phase1_baseline_v2.jsonl 不在本机（未入库）⇒ 三项锁已发表数字的判据未执行",
+            count=3,
+        )
         return
     gen = [
         _json.loads(ln)
@@ -2050,7 +2097,7 @@ def check_18() -> None:
                 bad.append(r["case_id"])
         check("⑱b 逐条一致：report 推导 == scorer 公式（无第二套账）", not bad, str(bad))
     else:
-        print("  ⏭ ⑱a/⑱b 跳过：ON 归档不在本机（未入库）")
+        skip("⑱a/⑱b", "ON 归档不在本机（未入库）⇒ 已发表数字的报告路径复现未执行", count=2)
 
     # ⑱c ★ 反向：负样本在旧三元 AND 下必判 False、在新口径下必判 True
     neg = {
@@ -2308,7 +2355,7 @@ def check_20() -> None:
             f"n={len(pairs)} 非众数={rep3.informative_n} share={rep3.informative_share}",
         )
     else:
-        print("  ⏭ ⑳d 跳过：calibration_30.jsonl 不在本机")
+        skip("⑳d", "calibration_30.jsonl 不在本机 ⇒ 真实校准表的秩信息量未验证", count=1)
 
 
 def check_21() -> None:
@@ -2715,18 +2762,31 @@ def main() -> int:
     check_22()
     check_23()
 
+    total = _n_pass + _n_fail + _n_skip
     print()
     print("=" * 72)
     print(
-        "✅ STEP 4/5 GATE 通过 —— 五项修复 + case-validity + paired control "
-        "+ KP 规范名 + 批改抗飘移 + context-fallback + topic 归一均就位"
-        if _ok_all
-        else "❌ STEP 4/5 GATE 未通过"
+        f"判定项 {total} = 通过 {_n_pass} · 失败 {_n_fail} · 未执行 {_n_skip}"
+        f"（声明值 {_EXPECTED_ITEMS}）"
     )
+    if total != _EXPECTED_ITEMS:
+        _flag(
+            f"判据总数 {total} ≠ 声明的 {_EXPECTED_ITEMS} —— "
+            "要么某组提前 return/抛错吞掉了后续项，要么改了判据没同步常量"
+        )
+    if _n_skip:
+        _flag(f"有 {_n_skip} 项**未执行** ⇒ 本次不能称为「全绿」，只能说「跑了的那几项绿」")
+    if _ok_all and total == _EXPECTED_ITEMS:
+        print(
+            "✅ STEP 4/5 GATE 通过 —— 五项修复 + case-validity + paired control "
+            "+ KP 规范名 + 批改抗飘移 + context-fallback + topic 归一 + 写入证据判据均就位"
+        )
+    else:
+        print("❌ STEP 4/5 GATE 未通过")
     print("=" * 72)
-    if _ok_all:
+    if _ok_all and total == _EXPECTED_ITEMS and not _n_skip:
         print("★ 遗留：A→B 真跨 thread 召回（真跑 agent）属 Step 5 实跑，需消耗 token。")
-    return 0 if _ok_all else 1
+    return 0 if (_ok_all and total == _EXPECTED_ITEMS and not _n_skip) else 1
 
 
 if __name__ == "__main__":
