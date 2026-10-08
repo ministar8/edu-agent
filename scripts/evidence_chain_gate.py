@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 10
+_EXPECTED_ITEMS = 17
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -55,9 +55,37 @@ def check_2() -> None:
     check("2e Gold 有 gold_source_ref 字段", "gold_source_ref" in Gold.__dataclass_fields__)
 
 
+def check_3() -> None:
+    """R5：应有但测不到 ⇒ 毒化合取。「不适用」⇒ 不毒化。"""
+    from evaluation.task_eval.predicates import common as pc
+
+    mix: dict[str, pc.Verdict] = {"gen_structure": "pass", "gen_coverage": "pass"}
+    check("3a 全 pass ⇒ pass", pc.composite(mix) == "pass")
+    check("3b 任一 fail ⇒ fail", pc.composite({**mix, "gen_correctness": "fail"}) == "fail")
+    check(
+        "3c required 项 missing_premise ⇒ 复合 missing_premise（★ 不得为 pass）",
+        pc.composite(
+            {**mix, "gen_correctness": "missing_premise", "gen_answerability": "missing_premise"}
+        )
+        == "missing_premise",
+    )
+    check(
+        "3d not_applicable 不毒化",
+        pc.composite({**mix, "gen_difficulty": "not_applicable"}) == "pass",
+    )
+    r = pc.rate(["pass", "fail", "missing_premise", "not_applicable"])
+    check("3e 分母只含已测", r["n"] == 2, str(r))
+    check("3f 两种 N/A 分开计数", r["n_a_missing_premise"] == 1 and r["n_a_not_applicable"] == 1)
+    check(
+        "3g 全 missing_premise ⇒ rate=None 而非 0.0",
+        pc.rate(["missing_premise", "missing_premise"])["rate"] is None,
+    )
+
+
 def main() -> int:
     check_1()
     check_2()
+    check_3()
     total = len(_ITEMS)
     for label, passed, detail in _ITEMS:
         print(f"{'PASS' if passed else 'FAIL'}  {label}{'  ' + detail if detail else ''}")

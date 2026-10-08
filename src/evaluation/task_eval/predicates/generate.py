@@ -1,0 +1,216 @@
+"""Generate 任务的判据（EFFECT_PLAN.md §3.1 冻结五项 + 两个机械替身）。
+
+两类判据名不能混（§4.1：证据不是等价定义就不沿用原名）：
+- 冻结五项 `gen_structure / gen_answerability / gen_coverage / gen_correctness /
+  gen_difficulty`：其中 `gen_correctness` / `gen_answerability` 要**外部 gold**
+  （盲标规程 P-1），gold 未标注 ⇒ 如实返回 `missing_premise` —— 那是诚实状态，
+  不是缺陷，**不得**用机械替身顶名。
+- 机械替身 `gen_answer_key_validity` / `gen_analysis_agreement`：**必要非充分**，
+  永不进门槛行顶替冻结名（registry 侧以 `optional=True` 标注）。
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from evaluation.task_eval import metrics
+from evaluation.task_eval.predicates.common import Verdict
+from evaluation.task_eval.predicates.registry import Predicate, register
+
+# 真实键名来自 metrics.structure_completeness 的返回（stem/options_or_task/answer/explanation）
+_GEN_KEYS = ("stem", "options_or_task", "answer", "explanation")
+
+
+def _structure(rec: dict) -> Verdict:
+    """§3.1 completeness_pass：四件套**逐一非空**，不是「整条能解析」。"""
+    parsed = metrics.structure_completeness(str(rec.get("reply") or ""))
+    return "fail" if [k for k in _GEN_KEYS if not parsed.get(k)] else "pass"
+
+
+def _answerability(rec: dict) -> Verdict:
+    """§3.1 冻结项「答案可判定」，判定主体是**人工**（盲标 P-1 未做）。
+
+    无 gold（连出处都没有）⇒ `missing_premise`；gold 在册也仍需人工标注结论，
+    而标注通道尚未建立（P-1 未做）⇒ 同样 `missing_premise`。名字保留、状态诚实。
+    """
+    gold = rec.get("gold") or {}
+    if not gold.get("gold_answer") or not (gold.get("gold_source_ref") or {}).get("gold_answer"):
+        return "missing_premise"
+    return "missing_premise"  # P-1 人工标注结论不存在：无可读判定，不冒充可测
+
+
+def _coverage(rec: dict) -> Verdict:
+    """§3.1 冻结项「知识点覆盖」：包一层 `metrics.kp_coverage`（唯一公式）。
+
+    `expected_kp` 为空 ⇒ `not_applicable`（族级零覆盖披露，§1.6）。
+    """
+    expected = (rec.get("gold") or {}).get("expected_kp") or []
+    if not expected:
+        return "not_applicable"
+    retrieved = [
+        kp
+        for item in (rec.get("top_items") or [])
+        for kp in ((item.get("kp") if isinstance(item, dict) else None) or [])
+    ]
+    v = metrics.kp_coverage(expected, retrieved)
+    return "missing_premise" if v is None else ("pass" if v else "fail")
+
+
+def _difficulty(rec: dict) -> Verdict:
+    """§3.1 冻结项「难度匹配」：`metrics.difficulty_match(expected, actual)`。
+
+    两条前置（§1.6）：`gold.expected_difficulty` 缺失或 `difficulty_of()` 抽不出来
+    ⇒ `missing_premise` —— 解析器的失败不能记成产品的失败。
+    """
+    gold = rec.get("gold") or {}
+    if not gold.get("expected_difficulty"):
+        return "missing_premise"
+    actual = metrics.difficulty_of(str(rec.get("reply") or ""))
+    if actual is None:
+        return "missing_premise"
+    v = metrics.difficulty_match(gold["expected_difficulty"], actual)
+    return "missing_premise" if v is None else ("pass" if v else "fail")
+
+
+def _correctness(rec: dict) -> Verdict:
+    """§3.1 冻结原文是「gold 判定正确」⇒ 需要外部 gold，且必须带出处（盲标规程）。"""
+    gold = rec.get("gold") or {}
+    if not gold.get("gold_answer") or not (gold.get("gold_source_ref") or {}).get("gold_answer"):
+        return "missing_premise"
+    keys = metrics.answer_keys_of(str(rec.get("reply") or ""))
+    return (
+        "pass" if len(keys) == 1 and keys[0] == str(gold["gold_answer"]).strip().upper() else "fail"
+    )
+
+
+def _answer_key_validity(rec: dict) -> Verdict:
+    """原 `gen_answerability` 的**必要非充分**机械替身。它不证明这题可被作答判定。
+
+    契约是三条，缺一条就不算覆盖（spec §6 那行的「two correct options」是第 2 条）：
+      ① 答案键可解析  ② 键数**恰好为 1**  ③ 该键 ∈ 选项集
+    """
+    reply = str(rec.get("reply") or "")
+    opts = metrics.option_letters(reply)
+    if not opts:
+        return "missing_premise"  # 连选项集都读不出来 = 没资格谈唯一性
+    keys = metrics.answer_keys_of(reply)
+    if len(keys) != 1:
+        return "fail"  # 0 个键（没给答案）与多键（A、B 都算对）在这里都是失败
+    return "pass" if keys[0] in opts else "fail"
+
+
+def _analysis_agreement(rec: dict) -> Verdict:
+    """原 `gen_correctness` 的**必要非充分**机械替身（#33 产品规则的评测化）。
+
+    ★ 它不证明答案对不对 —— #36 手验 5 道里 2 道客观错、1 道满分漏检就是这件事的证据。
+    """
+    reply = str(rec.get("reply") or "")
+    keys, cited = metrics.answer_keys_of(reply), metrics.analysis_key_of(reply)
+    if cited is None or len(keys) != 1:
+        return "missing_premise"  # 点不出可比的「键 ↔ 解析结论」= 测不到，不是不合格
+    return "pass" if keys[0] == cited else "fail"
+
+
+def _required_always(_rec: Any) -> bool:
+    return True
+
+
+def _required_when_query_mentions_difficulty(rec: Any) -> bool:
+    """query 未指定难度 ⇒ 本项不 required（`optional=True` 一并披露族级零覆盖）。"""
+    return bool(re.search(r"难度|难易", str((rec or {}).get("query") or "")))
+
+
+register(
+    Predicate(
+        name="gen_structure",
+        task="generate",
+        tier=1,
+        contract_ref="EFFECT_PLAN.md §3.1 结构完整",
+        contract_inputs=(
+            "reply#stem",
+            "reply#options_or_task",
+            "reply#answer",
+            "reply#explanation",
+        ),
+        required_when=_required_always,
+        fn=_structure,
+        falsifier="omit_reply_part",
+    )
+)
+register(
+    Predicate(
+        name="gen_answerability",
+        task="generate",
+        tier=1,
+        contract_ref="EFFECT_PLAN.md §3.1 答案可判定",
+        contract_inputs=("gold.gold_answer", "gold.gold_source_ref.gold_answer"),
+        required_when=_required_always,
+        fn=_answerability,
+        falsifier="omit_reply_part",
+    )
+)
+register(
+    Predicate(
+        name="gen_coverage",
+        task="generate",
+        tier=1,
+        contract_ref="EFFECT_PLAN.md §3.1 知识点覆盖",
+        # ★ 归档真实字段名是 `top_items[].kp`（runner.py 落盘即此名，无 knowledge_points 键）
+        contract_inputs=("top_items[].kp", "gold.expected_kp"),
+        required_when=_required_always,
+        fn=_coverage,
+        falsifier="drop_path:top_items[].kp",
+    )
+)
+register(
+    Predicate(
+        name="gen_correctness",
+        task="generate",
+        tier=1,
+        contract_ref="EFFECT_PLAN.md §3.1 内容正确",
+        contract_inputs=("reply#answer", "gold.gold_answer", "gold.gold_source_ref.gold_answer"),
+        required_when=_required_always,
+        fn=_correctness,
+        falsifier="dual_answer",
+    )
+)
+register(
+    Predicate(
+        name="gen_difficulty",
+        task="generate",
+        tier=1,
+        contract_ref="EFFECT_PLAN.md §3.1 难度匹配",
+        contract_inputs=("gold.expected_difficulty", "reply#difficulty"),
+        required_when=_required_when_query_mentions_difficulty,
+        fn=_difficulty,
+        falsifier="drop_path:gold.expected_difficulty",
+        optional=True,  # query 未指定难度 ⇒ 不毒化（§1.6 族级零覆盖披露）
+    )
+)
+register(
+    Predicate(
+        name="gen_answer_key_validity",
+        task="generate",
+        tier=2,
+        contract_ref="EFFECT_PLAN.md §3.1 答案可判定（机械替身，必要非充分）",
+        contract_inputs=("reply#answer", "reply#options_or_task"),
+        required_when=_required_always,
+        fn=_answer_key_validity,
+        falsifier="dual_answer",
+        optional=True,  # 机械替身：永不顶替 gen_answerability 进门槛行
+    )
+)
+register(
+    Predicate(
+        name="gen_analysis_agreement",
+        task="generate",
+        tier=2,
+        contract_ref="EFFECT_PLAN.md §3.1 内容正确（机械替身，必要非充分）",
+        contract_inputs=("reply#answer", "reply#explanation"),
+        required_when=_required_always,
+        fn=_analysis_agreement,
+        falsifier="flip_conclusion",
+        optional=True,  # 机械替身：永不顶替 gen_correctness 进门槛行
+    )
+)

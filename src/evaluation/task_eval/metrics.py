@@ -400,6 +400,87 @@ def structure_pass(reply: str) -> bool:
     return all(structure_completeness(reply).values())
 
 
+# ── 判据抽取 helper（predicates 包的唯一解析真源；分段正则复用 _STRUCTURE_*，无第二套）──
+_ANSWER_LINE = re.compile(r"(?:标准答案|参考答案|答案)\s*[：:]\s*([^\n。；;]{0,40})", re.I)
+_LETTER = re.compile(r"([A-D])")
+_OPTION_LINE = re.compile(r"^\s*([A-D])\s*[.、．)）]\s*\S", re.M)
+_ANALYSIS_KEY = re.compile(r"(?:所以|因此|故|答案[是为]?|正确)[^\n。]{0,12}?选?\s*([A-D])\b", re.I)
+_DIFFICULTY_LINE = re.compile(
+    r"(?:难度|难易程度)\s*[：:]\s*(基本|基础|简单|中等|适中|较难|困难|basic|easy|medium|hard)",
+    re.I,
+)
+
+
+def option_letters(reply: str) -> list[str]:
+    """选项**集合**（去重保序）。这里去重是对的：选项集本来就该是集合。"""
+    seen: list[str] = []
+    for m in _OPTION_LINE.finditer(str(reply or "")):
+        k = m.group(1).upper()
+        if k not in seen:
+            seen.append(k)
+    return seen
+
+
+def answer_keys_of(reply: str) -> list[str]:
+    """答案键序列 —— ★ **不去重、不取第一个**。
+
+    数量本身就是判据：`标准答案：A、B` ⇒ `['A','B']` ⇒ 单选语义下不唯一 ⇒ fail。
+    如果这里返回单个键（旧写法 `answer_key_of()`），「两个都算对」这个失败形状
+    在读数阶段就被抹掉了，`gen_answer_key_validity` 只剩「键 ∈ 选项」半条契约。
+    """
+    m = _ANSWER_LINE.search(str(reply or ""))
+    return [k.upper() for k in _LETTER.findall(m.group(1))] if m else []
+
+
+def analysis_key_of(reply: str) -> str | None:
+    """解析正文最后落到的那个选项（#33 产品规则「答案键与解析同结论」的评测化）。"""
+    keys = [k.upper() for k in _ANALYSIS_KEY.findall(str(reply or ""))]
+    return keys[-1] if keys else None
+
+
+def difficulty_of(reply: str) -> str | None:
+    """从生成题正文里抽难度档（`gen_difficulty` 的实际侧输入）。
+
+    ★ 抽不出来 ⇒ 判据返回 `missing_premise` 而**不是** `fail`：解析器的失败不能记成
+      产品的失败。`_as_difficulty()`（:664）已负责把中文档名映射到 1–5，这里只做抽取。
+    """
+    m = _DIFFICULTY_LINE.search(str(reply or ""))
+    return m.group(1) if m else None
+
+
+# ★ 分段名与 `structure_completeness` 用的是**同一批** `_STRUCTURE_*` 常量（本节上方）
+_REPLY_PART_PATTERNS: dict[str, re.Pattern[str]] = {
+    "stem": _STRUCTURE_STEM,
+    "options_or_task": _STRUCTURE_OPTIONS,
+    "answer": _STRUCTURE_ANSWER,
+    "explanation": _STRUCTURE_EXPLAIN,
+}
+
+
+def strip_reply_part(reply: str, part: str) -> str:
+    """删掉 reply 里某个语义片段的标识（Task 5 `omit_reply_part` 的唯一实现处）。
+
+    「判据认为某段存在」与「夹具把那段抹掉」必须说同一种语言，否则会出现
+    夹具删 A 段、判据读 B 段 的假红/假绿。未知片段名直接抛错，不静默返回原文。
+    """
+    pattern = _REPLY_PART_PATTERNS.get(part)
+    if pattern is None:
+        raise ValueError(f"未知的 reply 片段名：{part}")
+    return pattern.sub("", str(reply or ""))
+
+
+def rewrite_reply_part(reply: str, part: str, new_text: str) -> str:
+    """把某个片段换成给定文本（Task 5 的 `dual_answer` / `flip_conclusion` 用）。
+
+    ★ 与 `strip_reply_part` 共用 `_REPLY_PART_PATTERNS`：分段知识仍然只有 metrics 一份，
+      falsify 只声明「换哪一段成什么」，不认识正则。
+    """
+    pattern = _REPLY_PART_PATTERNS.get(part)
+    if pattern is None:
+        raise ValueError(f"未知的 reply 片段名：{part}")
+    return pattern.sub(new_text, str(reply or ""), count=1)
+
+
 def answerability_pass(reply: str) -> bool | None:
     """答案可判定率：是否存在**明确、可验证**的答案。
 
