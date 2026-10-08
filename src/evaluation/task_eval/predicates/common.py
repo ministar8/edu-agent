@@ -67,19 +67,27 @@ def is_reply_part(address: str) -> bool:
 
 
 def has_path(rec: object, dotted: str) -> bool:
-    """点分路径的**键存在性**检查。`top_items[].knowledge_points` = 逐元素，任一可达即存在。"""
+    """点分路径的**键存在性**检查。
+
+    `top_items[].kp` = `rec["top_items"]` 是**列表**，逐元素须含 `kp`，任一可达即算存在。
+    ★ 实测修正（Task 3 标定）：原稿把 `x[]` 当「属性 x 已在上一层取到」处理，
+      导致 `x[]` 出现在**首段**时（rec 本身是 dict）恒返回 False ——
+      而 `top_items[].kp` 恰恰就是首段形式，V0 会对它永远报缺键。
+    """
     parts = dotted.split(".")
     cur = rec
     for i, part in enumerate(parts):
         if part.endswith("[]"):
-            if not isinstance(cur, list):
+            name = part[:-2]
+            if not isinstance(cur, dict) or name not in cur:
                 return False
-            head = part[:-2]  # `x[].y` 里 head=x 已在上一层取到，这里通常为 ""
-            target = cur if not head else [getattr(item, head, None) for item in cur]
-            tail = parts[i + 1 :]
+            items = cur[name]
+            if not isinstance(items, list):
+                return False
+            tail = ".".join(parts[i + 1 :])
             if not tail:
-                return bool(target)
-            return any(has_path(item, ".".join(tail)) for item in target)
+                return bool(items)
+            return any(has_path(item, tail) for item in items)
         if not isinstance(cur, dict) or part not in cur:
             return False
         cur = cur[part]
@@ -87,12 +95,32 @@ def has_path(rec: object, dotted: str) -> bool:
 
 
 def drop_path(rec: dict, dotted: str) -> None:
-    """按点分路径删键（falsify 的 `drop_path` op 用）。路径不存在时静默返回。"""
+    """按点分路径删键（falsify 的 `drop_path` op 用）。路径不存在时静默返回。
+
+    列表段（`x[]`）⇒ 对**每个**元素删除剩余路径的键（取证要的是「该证据在整条列表上缺席」）。
+    ★ 实测修正（Task 3 fix round 1）：brief 稿在循环里把**末段**也走下去再对末值 pop，
+      导致叶子键永远删不掉（demo 断言 7 失败）；这里改为只走前 n-1 段、对**父 dict** pop 末段。
+    """
     parts = dotted.split(".")
     cur = rec
-    for part in parts[:-1]:
+    for i, part in enumerate(parts[:-1]):
+        if part.endswith("[]"):
+            name = part[:-2]
+            if not isinstance(cur, dict) or name not in cur:
+                return
+            items = cur[name]
+            tail = ".".join(parts[i + 1 :])
+            if isinstance(items, list):
+                for item in items:
+                    if tail:
+                        drop_path(item, tail)
+                    elif isinstance(item, dict):
+                        item.pop(name, None)
+            return
         if not isinstance(cur, dict) or part not in cur:
             return
         cur = cur[part]
+    last = parts[-1]
+    name = last[:-2] if last.endswith("[]") else last
     if isinstance(cur, dict):
-        cur.pop(parts[-1], None)
+        cur.pop(name, None)
