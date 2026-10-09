@@ -147,18 +147,9 @@ def _clean_markdown_text(text: str) -> str:
     normalized = _normalize_text(text)
     if not normalized:
         return ""
-    cleaned_lines: list[str] = []
-    in_fence = False
-    for line in normalized.splitlines():
-        stripped = _LINE_TRIM_RE.sub("", line)
-        if _FENCE_RE.match(stripped):
-            in_fence = not in_fence
-            cleaned_lines.append(stripped)
-            continue
-        if in_fence:
-            cleaned_lines.append(stripped)
-            continue
-        cleaned_lines.append(stripped)
+    # 逐行去行尾空白；代码围栏内外的处理目前相同（历史上曾按 in_fence 分叉，
+    # 现三分支体一致，故不再维护 in_fence —— 若将来要保护围栏内空白，在此处补回）
+    cleaned_lines = [_LINE_TRIM_RE.sub("", line) for line in normalized.splitlines()]
     return "\n".join(_collapse_blank_lines(cleaned_lines)).strip()
 
 
@@ -229,10 +220,9 @@ def _edge_lines(text: str) -> list[str]:
     if not lines:
         return []
     candidates = lines[:2] + lines[-2:]
+    # _SHORT_LINE_RE 的 {1,40} + match 锚定已限死长度，无需再判 len<=40
     return [
-        line
-        for line in candidates
-        if len(line) <= 40 and _SHORT_LINE_RE.match(line) and not _PAGE_NUM_RE.match(line)
+        line for line in candidates if _SHORT_LINE_RE.match(line) and not _PAGE_NUM_RE.match(line)
     ]
 
 
