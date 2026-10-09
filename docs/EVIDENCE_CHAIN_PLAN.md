@@ -2182,7 +2182,8 @@ Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword a
 ```bash
 grep -rn "reset_query_failures()" src | tee /tmp/reset_sites.txt
 ```
-Expected: 恰好 **2** 处 —— `evaluation/retrieval_gate.py`、`evaluation/task_eval/runner.py`。
+Expected（v1.4 起）：恰好 **3** 处 —— `evaluation/retrieval_gate.py`、`evaluation/task_eval/runner.py`、
+`evaluation/task_eval/cli.py`（`reprobe`，收尾修复批 Important-1 接进消费侧后成为第三个单元边界）。
 ★ `rag/routes.py` 里**不得**再出现该调用（`8k` 是这条撤销的回归锁）。
 少于 2 处 ⇒ B7 未闭合，**停在本 Step**，不要继续往下写归因门。
 
