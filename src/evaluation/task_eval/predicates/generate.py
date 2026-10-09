@@ -166,6 +166,7 @@ register(
         name="gen_structure",
         task="generate",
         tier=1,
+        tier_reason=("§1.3-tier1",),
         contract_ref="EFFECT_PLAN.md §3.1 结构完整",
         contract_inputs=(
             "reply#stem",
@@ -183,6 +184,7 @@ register(
         name="gen_answerability",
         task="generate",
         tier=1,
+        tier_reason=("§1.3-tier1",),
         contract_ref="EFFECT_PLAN.md §3.1 答案可判定",
         contract_inputs=("gold.gold_answer", "gold.gold_source_ref.gold_answer"),
         required_when=_required_always,
@@ -195,6 +197,7 @@ register(
         name="gen_coverage",
         task="generate",
         tier=1,
+        tier_reason=("§1.3-tier1",),
         contract_ref="EFFECT_PLAN.md §3.1 知识点覆盖",
         # ★ 归档真实字段名是 `top_items[].kp`（runner.py 落盘即此名，无 knowledge_points 键）
         contract_inputs=("top_items[].kp", "gold.expected_kp"),
@@ -208,6 +211,7 @@ register(
         name="gen_correctness",
         task="generate",
         tier=1,
+        tier_reason=("§1.3-tier1",),
         contract_ref="EFFECT_PLAN.md §3.1 内容正确",
         # ★ checkpoint 5 裁定（supersede checkpoint 3 的「contract_inputs 不变」字面）：
         #   纯选择守卫让选项块成为**真实输入**（omit options ⇒ 经 `_is_pure_mcq`
@@ -228,6 +232,7 @@ register(
         name="gen_difficulty",
         task="generate",
         tier=1,
+        tier_reason=("§1.3-tier1",),
         contract_ref="EFFECT_PLAN.md §3.1 难度匹配",
         contract_inputs=("gold.expected_difficulty", "reply#difficulty"),
         required_when=_required_when_query_mentions_difficulty,
@@ -236,11 +241,17 @@ register(
         optional=True,  # query 未指定难度 ⇒ 不毒化（§1.6 族级零覆盖披露）
     )
 )
+# ★ 这两条用债标记 `TIER-DEBT-task3` 而不是 `§1.3-tier2`：它们的 `fn` 是确定性字符串/字段比较
+#   （选项字母唯一性、解析引用键 ↔ 答案键一致性），按 §1.3 的证据种类定义应为 tier 0/1；
+#   写成 tier2 等于在 ledger 里声称「这个数是 judge 观点」= 假话。
+#   checkpoint 6 裁定「本轮只登记不改」⇒ 债在 ledger 判据附表（tier_reason 列）与 gate `7g`
+#   的债名单里都看得见；将来改 tier 时 `7g` 会红，逼改的人同步删登记。
 register(
     Predicate(
         name="gen_answer_key_validity",
         task="generate",
         tier=2,
+        tier_reason=("TIER-DEBT-task3",),
         contract_ref="EFFECT_PLAN.md §3.1 答案可判定（机械替身，必要非充分）",
         contract_inputs=("reply#answer", "reply#options_or_task"),
         required_when=_required_always,
@@ -254,6 +265,7 @@ register(
         name="gen_analysis_agreement",
         task="generate",
         tier=2,
+        tier_reason=("TIER-DEBT-task3",),
         contract_ref="EFFECT_PLAN.md §3.1 内容正确（机械替身，必要非充分）",
         # ★ checkpoint 5 裁定（同 gen_correctness）：守卫引入的间接依赖必须补实为真实契约输入
         contract_inputs=("reply#answer", "reply#explanation", "reply#options_or_task"),

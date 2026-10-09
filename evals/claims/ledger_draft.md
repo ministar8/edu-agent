@@ -69,20 +69,21 @@
 
 > ★ `falsify=✓` 但「归档重算」n=0 有效测量（全 missing_premise，如 `gen_correctness`）时，状态词仍是「已测量未证明」——这来自**冻结公式**（brief Step 2 / `claims.derive_status`：只有 `not discriminating and not falsify_passed` 才判「未测量」），本表逐字执行、不改判。
 > ★ 该格里 mutation 取证测的是**判据对契约输入的敏感性**（取证夹具自带 gold ⇒ 能翻转），**不是主张的数值**；数值一侧在真实归档上仍全 missing_premise（P−1 盲标暂停中）。§1.1 表把「gold 前提不存在」列为未测量，与 Step 2 公式在这一格上口径不一致（证据：`docs/EVIDENCE_CHAIN.md` §1.1 ↔ 本 brief Step 2 冻结公式）—— 属计划级缺口，已登记，待 Task 10 文档收口。
+> ★ 债的可见性（Task 7 Step 4b）：`tier 依据` 列里的 `TIER-DEBT-task3` 是**债标记**、不是依据 —— 标着它的判据，其 tier 值与 §1.3 的证据种类**不符**（`fn` 是确定性字符串/字段比较，按定义应为 tier 0/1，却写着 2），已登记为 Task 3 遗留债、本轮只登记不改。护栏 `7g` 通过的语义是「债名单与登记一致」，**不是**「债务已清偿」；清偿（改 tier）时 `7g` 会红，必须同步删除这条登记。
 
-| 判据 | task | tier | 归档重算 | falsify | tier_ok | disc | prov | sign | 状态词 |
-|---|---|---|---|---|---|---|---|---|---|
-| gen_structure | generate | 1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
-| gen_answerability | generate | 1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✗ | ✗ | 未测量 |
-| gen_coverage | generate | 1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
-| gen_correctness | generate | 1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✓ | ✗ | ✗ | ✗ | 已测量未证明 |
-| gen_difficulty | generate | 1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✗ | ✗ | 未测量 |
-| gen_answer_key_validity | generate | 2 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✗ | ✗ | ✗ | ✗ | 已测量未证明 |
-| gen_analysis_agreement | generate | 2 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✗ | ✗ | ✗ | ✗ | 未测量 |
-| memory_correct_use | memory | 1 | 0.800（已测 n=5, missing_premise=0, not_applicable=1） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
-| ver_fabricated | verify | 1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
-| ver_exam_item_cited | verify | 1 | 0.467（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
-| ver_exam_year_only | verify | 1 | 0.133（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
+| 判据 | task | tier | tier 依据（白名单锚点／债标记） | 归档重算 | falsify | tier_ok | disc | prov | sign | 状态词 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| gen_structure | generate | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
+| gen_answerability | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✗ | ✗ | 未测量 |
+| gen_coverage | generate | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
+| gen_correctness | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✓ | ✗ | ✗ | ✗ | 已测量未证明 |
+| gen_difficulty | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✗ | ✗ | 未测量 |
+| gen_answer_key_validity | generate | 2 | TIER-DEBT-task3 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✗ | ✗ | ✗ | ✗ | 已测量未证明 |
+| gen_analysis_agreement | generate | 2 | TIER-DEBT-task3 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✗ | ✗ | ✗ | ✗ | 未测量 |
+| memory_correct_use | memory | 1 | §1.3-tier1 | 0.800（已测 n=5, missing_premise=0, not_applicable=1） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
+| ver_fabricated | verify | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
+| ver_exam_item_cited | verify | 1 | §1.3-tier1 | 0.467（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
+| ver_exam_year_only | verify | 1 | §1.3-tier1 | 0.133（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✗ | 已测量未证明 |
 
 falsify_passed 逐判据读数（三条口径见页首）：
 

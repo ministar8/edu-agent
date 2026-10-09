@@ -31,6 +31,7 @@ register(
         name="memory_correct_use",
         task="memory",
         tier=1,
+        tier_reason=("§1.3-tier1",),
         contract_ref="EFFECT_PLAN.md §3.1 记忆正确使用",
         contract_inputs=(
             "gold.expected_memory",

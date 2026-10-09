@@ -8,12 +8,17 @@
 - `falsify_passed=True` 表示「mutation 取证成功：判据对它声明的每个契约输入都敏感、
   无附带损伤、无抛异常」，**不是**「主张被证伪」（命名理由见 `claims.derive_status`）。
 - 零 LLM 调用：全程本地纯计算。
+- `--check` 分**三段**各自判定（Task 7）：① ledger 一致性 ② R3 孤立结论 ③ V0 拦截
+  （§8① schema 缺键 + §8② required 判据全未测量）。任一段红 ⇒ 退出码 1，
+  但每段单独打印自己的 PASS/FAIL：**V0 尚未清偿**不等于「ledger 算错了」，两者不能混读。
 
 用法：
     PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.py \
         --records evals/results/task_eval/ec_r1_final_gate.jsonl --out evals/claims/ledger_draft.md
     PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.py \
-        --records <同上> --check
+        --records <同上> --out evals/claims/ledger_draft.md --check
+    ★ `--check` 的 `--out` 要指向**同一份**归档生成的文档，否则第 1 段必然红（那是在比两份
+      不同的现实）。默认 `evals/claims/ledger.md` 尚未落盘（Task 10 收尾时定稿）。
 """
 
 from __future__ import annotations
@@ -32,7 +37,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from evaluation import provenance as prov_mod  # noqa: E402
 from evaluation.task_eval import claims as cl  # noqa: E402
-from evaluation.task_eval import metrics  # noqa: E402
+from evaluation.task_eval import metrics, schema_gate  # noqa: E402
 from evaluation.task_eval import report as report_mod  # noqa: E402
 from evaluation.task_eval.predicates import common as pc  # noqa: E402
 from evaluation.task_eval.predicates import registry  # noqa: E402
@@ -220,23 +225,11 @@ def falsify_evidence(
 # 且没人检查它凭什么）。两条合法来源：
 #   ① registry 派生 —— 依据在判据注册处，行里给 `tier_derived` 指明派生式；
 #   ② 字面量 —— 必须在本表点名依据锚点，且锚点要能在文档/裁定记录里查到同名条目。
-# ★ 表 + 白名单 + `tier_justification()` 抛错，三者合起来防的正是 `tier: 1  # 忘了为什么`，
+# ★ 表 + 白名单 + 校验三者合起来防的正是 `tier: 1  # 忘了为什么`，
 #   以及日后有人把 1 机械地改成 2 却不重新证明（改 tier 必须同时改本表的锚点，检查才会跟着走）。
-TIER_ANCHORS = frozenset(
-    {
-        "§1.3-tier0",  # 机械字段：归档里直接读的键值/计数
-        "§1.3-tier1",  # 可观测物证：不经 judge 的确定性计算
-        "§1.3-tier2",  # judge 观点 ⇒ 需要边界校准 + 重复抖动两个前置
-        "D14",  # Verify 行为层判据机械化（仍出题率=0 为硬条件）
-        "D15",  # Memory 分母摊开
-        "G1b-revoked",  # Grade 中段分回填撤销 ⇒ 改读 verdict_agreement 辅助位
-        "§4.1",  # 机械替身「必要非充分」改名规则
-        "§3",  # provenance 八键（字段存在性）
-        "§7-②",  # 两极 gold ⇒ ±10 容差无判别力的偏离登记
-        "§6-no-archive",  # 该维度无归档证据源 ⇒ 只能未测量
-    }
-)
-
+# ★ `TIER_ANCHORS` 与 `tier_justification()` 已上移到 `evaluation.task_eval.claims`
+#   （Task 7 Step 4b：ledger 行侧与 registry 判据侧**共用一份白名单** —— 两份会各自漂移，
+#   正是本计划要消灭的「多套现实」）。这里只留 ledger 行自己的字面量表。
 DERIVED_TIER_DIMS = frozenset({"Generate", "Verify", "Memory"})
 
 # dim -> (tier, 依据锚点)。只有**不**从 registry 派生的行才进这张表。
@@ -265,23 +258,6 @@ def tier_decl_derived(dim: str, source: str, tier: int) -> dict[str, Any]:
     if dim in LITERAL_TIER_REASONS:
         raise ValueError(f"{dim}: 同时出现在字面量表与派生集合 ⇒ tier 依据有歧义")
     return {"tier": tier, "tier_derived": source}
-
-
-def tier_justification(dim: str, spec: dict[str, Any]) -> tuple[str, str]:
-    """返回 (来源种类, 说明)。字面量缺锚点 / 锚点不在白名单 ⇒ 抛错，不静默放行。"""
-    derived = spec.get("tier_derived")
-    if derived:
-        return "registry", f"tier {spec['tier']} 派生自 {derived}"
-    anchors = tuple(spec.get("tier_reason") or ())
-    if not anchors:
-        raise ValueError(
-            f"{dim}: 字面量 tier={spec.get('tier')} 必须带 tier_reason"
-            "（§1.3 证据种类定义，或 D14/G1b-revoked 等既有降级裁定）"
-        )
-    unknown = sorted(a for a in anchors if a not in TIER_ANCHORS)
-    if unknown:
-        raise ValueError(f"{dim}: tier_reason 锚点 {unknown} 不在白名单 {sorted(TIER_ANCHORS)}")
-    return "literal", f"tier {spec['tier']} 为字面量，锚点 {'+'.join(anchors)}"
 
 
 def tier_ok_for(tier: int, boundary: bool, jitter: dict[str, float]) -> tuple[bool, str]:
@@ -622,7 +598,7 @@ def _finish_row(dim: str, requirement: str, spec: dict[str, Any], ctx: dict[str,
     else:
         fp = False
         fp_notes.append("（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）")
-    tier_kind, tier_basis = tier_justification(dim, spec)
+    tier_kind, tier_basis = cl.tier_justification(dim, spec)
     tok, tok_note = tier_ok_for(int(spec["tier"]), ctx["boundary"], ctx["jitter"])
     tok_note = f"[{tier_kind}] {tier_basis}；{tok_note}"
     pm, pm_note = provenance_match_for(recs, ctx["cur_cv"], ctx["cur_golden"])
@@ -750,6 +726,7 @@ def render_predicate_table(ctx: dict[str, Any]) -> list[str]:
                     p.name,
                     task,
                     str(p.tier),
+                    "+".join(p.tier_reason) or "（未申报）",
                     fmt_rate(st),
                     _mark(fp),
                     _mark(tok),
@@ -770,6 +747,11 @@ def render_predicate_table(ctx: dict[str, Any]) -> list[str]:
         "§1.1 表把「gold 前提不存在」列为未测量，与 Step 2 公式在这一格上口径不一致"
         "（证据：`docs/EVIDENCE_CHAIN.md` §1.1 ↔ 本 brief Step 2 冻结公式）—— "
         "属计划级缺口，已登记，待 Task 10 文档收口。",
+        "> ★ 债的可见性（Task 7 Step 4b）：`tier 依据` 列里的 `TIER-DEBT-task3` 是**债标记**、"
+        "不是依据 —— 标着它的判据，其 tier 值与 §1.3 的证据种类**不符**（`fn` 是确定性字符串/字段"
+        "比较，按定义应为 tier 0/1，却写着 2），已登记为 Task 3 遗留债、本轮只登记不改。"
+        "护栏 `7g` 通过的语义是「债名单与登记一致」，**不是**「债务已清偿」；"
+        "清偿（改 tier）时 `7g` 会红，必须同步删除这条登记。",
         "",
     ]
     out += _table(
@@ -777,6 +759,7 @@ def render_predicate_table(ctx: dict[str, Any]) -> list[str]:
             "判据",
             "task",
             "tier",
+            "tier 依据（白名单锚点／债标记）",
             "归档重算",
             "falsify",
             "tier_ok",
@@ -839,15 +822,23 @@ def render_artifacts(ctx: dict[str, Any]) -> list[str]:
     return out
 
 
-def build_ctx(records_spec: str, falsify_report: str) -> dict[str, Any]:
+def _record_paths(records_spec: str) -> list[Path]:
     files = [Path(p.strip()) for p in records_spec.split(",") if p.strip()]
     for f in files:
         if not f.exists():
             raise SystemExit(f"归档不存在：{f}")
+    return files
+
+
+def load_records(records_spec: str) -> list[dict[str, Any]]:
+    """`--records` 逗号分隔的全部归档记录（V0 段与 ledger 用同一份，避免两套现实）。"""
+    return [r for f in _record_paths(records_spec) for r in _load_jsonl(f)]
+
+
+def build_ctx(records_spec: str, falsify_report: str) -> dict[str, Any]:
+    files = _record_paths(records_spec)
     falsify_path = Path(falsify_report)
-    records: list[dict[str, Any]] = []
-    for f in files:
-        records += _load_jsonl(f)
+    records: list[dict[str, Any]] = [r for f in files for r in _load_jsonl(f)]
     if not records:
         raise SystemExit(f"归档为空：{records_spec}")
     by_task: dict[str, list[dict[str, Any]]] = {}
@@ -943,19 +934,28 @@ def _mark_prov(row: dict[str, Any]) -> bool:
 # ── --check：ledger 与重算一致性 + R3 孤立结论 ─────────────
 
 
-def run_check(args: argparse.Namespace, text: str) -> int:
-    red = False
+def run_check(args: argparse.Namespace, text: str, records: list[dict[str, Any]]) -> int:
+    """三段各自判定：① ledger 一致性 ② R3 孤立结论 ③ V0 拦截（§8①/§8②）。
+
+    ★ 退出码仍是「任一段红 ⇒ 1」，但**每段单独打印自己的 PASS/FAIL**：
+      混在一起会把「V0 尚未清偿」（P−1 未做 + 老归档缺 provenance/item_reasons）
+      误读成「ledger 算错了」—— 前者是计划里等待办的事实，后者会让人怀疑整条证据链。
+    """
+    seg1_red = False
+    seg2_red = False
+    seg3_red = False
+    print("── 第 1 段【ledger 一致性】文档 == 重算 ──")
     out = Path(args.out)
     if not out.exists():
-        print(f"RED   ledger 不存在：{out}（先不带 --check 生成一次）")
-        red = True
+        print(f"FAIL  ledger 不存在：{out}（先不带 --check 生成一次）")
+        seg1_red = True
     else:
         existing = out.read_text(encoding="utf-8")
         if existing == text:
             print(f"PASS  ledger 与重算一致：{out}")
         else:
-            red = True
-            print(f"RED   ledger 与重算不一致：{out}")
+            seg1_red = True
+            print(f"FAIL  ledger 与重算不一致：{out}")
             for i, (a, b) in enumerate(
                 zip(existing.splitlines(), text.splitlines(), strict=False), 1
             ):
@@ -964,6 +964,8 @@ def run_check(args: argparse.Namespace, text: str) -> int:
                     print(f"      文档：{a[:120]}")
                     print(f"      重算：{b[:120]}")
                     break
+
+    print("── 第 2 段【R3 孤立结论】文档结论句必须带来源锚点 ──")
     for doc in _ORPHAN_SCAN_DOCS:
         p = ROOT / doc
         if not p.exists():
@@ -971,15 +973,58 @@ def run_check(args: argparse.Namespace, text: str) -> int:
             continue
         bad = orphan_lines(p)
         if bad:
-            red = True
-            print(f"RED   {doc} 孤立结论行（含可验证事实、无来源锚点）：{bad}")
+            seg2_red = True
+            print(f"FAIL  {doc} 孤立结论行（含可验证事实、无来源锚点）：{bad}")
         else:
             print(f"PASS  {doc} 无孤立结论行")
+
+    print("── 第 3 段【V0 拦截】schema 完整性 + 未测量判据禁进门槛（§8①/§8②）──")
+    kinds = schema_gate.summarize_missing_keys(records)
+    if kinds:
+        seg3_red = True
+        n_lines = sum(cnt for _k, cnt, _ex in kinds)
+        print(
+            f"FAIL  V0 ① schema 缺键：{len(kinds)} 类 / {n_lines} 行"
+            "（老归档没有新字段 ⇒ 需 reanalyse，**禁止**自动回填）"
+        )
+        for kind, cnt, examples in kinds:
+            print(f"      ×{cnt}  {kind}")
+            print(f"          示例 case：{', '.join(str(e) for e in examples)}")
+    else:
+        print("PASS  V0 ① 判据声明的 contract_inputs 在归档里键真实存在")
+    unmeasurable = schema_gate.unmeasurable_tasks(records)
+    if unmeasurable:
+        seg3_red = True
+        print(
+            "FAIL  V0 ② required 判据在该归档上一次都没测出值（全 missing_premise）"
+            "⇒ 相关 claim = 未测量，**禁止**进入正式效果章的门槛行（§8②、§4.2 事故的拦网）"
+        )
+        for task, names in sorted(unmeasurable.items()):
+            n_task = sum(1 for r in records if str(r.get("task") or "") == task)
+            for name in names:
+                print(
+                    f"      {task}/{name}: missing_premise"
+                    f"（该任务 {n_task} 条归档全部缺前提 ⇒ n_measured=0）"
+                )
+    else:
+        print("PASS  V0 ② 无「required 判据全未测量」的任务 ⇒ 门槛行未被未测量项污染")
+
+    for title, red in (
+        ("第 1 段【ledger 一致性】", seg1_red),
+        ("第 2 段【R3 孤立结论】", seg2_red),
+        ("第 3 段【V0 拦截】", seg3_red),
+    ):
+        print(f"{'FAIL' if red else 'PASS'}  {title}")
     print(
-        "说明：R3 孤立结论在本 Task 只报警不阻塞（未接入任何 CI）——历史文档的既有结论句"
+        "说明：① 第 2 段在本 Task 只报警不阻塞（未接入任何 CI）——历史文档的既有结论句"
         "逐条补锚点是 Task 10 的收尾工作。"
     )
-    return 1 if red else 0
+    print(
+        "      ② 第 3 段红 = **V0 尚未清偿**（P−1 盲标未做 + 老归档缺 provenance/item_reasons），"
+        "不是 ledger 算错了；这两件事分属不同段，别混读。"
+        "本轮的正确结果就是这一段红 —— 它正是本计划的目的（§8：未证明的东西不得当成绩）。"
+    )
+    return 1 if (seg1_red or seg2_red or seg3_red) else 0
 
 
 def main() -> int:
@@ -991,7 +1036,9 @@ def main() -> int:
     args = ap.parse_args()
     text = build_ledger(args.records, args.falsify_report)
     if args.check:
-        return run_check(args, text)
+        # V0 先于「文档 == 重算」？不：三段一起判定、各段各自表态（见 run_check 的 docstring），
+        # 这样读者既能看到 ledger 是否漂移，也能看到 V0 是否清偿。
+        return run_check(args, text, load_records(args.records))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")

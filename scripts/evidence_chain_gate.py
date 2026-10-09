@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 41
+_EXPECTED_ITEMS = 48  # Step 1（7a–7e）后 = 46；Step 4b（7f/7g）后 = 48
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -278,11 +278,13 @@ def check_6() -> None:
     #   且锚点跟着事实走 —— 防 `tier: 1  # 忘了为什么`，也防日后把 1 机械改成 2 而不重新证明。
     import build_claim_ledger as bcl  # noqa: E402  （同目录脚本，检查申报表的静态一致性）
 
+    # ★ Task 7 Step 4b：白名单已上移到 `claims`（ledger 行侧与 registry 判据侧共用一份）
+    #   ⇒ 这里引用 `cl.TIER_ANCHORS` / `cl.tier_justification`，不再引用 `bcl.*`。
     lit = bcl.LITERAL_TIER_REASONS
     bad_anchors = {
-        d: sorted(a for a in ans if a not in bcl.TIER_ANCHORS)
+        d: sorted(a for a in ans if a not in cl.TIER_ANCHORS)
         for d, (t, ans) in lit.items()
-        if any(a not in bcl.TIER_ANCHORS for a in ans)
+        if any(a not in cl.TIER_ANCHORS for a in ans)
     }
     empty = sorted(d for d, (_t, ans) in lit.items() if not ans)
     check(
@@ -297,7 +299,7 @@ def check_6() -> None:
         ({"tier": 1, "tier_reason": ("D99-not-a-decision",)}, "锚点不在白名单"),
     ):
         try:
-            bcl.tier_justification("Grade", spec)
+            cl.tier_justification("Grade", spec)
             teeth.append(why)
         except ValueError:
             pass
@@ -333,6 +335,52 @@ def check_6() -> None:
     )
 
 
+def check_7() -> None:
+    """V0（§8①/§8②）：schema 完整性 + 「未测量的 required 判据 ⇒ 禁止进门槛行」。"""
+    from evaluation.task_eval import claims as cl
+    from evaluation.task_eval import schema_gate as sg
+    from evaluation.task_eval.predicates import registry as reg
+
+    bad = {"task": "generate", "case_id": "z", "reply": ""}  # 缺 item_reasons / gold
+    errs = sg.check_archive_records([bad])
+    check("7a 缺字段 ⇒ 报错，而不是默认 False 通过", bool(errs))
+    hits = sg.assert_no_default_masking("evaluation.task_eval.predicates")
+    check("7b predicates 包内无 .get(k, False) 掩盖", not hits, "; ".join(hits))
+    check(
+        "7c 任一 required 判据 missing_premise ⇒ 该 claim 不可进门槛",
+        sg.gate_rejects({"gen_correctness": "missing_premise"}) is True,
+    )
+    check(
+        "7d 全 not_applicable 且非 required ⇒ 不阻塞（§8 划清）",
+        sg.gate_rejects({"gen_difficulty": "not_applicable"}) is False,
+    )
+    # ★ 这一条钉住「生产者先于消费者」：registry 查不到判据 ⇒ required 为空 ⇒ gate_rejects 静默 False
+    empty_required = [t for t in ("generate", "verify", "memory") if not sg.required_predicates(t)]
+    check(
+        "7e required_predicates() 对三个任务都非空（防 V0 因空集合静默放行）",
+        not empty_required,
+        f"registry 缺：{empty_required}",
+    )
+
+    # Step 4b：判据侧的 tier 申报（与 ledger 行侧同一道锁，白名单只有 `claims.TIER_ANCHORS` 一份）
+    no_reason = sorted(
+        p.name
+        for p in reg.all_preds()
+        if not p.tier_reason or any(a not in cl.TIER_ANCHORS for a in p.tier_reason)
+    )
+    check("7f 每个判据的 tier 都带白名单锚点（不许裸写）", not no_reason, str(no_reason))
+    tier2 = sorted(p.name for p in reg.all_preds() if p.tier == 2)
+    check(
+        "7g tier=2 判据集合 == 已登记的 Task 3 遗留债名单（改判据须同步改本表）",
+        tier2 == ["gen_analysis_agreement", "gen_answer_key_validity"],
+        str(tier2),
+    )
+    # ★ `7g` 通过的语义是「**债名单与登记一致**」，不是「债务已清偿」：
+    #   这两条是 optional 机械替身，按 §1.3 的证据种类应为 tier 0/1（Task 3 registry debt），
+    #   checkpoint 6 裁定本轮只登记不改。谁将来把 tier 改成 1，`7g` 会红 ⇒ 逼他同步删这条登记，
+    #   而不是让「改了什么」静默消失。⇒ 报告里不得写「V0 全绿 ⇒ schema 问题已解决」。
+
+
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
     """把取证结果落盘成 ledger 的输入（Task 6 的 `falsify_passed` 读它，不靠人回忆）。"""
     import json
@@ -365,6 +413,7 @@ def main() -> int:
     check_4()
     check_5()
     check_6()
+    check_7()
     if "--emit" in sys.argv:
         emit_falsify_report()
     total = len(_ITEMS)
