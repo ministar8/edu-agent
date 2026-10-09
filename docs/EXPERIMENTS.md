@@ -1240,10 +1240,10 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 
 | 路由（基线文件） | pre→new 的主要 diff | 归因 |
 |---|---|---|
-| fake+off（`retrieval_baseline.json`） | category_hit@1 +0.0065、category_mrr +0.0037、kp_hit@k +0.0064、count +0.0064 | **待定**（未做代码态对照） |
+| fake+off（`retrieval_baseline.json`） | category_hit@1 +0.0065、category_mrr +0.0037、category_precision −0.0012、kp_hit@k +0.0064、kp_mrr +0.0063、count +0.0064 | **待定**（未做代码态对照） |
 | fake+on（`retrieval_baseline_rerank.json`） | category_mrr −0.0016、precision +0.0036、kp_hit@k +0.0064、**kp_mrr −0.0198**、count +0.0129 | **待定** |
 | fake+disabled（`retrieval_baseline_fake_disabled.json`） | hit@1 +0.0128、category_mrr +0.0074、kp_hit@k +0.0128、kp_mrr +0.0337 | **待定** |
-| real+off（`retrieval_baseline_real_embed.json`） | category_mrr +0.0030、**kp_mrr +0.0324**、count −0.0256 | **待定** |
+| real+off（`retrieval_baseline_real_embed.json`） | category_mrr +0.0030、category_precision +0.0019、**kp_mrr +0.0324**、count −0.0256 | **待定** |
 | real+disabled（`retrieval_baseline_real_disabled.json`） | category_mrr +0.0039、precision +0.0024、kp_hit@k +0.0192、kp_mrr +0.0170 | **待定** |
 | **real+on 权威**（`retrieval_baseline_real_rerank.json`） | category_hit@k +0.0064、category_mrr +0.0032、precision +0.0037、kp_hit@k −0.0064、kp_mrr −0.0003、count +0.0449 | **不属本轮代码**（有三方对照，见下） |
 
