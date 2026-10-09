@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 49  # Step 1（7a–7e）后 = 46；Step 4b（7f/7g）后 = 48；Fix 1（7h）后 = 49
+_EXPECTED_ITEMS = 58  # Task 7 结束时 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -421,6 +421,180 @@ def check_7() -> None:
     )
 
 
+def _gold(*, should: bool = True, values: tuple[str, ...] = ("平衡二叉树",)):
+    """造一份可机械判定的 gold。
+
+    已核实的真源：`cases.py:85` ⇒ `MEMORY_TYPES = frozenset({"weak_topics"})`（**只有一个合法值**，
+    且 frozenset 不能下标取元素 —— 别写 `MEMORY_TYPES[0]`）；
+    `cases.py:120` ⇒ 可机械判定要求 `type ∈ MEMORY_TYPES` ∧ `bool(values)` ∧ `should_be_recalled is not None`。
+    """
+    from evaluation.task_eval.cases import ExpectedAnswerProperty, ExpectedMemory, Gold
+
+    return Gold(
+        expected_memory=ExpectedMemory(
+            type="weak_topics", values=list(values), should_be_recalled=should
+        ),
+        # ★ 偏差（Task 8 报告 D-1）：brief 原样是 `ExpectedAnswerProperty()`，并注释
+        #   「全默认 ⇒ forbidden_values 为空 ⇒ correct ≡ used」。**实测不成立** ——
+        #   `cases.py:134` 的默认是 `forbidden_values: list[str] | None = None`，
+        #   而 `None` 的语义是**未标注**（`cases.py:131` 明写「必填（可为 []）」），
+        #   ⇒ `ExpectedAnswerProperty().is_valid()` 为 False ⇒ `memory_mechanizable()` False
+        #   ⇒ 8a/8b/8c 全拿到 None（实测 FAIL 过，见报告）。
+        #   本夹具要的是「可机械判定的 gold」⇒ 显式传 `[]`（= 标注了「无禁止值」，
+        #   此时 `correct ≡ used` 这条退化才真的成立）。
+        expected_answer_property=ExpectedAnswerProperty(forbidden_values=[]),
+    )
+
+
+def check_8() -> None:
+    from evaluation.task_eval.memory_scorer import judge_memory_mechanically as J
+
+    def _v(status: str, cards: list[str], hit: bool = True):
+        return J(
+            memory_cards=cards,
+            reply="平衡二叉树" if hit else "",
+            gold=_gold(),
+            read_status=status,
+        )
+
+    check(
+        "8a success+命中 ⇒ recalled_actual True",
+        _v("success", ["数据结构 平衡二叉树"]).recalled_actual is True,
+    )
+    check("8b success+未命中 ⇒ False", _v("success", ["操作系统 页表"]).recalled_actual is False)
+    check("8c empty ⇒ False（读到了，确实没卡）", _v("empty", []).recalled_actual is False)
+    check("8d failed ⇒ None（★ 绝不记 False）", _v("failed", []).recalled_actual is None)
+    check("8e not_attempted ⇒ None", _v("not_attempted", []).recalled_actual is None)
+    check("8f failed 时 recalled_pass 为 None 而非 False", _v("failed", []).recalled_pass is None)
+    from pathlib import Path
+
+    sites = [
+        p
+        for p in (
+            "src/evaluation/retrieval_gate.py",
+            "src/evaluation/task_eval/runner.py",
+            "src/rag/routes.py",
+        )
+        if "reset_query_failures()" in Path(p).read_text(encoding="utf-8")
+    ]
+    check(
+        "8g reset 被三个取证单元各调一次（只加方法不调用 = B7 没闭合）",
+        len(sites) == 3,
+        f"只找到 {sites}",
+    )
+
+    # ── 8h（T8-C）：可用性必须被**证明**，不是被相信 ─────────────────────
+    #   把 BM25 打坏，走**真实服务链路**（`_raw_search` → `_run()` → `_safe_to_thread`），
+    #   断言三件事同时成立：① 不抛出（服务仍能收敛为「该路由空结果」）
+    #   ② 失败被记进 `query_failures`（不是咽掉）③ 结果是空/默认值。
+    #   用**不存在的 collection 名**制造故障：`get_collection()` 必然抛，
+    #   且不需要起 Chroma 服务、不需要 embedding、零 token。
+    import asyncio
+
+    from rag import routes
+    from rag.bm25 import bm25_search
+    from rag.vectorstore import get_vector_store_manager
+
+    mgr = get_vector_store_manager()
+    missing = "__evidence_chain_gate_no_such_collection__"
+
+    mgr.reset_query_failures()
+    service_raised = ""
+    try:
+        route_id, docs = asyncio.run(
+            routes._safe_to_thread(
+                "keyword_bm25",
+                lambda: (
+                    "keyword_bm25",
+                    routes._raw_search("平衡二叉树", missing, 3, route_name="keyword_bm25"),
+                ),
+                timeout=30.0,
+                default=("keyword_bm25", []),
+            )
+        )
+    except BaseException as exc:  # noqa: BLE001 — 这条判据的存在意义就是抓「服务路径 500」
+        service_raised = f"{exc.__class__.__name__}: {exc}"
+        route_id, docs = "", None
+    service_failures = mgr.query_failures
+
+    mgr.reset_query_failures()
+    producer_raised = False
+    try:
+        bm25_search(["平衡二叉树"], missing, 3)
+    except Exception:  # noqa: BLE001
+        producer_raised = True
+    producer_failures = mgr.query_failures
+    check(
+        "8h BM25 打坏：服务链不抛出+结果为空，且失败**确实被记录**（生产者侧必须抛）",
+        not service_raised
+        and route_id == "keyword_bm25"
+        and docs == []
+        and any(missing in f and "bm25" in f for f in service_failures)
+        and producer_raised
+        and any(missing in f and "bm25" in f for f in producer_failures),
+        f"服务链={service_raised or '未抛出✓'} 结果={docs if docs is not None else 'N/A'} "
+        f"服务侧记录={service_failures} 生产者抛={producer_raised} 生产者记录={producer_failures}",
+    )
+
+    # ── 8i（T8-E）：归因的 tier-0 门，用**合成 JudgeOutput**驱动真实写入函数 ──
+    #   零 LLM：`JudgeOutput` 是 pydantic 模型，直接构造即可。
+    #   三行规则逐条钉，断言打在 `apply_judge_to_dict` 的**实际输出**上。
+    from evaluation.task_eval.judge import JudgeOutput, apply_judge_to_dict
+
+    def _rec(**over: object) -> dict:
+        rec = {
+            "task": "verify",
+            "case_id": "8i",
+            "retrieval_status": "ok",
+            "pack_nonempty": True,
+            "hard_fails": [],
+            "reply": "参考答案：A",
+            "failure_reason": [],
+            "validity_valid": None,
+        }
+        rec.update({k: v for k, v in over.items()})
+        return rec
+
+    retrieval_layer = {"retrieval_miss", "retrieval_dropped", "evidence_pollution"}
+
+    # 行 1：`error` ⇒ 只能是 `tool_error`；judge 的 `retrieval_miss` 必须被隔离
+    r1 = _rec(retrieval_status="error", pack_nonempty=False)
+    apply_judge_to_dict(
+        r1, JudgeOutput(final_quality=2, failure_reason=["retrieval_miss"]), judge_model="synthetic"
+    )
+    row1 = (
+        "tool_error" in r1["failure_reason"]
+        and "retrieval_miss" not in r1["failure_reason"]
+        and r1["judge_failure_reasons"] == ["retrieval_miss"]
+        and r1["primary_failure"] == "tool_error"
+    )
+
+    # 行 2：`empty` ∧ `pack_nonempty is False` ⇒ 机械 `retrieval_miss` **允许**进入
+    r2 = _rec(retrieval_status="empty", pack_nonempty=False)
+    apply_judge_to_dict(
+        r2, JudgeOutput(final_quality=2, failure_reason=[]), judge_model="synthetic"
+    )
+    row2 = "retrieval_miss" in r2["failure_reason"] and not r2["judge_failure_reasons"]
+
+    # 行 3：`ok` ∨ `pack_nonempty is True` ⇒ failure_reason 里**没有任何**检索层原因
+    r3 = _rec(retrieval_status="ok", pack_nonempty=True)
+    apply_judge_to_dict(
+        r3,
+        JudgeOutput(final_quality=2, failure_reason=sorted(retrieval_layer)),
+        judge_model="synthetic",
+    )
+    row3 = not (set(r3["failure_reason"]) & retrieval_layer) and r3[
+        "judge_failure_reasons"
+    ] == sorted(retrieval_layer)
+    check(
+        "8i 检索层归因只由 tier-0 供给（error→tool_error / empty→允许 / ok→全禁）",
+        row1 and row2 and row3,
+        f"行1={r1['failure_reason']}/{r1['judge_failure_reasons']}/{r1['primary_failure']} "
+        f"行2={r2['failure_reason']}/{r2['judge_failure_reasons']} "
+        f"行3={r3['failure_reason']}/{r3['judge_failure_reasons']}",
+    )
+
+
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
     """把取证结果落盘成 ledger 的输入（Task 6 的 `falsify_passed` 读它，不靠人回忆）。"""
     import json
@@ -454,6 +628,7 @@ def main() -> int:
     check_5()
     check_6()
     check_7()
+    check_8()
     if "--emit" in sys.argv:
         emit_falsify_report()
     total = len(_ITEMS)

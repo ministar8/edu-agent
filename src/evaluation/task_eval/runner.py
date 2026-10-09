@@ -231,6 +231,12 @@ class CaseRecord:
     ver_exam_item_cited: bool | None = None  # L1：给出可核对的真题条目（年份 + 题号/题干）
     ver_exam_year_only: bool | None = None  # L2：只报年份/来源与考点归属（与 L1 互斥）
     failure_reason: list[str] = field(default_factory=list)
+    # ★ Task 8 Step 5：judge **单独**给、且没有 tier-0 证据支撑的检索层原因落这里
+    #   （`judge.py.split_retrieval_layer_reasons`）。它与 `failure_reason` 同构、
+    #   但**不参与** `pick_primary_failure`、不进任何归因统计 —— 只作「机械 vs 主观」对照，
+    #   沿用 `judge_memory_*` 三个字段已验证过的隔离模式。
+    #   ★ 老归档**没有**这个键 ⇒ 读它时按「未隔离过的旧口径」处理，不许回填、不许与新数据并列。
+    judge_failure_reasons: list[str] = field(default_factory=list)
     primary_failure: str = "none"
 
     # —— memory（仅多轮 case；**机械判定**，judge 不参与）——
@@ -367,13 +373,21 @@ def mechanical_failures(
       本就不是知识查询，检索返空属**预期**。若照记 `retrieval_miss`，
       Phase 1 会误判「记忆差是因为检索差」—— 归因方向直接错。
       Memory 的判据是三维 `retrieved ∧ used ∧ correct`。
+
+    ★ tier-0 门（Task 8 Step 5）：`retrieval_miss` 只在**探针真的报告 `empty`** 时才记。
+      旧实现看 `not probe.ok`，而 `status == "error"` 时 `ok` **同样是 False** ⇒
+      一次 BM25 崩溃会同时产出 `tool_error` 与 `retrieval_miss`，后者再被
+      `metrics._PRIMARY_PRIORITY` 顶成 `primary_failure` ⇒ 「路由坏了」被写成
+      「产品没查到」。判据与重判路径共用 `judge.retrieval_layer_gate_open`（一份规则）。
     """
+    from evaluation.task_eval.judge import retrieval_layer_gate_open
+
     reasons: list[str] = []
     if any("invoke 抛错" in h or "工具" in h for h in hard_fails):
         reasons.append("tool_error")
     if probe.status == "error":
         reasons.append("tool_error")
-    if task != "memory" and not probe.ok:
+    if retrieval_layer_gate_open(probe.status, probe.ok, task):
         reasons.append("retrieval_miss")
     if not reply.strip():
         reasons.append("generation_incomplete")
@@ -470,6 +484,39 @@ def _tool_call_summaries(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]
     return out
 
 
+def aggregate_memory_read_status(statuses: list[str], memory_cards: list[str]) -> str:
+    """把本 case 各轮 `load_memory` 报上来的状态聚成**一个**四态值（B4，四态无损）。
+
+    为什么要把聚合放在评测侧而不是让 `load_memory` 只报一次：一条 memory case 会跑
+    **多轮/多段**，每轮都读一次 Store ⇒ 事实是「一串状态」，而 record 的字段是「一个」。
+    聚合规则一旦写错就会**折叠**（用户点名的失效模式），故规则按「证据强度」排：
+
+    1. **有卡**（`memory_cards` 非空）⇒ `success`。
+       记忆卡是 harness 从 SystemMessage 机械捕获的**正面物证**：它出现了，
+       读链就一定成功过 —— 即使别轮报 `failed`，也不能把已经拿到的物证降格成 `None`。
+    2. 没卡 + 任一 `failed` ⇒ `failed`（★ 不折成 `empty`：「读挂了」与「确实没画像」
+       是两件事，折起来会把基础设施故障记成产品召回失败）。
+    3. 没卡 + 任一 `not_attempted` ⇒ `not_attempted`（没有 `user_id`，压根没读）。
+    4. 没卡 + 全部 `empty` ⇒ `empty`（读到了、确实没卡 ⇒ 这是**真缺陷**，进分母记 fail）。
+    5. **一条都没捕获**（`run_agent=False`、或 agent 在 `load_memory` 之前就抛错）⇒ `""`
+       = 未测量。★ 刻意**不**映射成 `failed` —— 那会把「没有记录」说成「读链故障」；
+       也刻意**不**让它走机械判定（`judge_memory_mechanically` 对 `""` 同样返回全 None）。
+
+    `success` 只会从第 1 条来：`load_memory` 报的 `success` 就是「这轮有卡」，
+    与 `memory_cards` 非空是同一件事的两个视图，不会互相打脸。
+    """
+    if memory_cards:
+        return "success"
+    seen = set(statuses)
+    if "failed" in seen:
+        return "failed"
+    if "not_attempted" in seen:
+        return "not_attempted"
+    if seen & {"empty", "success"}:
+        return "empty"
+    return ""
+
+
 def _apply_memory_judgement(
     record: CaseRecord,
     case: TaskCase,
@@ -486,6 +533,9 @@ def _apply_memory_judgement(
         memory_cards=memory_cards,
         reply=reply,
         gold=case.gold,
+        # ★ B4：读链状态是**判定的前置事实**，不是事后诊断字段 ——
+        #   `failed` / `not_attempted` / `""` 时三维一律 None（测不到不进分母）。
+        read_status=record.memory_read_status,
     )
     record.memory_retrieved = _m.recalled_pass  # ★ 进主指标的是「与期望对齐」的结果
     record.memory_recalled_actual = _m.recalled_actual
@@ -536,6 +586,13 @@ async def run_case(
     turn_log: list[dict[str, Any]] = []
     episodes: list[dict[str, Any]] = []
     episodes_read_failed = False
+    # ★ B4 取证单元 ②的「清空」半边：本 case 的读链状态从这里开始收集
+    #   （`load_memory` 每轮往 `agents.teaching_graph` 的模块级通道追加一条）。
+    #   不 reset 就是「上一条 case 的 Store 故障一路跟着这一条」—— 与 `_query_failures`
+    #   同一个失效模式，见 `vectorstore.reset_query_failures` 的三个调用点。
+    from agents.teaching_graph import memory_read_statuses, reset_memory_read_statuses
+
+    reset_memory_read_statuses()
     if run_agent:
         try:
             result = await _run_agent(
@@ -557,6 +614,17 @@ async def run_case(
             logger.warning("case %s agent 执行失败: %s", case.case_id, e)
             hard_fails.append(f"invoke 抛错: {type(e).__name__}: {e}")
 
+    # ★ B4：把本轮捕获到的读链状态聚合成**一个** `memory_read_status` 落盘（四态无损）。
+    record.memory_read_status = aggregate_memory_read_status(
+        memory_read_statuses() if run_agent else [], memory_cards
+    )
+
+    # ★ B7 的 reset 调用点 ②：每次检索探针之前清空 ⇒ 探针期间的查询故障只属于这次探针。
+    #   （今天 `_query_failures` 在本模块**没有**消费方，所以这一步不改变任何既有输出；
+    #    它钉的是「将来有消费方时，记录归属的是这次探针」。）
+    from rag.vectorstore import get_vector_store_manager
+
+    get_vector_store_manager().reset_query_failures()
     probe = await probe_retrieval(
         case.query, task_mode=case.task_mode or None, k=k, use_rerank=use_rerank
     )

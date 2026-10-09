@@ -18,6 +18,7 @@ import json
 import logging
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -262,6 +263,57 @@ async def judge_case(case: TaskCase, reply: str, hard_fails: list[str]) -> Judge
 _RETRIEVAL_LAYER_REASONS = frozenset({"retrieval_miss", "retrieval_dropped", "evidence_pollution"})
 
 
+def retrieval_layer_gate_open(
+    retrieval_status: object, pack_nonempty: object, task: object = ""
+) -> bool:
+    """检索层归因的 **tier-0 门**（`EVIDENCE_CHAIN.md` §4.3「Verify 归因」行）。
+
+    为什么要有这道门（实测，非措辞）：`phase1_final_gate_20261008.jsonl` 的 15 条 verify
+    `retrieval_status` **全是 `ok`**、`pack_nonempty` **全是 True**、`evidence_count` 1–5，
+    而 `primary_failure` 仍被顶成 `retrieval_miss`×15 —— 机械路径（本函数原来那行
+    `not pack_nonempty`）根本没触发，那 15 条只能是 **judge 的意见**，再被
+    `metrics._PRIMARY_PRIORITY` 排到第 3 位当根因。两个 tier-0 见证都反对的归因
+    不配当「主要失败原因」。
+
+    三行规则（表的逐字落地）：
+
+    | tier-0 证据 | 检索层原因 |
+    |---|---|
+    | `retrieval_status == "error"` | ★ 禁（那是基础设施故障，由 `tool_error` 表达）|
+    | `retrieval_status == "empty"` ∧ `pack_nonempty is False` | ★ 允许（唯一开门的组合）|
+    | `retrieval_status == "ok"` ∨ `pack_nonempty is True` | ★ 禁（包里有东西，谈什么没查到）|
+
+    ★ `retrieval_status == ""`（老归档没写这个键 / 未测量）⇒ **关门**：
+      「没记录」不能反推成「检索没查到」。这不是为了让数字好看 —— 老归档的归因分布
+      本就属旧口径（见 Task 8 报告 D-4），不许拿当前配置猜当时。
+    ★ `task == "memory"` 时同样关门：memory 的 query 不是知识查询，返空属预期
+      （与既有 `_RETRIEVAL_LAYER_REASONS` 过滤同口径，此处只是把它并进同一道门）。
+    """
+    if str(task) == "memory":
+        return False
+    if str(retrieval_status) != "empty":
+        return False
+    return pack_nonempty is False
+
+
+def split_retrieval_layer_reasons(
+    reasons: Sequence[str], *, retrieval_status: object, pack_nonempty: object, task: object = ""
+) -> tuple[list[str], list[str]]:
+    """把一组 reason 切成「可进 `failure_reason`」与「必须隔离」两份。
+
+    ★ 隔离的是**没有 tier-0 证据支撑**的检索层原因；其余 reason 原样通过。
+    """
+    allowed: list[str] = []
+    quarantined: list[str] = []
+    open_gate = retrieval_layer_gate_open(retrieval_status, pack_nonempty, task)
+    for r in reasons:
+        if r in _RETRIEVAL_LAYER_REASONS and not open_gate:
+            quarantined.append(r)
+        else:
+            allowed.append(r)
+    return allowed, quarantined
+
+
 def _sync_generate_correctness(record) -> None:
     """judge 写入 `final_quality` 后，**同步刷新** Generate 的「内容正确率」。
 
@@ -325,9 +377,16 @@ def apply_judge(record, output: JudgeOutput | None) -> None:
         return
     record.final_quality = float(output.final_quality)
     extra = [r for r in output.failure_reason if r in FAILURE_REASONS]
-    if getattr(record, "task", "") == "memory":
-        extra = [r for r in extra if r not in _RETRIEVAL_LAYER_REASONS]
-    merged = list(record.failure_reason) + extra
+    # ★ tier-0 门：judge 单独给的检索层原因**不进** `failure_reason`，落 `judge_failure_reasons`
+    #   留作「机械 vs 主观」对照（与 `_quarantine_judge_memory` 同一套已验证的隔离模式）。
+    allowed, quarantined = split_retrieval_layer_reasons(
+        extra,
+        retrieval_status=getattr(record, "retrieval_status", ""),
+        pack_nonempty=getattr(record, "pack_nonempty", None),
+        task=getattr(record, "task", ""),
+    )
+    record.judge_failure_reasons = sorted(set(quarantined))
+    merged = list(record.failure_reason) + allowed
     record.failure_reason = sorted(set(merged))
     record.primary_failure = pick_primary_failure(record.failure_reason)
     if getattr(record, "task", "") == "memory":
@@ -374,7 +433,13 @@ def mechanical_reasons_from_record(rec: dict) -> list[str]:
     hard = " ".join(rec.get("hard_fails") or [])
     if "invoke 抛错" in hard or "工具" in hard or rec.get("retrieval_status") == "error":
         reasons.append("tool_error")
-    if rec.get("task") != "memory" and not rec.get("pack_nonempty"):
+    # ★ tier-0 门（Task 8 Step 5）：机械路径也走同一道门 —— 旧实现只看 `not pack_nonempty`，
+    #   而 `retrieval_status == "error"` 时 `pack_nonempty` **同样是 False**（都来自 `probe.ok`），
+    #   于是「路由坏了」会同时产出 `tool_error` **和** `retrieval_miss`，后者再被
+    #   `_PRIMARY_PRIORITY` 顶成根因 ⇒ 基础设施故障被记成产品检索能力缺失。
+    if retrieval_layer_gate_open(
+        rec.get("retrieval_status"), rec.get("pack_nonempty"), rec.get("task")
+    ):
         reasons.append("retrieval_miss")
     if not (rec.get("reply") or "").strip():
         reasons.append("generation_incomplete")
@@ -395,9 +460,16 @@ def apply_judge_to_dict(rec: dict, output: JudgeOutput | None, *, judge_model: s
         return
     rec["final_quality"] = float(output.final_quality)
     extra = [r for r in output.failure_reason if r in FAILURE_REASONS]
-    if rec.get("task") == "memory":
-        extra = [r for r in extra if r not in _RETRIEVAL_LAYER_REASONS]
-    merged = sorted(set(mechanical_reasons_from_record(rec)) | set(extra))
+    # ★ tier-0 门 + 隔离（与 `apply_judge` 同源，一份规则两处不许分叉）：
+    #   judge 单独给的检索层原因落 `judge_failure_reasons`，**不参与** `pick_primary_failure`。
+    allowed, quarantined = split_retrieval_layer_reasons(
+        extra,
+        retrieval_status=rec.get("retrieval_status", ""),
+        pack_nonempty=rec.get("pack_nonempty"),
+        task=rec.get("task", ""),
+    )
+    rec["judge_failure_reasons"] = sorted(set(quarantined))
+    merged = sorted(set(mechanical_reasons_from_record(rec)) | set(allowed))
     rec["failure_reason"] = merged
     rec["primary_failure"] = pick_primary_failure(merged)
     if rec.get("task") == "memory":

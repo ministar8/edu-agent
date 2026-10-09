@@ -78,6 +78,16 @@ class MemoryJudgement:
     hit_values: tuple[str, ...] = ()  # 记忆卡里命中的期望值
     reply_hit_values: tuple[str, ...] = ()  # 回复里命中的期望值
     forbidden_hits: tuple[str, ...] = ()  # 回复里命中的禁止值
+    # ★ B4 的 tier-0 证据：读链状态（`""` 未记录 / `not_attempted` / `success` / `empty` /
+    #   `failed`）。它**不是**第四个指标，而是前三项「凭什么可以是 None」的凭据 ——
+    #   没有它，「测不到」与「没卡」在归档里就是同一个空串。
+    #   默认 `""`（与 `CaseRecord.memory_read_status` 同口径：**没记就是没记**，
+    #   不得默认成 `success` —— 那等于替老归档宣布「读链好好的」）。
+    read_status: str = ""
+    # ★ 读链状态（tier-0，B4）：`""` 未记录 / `not_attempted` / `success` / `empty` / `failed`。
+    #   它**不是**第四个指标，而是前三项「凭什么可以是 None」的证据 ——
+    #   没有它，「测不到」和「没召回」在归档里长得一模一样。
+    read_status: str = ""
 
     @property
     def correct_use(self) -> bool | None:
@@ -130,6 +140,7 @@ def judge_memory_mechanically(
     memory_cards: list[str],
     reply: str,
     gold: Gold,
+    read_status: str = "success",
 ) -> MemoryJudgement:
     """按 gold 契约**机械**判定 Memory 三维。gold 不合法 ⇒ 三项全 None（记 N/A）。
 
@@ -144,6 +155,15 @@ def judge_memory_mechanically(
         **读取段**（最后一段）的回复 —— 召回发生在后段。
     gold:
         该 case 的 gold；需含合法的 `expected_memory` 与 `expected_answer_property`。
+    read_status:
+        ★ B4 的 tier-0 读链状态（`teaching_graph.abuild_card_with_status` 产出）：
+        `success` / `empty` / `failed` / `not_attempted` / `""`（未记录）。
+        - `failed` / `not_attempted` ⇒ **三项全 None**（测不到，不进分母）；
+        - `empty` ⇒ 照常机械判定（读到了、确实没卡 ⇒ 这是**真缺陷**，不是没测）；
+        - `""` ⇒ 同样全 None：归档没写状态 ⇒ 「有没有读」这件事无证据，
+          机械判定出来的 `False` 会把**没记录**说成**产品不召回**（四行表见 Task 8 报告 T8-D）。
+        默认 `"success"` 是给**不接读链的既有调用方**（离线重算 / 夹具）保持原语义用的，
+        ★ 生产路径（`runner.run_case`）一律显式传入，不靠这个默认值。
 
     Returns
     -------
@@ -153,9 +173,16 @@ def judge_memory_mechanically(
     """
     em: ExpectedMemory | None = gold.expected_memory
     eap: ExpectedAnswerProperty | None = gold.expected_answer_property
+    if read_status in ("failed", "not_attempted", ""):
+        # ★ 测不到记 None（规则①）。旧实现把「读链故障」和「没有卡」压成同一个 `""`
+        #   ⇒ 一次 Store 超时会被记成产品召回失败，直接压低论文里的 Memory 数字。
+        return MemoryJudgement(
+            should_be_recalled=em.should_be_recalled if em else None,
+            read_status=read_status,
+        )
     if not gold.memory_mechanizable():
         # gold 未标注/非法：三项都不可判 ⇒ 全 None（N/A，不进分母）
-        return MemoryJudgement()
+        return MemoryJudgement(read_status=read_status)
 
     assert em is not None and eap is not None  # memory_mechanizable() 已保证
     assert em.should_be_recalled is not None
@@ -189,6 +216,7 @@ def judge_memory_mechanically(
         hit_values=hit_values,
         reply_hit_values=reply_hit_values,
         forbidden_hits=forbidden_hits,
+        read_status=read_status,
     )
 
 
@@ -203,6 +231,7 @@ def judgement_to_dict(j: MemoryJudgement) -> dict[str, Any]:
         "memory_hit_values": list(j.hit_values),
         "memory_reply_hit_values": list(j.reply_hit_values),
         "memory_forbidden_hits": list(j.forbidden_hits),
+        "memory_read_status": j.read_status,
         "memory_correct_use": j.correct_use,
     }
 

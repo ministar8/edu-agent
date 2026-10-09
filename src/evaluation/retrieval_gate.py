@@ -809,14 +809,18 @@ async def run_gate(
     list[tuple[str, str]],
     list[RerankObservation],
     Counter[str],
+    list[str],
 ]:
     """在黄金集上跑完整检索链。
 
     Returns:
-        ``(指标, 逐条结果, 抛异常的 query 列表, rerank 观察列表, 路由贡献计数)``。
+        ``(指标, 逐条结果, 抛异常的 query 列表, rerank 观察列表, 路由贡献计数, 查询失败记录)``。
         观察列表供 ``_assert_route_preconditions`` 判定 rerank 是否真的执行了（反静默回退）；
         路由贡献计数是 ``"集合:路由" → 出现在最终证据里的次数``，用于回答
         「13 条召回路由里谁在干活、谁空转」—— 此前只能靠临时脚本统计。
+        ★ 第 6 项是**整轮**收割下来的 `query_failures`（B7 每条 query 前 reset，
+        故进程级列表结束时只剩最后一条 query —— 消费方必须读这份累计值，
+        不能再去读 manager 的实时列表，否则「每条 query 前清空」会把前面几条的故障抹掉）。
 
     单条 query 抛异常**不再中断整轮** —— 之前一个异常会让门禁直接崩掉、什么指标都拿不到，
     值班的人只能看到 traceback。现在它被记成一条"空结果 + 错误原因"，门禁照样给出完整
@@ -832,8 +836,23 @@ async def run_gate(
     errors: list[tuple[str, str]] = []
     rerank_observations: list[RerankObservation] = []
     route_contributions: Counter[str] = Counter()
+    # ★ 逐条 query 收割下来的失败记录（供末轮 `unexpected_query_failures` 比对）。
+    from rag.vectorstore import get_vector_store_manager
+
+    _mgr = get_vector_store_manager()
+    # ★ 起点先把**进入本函数之前**已经记录的失败收进累计值（建索引 / `wait_for_index_ready`
+    #   的探针查询都会记）—— 第一条 query 的 reset 会把实时列表清空，
+    #   不先收 = 把那些故障从门禁的检查里抹掉（静默丢失，正是 B7 要消灭的东西）。
+    run_query_failures: list[str] = list(_mgr.query_failures)
 
     for query, expected, expected_kps in queries:
+        # ★ B7 的 reset 调用点 ①：每条 query 之前清空进程级失败记录，**紧接着在
+        #   `finally` 里收割进 `run_query_failures`**。两句必须成对出现 ——
+        #   只 reset 不收割 = 把「前面那几条 query 的索引故障」直接扔掉（比不修更静默）；
+        #   只收割不 reset = 每条都从第 1 条开始重复计数。
+        #   `_query_failures` 是 append-only 的进程级列表，不 reset 就无法定位
+        #   「到底是哪条 query 把集合查坏了」。
+        _mgr.reset_query_failures()
         try:
             fused, _verdict = await aretrieve_evidence_with_retry(
                 query=query,
@@ -854,7 +873,10 @@ async def run_gate(
                 )
             )
             rerank_observations.append(RerankObservation(False, False, False))
+            # ★ `finally` 在 `continue` 生效**之前**执行 ⇒ 异常路径的失败记录同样被收割。
             continue
+        finally:
+            run_query_failures.extend(_mgr.query_failures)
 
         categories = [str(ev.metadata.get("category", "")) for ev in fused.text_evidences]
         # 章级知识点：逐条证据的章（来自 source 文件名），按排名顺序排列。
@@ -889,6 +911,7 @@ async def run_gate(
         errors,
         rerank_observations,
         route_contributions,
+        run_query_failures,
     )
 
 
@@ -1244,9 +1267,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[提示] 以下集合需要重试才可查询（Chroma 落盘竞态）：{slow}")
 
         start = time.perf_counter()
-        metrics, outcomes, errors, rerank_observations, route_contributions = asyncio.run(
-            run_gate(args.golden, limit=args.limit)
-        )
+        (
+            metrics,
+            outcomes,
+            errors,
+            rerank_observations,
+            route_contributions,
+            query_failures,
+        ) = asyncio.run(run_gate(args.golden, limit=args.limit))
         query_seconds = time.perf_counter() - start
 
         preconditions = _assert_route_preconditions(rerank_observations)
@@ -1256,10 +1284,8 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  - {item}", file=sys.stderr)
             return 2
 
-        from rag import vectorstore as vs
-
         code = report_retrieval_anomalies(
-            unexpected_query_failures(vs.get_vector_store_manager().query_failures, set(counts)),
+            unexpected_query_failures(query_failures, set(counts)),
             errors,
         )
         if code is not None:

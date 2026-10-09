@@ -73,7 +73,7 @@ _n_skip = 0
 #   ⇒ 加两个不变量：① 执行数（含跳过）必须等于本常量；② 跳过数必须为 0。
 #      少跑一项、或某组提前 `return`，都在这里变红，而不是安静地少几行。
 #   ★ 改判据时同步更新这个数（改完跑一次，末行会印实际值）。
-_EXPECTED_ITEMS = 216
+_EXPECTED_ITEMS = 217  # Task 7 结束时 216；Task 8 Step 6 的 ⑱f（故障注入 ⇒ 三维 None）+1 = 217
 
 
 def check(label: str, passed: bool, detail: str = "") -> None:
@@ -2155,7 +2155,18 @@ def check_18() -> None:
     if m4 is None:
         check("⑱d mem-004 存在", False, "载入 0 条")
     else:
-        rec = CaseRecord(case_id="mem-004", task="memory", task_mode=m4.task_mode, query=m4.query)
+        rec = CaseRecord(
+            case_id="mem-004",
+            task="memory",
+            task_mode=m4.task_mode,
+            query=m4.query,
+            # ★ Task 8 B4：这两条夹具断言的是「读链**测过了**之后的极性口径」，
+            #   故显式补 `memory_read_status="success"` —— 该字段的新增语义是
+            #   「`failed`/`not_attempted`/`""` ⇒ 三维 None（未测量）」，
+            #   缺省成空串会让下面的断言读到 None（把「测试自己的缺项」当成产品红灯，
+            #   正是 ⑱d 注释里已经避过一次的那类坑）。断言本身一个字没改。
+            memory_read_status="success",
+        )
         # ★ 必须按**真实 record 的状态**构造：`gold` 是 `run_case` 赋的、不是本函数赋的。
         #   少了这一步，`from_record` 读到空 gold ⇒ should_be_recalled=None ⇒ 返回 None，
         #   于是红灯来自测试自己的缺项而不是产品逻辑（实测踩过一次，红得很像真 bug）。
@@ -2172,13 +2183,80 @@ def check_18() -> None:
         m1 = next((c for c in cases if c.case_id == "mem-001"), None)
         if m1 is not None:
             rec1 = CaseRecord(
-                case_id="mem-001", task="memory", task_mode=m1.task_mode, query=m1.query
+                case_id="mem-001",
+                task="memory",
+                task_mode=m1.task_mode,
+                query=m1.query,
+                # ★ 同 ⑱d：这条夹具断言「测过之后确实记 False」，前提必须是读链**测量成立**
+                #   （`memory_read_status=""` 在新语义下 = 未测量 ⇒ 三维 None，
+                #   那会让红灯来自夹具缺项而不是产品逻辑）。断言未改。
+                memory_read_status="success",
             )
             _apply_memory_judgement(rec1, m1, memory_cards=[], reply="本题要点如下。")
             check(
                 "⑱e 正样本未召回 ⇒ False（不是 N/A、更不是 True）",
                 rec1.memory_correct_use is False,
                 f"{rec1.memory_correct_use} | recalled_actual={rec1.memory_recalled_actual}",
+            )
+            # ⑱f ★★ Task 8 B4：**故障注入走真实读链**（不是手搓一个 record 字段）。
+            #   把 Store 换成「`aget` 永远挂住」的假实现 ⇒ `load_memory` 的读超时 ⇒
+            #   `safe_remember_status` 报 `failed` ⇒ runner 聚合 ⇒ `_apply_memory_judgement`。
+            #   断言的是**方向**：测不到 ⇒ 三维 None（N/A，不进分母），
+            #   ★ 绝不能是 `False` —— 一次 Store 超时被记成「产品召回失败」就是
+            #   直接压低论文里的 Memory 数字（§4.3「Memory 三维」那一行的原话）。
+            from agents.teaching_graph import (
+                load_memory,
+                memory_read_statuses,
+                reset_memory_read_statuses,
+            )
+            from core.settings import settings as _st
+            from evaluation.task_eval.predicates import registry as _reg
+            from evaluation.task_eval.runner import aggregate_memory_read_status
+            from memory.runtime import get_store, set_store
+
+            class _HangingStore:
+                async def aget(self, *_a, **_k):
+                    await asyncio.sleep(30)
+
+            _prev_timeout, _prev_store = _st.MEMORY_WRITE_TIMEOUT, get_store()
+            injected_status, dims, verdict = "", (), ""
+            try:
+                _st.MEMORY_WRITE_TIMEOUT = 0.05
+                set_store(_HangingStore())
+                reset_memory_read_statuses()
+                asyncio.run(
+                    load_memory(
+                        {"messages": []},
+                        {"configurable": {"thread_id": "gate-18f", "user_id": 999}},
+                    )
+                )
+                injected_status = aggregate_memory_read_status(memory_read_statuses(), [])
+                rec_f = CaseRecord(
+                    case_id=m1.case_id,
+                    task="memory",
+                    task_mode=m1.task_mode,
+                    query=m1.query,
+                    memory_read_status=injected_status,
+                )
+                rec_f.gold = _asdict(m1.gold)
+                _apply_memory_judgement(rec_f, m1, memory_cards=[], reply="本题要点如下。")
+                dims = (
+                    rec_f.memory_retrieved,
+                    rec_f.memory_used,
+                    rec_f.memory_correct,
+                    rec_f.memory_correct_use,
+                )
+                verdict = _reg.get("memory_correct_use").fn(rec_f.to_dict())
+            finally:
+                _st.MEMORY_WRITE_TIMEOUT = _prev_timeout
+                set_store(_prev_store)
+                reset_memory_read_statuses()
+            check(
+                "⑱f 故障注入（读链超时）⇒ 注入状态 failed 且三维 None 而非 False",
+                injected_status == "failed"
+                and all(d is None for d in dims)
+                and verdict == "missing_premise",
+                f"注入={injected_status!r} 三维={dims} verdict={verdict!r}",
             )
 
 

@@ -14,12 +14,13 @@ import logging
 from langchain_core.messages import RemoveMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import MessagesState
+from langgraph.store.base import BaseStore
 
 from agents.supervisor import inner_supervisor
 from agents.task_context import load_thread_context, remember_query_mode
 from core import settings
 from memory.runtime import get_store
-from memory.safe import safe_remember
+from memory.safe import safe_remember_status
 from memory.window import trim_conversation
 from memory.working import abuild_memory_card
 
@@ -27,6 +28,48 @@ logger = logging.getLogger(__name__)
 
 # 记忆卡固定消息 ID：同 ID 消息每轮被替换而非追加
 MEMORY_CARD_MESSAGE_ID = "edu_memory_card"
+
+# ── B4 的可观测出口：本轮读链的**状态**（`memory_read_status` 的原料）──────
+#   ★ 为什么放在模块级、而不是塞进 graph state：`MessagesState` 只有 `messages` 一个
+#     channel，节点返回的其它键会被 LangGraph **静默丢弃**（实测：`{"messages": [], "x": 1}`
+#     ⇒ updates 流与最终 state 里都没有 `x`）。走 state 等于把状态写进黑洞。
+#   ★ 与 `vectorstore._query_failures` 同构：append-only + `reset` 由取证单元在开跑前调，
+#     消费方（`task_eval.runner.run_case`）在跑完后聚合成四态之一。
+#   ★ 产品侧不读它 —— 它只服务「把 0.5 是不是 Store 挂了变成有证据可答」。
+_MEMORY_READ_STATUSES: list[str] = []
+
+
+def reset_memory_read_statuses() -> None:
+    """取证单元开跑前清空（否则上一条 case 的故障会一路跟着下一条）。"""
+    _MEMORY_READ_STATUSES.clear()
+
+
+def memory_read_statuses() -> list[str]:
+    """本次捕获到的读链状态，按发生顺序（每轮 `load_memory` 追加一条）。"""
+    return list(_MEMORY_READ_STATUSES)
+
+
+async def abuild_card_with_status(
+    store: BaseStore | None, uid: int | str | None
+) -> tuple[str, str]:
+    """读 Store 生成记忆卡，并返回**四态里的那一态**（B4）。
+
+    值域：`not_attempted`（没有 `uid`，压根没读）/ `failed`（超时或抛错）/
+    `empty`（读成功但没卡）/ `success`（读成功且有卡）。
+
+    ★ 旧实现在调用点写 `await safe_remember(...) or ""` —— 于是
+      「Store 挂了」与「画像确实是空的」压成同一个空串（§4.3 Memory 三维那一行）。
+      空串只能说明**没有卡**，不能说明**为什么没有卡**；分开返回才谈得上归因。
+    """
+    if uid is None:
+        return "", "not_attempted"  # ★ 今天这条路被压成 ""
+    card, status = await safe_remember_status(
+        lambda: abuild_memory_card(store, uid),
+        label="memory_card",  # type: ignore[arg-type]
+    )
+    if status != "success":
+        return "", status
+    return (card or ""), ("success" if card else "empty")
 
 
 async def load_memory(state: MessagesState, config=None) -> dict:
@@ -39,11 +82,10 @@ async def load_memory(state: MessagesState, config=None) -> dict:
         conf = dict(config.get("configurable") or {})
         uid = conf.get("user_id")
     store = get_store()
-    card = ""
-    if uid is not None:
-        card = (
-            await safe_remember(lambda: abuild_memory_card(store, uid), label="memory_card") or ""
-        )
+    card, read_status = await abuild_card_with_status(store, uid)
+    # ★ 落状态，不落布尔：`load_memory` 每轮都被调用一次，捕获到的顺序就是读链发生的顺序。
+    #   记在这里而不是 state（见 `_MEMORY_READ_STATUSES` 的说明）。
+    _MEMORY_READ_STATUSES.append(read_status)
 
     # 旧版累积的记忆卡没有固定 ID，逐条删除；当前卡由同 ID upsert 覆盖
     removes = [

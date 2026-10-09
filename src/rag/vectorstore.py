@@ -156,6 +156,24 @@ class VectorStoreManager:
         """
         return list(self._query_failures)
 
+    def record_query_failure(self, note: str) -> None:
+        """★ 全仓**唯一**的失败记录入口（B7）。
+
+        旧实现里向量路径直接 `self._query_failures.append(...)`，而 BM25 / 服务路由
+        失败既不 append 也不抛 ⇒ 「记录失败」这件事没有单一去处，加门也无从加起。
+        现在所有生产者都调这个方法（`vectorstore` 自身、`rag.bm25`、`rag.routes`）。
+        """
+        self._query_failures.append(note)
+
+    def reset_query_failures(self) -> None:
+        """★ 每个「独立取证单元」开跑前调一次，三个调用点缺一不可：
+        ① `retrieval_gate` 每条 query 之前；
+        ② `task_eval.runner.run_case` 每次检索探针之前；
+        ③ `routes._amulti_route_search` 每一**轮**之前（一轮内各路由共享，
+           这样一条路由坏了能在该轮的 `unexpected_query_failures` 里看到）。
+        """
+        self._query_failures.clear()
+
     @property
     def embeddings(self):
         """懒加载 Embedding 模型，首次访问时才初始化"""
@@ -337,7 +355,7 @@ class VectorStoreManager:
                 values={"k": k, "error_type": e.__class__.__name__},
             )
             logger.warning("Async Chroma query failed for %s: %s", collection_name, e)
-            self._query_failures.append(f"{collection_name}: {e.__class__.__name__}")
+            self.record_query_failure(f"{collection_name}: {e.__class__.__name__}")
             return []
 
     def _get_existing_hashes(self, collection_name: str) -> set[str]:

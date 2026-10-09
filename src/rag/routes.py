@@ -288,6 +288,14 @@ async def _amulti_route_search(
 ) -> list[tuple[Document, float]]:
     collection_routes = resolve_collection_routes(query, collection_name, cat=cat)
     route_queries = build_recall_queries(query, cat=cat)
+
+    # ★ B7 的 reset 调用点 ③：本轮开始前清空 ⇒ 该轮结束后 `query_failures` 里只剩
+    #   **本轮**的失败（`_query_failures` 是 append-only 的进程级列表，不清就是
+    #   「上一条 query 的故障一路跟着这一条的指标」）。一轮内各路由共享同一份记录，
+    #   这样「某条路由坏了」能被本轮的 `unexpected_query_failures` 看到。
+    from rag.vectorstore import get_vector_store_manager
+
+    get_vector_store_manager().reset_query_failures()
     if depth and depth.skip_bm25:
         route_queries = [(name, rq) for name, rq in route_queries if name != "keyword_bm25"]
 
@@ -347,6 +355,17 @@ async def _amulti_route_search(
                     return route_id, result
                 except Exception as e:
                     logger.warning("Async vector route failed: %s: %s", route_id, e)
+                    # ★ B7：只 `logger.warning` 不记失败 ⇒ 这条路由坏了在
+                    #   `unexpected_query_failures` 里是隐形的（BM25 半边已由
+                    #   `rag.bm25.bm25_search` 记录）。返回 `[]` 保留（单路失败可容忍），
+                    #   但必须**留下证据**，否则「坏了」与「没查到」不可区分。
+                    #   ★ 局部 import：`try` 里那次 import 若本身失败，except 里就不能
+                    #   依赖那个还没绑定的名字（否则 UnboundLocalError 会把证据一起吞掉）。
+                    from rag.vectorstore import get_vector_store_manager as _mgr
+
+                    _mgr().record_query_failure(
+                        f"{target_collection}: vector_route {e.__class__.__name__}"
+                    )
                     return route_id, []
             return await _safe_to_thread(
                 route_id,

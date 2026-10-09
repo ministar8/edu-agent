@@ -55,8 +55,16 @@ def bm25_search(
         from rag.vectorstore import get_vector_store_manager
 
         collection = get_vector_store_manager().client.get_collection(collection_name)
-    except Exception:
-        return []
+    except Exception as e:
+        # 词法路由整条坏掉时，旧实现返回 [] 且不记失败 ⇒ retrieval_gate 的
+        # unexpected_query_failures 看不见它，所有指标照常「健康」；更糟的是探针会把
+        # 「坏了」写成 status="empty"，于是归因层永远没有 `error` 这个证据可用。
+        from rag.vectorstore import get_vector_store_manager
+
+        get_vector_store_manager().record_query_failure(
+            f"{collection_name}: bm25 {e.__class__.__name__}"
+        )
+        raise  # 交给调用方收敛为 status="error"；不再伪装成空结果
 
     scored_docs: dict[str, tuple[Document, float]] = {}
     total_docs = collection.count()
