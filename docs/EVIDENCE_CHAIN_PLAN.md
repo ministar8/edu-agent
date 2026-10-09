@@ -1944,7 +1944,8 @@ from evaluation.task_eval.predicates.common import has_path, is_reply_part
 ★ 语法实现只有一份（Task 3 建、Task 5 用、Task 7 用）。如果这里再写一份 `_REPLY_PARTS` 名单，
 就是第三套真源 —— 本计划要消灭的正是这种东西。
 
-本 Task 结束时 `_EXPECTED_ITEMS = 48`（Task 6 结束时为 **41**，`check_7` 贡献 7 项：7a/7b/7c/7d/7e + Step 4b 的 7f/7g）。
+本 Task 结束时 `_EXPECTED_ITEMS = 49`（Task 6 结束时为 **41**，`check_7` 贡献 8 项：7a/7b/7c/7d/7e + Step 4b 的 7f/7g + 评审 I-4 的 7h。
+★ 7h 是 checkpoint 7 追加的：`item_reasons` 的不适用跳过集合是**推导**出来的 ⇒ 必须断言它非空且不许越界扩大，否则「整类任务都跳过」不会有任何一项变红）。
 
 - [ ] **Step 3: `build_claim_ledger --check` 先跑 V0，红灯即退出 1**
 
@@ -1983,7 +1984,7 @@ Expected: gate 全绿；ledger `--check` **退出码 1**，且原因包含 `gen_
    ★ 连 `tier == 0` 也要带锚点：白拿的 0 和手滑的 2 是同一种病。
 3. registry 目前只暴露 `register/get/for_task`（`registry.py:34-49`）⇒ 本步补只读的
    `def all_preds() -> list[Predicate]`（按注册顺序），供判据遍历。
-4. 新增两条判据（+2；本 Task 结束时 `_EXPECTED_ITEMS = 48`）：
+4. 新增两条判据（+2；Step 4b 结束时 `_EXPECTED_ITEMS = 48`，评审 I-4 的 7h 再到 49）：
 
 ```python
     from evaluation.task_eval import claims as cl
@@ -2098,7 +2099,7 @@ def check_8() -> None:
           len(sites) == 3, f"只找到 {sites}")
 ```
 
-`_EXPECTED_ITEMS = 55`（Task 7 结束时为 **48**，本步 +7：8a/8b/8c/8d/8e/8f/8g）。
+`_EXPECTED_ITEMS = 56`（Task 7 结束时为 **49**，本步 +7：8a/8b/8c/8d/8e/8f/8g）。
 Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword argument 'read_status'`
 （真实签名是 `(*, memory_cards, reply, gold)` —— 本 Task 给它加第四个 keyword-only 参数）。
 
@@ -2270,7 +2271,7 @@ def check_9() -> None:
           D([], active=True, raised=False, empty_result=False) == "degraded")
 ```
 
-`_EXPECTED_ITEMS = 60`（Task 8 结束时为 **55**，本步 +5：9a/9b/9c/9d/9e）。
+`_EXPECTED_ITEMS = 61`（Task 8 结束时为 **56**，本步 +5：9a/9b/9c/9d/9e）。
 Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
 ★ 原 `9f`（reset 三处调用）跟着 B7 一起搬进 Task 8，现在是那里的 `8g`。
 
@@ -2299,7 +2300,7 @@ Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
 `retrieval_gate.py:873` 同时读新旧两个字段（新字段缺 ⇒ `""`，按「未知」处理，不回填）。
 
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
-Expected: `全绿（60 项）`
+Expected: `全绿（61 项）`
 
 - [ ] **Step 3: B1 —— R4 语义统一（唯一换算点）**
 
