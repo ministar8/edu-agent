@@ -262,16 +262,36 @@ async def _safe_to_thread(
     default=None,
     **kwargs,
 ):
+    """把一次同步路由调用包成「**不抛出** + **必留痕**」。
+
+    ★★ 这里就是 B7 的**覆盖面收口点**（v1.3）：探针层永远收不到异常（异常在本函数
+       按路由逐个收敛成默认值 —— 多路召回容忍单路失败，这是有意的设计），
+       所以「坏了」这件事**只能在这里**留下证据。两个分支各调一次
+       `record_query_failure`：
+       - `TimeoutError`：超时**只有这里看得见** —— `asyncio.to_thread` 取消不了已启动的
+         线程，被弃用的调用里的生产者永远不会记录 ⇒ 不留痕就等于又一次「坏了说是没查到」；
+       - `Exception`：生产者若已就地记过**同一个异常对象**，`record_query_failure` 的
+         身份去重保证不重复计数（见该方法的 `exc` 参数）。
+       ★ 刻意**不**往 `bm25.py` 的 `count()` / 逐词 `get()` 撒记录点 —— 那会把「记录失败」
+         变成多套现实；收敛点统一在这一处。
+    ★ 只在**失败分支**取 manager：成功路径不该因为「为了留痕」而触发 Chroma 单例构建。
+    """
     try:
         return await asyncio.wait_for(
             asyncio.to_thread(func, *args, **kwargs),
             timeout=timeout,
         )
-    except TimeoutError:
+    except TimeoutError as e:
         logger.warning("Async route timed out: %s after %.1fs", name, timeout)
+        from rag.vectorstore import get_vector_store_manager
+
+        get_vector_store_manager().record_query_failure(f"{name}: {e.__class__.__name__}", exc=e)
         return default
     except Exception as e:
         logger.warning("Async route failed: %s: %s", name, e)
+        from rag.vectorstore import get_vector_store_manager
+
+        get_vector_store_manager().record_query_failure(f"{name}: {e.__class__.__name__}", exc=e)
         return default
 
 
@@ -289,13 +309,14 @@ async def _amulti_route_search(
     collection_routes = resolve_collection_routes(query, collection_name, cat=cat)
     route_queries = build_recall_queries(query, cat=cat)
 
-    # ★ B7 的 reset 调用点 ③：本轮开始前清空 ⇒ 该轮结束后 `query_failures` 里只剩
-    #   **本轮**的失败（`_query_failures` 是 append-only 的进程级列表，不清就是
-    #   「上一条 query 的故障一路跟着这一条的指标」）。一轮内各路由共享同一份记录，
-    #   这样「某条路由坏了」能被本轮的 `unexpected_query_failures` 看到。
-    from rag.vectorstore import get_vector_store_manager
-
-    get_vector_store_manager().reset_query_failures()
+    # ★★ v1.3（checkpoint 8 裁定 R1-A）**此处刻意不调 `reset_query_failures()`**。
+    #   原判据「reset 有三个调用点」的第三点（本函数每轮开头清空）已**撤销**，理由是它
+    #   **净降低**故障检测能力：`reset` 只允许在**独立取证单元的边界**（`retrieval_gate`
+    #   每条 query 前、`task_eval.runner.run_case` 每次探针前）；单元**内部**的清空会
+    #   销毁本单元尚未被消费的失败证据 —— 一条 query 在 `rag/pipeline.py` 会跑**多轮**
+    #   （HyDE 恰在第一轮空/差之后才跑），后一轮的 reset 会把前一轮路由记下的失败抹掉，
+    #   于是 `run_case` 读到时是 `[]`（实测：注入 BM25 全线故障 ⇒ 读取时失败记录为空）。
+    #   失败证据必须**活到被消费之后**才清。回归锁见 `scripts/evidence_chain_gate.py` 的 `8k`。
     if depth and depth.skip_bm25:
         route_queries = [(name, rq) for name, rq in route_queries if name != "keyword_bm25"]
 
@@ -364,7 +385,7 @@ async def _amulti_route_search(
                     from rag.vectorstore import get_vector_store_manager as _mgr
 
                     _mgr().record_query_failure(
-                        f"{target_collection}: vector_route {e.__class__.__name__}"
+                        f"{target_collection}: vector_route {e.__class__.__name__}", exc=e
                     )
                     return route_id, []
             return await _safe_to_thread(

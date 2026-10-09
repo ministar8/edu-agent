@@ -39,6 +39,11 @@ _LEGACY_HNSW_KEYS = {
 # 就绪探针查询：只要求"能查通"，不关心命中什么，故用一个与语料无关的短词
 _READINESS_PROBE_QUERY = "索引就绪探针"
 
+# `record_query_failure(..., exc=...)` 挂在异常对象上的属性名（F3 的**幂等标记**）：
+# 同一个异常穿过「生产者记录 + 路由收敛记录」两层时，只落**一条**记录。
+# ★ 用异常对象身份而不是文案匹配做去重（文案随 Chroma 版本变，见 `record_query_failure`）。
+_FAILURE_NOTE_ATTR = "_edu_query_failure_note"
+
 
 def _content_hash(content: str) -> str:
     """生成内容的 SHA256 哈希，用于去重"""
@@ -156,21 +161,42 @@ class VectorStoreManager:
         """
         return list(self._query_failures)
 
-    def record_query_failure(self, note: str) -> None:
-        """★ 全仓**唯一**的失败记录入口（B7）。
+    def record_query_failure(self, note: str, *, exc: BaseException | None = None) -> None:
+        """★ 全仓**唯一**的失败记录入口（B7），并给出「**一次失败 = 一条记录**」的机械保证。
 
         旧实现里向量路径直接 `self._query_failures.append(...)`，而 BM25 / 服务路由
         失败既不 append 也不抛 ⇒ 「记录失败」这件事没有单一去处，加门也无从加起。
-        现在所有生产者都调这个方法（`vectorstore` 自身、`rag.bm25`、`rag.routes`）。
+        现在所有生产者都调这个方法（`vectorstore` 自身、`rag.bm25`、`rag.routes` 的两处收敛点）。
+
+        ★★ `exc`（F3，覆盖面收进一处）：收敛点有**两层** ——
+          ① 生产者就地记录（`rag.bm25.bm25_search` 取 collection 失败 ⇒ 记录后 `raise`）；
+          ② 路由包装收敛（`rag.routes._safe_to_thread` **按路由逐个**把异常/超时收敛成空结果）。
+          同一个异常穿过两层时，若两处各记一条，门禁那句「有 N 次检索期查询异常」会把
+          **一次**故障数成两次 —— 计数虚高同样是「多套现实」。
+          ⇒ 传入 `exc` 时以**异常对象身份**为去重键（已记过 ⇒ 第二条不落），
+          ★ 刻意**不**用字符串前缀/文案匹配去重：那依赖 Chroma 的报错文案，升级即失效
+          （本项目已有「靠字符串猜语义」的教训）。
+          带 `__slots__`、无法挂属性的异常类型 ⇒ 宁可多记一条，也**绝不**丢证据
+          （漏报会让「坏了」重新伪装成「没查到」，重复计数只是把 N 报大）。
         """
+        if exc is not None and getattr(exc, _FAILURE_NOTE_ATTR, None) is not None:
+            return
         self._query_failures.append(note)
+        if exc is not None:
+            try:
+                setattr(exc, _FAILURE_NOTE_ATTR, note)
+            except (AttributeError, TypeError):  # noqa: PERF203 — 极少数异常类型不可挂属性
+                logger.debug("异常对象不可挂属性，跳过幂等标记: %s", note)
 
     def reset_query_failures(self) -> None:
-        """★ 每个「独立取证单元」开跑前调一次，三个调用点缺一不可：
-        ① `retrieval_gate` 每条 query 之前；
-        ② `task_eval.runner.run_case` 每次检索探针之前；
-        ③ `routes._amulti_route_search` 每一**轮**之前（一轮内各路由共享，
-           这样一条路由坏了能在该轮的 `unexpected_query_failures` 里看到）。
+        """★ 每个「独立取证单元」开跑前调一次，**只允许**两个单元边界：
+        ① `evaluation.retrieval_gate` 每条 query 之前（`finally` 里紧接着收割）；
+        ② `evaluation.task_eval.runner.run_case` 每次检索探针之前。
+
+        ★★ v1.3（checkpoint 8 裁定 R1-A）：原列的第三点（`rag/routes._amulti_route_search`
+           每轮开头）已**撤销** —— 单元**内部**的清空会销毁本单元尚未被消费的失败证据
+           （一条 query 跑多轮，后轮 reset 抹掉前轮的记录），实测净降低检测能力。
+           回归锁：`scripts/evidence_chain_gate.py` 的 `8k`。
         """
         self._query_failures.clear()
 
@@ -355,7 +381,7 @@ class VectorStoreManager:
                 values={"k": k, "error_type": e.__class__.__name__},
             )
             logger.warning("Async Chroma query failed for %s: %s", collection_name, e)
-            self.record_query_failure(f"{collection_name}: {e.__class__.__name__}")
+            self.record_query_failure(f"{collection_name}: {e.__class__.__name__}", exc=e)
             return []
 
     def _get_existing_hashes(self, collection_name: str) -> set[str]:

@@ -78,15 +78,17 @@ class MemoryJudgement:
     hit_values: tuple[str, ...] = ()  # 记忆卡里命中的期望值
     reply_hit_values: tuple[str, ...] = ()  # 回复里命中的期望值
     forbidden_hits: tuple[str, ...] = ()  # 回复里命中的禁止值
-    # ★ B4 的 tier-0 证据：读链状态（`""` 未记录 / `not_attempted` / `success` / `empty` /
-    #   `failed`）。它**不是**第四个指标，而是前三项「凭什么可以是 None」的凭据 ——
-    #   没有它，「测不到」与「没卡」在归档里就是同一个空串。
+    # ★ B4 的 tier-0 证据（**唯一声明处**）：读链状态，值域
+    #   `""` 未记录 / `not_attempted` / `success` / `empty` / `failed`。
+    #   它**不是**第四个指标，而是前三项「凭什么可以是 None」的凭据 ——
+    #   没有它，「测不到」与「没卡」在归档里就是同一个空串（长得很像，语义相反）。
     #   默认 `""`（与 `CaseRecord.memory_read_status` 同口径：**没记就是没记**，
     #   不得默认成 `success` —— 那等于替老归档宣布「读链好好的」）。
-    read_status: str = ""
-    # ★ 读链状态（tier-0，B4）：`""` 未记录 / `not_attempted` / `success` / `empty` / `failed`。
-    #   它**不是**第四个指标，而是前三项「凭什么可以是 None」的证据 ——
-    #   没有它，「测不到」和「没召回」在归档里长得一模一样。
+    #   ★ 修复轮 F4：此处原有**两次同名声明**（上一轮中断残留）。dataclass 会把重复注解
+    #     折叠成**一个**字段（后一条被忽略），所以 ruff/pyrefly 都不报 —— 但读代码的人会在
+    #     两份注释之间猜哪份是权威。现在只留这一处，两处语义已合并；消费者不变：
+    #     `judgement_to_dict` 把它落盘成 `memory_read_status`，本模块的
+    #     `judge_memory_mechanically` 用它做「测不到 ⇒ 三维 None」的前置判定。
     read_status: str = ""
 
     @property

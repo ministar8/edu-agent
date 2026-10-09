@@ -294,11 +294,31 @@ class CaseRecord:
     #   ⇒ `error` 目前只存在于 `retrieval_probe.py:66` 的代码默认值里，`judge.py:373` 那条分支
     #   **从未被触发过**。所以 B7 要修的不是「加一个值」，而是「让 `error` 真的可达」
     #   （BM25 把抛错咽成空结果），并且 Task 8 的归因门必须为这条分支自带取证。
+    # ★ v1.3（裁定 R4）：`error` 自本修复轮起由**消费侧**产出 —— `run_case` 读 `query_failures`，
+    #   经 `map_route_failures` 只升不降（探针自报 `ok`/`empty` + 有失败 ⇒ `error`）。
     retrieval_status: str = ""
+    # ★ B7 消费侧（v1.3）的**凭据**：本次探针期间路由侧记下的失败原文
+    #   （`VectorStoreManager.query_failures`，形如 `"<集合>: <异常类型>"`）。
+    #   `run_case` 用它经 `map_route_failures` 把 `retrieval_status` 升为 `error`，
+    #   清单本身**只作凭据**：与 `judge_failure_reasons` 同构 ——
+    #   **不进**任何比率的分子/分母、**不进** `pick_primary_failure`、
+    #   **不参与** `report.py`/`metrics.py`/`build_claim_ledger.py` 的任何计算路径（Task 8 修复轮 F2 已核查）。
+    #   ★ 老归档**没有**这个键 ⇒ 读它时按「未消费过的旧口径」处理，不许回填。
+    route_failure_notes: list[str] = field(default_factory=list)
     # ★ 状态枚举取代自报布尔（EVIDENCE_CHAIN.md §5 B2/B4）。
     #   空串 = 该归档跑在写这个字段之前的代码上 = **未知**，不得按 `off`/`not_attempted` 猜。
     rerank_status: str = ""
     memory_read_status: str = ""
+    # ★ 修复轮 F5：**聚合之前**的逐轮原样留痕（`agents.teaching_graph` 的读链明细，按轮序）。
+    #   为什么聚合之外还要留明细：`aggregate_memory_read_status` 的第 1 条规则是
+    #   「有卡 ⇒ `success`」（正面物证优先），它**会压掉**其它轮报上的 `failed` ——
+    #   只看聚合值就再也问不出「这一 case 里到底有没有哪一轮读过链坏过」。
+    #   明细落盘后两者可**一一对应**：`memory_read_statuses=["failed","success"]` +
+    #   `memory_read_status="success"` 是**合法**组合，而不是矛盾。
+    #   ★ append-only（只由 `run_case` 写一次、来自捕获通道的快照）、**不进任何公式**：
+    #     四态判定、Memory 三维、比率、`item_reasons` 一律只看聚合字段 `memory_read_status`。
+    #   ★ 老归档没有这个键 ⇒ 按「未留痕」处理，不许回填、不许据此反推。
+    memory_read_statuses: list[str] = field(default_factory=list)
     # 判据项为 None 时的原因（`not_applicable` / `missing_premise`）。R5 靠它区分两种 N/A。
     item_reasons: dict[str, str] = field(default_factory=dict)
     # provenance 补齐（§3 表）：只放非密钥字段与 hash，密钥原值一律不落。
@@ -364,8 +384,37 @@ def generation_ok(task: str, reply: str, hard_fails: list[str]) -> bool:
     return False
 
 
+def map_route_failures(failures: list[str], probe_status: str) -> tuple[str, list[str]]:
+    """路由侧记下了失败 ⇒ 该 case 的检索层证据等级就是 `error`（B7 消费侧，v1.3）。
+
+    ★ 为什么必须有这一层（实测，非措辞）：异常收敛发生在 `rag.routes._safe_to_thread`
+      （**按路由逐个**收敛成空结果），**不在探针层** ⇒ 探针永远收不到 exception，
+      于是 `probe_retrieval` 把「路由全线故障」写成 `status="ok"`（实测注入 BM25 抛错：
+      `status='ok' pack_len=755 evidence=3`）。光让错误**被记录**不足以让 `error` 可达，
+      必须有**消费者**把记录读回状态里 —— 规格 v1.3 的 B7-② 两侧缺一不可。
+
+    规则（只升级、不降级）：
+    - 空清单 ⇒ 状态**原样**返回（不许把 `ok` 折成 `empty`，也不许凭空造 `error`）；
+    - 非空 ∧ `probe_status ∈ {ok, empty}` ⇒ 升为 `error`（「坏了」不是「没查到」）；
+    - 非空 ∧ 已是 `error`（或 `""`）⇒ **不降级**、原样返回，清单照样落盘。
+
+    返回 `(状态, 清单副本)`。本函数**纯**（无 IO、无全局读）⇒ 判据 `8j` 直接打它，
+    不许在判据里读 manager。清单由调用方落进诊断字段 `route_failure_notes`。
+    """
+    if not failures:
+        return probe_status, []
+    if probe_status in ("ok", "empty"):
+        return "error", list(failures)
+    return probe_status, list(failures)
+
+
 def mechanical_failures(
-    task: str, probe: RetrievalProbe, reply: str, hard_fails: list[str]
+    task: str,
+    probe: RetrievalProbe,
+    reply: str,
+    hard_fails: list[str],
+    *,
+    retrieval_status: str | None = None,
 ) -> list[str]:
     """只在**机械可判**的范围内收集 failure_reason；生成质量类留给 judge。
 
@@ -379,15 +428,21 @@ def mechanical_failures(
       一次 BM25 崩溃会同时产出 `tool_error` 与 `retrieval_miss`，后者再被
       `metrics._PRIMARY_PRIORITY` 顶成 `primary_failure` ⇒ 「路由坏了」被写成
       「产品没查到」。判据与重判路径共用 `judge.retrieval_layer_gate_open`（一份规则）。
+
+    ★ `retrieval_status`（B7 v1.3）：调用方传入 `map_route_failures` **升级后**的状态，
+      于是「路由记了失败但探针写成 ok」这一类 case 在**新跑**里与**重判路径**
+      （`judge.mechanical_reasons_from_record` 读归档的 `retrieval_status`）同口径。
+      缺省（None）时退回探针自报状态，语义与旧实现一致。
     """
     from evaluation.task_eval.judge import retrieval_layer_gate_open
 
+    status = probe.status if retrieval_status is None else retrieval_status
     reasons: list[str] = []
     if any("invoke 抛错" in h or "工具" in h for h in hard_fails):
         reasons.append("tool_error")
-    if probe.status == "error":
+    if status == "error":
         reasons.append("tool_error")
-    if retrieval_layer_gate_open(probe.status, probe.ok, task):
+    if retrieval_layer_gate_open(status, probe.ok, task):
         reasons.append("retrieval_miss")
     if not reply.strip():
         reasons.append("generation_incomplete")
@@ -589,7 +644,7 @@ async def run_case(
     # ★ B4 取证单元 ②的「清空」半边：本 case 的读链状态从这里开始收集
     #   （`load_memory` 每轮往 `agents.teaching_graph` 的模块级通道追加一条）。
     #   不 reset 就是「上一条 case 的 Store 故障一路跟着这一条」—— 与 `_query_failures`
-    #   同一个失效模式，见 `vectorstore.reset_query_failures` 的三个调用点。
+    #   同一个失效模式，见 `vectorstore.reset_query_failures` 的**两个单元边界**。
     from agents.teaching_graph import memory_read_statuses, reset_memory_read_statuses
 
     reset_memory_read_statuses()
@@ -615,18 +670,29 @@ async def run_case(
             hard_fails.append(f"invoke 抛错: {type(e).__name__}: {e}")
 
     # ★ B4：把本轮捕获到的读链状态聚合成**一个** `memory_read_status` 落盘（四态无损）。
-    record.memory_read_status = aggregate_memory_read_status(
-        memory_read_statuses() if run_agent else [], memory_cards
-    )
+    # ★ F5：聚合**之前**的逐轮明细先原样落盘（`memory_read_statuses`）—— 聚合规则第 1 条
+    #   「有卡 ⇒ success」压掉的 `failed` 只有在这份明细里才还看得见。明细只作凭据、不进公式。
+    _read_status_detail = memory_read_statuses() if run_agent else []
+    record.memory_read_statuses = list(_read_status_detail)
+    record.memory_read_status = aggregate_memory_read_status(_read_status_detail, memory_cards)
 
-    # ★ B7 的 reset 调用点 ②：每次检索探针之前清空 ⇒ 探针期间的查询故障只属于这次探针。
-    #   （今天 `_query_failures` 在本模块**没有**消费方，所以这一步不改变任何既有输出；
-    #    它钉的是「将来有消费方时，记录归属的是这次探针」。）
+    # ★ B7 的 reset 调用点 ②（两个独立取证单元边界之一）：每次检索探针之前清空
+    #   ⇒ 探针期间记录的查询故障**只属于这次探针**，紧接着在下面被消费。
+    #   顺序不可颠倒（reset 早于消费）也不许在单元内部再加清点（v1.3 撤销了第三点，
+    #   见 `rag/routes._amulti_route_search` 的注释与回归锁 `8k`）。
     from rag.vectorstore import get_vector_store_manager
 
     get_vector_store_manager().reset_query_failures()
     probe = await probe_retrieval(
         case.query, task_mode=case.task_mode or None, k=k, use_rerank=use_rerank
+    )
+    # ★ B7 消费侧（v1.3 裁定 R4）：路由的失败在这里被读回状态。
+    #   `_safe_to_thread` 按路由逐个收敛 ⇒ 探针**收不到异常**、自报 `ok`/`empty`（实测注入
+    #   BM25 全线故障：`status='ok' pack_len=755`）⇒ 只看探针会把「路由坏了」写成「没查到」。
+    #   非空清单 ⇒ 升为 `error`（只升不降，纯函数 `map_route_failures`），清单落 `route_failure_notes`
+    #   作凭据；归因门复用 `judge.retrieval_layer_gate_open`（`error` ⇒ 关门，不另写一份规则）。
+    effective_status, route_failure_notes = map_route_failures(
+        get_vector_store_manager().query_failures, probe.status
     )
 
     record.reply = reply
@@ -637,7 +703,8 @@ async def run_case(
     record.pack_len = probe.pack_len
     record.evidence_count = probe.evidence_count
     record.retrieval_ok = probe.ok
-    record.retrieval_status = probe.status
+    record.retrieval_status = effective_status
+    record.route_failure_notes = route_failure_notes
     record.retrieval_error = probe.error
 
     top = probe.top_k(k)
@@ -701,7 +768,9 @@ async def run_case(
         # ⇒ 本批一律 N/A。**不编默认值、不用系统自报的「理解/综合」反推 gold**
         #   （用户 2026-10-06 裁决）⇒ 第二个入参恒为 None，`difficulty_match` 必返 None。
         record.gen_difficulty = metrics.difficulty_match(case.gold.expected_difficulty, None)
-    record.failure_reason = mechanical_failures(case.task, probe, reply, hard_fails)
+    record.failure_reason = mechanical_failures(
+        case.task, probe, reply, hard_fails, retrieval_status=effective_status
+    )
     # ── Verify 行为层三判据（D14，2026-10-08）────────────────────────────
     #   ★ 只在**真有回复**时记：`--no-agent` 的探针跑或 agent 抛错时 `reply=""`，
     #     此时记 False/False/False 会被读成「没出题、引用了真题」= 把**没测**说成**测过**。

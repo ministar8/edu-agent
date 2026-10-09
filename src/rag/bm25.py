@@ -62,7 +62,7 @@ def bm25_search(
         from rag.vectorstore import get_vector_store_manager
 
         get_vector_store_manager().record_query_failure(
-            f"{collection_name}: bm25 {e.__class__.__name__}"
+            f"{collection_name}: bm25 {e.__class__.__name__}", exc=e
         )
         raise  # 交给调用方收敛为 status="error"；不再伪装成空结果
 
