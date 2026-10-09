@@ -21,6 +21,26 @@ BATCH_SIZE = 16
 # 单条文本最大字符数（bge-m3 8192 tokens，中文约 1-2 token/字，保守取 3000）
 MAX_TEXT_LENGTH = 3000
 
+# ★ §1.5 R4：距离→相似度的**唯一**换算点。未列出的 space 一律抛错，不静默回退成 cosine。
+SUPPORTED_SPACES: frozenset[str] = frozenset({"cosine", "l2", "ip"})
+
+
+def similarity_from_distance(distance: float, space: str) -> float:
+    """Chroma 距离 → 相似度（越高越好）。**全仓只允许这一处做尺度换算**（§1.5 R4）。
+
+    ★ 未列出的 space 直接抛错，不返回原值。旧稿那句 `return float(distance)  # ip 本身即相似度方向`
+      本身就违反「先测 space，不猜」：Chroma 对 ip 返回内积还是 1−内积，取决于版本与是否归一化，
+      猜错的后果是**数值合法但方向反了**的 `EvidenceDoc.score` —— 正是 B1 要消灭的那类错误。
+    """
+    if space not in SUPPORTED_SPACES:
+        raise ValueError(f"未支持的 hnsw:space={space}；先核实方向，再显式登记进 SUPPORTED_SPACES")
+    d = float(distance)
+    if space == "cosine":
+        return max(0.0, 1.0 - d)
+    if space == "l2":
+        return 1.0 / (1.0 + math.sqrt(max(0.0, d)))
+    return d  # ip：仅在 Step 3.5 的方向实测通过后才算被验过
+
 
 def _embedding_timeout() -> httpx.Timeout:
     total = float(settings.EMBEDDING_TIMEOUT or 60)

@@ -8,13 +8,15 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 64  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
+_EXPECTED_ITEMS = 71  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 # ★ 修复轮 F7 再 +4：`8j`（map_route_failures 双向）/`8k`（单元内 reset 回归锁）/
 #   `8l`（run_case 必调 reset_memory_read_statuses，**行为**取证）/`8m`（gate 的 reset↔收割配对）
 #   ⇒ 62；控制器复验发现 F6 的映射只由外部探针证明、62 项里没有一条会因它回归而红
 #   ⇒ 补 `8n`（缺键/空串/failed ⇒ missing_premise 的双向回归锁）⇒ 63；
 #   checkpoint 8 用户追加 `8o`（F6 的**结构**承重锁 —— 8n 的四条行为用例分不出 `has_path`
-#   与真值写法，因为那三条分支输出同为 `missing_premise` ⇒ 只能走 AST 定位函数体内调用）⇒ **64**。
+#   与真值写法，因为那三条分支输出同为 `missing_premise` ⇒ 只能走 AST 定位函数体内调用）⇒ **64**；
+#   Task 9 Step 1（B2 四态判据 9a/9b/9c/9d/9e）+5 ⇒ 69；阶段 A 后半段 B2 两条验收探针 `9f`
+#   + B1 唯一权威换算点结构锁 `9g` +2 ⇒ **71**（B1/B2 的验收探针与结构锁见 9f/9g）。
 #   计数器只增不减：既有判据一条都不许删。
 _ITEMS: list[tuple[str, bool, str]] = []
 
@@ -925,6 +927,105 @@ def check_8() -> None:
     )
 
 
+def check_9() -> None:
+    """B2 `rerank_status` 四态（§5 B2 / §6）+ B1 语义统一（§1.5 R4）的取证判据。
+
+    Step 1 先红：`from rag.pipeline import _derive_rerank_status` 触发 ImportError
+    （生产者尚不存在）⇒ 判据先于实现落地，红→绿才可信。
+    """
+    from rag.pipeline import _derive_rerank_status as D
+
+    class _D:
+        def __init__(self, md):
+            self.metadata = md
+
+    check("9a 开关关 ⇒ off", D([_D({})], active=False, raised=False, empty_result=False) == "off")
+    check(
+        "9b 抛错 ⇒ failed",
+        D([_D({"rerank_score": 0.1})], active=True, raised=True, empty_result=False) == "failed",
+    )
+    check(
+        "9c 无分降级 ⇒ degraded",
+        D([_D({})], active=True, raised=False, empty_result=False) == "degraded",
+    )
+    check(
+        "9d 合法 0.0 分仍是 success（★ on 路由不被误翻）",
+        D([_D({"rerank_score": 0.0})], active=True, raised=False, empty_result=False) == "success",
+    )
+    check(
+        "9e 空 docs 不得因 all([]) == True 被判 success",
+        D([], active=True, raised=False, empty_result=False) == "degraded",
+    )
+
+    # ── 9f（B2 验收 · 存储/派生）：缺失前提不折叠 + off 不冒充 success ──────────
+    #   用户原话两条验收各写一条行为探针，别只在文字里声明。
+    from evaluation.task_eval.runner import CaseRecord as _CR
+
+    def _used(status: str) -> bool:
+        return _CR(
+            case_id="x", task="qa", task_mode="learn", query="q", rerank_status=status
+        ).rerank_used
+
+    # 只有 success ⇒ rerank_used True；off/degraded/failed/""（未知）全 False。
+    derived_ok = (
+        _used("success") is True
+        and _used("off") is False  # ★ 未执行重排(off) 不得被误报为重排成功
+        and _used("degraded") is False
+        and _used("failed") is False
+        and _used("") is False  # ★ 缺失前提（老归档没写）不得被折成成功
+    )
+    # `rerank_used` 必须是**派生 property**，不再是独立自报布尔字段（不进 __dataclass_fields__）。
+    is_derived = "rerank_used" not in _CR.__dataclass_fields__ and isinstance(
+        getattr(_CR, "rerank_used", None), property
+    )
+    # 未知态（""）既不等于 failed 也不等于 success —— 缺失前提不得被折成普通失败。
+    not_folded = _CR(case_id="y", task="qa", task_mode="learn", query="q").rerank_status == ""
+    check(
+        "9f rerank_used 是派生 property：仅 success⇒True；off/degraded/failed/未知 全 False 且缺失不折成失败（B2 验收）",
+        derived_ok and is_derived and not_folded,
+        f"派生={is_derived} off冒充={_used('off')} 未知冒充={_used('')}",
+    )
+
+    # ── 9g（B1 唯一权威换算点结构锁）：semantic_cache 私有实现必须已删除 ──────────
+    #   ★ 破坏性验证 ④ 的落点：在 semantic_cache.py 恢复一份 `1.0 - distance` ⇒ 本判据红。
+    import pathlib as _pl9
+
+    from rag.embeddings import SUPPORTED_SPACES as _SS
+    from rag.embeddings import similarity_from_distance as _SFD
+
+    spaces_ok = _SS == frozenset({"cosine", "l2", "ip"})
+    raised_unknown = False
+    try:
+        _SFD(0.1, "hamming")  # 未登记的 space ⇒ 必须抛，不静默回退成 cosine
+    except ValueError:
+        raised_unknown = True
+    _sc_src = (_pl9.Path(__file__).resolve().parents[1] / "src/rag/semantic_cache.py").read_text(
+        encoding="utf-8"
+    )
+    _vs_src = (_pl9.Path(__file__).resolve().parents[1] / "src/rag/vectorstore.py").read_text(
+        encoding="utf-8"
+    )
+    # semantic_cache 不再持有私有换算（`1.0 - distance` 只允许出现在注释里，不能作为赋值表达式）
+    _sc_no_private = not any(
+        line.strip().startswith(("similarity =", "score =", "sim ="))
+        and "1.0 - distance" in line
+        and not line.strip().startswith("#")
+        for line in _sc_src.splitlines()
+    )
+    _sc_routes_through = "similarity_from_distance(" in _sc_src
+    _vs_routes_through = _vs_src.count("similarity_from_distance(") >= 1 and "hnsw:space" in _vs_src
+    check(
+        "9g B1 唯一权威换算点：未知 space 抛错 + semantic_cache 私有实现已删 + vectorstore 经此换算（结构锁）",
+        spaces_ok
+        and raised_unknown
+        and _sc_no_private
+        and _sc_routes_through
+        and _vs_routes_through,
+        f"表={_SS} 未知抛={raised_unknown} 私有删={_sc_no_private} "
+        f"cache经点={_sc_routes_through} vectorstore经点={_vs_routes_through}",
+    )
+
+
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
     """把取证结果落盘成 ledger 的输入（Task 6 的 `falsify_passed` 读它，不靠人回忆）。"""
     import json
@@ -959,6 +1060,7 @@ def main() -> int:
     check_6()
     check_7()
     check_8()
+    check_9()
     if "--emit" in sys.argv:
         emit_falsify_report()
     total = len(_ITEMS)

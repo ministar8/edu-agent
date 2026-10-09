@@ -357,9 +357,16 @@ class SemanticCache:
                 self._misses += 1
                 return None, 0.0
 
-            # ChromaDB cosine distance → similarity = 1 - distance
+            # ★ B1（§1.5 R4）：删除本模块私有的 `1.0 - distance` 第二套实现，
+            #   统一走 `embeddings.similarity_from_distance` 这**唯一**换算点。
+            #   本类恒按 cosine 建集合（见 :154/:233 `metadata={"hnsw:space": "cosine"}`），
+            #   故 `or "cosine"` 是**与本类自身创建口径对齐**，不是跨未知集合的瞎猜；
+            #   cosine 下 `max(0,1-d)` 与旧 `1-d` 对「是否过阈值」的判定完全等价。
+            from rag.embeddings import similarity_from_distance
+
             distance = results["distances"][0][0]
-            similarity = 1.0 - distance
+            _space = (self._collection.metadata or {}).get("hnsw:space") or "cosine"
+            similarity = similarity_from_distance(distance, _space)
 
             if similarity < self._similarity_threshold:
                 self._misses += 1

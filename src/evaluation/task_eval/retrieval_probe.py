@@ -69,6 +69,9 @@ class RetrievalProbe:
     evidence_count: int = 0
     error: str = ""
     latency_ms: float = 0.0
+    # ★ B2：tier-0 重排状态（off/success/degraded/failed）。
+    #   空串 = 老链路没写这个字段 = **未知**，不得回填成 off/success。
+    rerank_status: str = ""
 
     def top_k(self, k: int) -> list[RetrievedItem]:
         return self.items[:k]
@@ -151,4 +154,6 @@ async def probe_retrieval(
         pack_len=len(context),
         evidence_count=len(items),
         latency_ms=round((time.perf_counter() - started) * 1000, 3),
+        # ★ B2：读新字段，缺 ⇒ ""（未知，不回填）。
+        rerank_status=str((fused.metadata or {}).get("rerank_status", "") or ""),
     )

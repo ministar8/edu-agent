@@ -365,6 +365,17 @@ class CaseRecord:
     #   现在公式只在 `metrics.memory_correct_use` 一处，本字段由 scorer 的判定结果写入。
     memory_correct_use: bool | None = None
 
+    @property
+    def rerank_used(self) -> bool:
+        """★ B2：`rerank_used` 是**派生 property**，不再作为独立自报布尔存在。
+
+        唯一真源是 tier-0 枚举 `rerank_status`：仅 `success ⇒ True`；
+        `off`/`degraded`/`failed`/`""`（未知，老归档没写）一律 `False`。
+        ⇒ 缺失前提（""）既不被折成普通失败、也不被折成成功；`off`（未执行重排）
+          永不被误报为重排成功。因走 `__dict__`，本 property **不进** `to_dict()` 归档。
+        """
+        return self.rerank_status == "success"
+
 
 # ── 机械判定 ──────────────────────────────────────────────
 
@@ -706,6 +717,10 @@ async def run_case(
     record.retrieval_status = effective_status
     record.route_failure_notes = route_failure_notes
     record.retrieval_error = probe.error
+    # ★ B2：把检索探针的 tier-0 重排状态落进 record（含 `--no-agent` 的探针归档）。
+    #   `rerank_used` 不在这里存布尔 —— 它由 CaseRecord 的派生 property（status=="success"）给出。
+    #   缺字段（替身/老链路探针）⇒ ""（未知），与「不回填」纪律一致。
+    record.rerank_status = getattr(probe, "rerank_status", "")
 
     top = probe.top_k(k)
     # ★ 落盘「配置 + top-k 输入」，让检索侧指标可离线重算（字段说明见 CaseRecord）

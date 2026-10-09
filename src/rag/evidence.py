@@ -15,7 +15,14 @@ class TextEvidence(BaseModel):
     evidence_id: str = Field(description="evidence unique ID")
     content: str = Field(description="evidence body text")
     source: str = Field(default="unknown", description="source file or data source")
-    score: float = Field(default=0.0)
+    score: float = Field(
+        default=0.0,
+        description=(
+            "★ B1（§1.5 R4）契约：相似度语义，**数值越高越相似**（距离→相似度只在唯一换算点 "
+            "`embeddings.similarity_from_distance`）。top-up 路径由 `layer_recall._doc_to_evidence` "
+            "直接落向量相似度；主路径取 rerank/recall(RRF)——均「越高越好」，排序一律 reverse=True。"
+        ),
+    )
     rerank_score: float = Field(default=0.0)
     recall_score: float = Field(default=0.0)
     collection: str = Field(default="")

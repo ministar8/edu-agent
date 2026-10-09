@@ -302,6 +302,14 @@ class VectorStoreManager:
         filter: dict | None = None,
     ) -> list[tuple[Document, float]]:
         collection = self.client.get_collection(collection_name)
+        # ★ B1（§1.5 R4）：距离→相似度的**唯一**换算点。space 从集合元数据读，**不给默认值**
+        #   （`"l2"` 那种默认就是猜）；未知 space 由 `similarity_from_distance` 抛错。
+        #   放在 try 外 ⇒ 方向未知时是**硬失败**，不会被下面的 `except` 静默折成 0.0。
+        from rag.embeddings import similarity_from_distance
+
+        space = (collection.metadata or {}).get("hnsw:space")
+        if not space:
+            raise ValueError(f"{collection_name}: 集合元数据里没有 hnsw:space，方向无法确定")
         query_kwargs = {
             "query_embeddings": [embedding],
             "n_results": max(1, int(k)),
@@ -326,9 +334,15 @@ class VectorStoreManager:
         for content, metadata, distance in zip(docs, metadatas, distances):
             doc = Document(page_content=str(content or ""), metadata=dict(metadata or {}))
             try:
-                score = float(distance)
+                d = float(distance)
             except (TypeError, ValueError):
+                # ★ 回退路径（用户点名「不能只修主路径而遗漏回退路径」）：距离不可解析时
+                #   取**最低相似度** 0.0（新语义下排在最后），而不是旧稿把原始距离当 score
+                #   那种「数值合法但方向反了」的取值。
                 score = 0.0
+            else:
+                # 主路径：经唯一换算点把 Chroma 距离转成相似度（越高越相似）。
+                score = similarity_from_distance(d, space)
             results.append((doc, score))
         return results
 

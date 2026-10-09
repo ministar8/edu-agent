@@ -26,7 +26,14 @@ class EvidenceDoc(BaseModel):
     source: str = Field(default="unknown", description="来源文件名")
     section_path: str = Field(default="", description="章节路径")
     chunk_id: str = Field(default="", description="chunk ID（引用定位）")
-    score: float = Field(default=0.0, description="综合得分")
+    score: float = Field(
+        default=0.0,
+        description=(
+            "综合得分；★ B1（§1.5 R4）契约：**相似度语义，数值越高越相似**（唯一换算点 "
+            "`embeddings.similarity_from_distance`，距离→相似度）。主路径取 rerank_score，"
+            "回退取 RRF recall_score，top-up 取向量相似度——三者均为「越高越好」的同向量。"
+        ),
+    )
     rerank_score: float = Field(default=0.0, description="重排得分")
     knowledge_points: list[str] = Field(default_factory=list)
     excerpt: str = Field(default="", description="正文摘录（可能截断）")

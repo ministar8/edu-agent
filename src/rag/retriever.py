@@ -240,6 +240,10 @@ async def aretrieve_evidence(
         fused.metadata["use_rerank"] = use_rerank
         # 「实际是否重排」与「调用方是否要求重排」是两件事（部署开关可能否决后者）。
         # 门禁的 disabled 路由靠它断言 rerank_used 未被谎报。
+        # ★ B2：新增 tier-0 `rerank_status`（off/success/degraded/failed），
+        #   `rerank_used` 由 pipeline 侧从 `rerank_status == "success"` **派生**后传下来；
+        #   这里读新字段缺 ⇒ ""（未知，按旧口径处理，**不回填**）。
+        fused.metadata["rerank_status"] = docs[0].metadata.get("_rerank_status", "") if docs else ""
         fused.metadata["rerank_used"] = docs[0].metadata.get("_rerank_used") if docs else None
         fused.metadata["retrieval_depth"] = (
             docs[0].metadata.get("_retrieval_depth", _resolved_depth.depth)

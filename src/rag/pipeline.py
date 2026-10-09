@@ -538,13 +538,40 @@ def _warn_rerank_disabled_once(use_rerank: bool, filtered: list[Document]) -> No
     )
 
 
+def _derive_rerank_status(docs: list, *, active: bool, raised: bool, empty_result: bool) -> str:
+    """重排阶段状态的**唯一真源**（tier-0 枚举：off / success / degraded / failed）。
+
+    ★ 判「有没有 `rerank_score` 这个**键**」而不是「分数是否 > 0」：
+      `reranker.py:246` 有合法写 `0.0` 的补齐路径，用真值会把假重排 `on` 路由的自报值
+      误翻成 False —— 等于借修诚实度偷偷换基线。
+    ★ 先挡空 docs 再 `all(...)`：Python 的 `all([])` 是 True，不先守卫就会把
+      `docs=[]` 判成 success（四态判据不能依赖「调用方保证 docs 非空」这种口头前提）。
+    """
+    if not active:
+        return "off"
+    if raised or empty_result:
+        return "failed"
+    if not docs:
+        return "degraded"
+    if all("rerank_score" in (d.metadata or {}) for d in docs):
+        return "success"
+    return "degraded"
+
+
+# `_safe_to_thread` 在超时/异常时**原样返回 default**；用一个可辨识哨兵当 default，
+# 调用点就能区分「rerank 真的返回了列表」与「rerank 坏了走兜底」⇒ 四态里的 `failed`
+# 有实测依据，而不是把降级猜成失败。（reranker 自捕 HTTP 错误会返回**不含 rerank_score**
+# 的正常列表 ⇒ raised=False、无键 ⇒ degraded，与「超时/抛错走 default=failed」天然分开。）
+_RERANK_UNSET = object()
+
+
 async def _stage_rerank(
     filtered: list[Document],
     query: str,
     k: int,
     use_rerank: bool,
     decomposed: bool,
-) -> tuple[list[Document], bool, float]:
+) -> tuple[list[Document], str, float]:
     """阶段 7：重排（可选）+ 重排后的双重阈值过滤。
 
     分解路径的候选池是单路的两倍（``top_k=k*2``）：子查询合并后候选更多，
@@ -558,7 +585,9 @@ async def _stage_rerank(
     详见 ``docs/RERANK_SWITCH_ANALYSIS.md``。
 
     Returns:
-        ``(重排后的文档, 是否真的执行了重排, 重排耗时毫秒)``。
+        ``(重排后的文档, rerank_status, 重排耗时毫秒)``。``rerank_status`` 是四态枚举
+        ``off``/``success``/``degraded``/``failed``（§5 B2）；「是否真的执行了重排」
+        不再是独立自报布尔，而由 ``status == "success"`` **派生**。
         耗时由调用方写进 ``stage_ms`` —— 指标的所有权留在编排层。
     """
     rerank_active = use_rerank and settings.RERANK_ENABLED
@@ -566,8 +595,9 @@ async def _stage_rerank(
         # 未启用重排：仍要截断。注意这里**不**记录耗时（原本就没有计时窗口）
         if not rerank_active:
             _warn_rerank_disabled_once(use_rerank, filtered)
-            return filtered[: k * 2 if decomposed else k], False, 0.0
-        return filtered, False, 0.0
+            return filtered[: k * 2 if decomposed else k], "off", 0.0
+        # active 但无候选可重排 ⇒ 空结果降级（回落原序，本就是空）。
+        return filtered, "degraded", 0.0
 
     top_k = k * 2 if decomposed else k
     log_label = "async-post-rerank-decomposed" if decomposed else "async-post-rerank"
@@ -582,31 +612,38 @@ async def _stage_rerank(
         # 原实现两条分支都写 `filtered[:k]`，但候选池是 `top_k = k*2 if decomposed else k`：
         # 非分解路径 `top_k == k`，恰好等价；**分解路径重排失败时只兜住一半候选**。
         # 重排失败本就是降级场景，此时再把候选砍半，等于在降级上再降一级。
-        default=filtered[:top_k],
+        # ★ B2：default 换成可辨识哨兵 ⇒ 超时/抛错能落成 `failed` 而非被折成 `degraded`。
+        default=_RERANK_UNSET,
         top_k=top_k,
     )
+    raised = reranked is _RERANK_UNSET
+    if raised:
+        reranked = filtered[:top_k]  # 坏了：回落原序候选（与旧 default 行为一致）
     elapsed_ms = (time.perf_counter() - started) * 1000
 
+    rerank_status = _derive_rerank_status(
+        reranked, active=True, raised=raised, empty_result=(not raised and not reranked)
+    )
     # 双重阈值过滤，兜底保留 top-2
     out = _apply_rerank_threshold(reranked, min_keep=2)
     _log_final_retrieval_summary(log_label, query, out)
-    return out, True, elapsed_ms
+    return out, rerank_status, elapsed_ms
 
 
 @dataclass(frozen=True)
 class _HydeOutcome:
     """HyDE 阶段的产出。
 
-    `rerank_used` 也在返回值里：HyDE 召回后若走了重排，会把整条链路的
-    "用过重排"标记翻成 True —— 这是原实现的行为。拆开后显式返回，
-    避免调用方漏掉这次翻转（漏了会让指标里的 rerank_used 少记）。
+    `rerank_status` 也在返回值里：HyDE 召回后若走了重排并把状态拉回 success，
+    会把整条链路的重排状态更新 —— 这是原实现「用过重排 ⇒ 标记翻 True」行为的
+    状态枚举化。拆开后显式返回，避免调用方漏掉这次翻转。
     """
 
     docs: list[Document]
     triggered: bool
     added_count: int
     error: str
-    rerank_used: bool
+    rerank_status: str
     elapsed_ms: float
 
 
@@ -622,7 +659,7 @@ async def _stage_hyde(
     depth: RetrievalDepth,
     k: int,
     effective_threshold: float,
-    rerank_used: bool,
+    rerank_status: str,
 ) -> _HydeOutcome:
     """阶段 8：HyDE 兜底召回。
 
@@ -652,7 +689,7 @@ async def _stage_hyde(
     if depth.skip_hyde or not should_trigger_hyde(
         query, len(filtered), top_rerank_score_for_hyde, cat
     ):
-        return _HydeOutcome(filtered, False, 0, "", rerank_used, 0.0)
+        return _HydeOutcome(filtered, False, 0, "", rerank_status, 0.0)
 
     triggered = False
     added_count = 0
@@ -689,16 +726,31 @@ async def _stage_hyde(
             )
             hyde_docs = [doc for doc, score in hyde_results if score >= effective_threshold * 0.8]
             if use_rerank and settings.RERANK_ENABLED and hyde_docs:
+                _hyde_pre = hyde_docs
                 hyde_docs = await _safe_to_thread(
                     "async_hyde_rerank",
                     rerank,
                     query,
                     hyde_docs,
                     timeout=float(getattr(settings, "RERANK_TIMEOUT", 30) or 30),
-                    default=hyde_docs[:k],
+                    default=_RERANK_UNSET,
                     top_k=k,
                 )
-                rerank_used = True
+                _hyde_raised = hyde_docs is _RERANK_UNSET
+                if _hyde_raised:
+                    hyde_docs = _hyde_pre[:k]
+                # HyDE 的补重排成功可把主链的降级/失败拉回 success，但**只升不降**
+                # （主链已 success 时不因这次波动而降级；这次没跑好就维持主链原状态）。
+                if (
+                    _derive_rerank_status(
+                        hyde_docs,
+                        active=True,
+                        raised=_hyde_raised,
+                        empty_result=(not _hyde_raised and not hyde_docs),
+                    )
+                    == "success"
+                ):
+                    rerank_status = "success"
             for doc in hyde_docs:
                 doc.metadata["_hyde_fallback"] = True
                 doc.metadata["_hyde_query"] = hyde_query[:120]
@@ -743,7 +795,7 @@ async def _stage_hyde(
         triggered,
         added_count,
         error,
-        rerank_used,
+        rerank_status,
         round((time.perf_counter() - started) * 1000, 3),
     )
 
@@ -871,7 +923,7 @@ class _RetrievalContext:
     decomposed: bool
     sub_queries: list[str]
     use_rerank: bool
-    rerank_used: bool
+    rerank_status: str
     hyde_triggered: bool
     hyde_added_count: int
     hyde_error: str
@@ -902,8 +954,11 @@ def _finalize_retrieval(
         doc.metadata["_effective_k"] = ctx.k
         doc.metadata["_coarse_k"] = ctx.coarse_k
         # 供上层（aretrieve_evidence → fused.metadata）与门禁断言读取：
-        # 「本次是否真的执行了重排」。传 doc metadata 是本文件既有模式（同 _coarse_k）。
-        doc.metadata["_rerank_used"] = ctx.rerank_used
+        # 「本次重排的真实状态」+ 由其**派生**的「是否真的执行了重排」。
+        # ★ `rerank_used` 不再是独立自报布尔，唯一真源是 `rerank_status`；仅 success ⇒ True。
+        #   传 doc metadata 是本文件既有模式（同 _coarse_k）。
+        doc.metadata["_rerank_status"] = ctx.rerank_status
+        doc.metadata["_rerank_used"] = ctx.rerank_status == "success"
 
     window_expanded_count = sum(1 for doc in filtered if doc.metadata.get("_window_merged"))
     context_chars = sum(len(doc.page_content or "") for doc in filtered)
@@ -933,7 +988,8 @@ def _finalize_retrieval(
             "decomposed": ctx.decomposed,
             "sub_query_count": len(ctx.sub_queries),
             "use_rerank": ctx.use_rerank,
-            "rerank_used": ctx.rerank_used,
+            "rerank_status": ctx.rerank_status,
+            "rerank_used": ctx.rerank_status == "success",
             "hyde_triggered": ctx.hyde_triggered,
             "hyde_added_count": ctx.hyde_added_count,
             "hyde_error": ctx.hyde_error,
@@ -984,7 +1040,7 @@ async def aretrieve_documents(
     stage_ms: dict[str, float] = {}
     decomposed = False
     sub_queries: list[str] = []
-    rerank_used = False
+    rerank_status = ""
     hyde_triggered = False
     hyde_added_count = 0
     hyde_error = ""
@@ -1039,7 +1095,7 @@ async def aretrieve_documents(
         )
 
         _emit_stage(on_stage, "rerank")
-        filtered, rerank_used, _rerank_ms = await _stage_rerank(
+        filtered, rerank_status, _rerank_ms = await _stage_rerank(
             filtered, query, k, use_rerank, decomposed
         )
         stage_ms["rerank_ms"] = round(_rerank_ms, 3)
@@ -1057,13 +1113,13 @@ async def aretrieve_documents(
             depth=depth,
             k=k,
             effective_threshold=effective_threshold,
-            rerank_used=rerank_used,
+            rerank_status=rerank_status,
         )
         filtered = _hyde.docs
         hyde_triggered = _hyde.triggered
         hyde_added_count = _hyde.added_count
         hyde_error = _hyde.error
-        rerank_used = _hyde.rerank_used
+        rerank_status = _hyde.rerank_status
         stage_ms["hyde_ms"] = _hyde.elapsed_ms
 
         _emit_stage(on_stage, "expand")
@@ -1090,7 +1146,7 @@ async def aretrieve_documents(
                 decomposed=decomposed,
                 sub_queries=sub_queries,
                 use_rerank=use_rerank,
-                rerank_used=rerank_used,
+                rerank_status=rerank_status,
                 hyde_triggered=hyde_triggered,
                 hyde_added_count=hyde_added_count,
                 hyde_error=hyde_error,
@@ -1127,7 +1183,8 @@ async def aretrieve_documents(
                 "decomposed": decomposed,
                 "sub_query_count": len(sub_queries),
                 "use_rerank": use_rerank,
-                "rerank_used": rerank_used,
+                "rerank_status": rerank_status,
+                "rerank_used": rerank_status == "success",
                 "hyde_triggered": hyde_triggered,
                 "hyde_added_count": hyde_added_count,
                 "hyde_error": hyde_error,

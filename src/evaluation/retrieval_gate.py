@@ -789,7 +789,9 @@ class RerankObservation(NamedTuple):
 
     - ``has_evidence``：该 query 是否返回了非空证据（空结果不参与断言）
     - ``has_rerank_score``：证据里出现 ``rerank_score > 0`` —— 重排确实跑过
-    - ``rerank_used``：链路**自报**的「本次是否用过重排」
+    - ``rerank_used``：链路自报的「本次是否用过重排」（B2 起由 `rerank_status=="success"` 派生）
+    - ``rerank_status``：★ B2 tier-0 四态原文 `off`/`success`/`degraded`/`failed`；
+      缺字段（老链路）⇒ ``""``（未知，按「未知」处理，**不回填**）
 
     后两者是**两个独立信号**：交叉验证才能抓出"自报值失真"
     （曾出现：部署开关关掉重排后仍返回 ``rerank_used=True``）。
@@ -798,6 +800,7 @@ class RerankObservation(NamedTuple):
     has_evidence: bool
     has_rerank_score: bool
     rerank_used: bool
+    rerank_status: str = ""
 
 
 async def run_gate(
@@ -893,6 +896,8 @@ async def run_gate(
                 has_evidence=bool(fused.text_evidences),
                 has_rerank_score=any(ev.rerank_score > 0 for ev in fused.text_evidences),
                 rerank_used=bool(fused.metadata.get("rerank_used")),
+                # ★ B2：新字段缺 ⇒ ""（未知，不回填）。
+                rerank_status=str(fused.metadata.get("rerank_status", "") or ""),
             )
         )
         outcomes.append(
@@ -966,6 +971,25 @@ def _assert_route_preconditions(rerank_observations: list[RerankObservation]) ->
             violations.append(
                 f"rerank 路由为 {mode}，却有 {used_count} 条 query 自报 rerank_used=True —— "
                 "rerank_used 失真（应为 False），检查重排阶段是否绕过了部署开关"
+            )
+
+    # ★ B2：`rerank_status`（tier-0 原文）与派生 `rerank_used` 必须一致（状态已知时）。
+    #   `off`/`degraded`/`failed` 永不得与 `rerank_used=True` 并存 ⇒ 守「未执行重排(off)
+    #   不得被误报为重排成功」这条验收。缺字段（老链路 `rerank_status==""`）按未知跳过。
+    known = [o for o in with_evidence if o.rerank_status]
+    status_mismatch = sum(1 for o in known if o.rerank_used != (o.rerank_status == "success"))
+    if status_mismatch:
+        violations.append(
+            f"{status_mismatch} 条 query 的 rerank_used 与其 rerank_status 派生值不一致 "
+            f"（已知状态 {sorted({o.rerank_status for o in known})}）—— "
+            "rerank_used 必须是 rerank_status==success 的派生量"
+        )
+    if mode in ("off", "disabled"):
+        bogus_success = sum(1 for o in known if o.rerank_status == "success")
+        if bogus_success:
+            violations.append(
+                f"rerank 路由为 {mode}，却有 {bogus_success} 条 query 的 rerank_status=success "
+                "—— 未执行重排被误报为重排成功（B2 验收：off/disabled 不得出 success）"
             )
 
     # 与 mode 无关的交叉验证：两个信号必须一致。
