@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 71  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
+_EXPECTED_ITEMS = 72  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 # ★ 修复轮 F7 再 +4：`8j`（map_route_failures 双向）/`8k`（单元内 reset 回归锁）/
 #   `8l`（run_case 必调 reset_memory_read_statuses，**行为**取证）/`8m`（gate 的 reset↔收割配对）
 #   ⇒ 62；控制器复验发现 F6 的映射只由外部探针证明、62 项里没有一条会因它回归而红
@@ -16,7 +16,10 @@ _EXPECTED_ITEMS = 71  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T
 #   checkpoint 8 用户追加 `8o`（F6 的**结构**承重锁 —— 8n 的四条行为用例分不出 `has_path`
 #   与真值写法，因为那三条分支输出同为 `missing_premise` ⇒ 只能走 AST 定位函数体内调用）⇒ **64**；
 #   Task 9 Step 1（B2 四态判据 9a/9b/9c/9d/9e）+5 ⇒ 69；阶段 A 后半段 B2 两条验收探针 `9f`
-#   + B1 唯一权威换算点结构锁 `9g` +2 ⇒ **71**（B1/B2 的验收探针与结构锁见 9f/9g）。
+#   + B1 唯一权威换算点结构锁 `9g` +2 ⇒ 71；控制器复验 B2「产生→存储→聚合→报告」全链路时发现
+#   `rerank_status` 要跨**三跳改名**才落到归档（`_rerank_status` → `rerank_status` → probe → record），
+#   每跳都带 `""` 掩盖默认值、且桥接在 `aretrieve_documents` 内部（纯内存测试拿不到）⇒ 补 `9h`
+#   键名配对结构锁 ⇒ **72**。
 #   计数器只增不减：既有判据一条都不许删。
 _ITEMS: list[tuple[str, bool, str]] = []
 
@@ -1023,6 +1026,38 @@ def check_9() -> None:
         and _vs_routes_through,
         f"表={_SS} 未知抛={raised_unknown} 私有删={_sc_no_private} "
         f"cache经点={_sc_routes_through} vectorstore经点={_vs_routes_through}",
+    )
+
+    # ── 9h（B2 全链路**名称配对**结构锁）：`rerank_status` 要跨三跳改名才落到归档 ──────
+    #   pipeline 写 `doc.metadata["_rerank_status"]` → retriever 桥接成 `fused.metadata["rerank_status"]`
+    #   → retrieval_probe 读该键 → runner 落 `record.rerank_status`（`rerank_used` 由它派生）。
+    #   ★ 为什么这条只能走结构：桥接发生在 `aretrieve_documents` 内部（要碰 Chroma），
+    #     纯内存行为测试拿不到它；而每一跳都带 `""` 掩盖默认值 ⇒ 任何一侧改名都会让下游
+    #     **静默变成「未知」**，9f/9g 都不会红（9f 测纯函数、9g 测 B1）。
+    #   ★ 本判据锁的是「四处的键名与赋值方向必须成对存在」——改名即红；
+    #     它**不**证明运行时真的有值送达，那由一次性端到端复证负责（见 task-9-report 阶段 A 末节）。
+    _src9 = _pl9.Path
+    _root9 = _src9(__file__).resolve().parents[1]
+
+    def _read9(rel: str) -> str:
+        return (_root9 / rel).read_text(encoding="utf-8")
+
+    _pipe9 = _read9("src/rag/pipeline.py")
+    _ret9 = _read9("src/rag/retriever.py")
+    _probe9 = _read9("src/evaluation/task_eval/retrieval_probe.py")
+    _run9 = _read9("src/evaluation/task_eval/runner.py")
+    hops = {
+        "①pipeline 写 _rerank_status": 'metadata["_rerank_status"] = ' in _pipe9,
+        "②retriever 读 _rerank_status": '"_rerank_status"' in _ret9,
+        "②retriever 写 rerank_status": 'metadata["rerank_status"] = ' in _ret9,
+        "③probe 读 rerank_status": 'get("rerank_status"' in _probe9,
+        "④runner 落 record.rerank_status": "record.rerank_status = " in _run9,
+        "④rerank_used 派生自 status": 'self.rerank_status == "success"' in _run9,
+    }
+    check(
+        "9h B2 三跳改名的键名配对全在位（结构锁；断链即红，不许静默降级成未知）",
+        all(hops.values()),
+        f"缺失={[k for k, v in hops.items() if not v]}",
     )
 
 
