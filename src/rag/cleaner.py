@@ -16,10 +16,15 @@ import time
 import unicodedata
 from collections import Counter
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
 
 from rag.metrics import metrics
+
+if TYPE_CHECKING:
+    # 仅供类型标注使用；运行时导入保持在函数内（避免循环依赖）
+    from tools.anomaly import AnomalyRecord
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +45,10 @@ _MULTI_NEWLINE_RE = re.compile(r"\n{3,}")
 # 连续3个以上空格 → 1个空格
 _MULTI_SPACE_RE = re.compile(r"(?<=\S)[ \t]{3,}(?=\S)")
 
-# 行首/行尾空白
+# 行尾空白（空格/制表符）
 _LINE_TRIM_RE = re.compile(r"[ \t]+$", re.MULTILINE)
 
-# 乱码：连续控制字符（排除常见换行/制表符）
+# 乱码：控制字符（\t \n \r 除外）
 _CONTROL_CHARS_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 _FENCE_RE = re.compile(r"^\s*(```+|~~~+)")
@@ -106,13 +111,7 @@ from rag.synonyms import normalize_synonyms  # noqa: E402
 
 
 def _get_source_ext(doc: Document) -> str:
-    source = (
-        doc.metadata.get("source_path")
-        or doc.metadata.get("source_file")
-        or doc.metadata.get("source")
-        or ""
-    )
-    return Path(str(source)).suffix.lower()
+    return Path(_get_source_path(doc)).suffix.lower()
 
 
 def _get_source_path(doc: Document) -> str:
@@ -240,8 +239,7 @@ def _edge_lines(text: str) -> list[str]:
 def _dedupe_pdf_edges(documents: list[Document]) -> dict[str, set[str]]:
     grouped: dict[str, list[Document]] = {}
     for doc in documents:
-        key = str(doc.metadata.get("source_path") or doc.metadata.get("source_file") or id(doc))
-        grouped.setdefault(key, []).append(doc)
+        grouped.setdefault(_pdf_source_key(doc), []).append(doc)
 
     repeated: dict[str, set[str]] = {}
     for key, group_docs in grouped.items():
@@ -255,6 +253,39 @@ def _dedupe_pdf_edges(documents: list[Document]) -> dict[str, set[str]]:
     return repeated
 
 
+def _is_cjk_char(char: str) -> bool:
+    """单字符是否落在 CJK 统一表意文字区（基本区 + 扩展A）"""
+    return "\u4e00" <= char <= "\u9fff" or "\u3400" <= char <= "\u4dbf"
+
+
+def _can_merge_pdf_lines(current: str, next_stripped: str) -> bool:
+    """判断断行的下一行能否并入当前行（判断顺序即优先级，勿调换）"""
+    if _LINE_START_NEW_PARA_RE.match(next_stripped):
+        return False
+
+    if current and current[-1] in _SENT_END_PUNCTS:
+        return False
+
+    # 右括号/引号结尾 → 可能本就是自然断行
+    if current and current[-1] in "）)」』\"'":
+        return False
+
+    # 左括号/引号开头 → 可能是新内容块
+    if next_stripped and next_stripped[0] in "（(「『\"'":
+        return False
+
+    return True
+
+
+def _join_pdf_lines(current: str, next_stripped: str) -> str:
+    """合并断行：CJK 相邻直接拼接，否则用空格连接"""
+    cur_last_cjk = bool(current) and _is_cjk_char(current[-1])
+    next_first_cjk = bool(next_stripped) and _is_cjk_char(next_stripped[0])
+    if cur_last_cjk or next_first_cjk:
+        return current + next_stripped
+    return current + " " + next_stripped
+
+
 def _repair_pdf_line_breaks(text: str) -> str:
     """修复 PDF 提取导致的断行
 
@@ -262,21 +293,12 @@ def _repair_pdf_line_breaks(text: str) -> str:
       "这是一"  →  "这是一个例子。"
       "个例子。"
 
-    合并规则：
-    1. 当前行不以终结标点结尾，且下一行不以新段落标记开头 → 合并
-    2. 英文连字符断行 "word-\\nword" → 合并为 "wordword"（或 "word-word" 保留）
-    3. 保留空行（段落边界）和代码块
-
-    Args:
-        text: PDF 提取的原始文本
-
-    Returns:
-        断行修复后的文本
+    合并规则：当前行不以终结标点结尾、且下一行不以新段落标记开头 → 合并；
+    英文连字符断行 "word-\\nword" → "wordword"；空行（段落边界）不跨越。
     """
     if not text or not text.strip():
         return text
 
-    # 1. 修复英文连字符断行：word-\nword → wordword
     text = _HYPHEN_BREAK_RE.sub(r"\1\2", text)
 
     lines = text.splitlines()
@@ -288,63 +310,50 @@ def _repair_pdf_line_breaks(text: str) -> str:
 
     while i < len(lines):
         line = lines[i]
+        i += 1
 
         # 空行 → 段落边界，不合并
         if not line.strip():
             merged.append(line)
-            i += 1
             continue
 
-        # 尝试向后合并连续的断行
         current = line.rstrip()
 
-        while i + 1 < len(lines):
-            next_line = lines[i + 1]
+        while i < len(lines):
+            next_line = lines[i]
 
             # 下一行为空 → 段落边界，停止合并
             if not next_line.strip():
                 break
 
             next_stripped = next_line.strip()
-
-            # 下一行以新段落标记开头 → 不合并
-            if _LINE_START_NEW_PARA_RE.match(next_stripped):
+            if not _can_merge_pdf_lines(current, next_stripped):
                 break
 
-            # 当前行以终结标点结尾 → 自然断行，不合并
-            if current and current[-1] in _SENT_END_PUNCTS:
-                break
-
-            # 当前行以右括号/引号结尾 → 可能是自然断行
-            if current and current[-1] in "）)」』\"'":
-                break
-
-            # 下一行以左括号/引号开头 → 可能是新内容块
-            if next_stripped and next_stripped[0] in "（(「『\"'":
-                break
-
-            # 合并：移除换行，用空格连接（英文）或直接连接（中文）
-            # 判断逻辑：如果当前行末尾是 CJK 字符或下一行开头是 CJK → 无空格连接
-            cur_last_cjk = current and (
-                "\u4e00" <= current[-1] <= "\u9fff" or "\u3400" <= current[-1] <= "\u4dbf"
-            )
-            next_first_cjk = next_stripped and (
-                "\u4e00" <= next_stripped[0] <= "\u9fff" or "\u3400" <= next_stripped[0] <= "\u4dbf"
-            )
-
-            if cur_last_cjk or next_first_cjk:
-                # 中文断行：直接拼接
-                current = current + next_stripped
-            else:
-                # 英文断行：空格拼接
-                current = current + " " + next_stripped
-
+            current = _join_pdf_lines(current, next_stripped)
             i += 1
 
         merged.append(current)
-        i += 1
 
     return "\n".join(merged)
+
+
+def _find_short_line_regions(lines: list[str], is_short: list[bool]) -> list[tuple[int, int]]:
+    """找出连续短行区域，返回 (start, end) 闭区间列表"""
+    regions: list[tuple[int, int]] = []
+    start: int | None = None
+    for i, short in enumerate(is_short):
+        if short and not lines[i].strip() == "":
+            if start is None:
+                start = i
+            continue
+        if start is not None and i - start >= _COLUMN_MIN_CONSECUTIVE:
+            regions.append((start, i - 1))
+        start = None
+    # 处理末尾区域
+    if start is not None and len(lines) - start >= _COLUMN_MIN_CONSECUTIVE:
+        regions.append((start, len(lines) - 1))
+    return regions
 
 
 def _reorder_pdf_columns(text: str) -> str:
@@ -354,19 +363,10 @@ def _reorder_pdf_columns(text: str) -> str:
       左栏第1行  右栏第1行  ← 实际提取为连续行
       左栏第2行  右栏第2行
 
-    检测策略：
-    1. 扫描文本，找出连续短行区域（行宽 < _COLUMN_LINE_MAX_WIDTH）
-    2. 连续短行数 ≥ _COLUMN_MIN_CONSECUTIVE → 疑似多栏区域
-    3. 将疑似区域的行按奇偶分组（左栏/右栏），重新排列为左栏全部 + 右栏全部
-    4. 验证：重排后文本的句子连贯性应优于重排前（启发式）
+    做法：找出连续短行区域（行宽 ≤ _COLUMN_LINE_MAX_WIDTH、行数 ≥ _COLUMN_MIN_CONSECUTIVE），
+    按奇偶分成左右栏重排，且只在 `_check_column_coherence` 判定栏内连贯性显著更高时才采用。
 
-    注意：此为启发式方法，可能误判。保守策略：只在高置信度时重排。
-
-    Args:
-        text: PDF 提取文本（已做断行修复）
-
-    Returns:
-        可能重排后的文本
+    启发式方法，可能误判 ⇒ 保守策略：只在高置信度时重排。
     """
     if not text or not text.strip():
         return text
@@ -375,63 +375,41 @@ def _reorder_pdf_columns(text: str) -> str:
     if len(lines) < _COLUMN_MIN_CONSECUTIVE:
         return text
 
-    # 1. 标记每行是否为"短行"
     is_short = [
         bool(line.strip()) and len(line.strip()) <= _COLUMN_LINE_MAX_WIDTH for line in lines
     ]
 
-    # 2. 找出连续短行区域
-    regions: list[tuple[int, int]] = []  # (start, end) inclusive
-    start = None
-    for i, short in enumerate(is_short):
-        if short and not lines[i].strip() == "":
-            if start is None:
-                start = i
-        else:
-            if start is not None and i - start >= _COLUMN_MIN_CONSECUTIVE:
-                regions.append((start, i - 1))
-            start = None
-    # 处理末尾区域
-    if start is not None and len(lines) - start >= _COLUMN_MIN_CONSECUTIVE:
-        regions.append((start, len(lines) - 1))
-
+    regions = _find_short_line_regions(lines, is_short)
     if not regions:
         return text
 
-    # 3. 对每个疑似多栏区域，尝试奇偶重排
     result_lines = list(lines)
 
     for region_start, region_end in regions:
-        region_lines = [
-            lines[i] for i in range(region_start, region_end + 1) if lines[i].strip()
-        ]  # 跳过空行
+        region_lines = [lines[i] for i in range(region_start, region_end + 1) if lines[i].strip()]
 
-        # 必须有偶数行（双栏对称）
         if len(region_lines) < _COLUMN_MIN_CONSECUTIVE:
             continue
 
-        # 奇偶分组
         left_col = [region_lines[i] for i in range(0, len(region_lines), 2)]
         right_col = [region_lines[i] for i in range(1, len(region_lines), 2)]
 
-        # 验证：重排后左栏末尾和右栏开头的连贯性
-        # 启发式：左栏各行之间应该有更多词汇重叠（同主题）而非交叉
-        if _check_column_coherence(left_col, right_col, region_lines):
-            reordered = left_col + [""] + right_col  # 用空行分隔左右栏
-            # 替换原区域
-            result_lines[region_start : region_end + 1] = reordered + [""] * (
-                (region_end - region_start + 1) - len(reordered)
-            )
-            logger.debug(
-                "PDF column reorder: region lines %d-%d (%d lines → L%d + R%d)",
-                region_start,
-                region_end,
-                len(region_lines),
-                len(left_col),
-                len(right_col),
-            )
+        if not _check_column_coherence(left_col, right_col, region_lines):
+            continue
 
-    # 清理多余空行
+        reordered = left_col + [""] + right_col  # 用空行分隔左右栏
+        result_lines[region_start : region_end + 1] = reordered + [""] * (
+            (region_end - region_start + 1) - len(reordered)
+        )
+        logger.debug(
+            "PDF column reorder: region lines %d-%d (%d lines → L%d + R%d)",
+            region_start,
+            region_end,
+            len(region_lines),
+            len(left_col),
+            len(right_col),
+        )
+
     result = "\n".join(result_lines)
     result = _MULTI_NEWLINE_RE.sub("\n\n", result)
     return result
@@ -444,20 +422,15 @@ def _check_column_coherence(
 ) -> bool:
     """验证奇偶重排是否比原始顺序更连贯
 
-    启发式判断：
-    - 计算左栏相邻行之间的共享字符数（去重后），与原始交替行对比
-    - 如果左栏的内部连贯性 > 原始交替行的连贯性 → 重排有效
-
-    Returns:
-        True 表示重排后更连贯，应采用重排
+    用字符级 bigram 重叠率比较「栏内相邻行」与「原始交替相邻行」，前者显著更高才重排。
     """
 
-    def _avg_overlap(line_pairs: list[tuple[str, str]]) -> float:
-        """计算相邻行对的平均字符重叠率"""
-        if not line_pairs:
+    def _adjacent_coherence(lines: list[str]) -> float:
+        """计算相邻行对（lines[i] 与 lines[i+1]）的平均字符重叠率"""
+        if len(lines) < 2:
             return 0.0
         overlaps = []
-        for a, b in line_pairs:
+        for a, b in zip(lines, lines[1:]):
             if not a or not b:
                 overlaps.append(0.0)
                 continue
@@ -471,30 +444,27 @@ def _check_column_coherence(
             overlaps.append(overlap)
         return sum(overlaps) / len(overlaps) if overlaps else 0.0
 
-    # 原始交替行的连贯性
-    original_pairs = [(original[i], original[i + 1]) for i in range(len(original) - 1)]
-    original_coherence = _avg_overlap(original_pairs)
-
-    # 左栏内部连贯性
-    left_pairs = [(left_col[i], left_col[i + 1]) for i in range(len(left_col) - 1)]
-    left_coherence = _avg_overlap(left_pairs)
-
-    # 右栏内部连贯性
-    right_pairs = [(right_col[i], right_col[i + 1]) for i in range(len(right_col) - 1)]
-    right_coherence = _avg_overlap(right_pairs)
-
-    # 分栏连贯性 = 左栏和右栏连贯性的平均
+    original_coherence = _adjacent_coherence(original)
+    left_coherence = _adjacent_coherence(left_col)
+    right_coherence = _adjacent_coherence(right_col)
     column_coherence = (left_coherence + right_coherence) / 2
 
     # 重排有效条件：分栏连贯性显著高于原始（1.5x 阈值，避免误判）
     return column_coherence > original_coherence * 1.5 and column_coherence > 0.05
 
 
+def _finalize_whitespace(cleaned: str) -> str:
+    """收尾空白清理：压缩多余换行/空格并去除首尾空白"""
+    cleaned = _MULTI_NEWLINE_RE.sub("\n\n", cleaned)
+    cleaned = _MULTI_SPACE_RE.sub(" ", cleaned)
+    return cleaned.strip()
+
+
 def _clean_pdf_text(text: str, repeated_edges: set[str]) -> str:
     normalized = _normalize_text(text)
     if not normalized:
         return ""
-    # 1. 页眉页脚移除
+    # 页眉页脚移除
     lines = normalized.splitlines()
     while lines and lines[0].strip() in repeated_edges:
         lines.pop(0)
@@ -502,16 +472,11 @@ def _clean_pdf_text(text: str, repeated_edges: set[str]) -> str:
         lines.pop()
     cleaned_lines = [_LINE_TRIM_RE.sub("", line) for line in lines]
     cleaned = "\n".join(cleaned_lines)
-    # 2. 页码移除
     cleaned = _PAGE_NUM_RE.sub("", cleaned)
-    # 3. 多栏检测与重排（在断行修复前做，因为断行修复会改变行结构）
+    # 多栏重排必须排在断行修复之前：断行修复会改变行结构
     cleaned = _reorder_pdf_columns(cleaned)
-    # 4. 断行修复（合并 PDF 提取导致的句子中间断行）
     cleaned = _repair_pdf_line_breaks(cleaned)
-    # 5. 空白清理
-    cleaned = _MULTI_NEWLINE_RE.sub("\n\n", cleaned)
-    cleaned = _MULTI_SPACE_RE.sub(" ", cleaned)
-    return cleaned.strip()
+    return _finalize_whitespace(cleaned)
 
 
 def _clean_plain_text(text: str) -> str:
@@ -521,9 +486,151 @@ def _clean_plain_text(text: str) -> str:
     cleaned_lines = [_LINE_TRIM_RE.sub("", line) for line in normalized.splitlines()]
     cleaned = "\n".join(cleaned_lines)
     cleaned = _PAGE_NUM_RE.sub("", cleaned)
-    cleaned = _MULTI_NEWLINE_RE.sub("\n\n", cleaned)
-    cleaned = _MULTI_SPACE_RE.sub(" ", cleaned)
-    return cleaned.strip()
+    return _finalize_whitespace(cleaned)
+
+
+def _pdf_source_key(doc: Document) -> str:
+    """PDF 页边重复行去重的分组键（_dedupe_pdf_edges 与 pdf 分派共用这一份规则）"""
+    return str(doc.metadata.get("source_path") or doc.metadata.get("source_file") or id(doc))
+
+
+def _dispatch_clean(
+    doc: Document,
+    ext: str,
+    source_path: str,
+    repeated_edges: set[str],
+) -> None:
+    """按扩展名分派单文档清洗：.md / .pdf / 其它（三分支顺序与条件是行为的一部分）"""
+    if ext == ".md":
+        doc.page_content = _clean_markdown_text(doc.page_content)
+        if _is_exam_markdown_source(source_path):
+            doc.page_content, removed_noise = _remove_exam_web_noise(doc.page_content)
+            doc.page_content = _normalize_exam_question_headings(doc.page_content)
+            if removed_noise:
+                doc.metadata["exam_web_noise_removed_chars"] = removed_noise
+    elif ext == ".pdf":
+        doc.page_content = _clean_pdf_text(doc.page_content, repeated_edges)
+    else:
+        doc.page_content = _clean_plain_text(doc.page_content)
+
+
+def _clean_by_extension(documents: list[Document]) -> tuple[list[Document], int]:
+    """阶段0：按扩展名分派清洗，丢弃过短文档并标记 cleaned_ratio
+
+    Returns:
+        (清洗后保留的文档列表, 被丢弃的文档数)
+    """
+    cleaned: list[Document] = []
+    dropped_docs = 0
+    pdf_edge_map = _dedupe_pdf_edges([doc for doc in documents if _get_source_ext(doc) == ".pdf"])
+    for doc in documents:
+        original_len = len(doc.page_content)
+        ext = _get_source_ext(doc)
+        source_path = _get_source_path(doc)
+        repeated_edges = pdf_edge_map.get(_pdf_source_key(doc), set()) if ext == ".pdf" else set()
+        _dispatch_clean(doc, ext, source_path, repeated_edges)
+
+        if len(doc.page_content.strip()) < 10:
+            dropped_docs += 1
+            continue
+
+        if len(doc.page_content) < original_len * 0.5:
+            doc.metadata["cleaned_ratio"] = f"{1 - len(doc.page_content) / original_len:.0%}"
+
+        cleaned.append(doc)
+    return cleaned, dropped_docs
+
+
+def _run_normalization(cleaned: list[Document]) -> tuple[list[Document], list[dict]]:
+    """阶段1：数据转换与标准化（清洗后、填充前执行）"""
+    from tools.normalizer import normalize_documents
+
+    cleaned, norm_log = normalize_documents(cleaned)
+    if norm_log:
+        logger.info("标准化: %d 篇文档已转换", len(norm_log))
+    return cleaned, norm_log
+
+
+def _run_synonym_normalize(cleaned: list[Document]) -> list[Document]:
+    """阶段2：同义词归一（标准化后、填充前执行）"""
+    # ★ 跨侧契约的文档侧：一旦改写原文，query 侧做字面匹配的消费者（BM25 的 `$contains`、
+    #   cross-encoder reranker）就必须同样归一，否则错配。开关默认开（保持既有行为），
+    #   关掉即「文档保持原文」，用于与 query 侧归一做对照；实测代价见 settings 同名开关的注释。
+    from core.settings import settings
+
+    synonym_total = 0
+    if settings.INGEST_SYNONYM_NORMALIZE:
+        for doc in cleaned:
+            doc.page_content, replaced_count = normalize_synonyms(doc.page_content)
+            synonym_total += replaced_count
+    if synonym_total:
+        logger.info("同义词归一: %d 处替换", synonym_total)
+    return cleaned
+
+
+def _run_imputation(cleaned: list[Document]) -> tuple[list[Document], list[dict]]:
+    """阶段3：缺失值填充（标准化后、去重前执行）"""
+    from tools.imputer import impute_documents
+
+    cleaned, impute_log = impute_documents(cleaned)
+    if impute_log:
+        logger.info("缺失值填充: %d 条记录", len(impute_log))
+    return cleaned, impute_log
+
+
+def _detect_content_anomalies_stage(
+    cleaned: list[Document],
+) -> tuple[list[Document], list[AnomalyRecord], int]:
+    """阶段4：异常检测·内容层（去重前，处理乱码型异常）"""
+    from tools.anomaly import detect_content_anomalies
+
+    cleaned, content_anomaly_records = detect_content_anomalies(cleaned)
+    # 过滤全乱码文档（不入库）
+    cleaned = [doc for doc in cleaned if doc.metadata.get("content_status") != "full_garbage"]
+    content_anomaly_count = sum(1 for r in content_anomaly_records if r.actions_taken)
+    if content_anomaly_count:
+        logger.info("异常检测[阶段1/内容层]: %d 篇文档存在异常", content_anomaly_count)
+    return cleaned, content_anomaly_records, content_anomaly_count
+
+
+def _run_dedup(
+    cleaned: list[Document],
+    *,
+    dedup: bool,
+    fuzzy_dedup: bool,
+    fuzzy_threshold: float,
+) -> tuple[list[Document], list[dict]]:
+    """阶段5：去重（内容异常处理后执行，基于清洗后的内容）"""
+    if not (dedup or fuzzy_dedup):
+        return cleaned, []
+
+    from tools.dedup import dedup_documents
+
+    cleaned, dup_records = dedup_documents(
+        cleaned,
+        exact=dedup,
+        fuzzy=fuzzy_dedup,
+        fuzzy_threshold=fuzzy_threshold,
+    )
+    if dup_records:
+        logger.info("去重结果: 移除 %d 条重复记录", len(dup_records))
+    return cleaned, dup_records
+
+
+def _detect_statistical_anomalies_stage(
+    cleaned: list[Document],
+    content_anomaly_records: list[AnomalyRecord],
+) -> tuple[list[Document], int]:
+    """阶段6：异常检测·统计层（去重后，统计指标更准确）"""
+    from tools.anomaly import detect_statistical_anomalies
+
+    cleaned, anomaly_records = detect_statistical_anomalies(
+        cleaned, prev_records=content_anomaly_records
+    )
+    stat_anomaly_count = sum(1 for r in anomaly_records if r.actions_taken)
+    if stat_anomaly_count:
+        logger.info("异常检测[阶段2/统计层]: %d 篇文档存在异常", stat_anomaly_count)
+    return cleaned, stat_anomaly_count
 
 
 def clean_documents(
@@ -544,106 +651,27 @@ def clean_documents(
     Returns:
         清洗后文档列表
     """
-    # ── 执行清洗 ──
     start = time.perf_counter()
     original_total_chars = sum(len(doc.page_content or "") for doc in documents)
-    cleaned: list[Document] = []
-    dropped_docs = 0
-    pdf_edge_map = _dedupe_pdf_edges([doc for doc in documents if _get_source_ext(doc) == ".pdf"])
-    for doc in documents:
-        original_len = len(doc.page_content)
-        ext = _get_source_ext(doc)
-        source_path = _get_source_path(doc)
-        if ext == ".md":
-            doc.page_content = _clean_markdown_text(doc.page_content)
-            if _is_exam_markdown_source(source_path):
-                doc.page_content, removed_noise = _remove_exam_web_noise(doc.page_content)
-                doc.page_content = _normalize_exam_question_headings(doc.page_content)
-                if removed_noise:
-                    doc.metadata["exam_web_noise_removed_chars"] = removed_noise
-        elif ext == ".pdf":
-            source_key = str(
-                doc.metadata.get("source_path") or doc.metadata.get("source_file") or id(doc)
-            )
-            doc.page_content = _clean_pdf_text(
-                doc.page_content, pdf_edge_map.get(source_key, set())
-            )
-        else:
-            doc.page_content = _clean_plain_text(doc.page_content)
+    cleaned, dropped_docs = _clean_by_extension(documents)
 
-        if len(doc.page_content.strip()) < 10:
-            dropped_docs += 1
-            continue
+    cleaned, norm_log = _run_normalization(cleaned)
 
-        if len(doc.page_content) < original_len * 0.5:
-            doc.metadata["cleaned_ratio"] = f"{1 - len(doc.page_content) / original_len:.0%}"
+    cleaned = _run_synonym_normalize(cleaned)
 
-        cleaned.append(doc)
+    cleaned, impute_log = _run_imputation(cleaned)
 
-    # ── 数据转换与标准化（清洗后、填充前执行） ──
-    from tools.normalizer import normalize_documents
-
-    cleaned, norm_log = normalize_documents(cleaned)
-    if norm_log:
-        logger.info("标准化: %d 篇文档已转换", len(norm_log))
-
-    # ── 同义词归一（标准化后、填充前执行） ──
-    # ★ 这是**跨侧契约的文档侧**：一旦改写原文，query 侧做字面匹配的消费者
-    #   （BM25 的 `$contains`、cross-encoder reranker）就必须同样归一，否则错配。
-    #   实测代价见 `settings.INGEST_SYNONYM_NORMALIZE` 的注释与
-    #   `docs/RETRIEVAL_PLAN.md` / `docs/RETRIEVAL_ROADMAP.md`。开关默认开（保持既有行为），
-    #   关掉即「文档保持原文」，用于与「query 侧归一」做对照。
-    from core.settings import settings
-
-    synonym_total = 0
-    if settings.INGEST_SYNONYM_NORMALIZE:
-        for doc in cleaned:
-            doc.page_content, cnt = normalize_synonyms(doc.page_content)
-            synonym_total += cnt
-    if synonym_total:
-        logger.info("同义词归一: %d 处替换", synonym_total)
-
-    # ── 缺失值填充（标准化后、去重前执行） ──
-    from tools.imputer import impute_documents
-
-    cleaned, impute_log = impute_documents(cleaned)
-    if impute_log:
-        logger.info("缺失值填充: %d 条记录", len(impute_log))
-
-    # ── 异常检测阶段1：内容层（去重前，处理乱码型异常） ──
-    from tools.anomaly import detect_content_anomalies
-
-    cleaned, content_anomaly_records = detect_content_anomalies(cleaned)
-    # 过滤全乱码文档（不入库）
-    cleaned = [d for d in cleaned if d.metadata.get("content_status") != "full_garbage"]
-    content_anomaly_count = sum(1 for r in content_anomaly_records if r.actions_taken)
-    if content_anomaly_count:
-        logger.info("异常检测[阶段1/内容层]: %d 篇文档存在异常", content_anomaly_count)
-
-    # ── 去重（内容异常处理后执行，基于清洗后的内容） ──
-    if dedup or fuzzy_dedup:
-        from tools.dedup import dedup_documents
-
-        cleaned, dup_records = dedup_documents(
-            cleaned,
-            exact=dedup,
-            fuzzy=fuzzy_dedup,
-            fuzzy_threshold=fuzzy_threshold,
-        )
-        if dup_records:
-            logger.info("去重结果: 移除 %d 条重复记录", len(dup_records))
-    else:
-        dup_records = []
-
-    # ── 异常检测阶段2：统计层（去重后，统计指标更准确） ──
-    from tools.anomaly import detect_statistical_anomalies
-
-    cleaned, anomaly_records = detect_statistical_anomalies(
-        cleaned, prev_records=content_anomaly_records
+    cleaned, content_anomaly_records, content_anomaly_count = _detect_content_anomalies_stage(
+        cleaned
     )
-    stat_anomaly_count = sum(1 for r in anomaly_records if r.actions_taken)
-    if stat_anomaly_count:
-        logger.info("异常检测[阶段2/统计层]: %d 篇文档存在异常", stat_anomaly_count)
+
+    cleaned, dup_records = _run_dedup(
+        cleaned, dedup=dedup, fuzzy_dedup=fuzzy_dedup, fuzzy_threshold=fuzzy_threshold
+    )
+
+    cleaned, stat_anomaly_count = _detect_statistical_anomalies_stage(
+        cleaned, content_anomaly_records
+    )
 
     cleaned_total_chars = sum(len(doc.page_content or "") for doc in cleaned)
     retention_ratio = cleaned_total_chars / original_total_chars if original_total_chars else 0.0
