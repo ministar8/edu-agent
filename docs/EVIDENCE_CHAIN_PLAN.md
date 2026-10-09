@@ -2116,7 +2116,12 @@ def check_8() -> None:
 `8l` `run_case` 必调 `reset_memory_read_statuses()`（**行为**取证，不是 grep 字符串）、
 `8m` `retrieval_gate` 的 reset 与收割配对 ⇒ 62；
 控制器复验补 `8n`（F6 的回归锁：缺键/空串/`failed` ⇒ `missing_premise`，只有不可机械判定的样本才是
-`not_applicable` —— 此前它只由外部探针证明，62 项里没有一条会因 F6 回归而红）⇒ **63**。
+`not_applicable` —— 此前它只由外部探针证明，62 项里没有一条会因 F6 回归而红）⇒ 63；
+checkpoint 8 用户再追加 **`8o`**（F6 的**结构**承重锁）：★ 行为用例在这里**先天分不出来** ——
+`_correct_use` 的「缺键 / 空串 / failed」三条分支输出同为 `missing_premise`，所以把 `has_path` 换成
+真值写法时 8n 照样绿 ⇒ 只能走 AST 断言「`_correct_use` **函数体内**确有 `has_path` 调用且实参点名
+`memory_read_status`」。牙齿三条实测：删缺键分支 ⇒ 只有 `8o` 红（`8n` 仍绿，正是这条锁存在的理由）；
+保留 import 并把调用挪到函数体外（decoy）⇒ `8o` 仍红 ⇒ **64**。
 Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword argument 'read_status'`
 （真实签名是 `(*, memory_cards, reply, gold)` —— 本 Task 给它加第四个 keyword-only 参数）。
 
@@ -2319,7 +2324,7 @@ def check_9() -> None:
           D([], active=True, raised=False, empty_result=False) == "degraded")
 ```
 
-`_EXPECTED_ITEMS = 68`（Task 8 结束时为 **63**，本步 +5：9a/9b/9c/9d/9e）。
+`_EXPECTED_ITEMS = 69`（Task 8 结束时为 **64**，本步 +5：9a/9b/9c/9d/9e）。
 Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
 ★ 原 `9f`（reset 调用点）跟着 B7 一起搬进 Task 8，现在是那里的 `8g` + `8k`；v1.3 后是**两处单元边界**。
 

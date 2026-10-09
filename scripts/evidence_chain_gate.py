@@ -8,11 +8,13 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 63  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
+_EXPECTED_ITEMS = 64  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 # ★ 修复轮 F7 再 +4：`8j`（map_route_failures 双向）/`8k`（单元内 reset 回归锁）/
 #   `8l`（run_case 必调 reset_memory_read_statuses，**行为**取证）/`8m`（gate 的 reset↔收割配对）
 #   ⇒ 62；控制器复验发现 F6 的映射只由外部探针证明、62 项里没有一条会因它回归而红
-#   ⇒ 补 `8n`（缺键/空串/failed ⇒ missing_premise 的双向回归锁）⇒ **63**。
+#   ⇒ 补 `8n`（缺键/空串/failed ⇒ missing_premise 的双向回归锁）⇒ 63；
+#   checkpoint 8 用户追加 `8o`（F6 的**结构**承重锁 —— 8n 的四条行为用例分不出 `has_path`
+#   与真值写法，因为那三条分支输出同为 `missing_premise` ⇒ 只能走 AST 定位函数体内调用）⇒ **64**。
 #   计数器只增不减：既有判据一条都不许删。
 _ITEMS: list[tuple[str, bool, str]] = []
 
@@ -885,6 +887,41 @@ def check_8() -> None:
         "8n 缺键/空串/failed ⇒ missing_premise，只有不可机械判定的样本才是 not_applicable（F6 回归锁）",
         not folded and not na_wrong,
         f"被折叠={folded}；不适用正例异常={na_wrong}",
+    )
+
+    # ── 8o（F6 的**结构**承重锁）：缺键区分必须由 `has_path` 承担，不能退化成真值判断 ──
+    #   ★ 为什么 8n 不够：`_correct_use` 里「缺键 / 空串 / failed」三条分支**输出相同**
+    #     （都 `missing_premise`）⇒ 任何行为用例都分不出 `has_path(...)` 与
+    #     `rec.get("memory_read_status")` 的真值写法。所以这条只能走 AST：
+    #     断言 `_correct_use` **函数体内**确有对 `has_path` 的调用、且实参点名 `memory_read_status`。
+    #   ★ 不是「源码里出现过 has_path 这个字符串」—— 那连 import 都能满足，去掉承重分支照样绿。
+    import ast as _ast8o
+    import pathlib as _pl8o
+
+    _mem_src = (
+        _pl8o.Path(__file__).resolve().parents[1] / "src/evaluation/task_eval/predicates/memory.py"
+    ).read_text(encoding="utf-8")
+    _fn = next(
+        (
+            n
+            for n in _ast8o.walk(_ast8o.parse(_mem_src))
+            if isinstance(n, _ast8o.FunctionDef) and n.name == "_correct_use"
+        ),
+        None,
+    )
+    _hp_calls = [
+        n
+        for n in _ast8o.walk(_fn)
+        if isinstance(n, _ast8o.Call)
+        and (getattr(n.func, "id", "") or getattr(n.func, "attr", "")) == "has_path"
+    ]
+    _names_key = any(
+        any("memory_read_status" in _ast8o.unparse(a) for a in n.args) for n in _hp_calls
+    )
+    check(
+        "8o _correct_use 体内确以 has_path 区分缺键（AST 承重锁，非字符串存在性）",
+        _fn is not None and len(_hp_calls) >= 1 and _names_key,
+        f"_correct_use 存在={_fn is not None}；体内 has_path 调用={len(_hp_calls)} 处；点名键={_names_key}",
     )
 
 
