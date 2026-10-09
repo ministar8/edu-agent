@@ -183,11 +183,78 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
 再 R 双标；`--check`/V0 新增红必须**可追溯到具体缺失字段与受影响判据**（§4.4.7 第 4 条），
 且缺字段红与实际错键**分开统计**。
 
-**P−1 盲标 gold**（`docs/EVIDENCE_CHAIN.md` §4.2 规程）：**约 2 人时，零 token**
-（原 4 人时含 G1b，G1b 已于 checkpoint 2 撤回 —— 两极 gold 是语料性质，改判据不换标签）。
+---
 
-- 填 `evals/datasets/demo/generate_cases.jsonl` 对应 15 条的 `gold_answer` + `expected_difficulty`
-  （**唯一剩下的补标工作**）。
+### P−1-5 实现批次（代码 + 门禁，★ 项目所有者已批准开工顺序；先证伪能力，后人工标注）
+
+★ 三个层级**分别报告、不得互相顶替**（项目所有者原文）：**代码提交** ≠ **gate 变绿** ≠ **证据链成立**。
+在四种 part 变异操作都有实际行为测试、且 mutation 能**击穿** `gen_item_part_composite` 之前，
+**不得宣称证伪闭环完成**。
+
+#### 批 1：schema 与契约（先落地，不含 part 复合）
+
+- `src/evaluation/task_eval/cases.py`
+  - 新枚举真源（与 `MEMORY_TYPES: frozenset`（`cases.py:85`）同一位置、同一风格）：
+    `ANSWER_STATUSES: frozenset[str] = frozenset({"present","missing_key","incomplete_source","illegible","undecidable"})`
+  - `Gold` 新字段：`gold_answer_status: dict[str, str] = field(default_factory=dict)`
+    （★ 解析复用 `_as_str_dict`（`cases.py:366`），畸形值丢弃 = 「没填」，由 sanity 报错，不在解析层抛）；
+    `verdict_requires_figure: bool | None = None`（★ 三态：`None`=未声明；**新增** `_as_tri_bool`，
+    **不得**用 `bool(x)` —— 未声明当 `false` 正是 §4.4.3 硬规则要防的漏填绕过）。
+  - `GOLD_FIELDS`（`cases.py:72-77`）各 task 白名单**追加** `gold_answer_status` 与 `verdict_requires_figure`。
+- `gold_sanity.py`：仿 `_check_gold_source_ref` 增一条 ERROR 检查（同 `SanityIssue(case_id, task, ERROR, field, msg)` 形状）：
+  ① `gold_answer_status` 的键集 **必须等于** `gold_source_ref` 的键集（两个方向都查）；
+  ② 值 ∈ `ANSWER_STATUSES`，越界即 ERROR；③ gold 字段有值但无状态 ⇒ ERROR（**不得默认 `present`**）。
+  ★ 不回填、不改写任何 dataset/归档：dataset 里 `gold_answer_status` **本批保持不填**（填它 = 盲标开工）。
+- `schema_gate.py`：V0 失败原因结构化为可归因五元组（§4.4.7 第 4 条 + 项目所有者第五条要求）：
+  `(缺失契约字段, case_id, 受影响 gold 字段, 受影响判据, 旧归档缺字段 / 新记录违反 schema, 可否靠补真实证据解决)`；
+  `--check` 第 3 段按「字段 × 判据」聚合打印，**缺字段红与「答案键已知错误」分开统计**（后者今天为 0）。
+- 提交：`feat(p1): gold_answer_status + verdict_requires_figure 三态 + V0 逐条可归因`
+- gate 判据（批 1）：`9q` 键集相等与值域（合成夹具三格：一致 / 多 source_ref 键 / 越界值）、
+  `9r` `_as_tri_bool` 三态（`None`/`true`/`false` 各一，且 `false` **不**等于缺失）。
+
+#### 批 2：part 复合 + **真正的 part 级证伪能力**（★ 本批的验收门槛）
+
+- `predicates/common.py`：新纯函数 `part_composite(parts: list[dict]) -> Verdict`，
+  实现 §4.4.4 优先级（任一 `fail` ⇒ `fail`；否则任一 `missing_premise` ⇒ `missing_premise`；
+  否则全 `pass` ⇒ `pass`），并**先**按 §4.4.3 对象分流 part 的 `not_applicable`/`undecidable`；
+  结构校验前置：父题声明有 part 而某 part 缺失/未标注/无法关联 ⇒ `missing_premise` +
+  `reason_code ∈ {part_missing, part_unlabelled, part_unlinkable}`（**不得**当「该 part 不存在」通过）。
+- `predicates/generate.py`：注册 `gen_item_part_composite`（task=`generate`、**`optional=True`** ——
+  项目所有者裁定 1 选 A：复用机械替身已证过的隔离机制，**不新增** `generate_r` task、**不改** §6）；
+  `tier=2`、`tier_reason=("§1.3-tier2",)`、`contract_inputs=("r_parts[].verdict","r_parts[].status","r_parts[].part_id","r_parent_id")`。
+  ★ `optional=True` 只隔离**评测参与方式**：判据仍进 registry、仍有 contract_inputs、仍要证伪、仍有审计输出。
+- `falsify.py`：★ 现在 `declared_mutations()` 对**非 `reply#` 输入一律只给 `drop_path`**（`falsify.py:72-77`），
+  `apply()` 也只会删 reply 片段与按路径 drop ⇒ 必须新增：
+  ① 按输入种类分派的操作表（part 输入 → `drop_part` / `flip_part_verdict` /
+  `mark_part_undecidable` / `break_parent_link`）；② `apply()` 实现这四个注入（改 `broken["r_parts"]`/`r_parent_id`）。
+  ★ 只做 ① 不做 ② 等于没证伪能力 —— 判据会被 `coverage()` 判「已覆盖」而实际从未被击穿。
+- gate 判据（批 2）：`9s` part 复合四格行为锁（全 pass / 含 fail / 含缺 part / 含未关联）、
+  `9t` **四种 mutation 各自实际注入生效**（断言 `apply()` 前后 record 差异落在预期原子上）、
+  `9u` `gen_item_part_composite` 被 mutation **击穿**（`all_flipped`）且 R 缺席**不改变** Q 侧
+  `missing_premise`/`rate=None`（红线 2）、`9v` 该判据 `optional=True` 且不进 `gen_case_pass` 的 required 复合。
+- 提交：`feat(p1): part 复合判据入 registry + falsify 支持四种 part 变异（证伪闭环达成前不宣称完成）`
+
+#### 批 3：R 证据行的独立可读与写入器（不启动盲标）
+
+- `evals/annotations/r_row/` 目录 + 校验器 `scripts/validate_r_annotations.py`（只读校验：
+  每行含 `annotator_id`/`independent_answer`/`saw_model_key:false`/`part_verdict`/`reason_code`/
+  `difficulty_band`/`difficulty_rubric_ref`/`judged_at`，`provenance` 走 `build_provenance()` 同源，
+  `annotated_record_sha256` 必须能在 `evals/results/**` 找到对应归档，`item_content_hash` 与题面一致）。
+- `build_claim_ledger.py`：新增 **R 独立证据区**（与 §6 门槛分区并列、不复用其状态词），
+  无标注文件时打印「R 未标注 ⇒ 未测量」，**不**影响 Q 侧任何行的状态词。
+- 提交：`feat(p1): R 证据行的校验器与 ledger 独立区（Q/R 互不顶替）`
+
+#### 批 4（人工，代码绿了之后才做）
+59 题对照**原始扫描页**独立核验（按 §4.4.5 三分法记录设计目标/审计结果/可支持结论；
+错键即执行 §4.4.5 五步）→ R 双人独立作答 + 裁决。★ 盲标与重录在批 1–3 全绿并复审通过前**不启动**。
+**计数器**：批 1 +2、批 2 +4、批 3 视实作 ⇒ 从当前 **79** 起按实际执行顺序报最终值，**不预告**。
+
+**P−1 盲标 gold（★ v1.5 起目标已重定，下面原文仅对 Grade/出处核对有效）**
+（原 4 人时含 G1b，G1b 已于 checkpoint 2 撤回 —— 两极 gold 是语料性质，改判据不换标签）。
+- ★ **v1.5 更正**：~~填 `evals/datasets/demo/generate_cases.jsonl` 对应 15 条的 `gold_answer` +
+  `expected_difficulty`~~ ⇒ 那两项的 gold 指向**尚未生成的题**，事前不可标
+  （普查实测：15/15 未指定题型、15/15 未指定难度）。按裁定 Q 它们继续 `missing_premise`；
+  本节的实际工作改为上方 **P−1-5 的批 1–4**。
 - ★ **G1b 已撤回**（checkpoint 2 人裁）：原要求「给 grade 15 条补**非两极** `human_score`」。
   仓内证据否掉这个前提 —— `gold_sanity` 的集合级 PENDING 自己声明：L3 语料 674/674 全是
   2 分选择题、学生作答仅 1 个字母 ⇒ **无部分分可标**，并指出正确处置是改用 `verdict_agreement`
