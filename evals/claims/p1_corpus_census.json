@@ -1,0 +1,38 @@
+{
+  "corpus": {
+    "files": 17,
+    "items": 674,
+    "question_type": {
+      "choice": 674
+    },
+    "answer_key_shape": {
+      "单字母": 514,
+      "缺键(null)": 160
+    },
+    "completeness": {
+      "complete": 480,
+      "partial": 194
+    },
+    "gap_fields": {
+      "[]": 480,
+      "[answer, figure]": 8,
+      "[answer]": 152,
+      "[figure]": 34
+    },
+    "explanation_status": {
+      "scan": 674
+    },
+    "items_with_subquestions": 2,
+    "distinct_kp_nodes": 99
+  },
+  "generate_cases": {
+    "cases": 15,
+    "query_constraints": {
+      "未指定题型": 15,
+      "未指定难度": 15
+    },
+    "gold_filled": {
+      "expected_kp": 15
+    }
+  }
+}
