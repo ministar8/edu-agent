@@ -94,33 +94,180 @@ def item_reasons_not_applicable_count(records: list[dict[str, Any]]) -> int:
     return sum(1 for r in records if not has_predicates(str(r.get("task") or "")))
 
 
-def check_archive_records(records: list[dict[str, Any]]) -> list[str]:
-    """判据声明的 `contract_inputs` 必须在 record 里**真实存在**。
+@dataclass(frozen=True)
+class ContractGap:
+    """V0 缺键的**可归因五元组**（§4.4.7 第 4 条 + P−1 批 1 第 3 条）。
+
+    一条红必须同时回答六个问题，不得只给一个总红灯数字：
+      ① `missing_field` 缺失契约字段（registry 里的地址原样）
+      ② `case_id` 哪条记录
+      ③ `gold_field` 受影响 gold 字段（非 gold 地址 ⇒ 空串，如 item_reasons）
+         ★ `gold.*_status` 类地址去掉 `_status` 尾缀 = 「该状态描述的是哪个 gold 字段」。
+      ④ `predicate` 受影响判据（item_reasons 是全判据共享的容器 ⇒ 记 `*`）
+      ⑤ `archive_state` `old_archive_missing_field`（旧归档缺字段）/
+         `new_record_schema_violation`（新记录违反 schema）。分界标志是 gold 快照里有没有
+         `gold_source_ref` 键（Task 2 起 runner 的 asdict 快照必带）：有 ⇒ 记录出自
+         schema 时代、缺声明输入 = 违反 schema；无 ⇒ 老归档天然没有新字段，需 reanalyse。
+      ⑥ `resolvable_by_evidence` 可否靠**补真实证据**解决（reanalyse / 重录 / P−1 盲标）。
+         ★ 本批全部为 True 且各有**合法补法**；凡「补它需要伪造」的字段将来标 False，
+           绝不为了转绿把 True 改成假 False，也不把补不上的红混进「已确认错误」。
+    """
+
+    missing_field: str
+    case_id: str
+    gold_field: str
+    predicate: str
+    archive_state: str
+    resolvable_by_evidence: bool
+
+
+# 补证据的合法通道（打印用；不在此承诺任何「已发生」）。
+_GAP_RESOLUTION: dict[str, str] = {
+    "gold.gold_answer_status": "P−1 盲标开工后填真实状态（本批禁止回填 dataset/归档）",
+    "gold.gold_source_ref.gold_answer": "盲标登记出处后 reanalyse/重录",
+    "gold.gold_answer": "盲标登记 gold 值后重录（来源缺键的正解是记 missing_key 状态，不是造值）",
+    "item_reasons": "reanalyse 重算即补（四态原因容器）",
+    "_default": "reanalyse / 重录可合法补齐该键",
+}
+
+
+def _gap_gold_field(address: str) -> str:
+    """从契约地址推导「受影响 gold 字段」。"""
+    if not address.startswith("gold."):
+        return ""
+    leaf = address.split(".")[-1]
+    if leaf.endswith("_status"):
+        leaf = leaf[: -len("_status")]  # gold_answer_status ⇒ gold_answer（状态描述的对象）
+    return leaf
+
+
+def _archive_state(rec: dict[str, Any]) -> str:
+    """记录属于「旧归档缺字段」还是「新记录违反 schema」（见 ContractGap ⑤）。"""
+    gold = rec.get("gold")
+    if isinstance(gold, dict) and "gold_source_ref" in gold:
+        return "new_record_schema_violation"
+    return "old_archive_missing_field"
+
+
+def contract_gaps(records: list[dict[str, Any]]) -> list[ContractGap]:
+    """V0 ① 的**真源**：判据声明的 `contract_inputs` 在 record 里缺席 ⇒ 逐条五元组。
 
     两类地址分别处理（语法见 Task 3 的 `common.has_path`）：
       - `reply#片段` ⇒ 不查键（它不是键），由 Task 5 的 R1-A 覆盖检查负责；
       - 点分路径（含 `top_items[].x`）⇒ 用 `has_path` 查，**不是** `name not in rec`。
     ★ 老归档没有新字段 ⇒ 报「缺键/需 reanalyse」，**不得**自动回填（`runner.py` 里多处注释
       都是这条规矩：老归档按空处理，别拿当前配置猜当时）。
-
-    `item_reasons`（评审 I-4 = 偏差 D5）只对 `registry.for_task(task)` **非空**的任务查：
-    该键的唯一生产者是 `cli._backfill`（`cli.py:331-335`），它只在
-    `for pred in registry.for_task(task)` 循环里写 ⇒ qa/grade（无判据）**永远**写不出这个键。
-    把它们算成红灯 = 一个先天无法转绿的红灯（正是逼人关掉门禁的那种），且无论怎么 reanalyse
-    都不会少。⇒ 跳过的是「设计上没有」，**真缺口一条不丢**：有判据的任务照旧逐条查。
+    `item_reasons` 的作用域口径与原 `check_archive_records` 完全一致（评审 I-4 = 偏差 D5，
+    只查 `has_predicates(task)` 非空的任务；跳过条数另由 `missing_key_report` 打印）。
     """
-    errs: list[str] = []
+    gaps: list[ContractGap] = []
     for rec in records:
         task = str(rec.get("task") or "")
-        cid = rec.get("case_id")
+        cid = str(rec.get("case_id"))
+        state = _archive_state(rec)
         for pred in registry.for_task(task):
             for address in pred.contract_inputs:
                 if is_reply_part(address):
                     continue
                 if not has_path(rec, address):
-                    errs.append(f"{cid}: 缺 {address}（判据 {pred.name} 依赖它）")
+                    gaps.append(
+                        ContractGap(
+                            missing_field=address,
+                            case_id=cid,
+                            gold_field=_gap_gold_field(address),
+                            predicate=pred.name,
+                            archive_state=state,
+                            resolvable_by_evidence=True,
+                        )
+                    )
         if has_predicates(task) and not has_path(rec, "item_reasons"):
-            errs.append(f"{cid}: 缺键 item_reasons（四态无法还原）")
+            gaps.append(
+                ContractGap(
+                    missing_field="item_reasons",
+                    case_id=cid,
+                    gold_field="",
+                    predicate="*",
+                    archive_state=state,
+                    resolvable_by_evidence=True,
+                )
+            )
+    return gaps
+
+
+@dataclass(frozen=True)
+class GapGroup:
+    """「字段 × 判据」聚合行（--check 第 3 段的打印单元，批 1 第 3 条）。"""
+
+    missing_field: str
+    predicate: str
+    gold_field: str
+    resolvable_by_evidence: bool
+    n_old_archive_missing: int
+    n_new_record_violation: int
+    examples: list[str]
+
+
+def gap_groups(gaps: list[ContractGap]) -> list[GapGroup]:
+    """按 (缺失字段, 判据) 聚合；**打印仍按种类聚合，逐条明细在 `contract_gaps`（真源）**。"""
+    by_key: dict[tuple[str, str], list[ContractGap]] = defaultdict(list)
+    for g in gaps:
+        by_key[(g.missing_field, g.predicate)].append(g)
+    out: list[GapGroup] = []
+    for (field, pred), rows in sorted(by_key.items()):
+        out.append(
+            GapGroup(
+                missing_field=field,
+                predicate=pred,
+                gold_field=rows[0].gold_field,
+                resolvable_by_evidence=all(r.resolvable_by_evidence for r in rows),
+                n_old_archive_missing=sum(
+                    1 for r in rows if r.archive_state == "old_archive_missing_field"
+                ),
+                n_new_record_violation=sum(
+                    1 for r in rows if r.archive_state == "new_record_schema_violation"
+                ),
+                examples=sorted({r.case_id for r in rows})[:5],
+            )
+        )
+    return out
+
+
+# 已确认错键的原因码前缀：唯一合法来源是 P−1-4 ③/§4.4.5 的人工抽查登记（批 2/3 落盘通道），
+# 形状 `answer_key_error:<出处/证据>`。缺字段、越界状态、missing_key/illegible 都**不是**它。
+_CONFIRMED_KEY_ERROR_PREFIX = "answer_key_error"
+
+
+def confirmed_answer_key_error_count(records: list[dict[str, Any]]) -> int:
+    """「答案键已知错误」的**分开统计**（§4.4.7 第 2 条：未知既不说成错误，也不说成可靠）。
+
+    ★ 本函数只数归档里带 `answer_key_error:*` 原因码的条目 —— 今天没有任何一条，
+      所以真实值是 0。老归档缺 `gold_answer_status` 属于 `contract_gaps()`（缺字段），
+      **绝不允许**折进这里（gate 判据 `9q` 用合成夹具钉死这条分界：制造缺字段红时，
+      本计数必须仍为 0）。
+    """
+    n = 0
+    for rec in records:
+        reasons = rec.get("item_reasons")
+        if isinstance(reasons, dict):
+            n += sum(
+                1
+                for v in reasons.values()
+                if isinstance(v, str) and v.startswith(_CONFIRMED_KEY_ERROR_PREFIX)
+            )
+    return n
+
+
+def check_archive_records(records: list[dict[str, Any]]) -> list[str]:
+    """V0 ① 的字符串视图 —— **由 `contract_gaps()` 生成**（单一真源，两视图不漂移）。
+
+    格式与 Task 7 逐字相同（`missing_key_report` / gate 7a/7h 都按它解析）。
+    """
+    errs: list[str] = []
+    for g in contract_gaps(records):
+        if g.missing_field == "item_reasons":
+            errs.append(f"{g.case_id}: 缺键 item_reasons（四态无法还原）")
+        else:
+            errs.append(f"{g.case_id}: 缺 {g.missing_field}（判据 {g.predicate} 依赖它）")
     return errs
 
 
@@ -220,11 +367,16 @@ def assert_no_default_masking(pkg: str) -> list[str]:
 
 
 __all__ = [
+    "ContractGap",
+    "GapGroup",
     "MissingKeyReport",
     "assert_no_default_masking",
     "check_archive",
     "check_archive_records",
+    "confirmed_answer_key_error_count",
+    "contract_gaps",
     "gate_rejects",
+    "gap_groups",
     "has_predicates",
     "item_reasons_not_applicable_count",
     "missing_key_report",

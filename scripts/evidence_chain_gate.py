@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 79  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
+_EXPECTED_ITEMS = 81  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 # ★ 修复轮 F7 再 +4：`8j`（map_route_failures 双向）/`8k`（单元内 reset 回归锁）/
 #   `8l`（run_case 必调 reset_memory_read_statuses，**行为**取证）/`8m`（gate 的 reset↔收割配对）
 #   ⇒ 62；控制器复验发现 F6 的映射只由外部探针证明、62 项里没有一条会因它回归而红
@@ -25,7 +25,11 @@ _EXPECTED_ITEMS = 79  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T
 #   **行为**锁，钉死「缺键不得 pass」）/`9l`（`_no_reply` 体内 `has_path` 的 AST 承重锁，8o 同款）/
 #   `9m`（空包送达**行为**锁：真实 aretrieve_documents 的 finally 出参 + 真实 retriever 桥接五格）/
 #   `9n`（基线 payload 导出 `_meta.rerank_status_counts` **行为**锁）/`9o`（probe 读侧五格等值
-#   **行为**锁）/`9p`（record 侧 probe⇒record⇒to_dict 工件送达**行为**锁）⇒ **79**。
+#   **行为**锁）/`9p`（record 侧 probe⇒record⇒to_dict 工件送达**行为**锁）⇒ **79**；
+#   ★ P−1 批 1（schema 与契约）+2：`9q`（`gold_answer_status`↔`gold_source_ref` 键集**双向**
+#   相等 + 值域 + 「缺状态不得折成 present」的判据行为 + V0 五元组归因 + 缺字段/错键分开
+#   统计）/`9r`（`_as_tri_bool` 三态 None/true/false 各一、false≠缺失，且 `incomplete_source`
+#   ×`verdict_requires_figure` 三格按 §4.4.3 分流）⇒ **81**。
 #   计数器只增不减：既有判据一条都不许删；`8g`/`8k` 的期望文件集随 reprobe 第三单元**按事实生长**
 #   （不是放松 —— 单元内部 reset 的禁句 `8k` routes 零调用断言原样保留）。
 _ITEMS: list[tuple[str, bool, str]] = []
@@ -194,6 +198,9 @@ def _base_record(**overrides: Any) -> dict:
         "gold": {
             "gold_answer": "B",
             "gold_source_ref": {"gold_answer": "knowledge/co/ch3.md#组相联"},
+            # ★ 合成夹具（P−1 批 1）：present 状态只存在于本判据代码，dataset/归档一律不填。
+            #   没有它 ⇒ gen_correctness 按 §4.4.7-1 走 missing_premise、falsify 基线断链。
+            "gold_answer_status": {"gold_answer": "present"},
             "expected_kp": ["co.overview"],
         },
         "item_reasons": {},
@@ -1508,6 +1515,196 @@ def check_9delivery() -> None:
     )
 
 
+def check_9goldstatus() -> None:
+    """P−1 批 1：`gold_answer_status`（键集双向相等 + 值域 + 契约行为 + V0 归因）与
+    `_as_tri_bool` 三态（`verdict_requires_figure` 的 None/true/false 且 false≠缺失）。
+
+    ★ 全部夹具是**代码内合成数据** —— dataset 与归档里的 gold_answer_status 本批一律不填
+      （填它 = 正式盲标开工，红线）。
+    """
+    from evaluation.task_eval import gold_status_sanity as gss
+    from evaluation.task_eval import schema_gate as sg
+    from evaluation.task_eval.cases import ANSWER_STATUSES, Gold, TaskCase, _as_tri_bool
+    from evaluation.task_eval.gold_sanity import SanityIssue
+    from evaluation.task_eval.predicates import generate as gen
+
+    # ── 9q：键集相等（双向）+ 值域 + 「缺状态≠present」+ 分开统计 ─────────────
+    def _sanity_errors(gold: Gold) -> list[SanityIssue]:
+        out: list[SanityIssue] = []
+        gss.check_gold_answer_status(
+            TaskCase(case_id="9q", task="generate", query="q", gold=gold), out
+        )
+        return out
+
+    # 格 1（一致）：ref 与 status 同键、值合法 ⇒ 零错误
+    ok_gold = Gold(
+        gold_answer="B",
+        gold_source_ref={"gold_answer": "knowledge/exams/2012/items.md#x"},
+        gold_answer_status={"gold_answer": "present"},
+    )
+    e1 = _sanity_errors(ok_gold)
+    # 格 2（status 少一侧键）：有出处有值、无状态 ⇒ ERROR（且不得默认 present）
+    e2 = _sanity_errors(
+        Gold(
+            gold_answer="B",
+            gold_source_ref={"gold_answer": "knowledge/exams/2012/items.md#x"},
+            gold_answer_status={},
+        )
+    )
+    # 格 3（status 多一侧键，出处侧缺）——只查单向就漏这一格（牙齿③）
+    e3 = _sanity_errors(
+        Gold(gold_answer_status={"expected_difficulty": "present"}, gold_source_ref={})
+    )
+    # 格 4（越界值）：非五值枚举 ⇒ ERROR
+    e4 = _sanity_errors(
+        Gold(
+            gold_answer="B",
+            gold_source_ref={"gold_answer": "r"},
+            gold_answer_status={"gold_answer": "verified_ok"},
+        )
+    )
+    # 格 5（判据行为）：gold 值与出处都在、**缺状态** ⇒ gen_correctness 必须 missing_premise。
+    #   ★ 牙齿①的位置：谁把缺失当 present（`st = status.get(k) or "present"`），这格变 pass 变红。
+    rec_no_status = {
+        "task": "generate",
+        "case_id": "9q-mp",
+        "reply": _gen_reply(),
+        "gold": {
+            "gold_answer": "B",
+            "gold_source_ref": {"gold_answer": "knowledge/co/ch3.md#组相联"},
+        },
+    }
+    # 格 6（读自己那一个 gold 字段）：status 里只有 expected_difficulty=present，
+    #   gold_answer 无状态 ⇒ correctness 仍 missing_premise（别的键 present **不**外借）。
+    rec_foreign_status = {
+        "task": "generate",
+        "case_id": "9q-foreign",
+        "reply": _gen_reply(),
+        "gold": {
+            "gold_answer": "B",
+            "gold_source_ref": {"gold_answer": "knowledge/co/ch3.md#组相联"},
+            "gold_answer_status": {"expected_difficulty": "present"},
+        },
+    }
+    # 格 7（合法 present ⇒ 正常测仍 pass，收紧不误伤）
+    v_ok = gen._correctness(_base_record())
+    # 格 8（undecidable 分流）：来源题不可唯一判定 ⇒ not_applicable，不是 missing/fail
+    v_und = gen._correctness(
+        {
+            **_base_record(),
+            "gold": {
+                **_base_record()["gold"],
+                "gold_answer_status": {"gold_answer": "undecidable"},
+            },
+        }
+    )
+    # 格 9（V0 五元组归因 + 缺字段/错键分开统计）
+    gap_recs = [
+        # 老归档形状：gold 快照里连 gold_source_ref 都没有
+        {
+            "task": "generate",
+            "case_id": "9q-old",
+            "reply": _gen_reply(),
+            "gold": {"gold_answer": "B"},
+            "item_reasons": {},
+        },
+        # 新记录形状：Task 2+ 快照（带 gold_source_ref）却缺 gold_answer_status ⇒ 违反 schema
+        {
+            "task": "generate",
+            "case_id": "9q-new",
+            "reply": _gen_reply(),
+            "gold": {
+                "gold_answer": "B",
+                "gold_source_ref": {"gold_answer": "knowledge/co/ch3.md#组相联"},
+            },
+            "item_reasons": {},
+        },
+    ]
+    g_all = sg.contract_gaps(gap_recs)
+    g_status = [g for g in g_all if g.missing_field == "gold.gold_answer_status"]
+    grp = {
+        (g.missing_field, g.predicate, g.gold_field, g.archive_state, g.resolvable_by_evidence)
+        for g in g_status
+    }
+    nke = sg.confirmed_answer_key_error_count(gap_recs)
+    check(
+        "9q gold_answer_status：键集双向相等+值域五枚举 / 缺状态不得折成 present（判据行为）/ V0 五元组可归因且缺字段与错键分开统计",
+        not e1
+        and ANSWER_STATUSES
+        == frozenset({"present", "missing_key", "incomplete_source", "illegible", "undecidable"})
+        and bool(e2)
+        and all(i.level == "ERROR" for i in e2 + e3 + e4)
+        and bool(e3)
+        and bool(e4)
+        and gen._correctness(rec_no_status) == "missing_premise"
+        and gen._answerability(rec_no_status) == "missing_premise"
+        and gen._correctness(rec_foreign_status) == "missing_premise"
+        and v_ok == "pass"
+        and v_und == "not_applicable"
+        and len(g_status) == 4  # 2 条夹具记录 × 2 个声明它的判据
+        and {t[3] for t in grp} == {"old_archive_missing_field", "new_record_schema_violation"}
+        and all(t[2] == "gold_answer" and t[4] is True for t in grp)
+        and {t[1] for t in grp} == {"gen_answerability", "gen_correctness"}
+        and len(g_all) > 0
+        and nke == 0,
+        f"e1={len(e1)} e2={[i.message[:18] for i in e2]} e3={len(e3)} e4={len(e4)} "
+        f"mp={gen._correctness(rec_no_status)} 外键借用={gen._correctness(rec_foreign_status)} "
+        f"present={v_ok} undecidable={v_und} 五元组={sorted(grp)} 错键计数={nke}",
+    )
+
+    # ── 9r：_as_tri_bool 三态 + §4.4.3 incomplete_source×requires_figure 三格 ──
+    tb_none = _as_tri_bool(None)  # 缺失 ⇒ 未声明
+    tb_true = _as_tri_bool(True)
+    tb_false = _as_tri_bool(False)
+    tb_junk = _as_tri_bool("true")  # 畸形 = 没填（同 _as_str_dict 口径）
+    parsed_none = Gold.from_dict({}).verdict_requires_figure
+    parsed_false = Gold.from_dict({"verdict_requires_figure": False}).verdict_requires_figure
+    v_none = gen._correctness(
+        {
+            **_base_record(),
+            "gold": {
+                **_base_record()["gold"],
+                "gold_answer_status": {"gold_answer": "incomplete_source"},
+            },
+        }
+    )  # 未声明 ⇒ missing_premise（硬规则：漏填不得绕过缺图保护）
+    v_true = gen._correctness(
+        {
+            **_base_record(),
+            "gold": {
+                **_base_record()["gold"],
+                "gold_answer_status": {"gold_answer": "incomplete_source"},
+                "verdict_requires_figure": True,
+            },
+        }
+    )  # 声明需要图 ⇒ missing_premise
+    v_false = gen._correctness(
+        {
+            **_base_record(),
+            "gold": {
+                **_base_record()["gold"],
+                "gold_answer_status": {"gold_answer": "incomplete_source"},
+                "verdict_requires_figure": False,
+            },
+        }
+    )  # 显式声明不需要 ⇒ 正常测（+披露走 item_reasons 通道）
+    check(
+        "9r _as_tri_bool 三态（None/true/false 各一，★ false≠缺失；bool(x) 实现会吞 false 格）+ incomplete_source×requires_figure 按 §4.4.3 三格分流",
+        tb_none is None
+        and tb_true is True
+        and tb_false is False
+        and tb_false is not tb_none
+        and tb_junk is None
+        and parsed_none is None
+        and parsed_false is False
+        and v_none == "missing_premise"
+        and v_true == "missing_premise"
+        and v_false == "pass",
+        f"tri=({tb_none!r},{tb_true!r},{tb_false!r},畸形{tb_junk!r}) "
+        f"from_dict=({parsed_none!r},{parsed_false!r}) 三格=未声明:{v_none} true:{v_true} false:{v_false}",
+    )
+
+
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
     """把取证结果落盘成 ledger 的输入（Task 6 的 `falsify_passed` 读它，不靠人回忆）。"""
     import json
@@ -1546,6 +1743,7 @@ def main() -> int:
     check_9reprobe()
     check_9verify()
     check_9delivery()
+    check_9goldstatus()
     if "--emit" in sys.argv:
         emit_falsify_report()
     total = len(_ITEMS)

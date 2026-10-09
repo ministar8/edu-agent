@@ -980,20 +980,45 @@ def run_check(args: argparse.Namespace, text: str, records: list[dict[str, Any]]
 
     print("── 第 3 段【V0 拦截】schema 完整性 + 未测量判据禁进门槛（§8①/§8②）──")
     stats = schema_gate.missing_key_report(records)
-    kinds = stats.kinds
-    if kinds:
+    gaps = schema_gate.contract_gaps(records)
+    groups = schema_gate.gap_groups(gaps)
+    n_key_errors = schema_gate.confirmed_answer_key_error_count(records)
+    if groups:
         seg3_red = True
         print(
-            f"FAIL  V0 ① schema 缺键：{len(kinds)} 类 / {stats.n_pairs} 处"
+            f"FAIL  V0 ① schema 缺键：{len(groups)} 组（字段×判据） / {stats.n_pairs} 处"
             f"（涉及 {stats.n_records} 条记录"
             f"，全归档 {len(records)} 条中；处 = 记录×缺键对数 ⇒ 一条记录缺两个键算两处）"
-            "—— 老归档没有新字段 ⇒ 需 reanalyse，**禁止**自动回填"
+            "—— 逐条可归因（§4.4.7 第 4 条：缺什么字段、影响哪个 gold 字段与判据、"
+            "旧归档缺字段还是新记录违反 schema、能否靠补真实证据解决），**禁止**自动回填"
         )
-        for kind, cnt, examples in kinds:
-            print(f"      ×{cnt}  {kind}")
-            print(f"          示例 case：{', '.join(str(e) for e in examples)}")
+        for g in groups:
+            print(
+                f"      ×{g.n_old_archive_missing + g.n_new_record_violation}  "
+                f"缺 {g.missing_field} × 判据 {g.predicate}"
+                f" × 受影响 gold 字段 {g.gold_field or '—（非 gold 地址）'}"
+                f" × 旧归档缺字段 {g.n_old_archive_missing} / 新记录违反 schema"
+                f" {g.n_new_record_violation}"
+                f" × 可补真实证据={'是' if g.resolvable_by_evidence else '否'}"
+                f"（{schema_gate._GAP_RESOLUTION.get(g.missing_field, schema_gate._GAP_RESOLUTION['_default'])}）"
+            )
+            print(f"          示例 case：{', '.join(str(e) for e in g.examples)}")
     else:
         print("PASS  V0 ① 判据声明的 contract_inputs 在归档里键真实存在")
+    # ★ §4.4.7 第 2 条：缺字段红与「答案键已知错误」**分开统计** —— 未知既不说成错误，
+    #   也不说成可靠。上面每一行都是「键缺席」；这里的 0 才是「人工确认过的错键」。
+    #   ★ 老归档缺 gold_answer_status **不得**被读成「历史答案键已确认错误」（9q 钉死分界）。
+    if n_key_errors:
+        seg3_red = True
+        print(
+            f"FAIL  V0 ①b 答案键已知错误（与缺字段分开统计）：{n_key_errors} 处 —— 见 §4.4.5 扩查规程"
+        )
+    else:
+        print(
+            "      答案键已知错误（与缺字段**分开统计**，§4.4.7-2）：0 处"
+            " —— 上面的缺字段红只说明『状态没登记』，不说明『键已确认错误』；"
+            "已确认错键的唯一合法来源是带 answer_key_error:* 原因码的人工登记（今天没有）"
+        )
     # ★ 评审 I-4（= 偏差 D5）：跳过多少条、为什么跳过，**必须明说**——
     #   不打印这句就是真放宽（读者无法区分「跳过不适用行」与「漏查了 30 条」）。
     print(

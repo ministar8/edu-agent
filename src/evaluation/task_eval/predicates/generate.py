@@ -22,6 +22,48 @@ from evaluation.task_eval.predicates.registry import Predicate, register
 _GEN_KEYS = ("stem", "options_or_task", "answer", "explanation")
 
 
+def _gold_field_status(rec: dict, field: str) -> str | None:
+    """读 `gold_answer_status` 里**指定那一个** gold 字段的状态（§4.4.3/§4.4.7）。
+
+    ★ 状态是**按 gold 字段分键**存的 —— 判据只认自己那一个键的状态；
+      `gold_answer=present` **不蕴含** `expected_difficulty` 也可靠（不同键不同事实，
+      合并读 = 把一份证据冒充成两份）。缺键 / 非 str / 空串 ⇒ None（「没填」）。
+      ★ 不得在此把 None 折成 "present"（§4.4.7 第 1 条，gate 判据 `9q` 钉死）。
+    """
+    raw = (rec.get("gold") or {}).get("gold_answer_status")
+    if not isinstance(raw, dict):
+        return None
+    value = raw.get(field)
+    return value if isinstance(value, str) and value else None
+
+
+def _requires_figure(rec: dict) -> bool | None:
+    """`verdict_requires_figure` 三态读取：非 bool（含缺失/畸形）一律 None = **未声明**。
+
+    ★ 不得写成 `bool(gold.get(...))`：那会把 None 折成 False，等于「漏填字段绕过缺图保护」
+      （§4.4.3 硬规则）。`cases._as_tri_bool` 是同一语义的 dataset 侧镜像。
+    """
+    value = (rec.get("gold") or {}).get("verdict_requires_figure")
+    return value if isinstance(value, bool) else None
+
+
+def _measurable_under_status(rec: dict, field: str) -> bool:
+    """§4.4.3 逐行分流：该 gold 字段的状态是否允许判据**正常测**。
+
+    - `present` ⇒ True；
+    - `incomplete_source` ⇒ 仅当**显式声明** `verdict_requires_figure=False` 才 True
+      （正常测 + 披露来源不完整；true / 未声明 ⇒ False，硬规则）；
+    - `missing_key` / `illegible` / 越界值 / 缺失(None) ⇒ False（missing_premise 侧）；
+    - `undecidable` ⇒ 由调用方先分流成 `not_applicable`（§4.4.3 对象分流表），不走这里。
+    """
+    st = _gold_field_status(rec, field)
+    if st == "present":
+        return True
+    if st == "incomplete_source":
+        return _requires_figure(rec) is False
+    return False
+
+
 def _structure(rec: dict) -> Verdict:
     """§3.1 completeness_pass：四件套**逐一非空**，不是「整条能解析」。"""
     parsed = metrics.structure_completeness(str(rec.get("reply") or ""))
@@ -29,14 +71,26 @@ def _structure(rec: dict) -> Verdict:
 
 
 def _answerability(rec: dict) -> Verdict:
-    """§3.1 冻结项「答案可判定」，判定主体是**人工**（盲标 P-1 未做）。
+    """§3.1 冻结项「答案可判定」，判定主体是**人工**（盲标 P-1 标注通道未开工）。
 
-    无 gold（连出处都没有）⇒ `missing_premise`；gold 在册也仍需人工标注结论，
-    而标注通道尚未建立（P-1 未做）⇒ 同样 `missing_premise`。名字保留、状态诚实。
+    前提链按 §4.4.3 逐层查（读的是 `gold_answer` **自己那一个键**的状态）：
+    - 无 gold 值 / 无出处 ⇒ `missing_premise`（盲标规程：出处存在也不等于键被验证）；
+    - `gold_answer_status.gold_answer` 缺失 ⇒ `missing_premise`（§4.4.7 第 1 条，
+      ★ 不得推断为 present —— 本分支正是「状态入契约」的牙齿：老记录即便带着
+      gold_answer+出处，缺状态一样不放行）；
+    - `undecidable`（语料来源题不可唯一判定）⇒ `not_applicable`（§4.4.3 对象分流：
+      它是对象属性，不是我方缺证据）；
+    - 其余状态（present / missing_key / incomplete_source / illegible / 越界值）：
+      可测性判定本身要**人工结论**，而 P−1 标注结论尚不存在 ⇒ `missing_premise`。
+      与旧版的区别只在诚实标注**为什么**缺前提，名字保留、不冒充可测。
     """
     gold = rec.get("gold") or {}
     if not gold.get("gold_answer") or not (gold.get("gold_source_ref") or {}).get("gold_answer"):
         return "missing_premise"
+    if _gold_field_status(rec, "gold_answer") is None:
+        return "missing_premise"  # §4.4.7-1：缺状态 ≠ present
+    if _gold_field_status(rec, "gold_answer") == "undecidable":
+        return "not_applicable"  # §4.4.3：来源题性质 ⇒ 依赖 gold 的判据不适用（不是失败）
     return "missing_premise"  # P-1 人工标注结论不存在：无可读判定，不冒充可测
 
 
@@ -107,9 +161,22 @@ def _is_pure_mcq(reply: str) -> bool:
 
 
 def _correctness(rec: dict) -> Verdict:
-    """§3.1 冻结原文是「gold 判定正确」⇒ 需要外部 gold，且必须带出处（盲标规程）。"""
+    """§3.1 冻结原文是「gold 判定正确」⇒ 需要外部 gold，且必须**带出处 + 带答案状态**。
+
+    §4.4.3 分流（读 `gold_answer` 自己那一个键的状态，`9q` 行为夹具钉死）：
+    - `present` ⇒ 正常测；
+    - `incomplete_source` ∧ `verdict_requires_figure=False`（显式声明）⇒ 正常测
+      （「+ 披露来源不完整」的落盘走 item_reasons 通道，批 2/3）；
+    - `incomplete_source` ∧ true/未声明 ⇒ `missing_premise`（★ 未声明不得当作 false）；
+    - `missing_key` / `illegible` / 状态缺失 / 越界值 ⇒ `missing_premise`（§4.4.7-1）；
+    - `undecidable` ⇒ `not_applicable`（来源题无从充当正确性 gold —— 不代表通过）。
+    """
     gold = rec.get("gold") or {}
     if not gold.get("gold_answer") or not (gold.get("gold_source_ref") or {}).get("gold_answer"):
+        return "missing_premise"
+    if _gold_field_status(rec, "gold_answer") == "undecidable":
+        return "not_applicable"
+    if not _measurable_under_status(rec, "gold_answer"):
         return "missing_premise"
     reply = str(rec.get("reply") or "")
     if not _is_pure_mcq(reply):
@@ -186,7 +253,13 @@ register(
         tier=1,
         tier_reason=("§1.3-tier1",),
         contract_ref="EFFECT_PLAN.md §3.1 答案可判定",
-        contract_inputs=("gold.gold_answer", "gold.gold_source_ref.gold_answer"),
+        # ★ P−1 批 1（§4.4.7）：`gold_answer_status` 入契约 —— 出处存在不等于答案键已验证，
+        #   状态是这两个判据的真实输入，V0 必须查它在归档里的键存在性。
+        contract_inputs=(
+            "gold.gold_answer",
+            "gold.gold_source_ref.gold_answer",
+            "gold.gold_answer_status",
+        ),
         required_when=_required_always,
         fn=_answerability,
         falsifier="omit_reply_part",
@@ -220,6 +293,8 @@ register(
             "reply#answer",
             "gold.gold_answer",
             "gold.gold_source_ref.gold_answer",
+            # ★ P−1 批 1（§4.4.7）：答案状态入契约（同 gen_answerability）。
+            "gold.gold_answer_status",
             "reply#options_or_task",
         ),
         required_when=_required_always,

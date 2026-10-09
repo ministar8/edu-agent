@@ -16,7 +16,8 @@
     "predicate": "gen_answerability",
     "inputs": [
       "gold.gold_answer",
-      "gold.gold_source_ref.gold_answer"
+      "gold.gold_source_ref.gold_answer",
+      "gold.gold_answer_status"
     ],
     "all_flipped": false,
     "no_collateral": true,
@@ -41,6 +42,7 @@
       "reply#answer",
       "gold.gold_answer",
       "gold.gold_source_ref.gold_answer",
+      "gold.gold_answer_status",
       "reply#options_or_task"
     ],
     "all_flipped": true,

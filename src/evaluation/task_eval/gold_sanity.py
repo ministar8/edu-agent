@@ -462,6 +462,9 @@ def _check_structure(case: TaskCase, out: list[SanityIssue]) -> None:
 
 def run_sanity(cases: list[TaskCase]) -> SanityReport:
     """对全部 case 跑检查。资产解析与生成器同源（`task_eval.assets`）。"""
+    # 局部导入防成环 + 600 行上限（Task 7 裁定：宁可新建文件，不撑爆本文件）
+    from evaluation.task_eval.gold_status_sanity import check_gold_answer_status
+
     report = SanityReport(n_cases=len(cases))
     kp_index = load_kp_index()
     items = parse_exam_items()
@@ -479,6 +482,7 @@ def run_sanity(cases: list[TaskCase]) -> SanityReport:
         _check_structure(case, report.issues)
         _check_field_ownership(case, report.issues)
         _check_gold_source_ref(case, report.issues)
+        check_gold_answer_status(case, report.issues)
         if case.task in ("qa", "generate"):
             _check_kp(case, kp_index, report.issues)
         if case.task == "generate":

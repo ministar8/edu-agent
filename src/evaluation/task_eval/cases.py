@@ -69,12 +69,41 @@ logger = logging.getLogger(__name__)
 TASKS: tuple[str, ...] = ("qa", "generate", "grade", "verify", "memory")
 
 # 各 task 的 gold 字段白名单：用于校验与「缺字段 → 不适用」判定
+# ★ `gold_answer_status` / `verdict_requires_figure` 是 gold 侧**跨 task 的元数据**
+#   （P−1-4 冻结清单 ①②：前者记录 gold_source_ref 同键空间的答案状态，后者声明缺图前提）
+#   ⇒ 全部 task 白名单都追加，归属校验才不会把「已声明状态」误报成串位字段。
 GOLD_FIELDS: dict[str, tuple[str, ...]] = {
-    "qa": ("gold_points", "expected_kp", "reference"),
-    "generate": ("expected_kp", "expected_difficulty", "gold_answer", "gold_source_ref"),
-    "grade": ("question_stem", "student_answer", "human_score", "full_marks"),
-    "verify": ("expected_question_ids",),
-    "memory": ("expected_memory", "expected_answer_property", "setup_conditions"),
+    "qa": (
+        "gold_points",
+        "expected_kp",
+        "reference",
+        "gold_answer_status",
+        "verdict_requires_figure",
+    ),
+    "generate": (
+        "expected_kp",
+        "expected_difficulty",
+        "gold_answer",
+        "gold_source_ref",
+        "gold_answer_status",
+        "verdict_requires_figure",
+    ),
+    "grade": (
+        "question_stem",
+        "student_answer",
+        "human_score",
+        "full_marks",
+        "gold_answer_status",
+        "verdict_requires_figure",
+    ),
+    "verify": ("expected_question_ids", "gold_answer_status", "verdict_requires_figure"),
+    "memory": (
+        "expected_memory",
+        "expected_answer_property",
+        "setup_conditions",
+        "gold_answer_status",
+        "verdict_requires_figure",
+    ),
 }
 
 # Memory 的 expected_memory.type 白名单。
@@ -83,6 +112,18 @@ GOLD_FIELDS: dict[str, tuple[str, ...]] = {
 #   不预留其他 type —— 预留但无写入路径的 type 会诱导写出「永远召不回」的 case，
 #   把产品能力缺失记成产品失败。
 MEMORY_TYPES: frozenset[str] = frozenset({"weak_topics"})
+
+# gold 答案键的**来源与可用性**枚举（EVIDENCE_CHAIN.md §4.4.2，已冻结 v1.7）。
+# ★ 与 `gold_source_ref` 同键空间（gold_answer / expected_difficulty / human_score）：
+#   「出处指向哪里」与「那里的键处于什么状态」并排可查，不造第二套键名（P−1-4 ①）。
+# ★ 五值语义边界（§4.4.2 三条必须守住的边界）：
+#   `undecidable`（题目本身不可唯一判定）≠ 证据不足；`missing_key` ≠ `incomplete_source`；
+#   `illegible`（扫描不可辨认）≠ 已确认错键，也 ≠ 通过核验。
+# ★ 缺省语义（§4.4.7 第 1 条）：**缺失不得被推断为 `present`** —— 「没填」由 gold
+#   侧校验报 ERROR，而不是在判据里折成可靠。四态映射见 §4.4.3（不在此处重复）。
+ANSWER_STATUSES: frozenset[str] = frozenset(
+    {"present", "missing_key", "incomplete_source", "illegible", "undecidable"}
+)
 
 # demo 集固定路径（相对仓库根）
 DEMO_DIR = Path(__file__).resolve().parents[3] / "evals" / "datasets" / "demo"
@@ -246,6 +287,18 @@ class Gold:
     #   键 = 被支撑的字段名（gold_answer / expected_difficulty / human_score），
     #   值 = `knowledge/` 相对路径或 `kp:<id>`。无出处视为未填 ⇒ missing_premise。
     gold_source_ref: dict[str, str] = field(default_factory=dict)
+    # gold 出处的**答案状态**（§4.4.2 五枚举，值域 = ANSWER_STATUSES；P−1-4 冻结清单 ①）：
+    #   键空间与 gold_source_ref **完全一致**（双向校验在 gold_status_sanity，越界/缺键 ⇒ ERROR）。
+    #   ★ 本批次（P−1 批 1）dataset 与归档一律**不填**：填它 = 正式盲标开工。
+    #   ★ 解析复用 `_as_str_dict`：畸形值丢弃 = 「没填」，由 sanity 报错，不在解析层抛；
+    #   ★ 「没填」**不得**被下游折成 `present`（§4.4.7 第 1 条）。
+    gold_answer_status: dict[str, str] = field(default_factory=dict)
+    # 题面图前提声明（§4.4.3 incomplete_source 行的分流开关；P−1-4 冻结清单 ②）：
+    #   True  ⇒ 评测需要题面图 ⇒ incomplete_source 走 missing_premise；
+    #   False ⇒ 显式声明不需要 ⇒ incomplete_source 可正常测 + 披露来源不完整；
+    #   None  ⇒ **未声明** ⇒ 按 §4.4.3 硬规则走 missing_premise —— 漏填不得当作 false，
+    #           否则「漏填字段」反而绕过缺图保护。★ 解析只认 `_as_tri_bool`，禁用 bool(x)。
+    verdict_requires_figure: bool | None = None
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any] | None) -> Gold:
@@ -273,6 +326,8 @@ class Gold:
             ),
             setup_conditions=SetupConditions.from_dict(raw.get("setup_conditions")),
             gold_source_ref=_as_str_dict(raw.get("gold_source_ref")),
+            gold_answer_status=_as_str_dict(raw.get("gold_answer_status")),
+            verdict_requires_figure=_as_tri_bool(raw.get("verdict_requires_figure")),
         )
 
     def memory_mechanizable(self) -> bool:
@@ -380,6 +435,19 @@ def _as_str_dict(value: Any) -> dict[str, str]:
         if key and text:
             out[key] = text
     return out
+
+
+def _as_tri_bool(value: Any) -> bool | None:
+    """三态布尔解析：True / False / None（None = **未声明**）。`verdict_requires_figure` 用。
+
+    ★ 绝不允许写成 `bool(x)`：`bool(None) is False` 会把「漏填」读成「显式声明不需要图」，
+      而 §4.4.3 的硬规则恰恰是「未声明不得当作 false，否则漏填字段反而绕过缺图保护」。
+      由 gate 判据 `9r` 钉死：`false` 一格与「缺失」一格必须给出**不同**结果。
+    ★ 非 bool 的畸形值（"true"/1/0/…）一律返回 None —— 与 `_as_str_dict` 同口径：
+      畸形 = 没填，由消费侧（missing_premise / sanity ERROR）报错，不在解析层抛。
+      ★ 特别地 `1/0` 也不算声明：三态契约只认真正的 bool，防止 JSON 里塞整数蒙混过关。
+    """
+    return value if isinstance(value, bool) else None
 
 
 def _as_str_list_2d(value: Any) -> list[list[str]] | None:
