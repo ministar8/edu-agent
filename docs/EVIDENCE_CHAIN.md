@@ -6,6 +6,10 @@
 > v1.2（2026-10-08）：v1.1 并入第一轮 review 的 12 条 + R5；**v1.2 并入第二轮 7 条**
 > —— gold 补齐从「可选路线」升级为 **P0 前置**、R5 补**分母语义与 `required_when`**、
 > 业务链二分（阻塞正式实验 / 登记 limitation）、新增 **B7 检索失败传播**、V0 加硬、**盲标规程**。
+"> v1.7（2026-10-09，P−1 第 3 步裁定）：§4.4.3 四态映射、§4.4.4 父题-part 汇总、§4.4.7 `answer_status` 入契约
+> 的四条连带规则由「留位」转为**已冻结**；核心是三条不合并原则 —— `undecidable` 按对象分流（生成题上它是
+> answerability 的 **fail**，不是「不适用」了事）、part 汇总**禁止**吞并 R5、未声明 `verdict_requires_figure`
+> 按缺前提处理（漏填不得绕过缺图保护）。
 > v1.6（2026-10-09，P−1 裁定三批）：§4.4 冻结「答案形态 / 答案状态 / 四态映射留位 / 父题-part 汇总禁令 /
 > 错键扩查五步 / R 行启用与红线」。统计口径改为**三分法**（设计目标 / 实际审计结果 / 可支持结论），
 > 并明确强制分层配额下**不得**把简单随机抽样的发现概率当作分层后的总体置信结论。
@@ -358,13 +362,62 @@ Grade 不再要求补标 —— 它的两极 gold 是语料性质决定的，改
 ★ **实现约束**：`answer_status` 描述来源及其可用性，**不直接等同** §1.3 的四态 verdict；映射见 §4.4.3（第 3 步冻结）。
 一个状态**不得被无条件映射成 pass**。
 
-#### 4.4.3 四态映射（★ 待第 3 步裁定，本节先留空位不许猜）
-（留待项目所有者裁：`answer_status` × 证据充分性 → `pass/fail/not_applicable/missing_premise`。）
+#### 4.4.3 四态映射（★ 已冻结，v1.7）
 
-#### 4.4.4 父题 / part 汇总规则（★ 待第 3 步裁定）
-★ 已定的一点：**不得复用 §1.6 R5 的复合规则**做 part 汇总 —— R5 里「pass 与 not_applicable 混合算 pass」
-是为「同一题上多个判据」设计的；若照搬到 part 级，一道含不可判定小问的题会被算成通过，
-正是 §4.4.2 那条边界想禁止的事。part 级规则须单独冻结。
+| `answer_status` | 读 gold 的判据（`gen_answerability`/`gen_correctness`/`gen_difficulty`） | 不读 gold 的判据（`gen_structure`/`gen_coverage`/机械替身） |
+|---|---|---|
+| `present` | 正常测 ⇒ `pass`/`fail` | 不受影响 |
+| `missing_key` | `missing_premise` | 不受影响 |
+| `incomplete_source` ∧ `verdict_requires_figure=true` | `missing_premise` | 正常测（不受影响） |
+| `incomplete_source` ∧ `verdict_requires_figure=false` | 正常测 **+ 披露来源不完整** | 正常测 |
+| `incomplete_source` ∧ **`verdict_requires_figure` 缺失/未声明** | **`missing_premise`（硬规则：未声明不得当作 `false`，否则漏填字段反而绕过缺图保护）** | 不受影响 |
+| `illegible` | `missing_premise` + 单独披露为「不可用」（不入错键分子、也不算通过核验） | 不受影响 |
+| `undecidable` | 见下表：**按对象分流，不统一映射** | 不受影响 |
+
+`undecidable` 的按对象分流（同一词挂在不同对象上，映射方向相反）：
+
+| 描述对象 | 判据 | verdict | 理由 |
+|---|---|---|---|
+| 语料来源题（当 gold 用的真题） | 依赖 gold 的判据 | `not_applicable` | 它不能充当本题的可靠 gold —— 是对象属性，不是我方缺证据 |
+| 生成题（R 行被测对象） | `answerability` | **`fail`** | 「题面不足以求出确定答案」正是 answerability 要检测的缺陷 |
+| 生成题（R 行被测对象） | `correctness` | `not_applicable` | 不可判定 ⇒ 正确性无从评；**但不代表通过** |
+| 生成题（R 行被测对象） | `difficulty` | `not_applicable` | 同上 |
+
+★ 两条限制：① 每个 `not_applicable` 都必须有对应的**对象状态 + 原因记录**，不得当作「缺证据的通用垃圾桶」；
+② 生成题被标 `correctness=not_applicable` **不等于**该题通过 —— `answerability=fail` 仍保留并按 §4.4.4 参与复合。
+★ `verdict_requires_figure` 只描述「评测所需的题面前提」，**不代表**图片内容已正确读取、也不代表答案键已核验；
+那两件事仍分别由 `answer_status` 与抽查证据承担。
+
+#### 4.4.4 父题 / part 汇总规则（★ 已冻结，v1.7）
+
+优先级（自上而下短路）：
+1. 任一 part `fail` ⇒ 父题 `fail`；
+2. 无 fail 且任一 part `missing_premise` ⇒ 父题 `missing_premise`；
+3. 以上皆无且所有 part 均 `pass` ⇒ 父题 `pass`；
+4. `not_applicable` / `undecidable` / 混合状态**必须先按 §4.4.3 的对象语义完成映射**，
+   **不得在汇总阶段自行吞并**。
+★ **不批准**把 §1.6 R5 的复合规则用于 part 级：不允许「一个 part 是 `not_applicable`、另一个是 `pass`
+⇒ 整道含不可判定小问的生成题算 `pass`」。
+★ 边界（缺 part 不是「没有 part」）：父题声明存在 part，而其中某个 part **缺失 / 未标注 / 无法关联** ⇒
+必须走 `missing_premise` 或结构校验失败的**明确路径**，不得当作「该 part 不存在」而汇总通过。
+★ 该规则必须**注册进 registry**（判据名与 `contract_inputs` 见 §4.4.8 冻结清单），
+声明具体 `falsifier` 并纳入 §6 mutation 取证矩阵；落盘 `n_parts` / `n_undecidable` /
+每个 part 的判定与状态 / 不可判定原因。★ 理由：这是本方案新引入的一条判定规则，
+进不了证伪矩阵就等于在证据链上留一个没牙齿的组件。
+
+#### 4.4.7 `answer_status` 入契约的连带规则（★ 已冻结，v1.7）
+
+`answer_status` **纳入相关判据的 `contract_inputs`**，不是只留文档约定 —— 出处存在
+（`gold_source_ref` 指向 `knowledge/exams/<年>/items.md#<题号>`）**不等于答案键已被验证**。配套四条：
+1. 缺少必需的 `answer_status` ⇒ `missing_premise`，**不得推断为 `present`**。
+2. **缺字段导致的红灯与实际发现的错键分开统计**：未知既不说成错误，也不说成可靠。
+3. 旧归档**不做静默回填**，不得根据 `items.md` 里已有答案反向伪造「已核验」状态。
+4. V0 的新增失败必须**可追溯到具体缺失契约字段与受影响判据**，不得只给一个总红灯数字。
+★ 代价已被项目所有者明确接受：重录前的未满足前提会增加 —— 宁可暴露旧证据链缺字段，
+也不能为维持绿灯而假定历史数据满足后来才冻结的契约。
+
+#### 4.4.8 标注指南 / 分歧裁决 / 审计字段 schema
+→ 冻结清单草案见 `EVIDENCE_CHAIN_PLAN.md` 前置节 **P−1-4**（★ 待确认；在其冻结前不启动盲标、不重录）。
 
 #### 4.4.5 发现错键后的扩查与升级（★ 已冻结为规则；未冻结前不得临场决定）
 1. **发现错键即停止使用「键可靠」结论**：先记录已确认错误及其来源，**不得**以其他抽中题正确来抵消。
