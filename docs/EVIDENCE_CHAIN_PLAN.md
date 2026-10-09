@@ -2105,11 +2105,16 @@ def check_8() -> None:
         )
         if "reset_query_failures()" in Path(p).read_text(encoding="utf-8")
     ]
-    check("8g reset 被三个取证单元各调一次（只加方法不调用 = B7 没闭合）",
+    # ★ v1.3（checkpoint 8 裁定 R1-A）：原判据要求「三处」，其中 `rag/routes.py` 的单元内 reset
+    #   已撤销 ⇒ 本判据改为「**两处单元边界**」，撤销的回归锁另由 `8k` 承担（不许有人再把它加回去）。
+    check("8g reset 被两个取证单元边界各调一次（只加方法不调用 = B7 没闭合）",
           len(sites) == 3, f"只找到 {sites}")
 ```
 
-`_EXPECTED_ITEMS = 56`（Task 7 结束时为 **49**，本步 +7：8a/8b/8c/8d/8e/8f/8g）。
+`_EXPECTED_ITEMS = 58`（Task 7 结束时为 **49**，本步 +9：8a/8b/8c/8d/8e/8f/8g + Step 2b 的 8h/8i）。
+★ 修复轮（评审 C1/I1–I7）再加 4 项：`8j` `map_route_failures` 双向、`8k` 单元内 reset 回归锁、
+`8l` `run_case` 必调 `reset_memory_read_statuses()`（**行为**取证，不是 grep 字符串）、
+`8m` `retrieval_gate` 的 reset 与收割配对 ⇒ **62**。
 Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword argument 'read_status'`
 （真实签名是 `(*, memory_cards, reply, gold)` —— 本 Task 给它加第四个 keyword-only 参数）。
 
@@ -2137,35 +2142,66 @@ Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword a
         raise  # 交给调用方收敛为 status="error"；不再伪装成空结果
 ```
 
-★ 这里选 `raise` 而不是 `return []`，是因为 `retrieval_probe.py:111` 的既有契约就是
-**「任何异常都收敛为 `ok=False, status="error"`，不抛出」**——收敛点已经存在，只需要让错误真的发生。
+★ **Step 2b 修订（checkpoint 8 裁定 R4，规格 v1.3）**：上面这句前提**实测不成立**。
+异常收敛发生在 `routes._safe_to_thread`（`:257-275`，**按路由逐个**收敛），不在探针层 ⇒ 探针仍写
+`ok`/`empty`（实测：注入 BM25 全线故障 ⇒ `status='ok' pack_len=755`）。所以 `raise` 只是**生产者**半边，
+还必须补**消费者**：`run_case` 在探针返回后读 `query_failures`，非空即把 `retrieval_status`
+升为 `error`（只升不降）并据此关闭检索层归因门。B7 缺任何一侧都等于没修。
 `routes.py:348-350` 的向量分支同理：`logger.warning` 之后要把失败计入 `_query_failures`
 （向量路径 `vectorstore.py:340` 已经在记，BM25 与这半边补齐）。
 
 `vectorstore.py` 新增两个方法，并**钉死 reset 的调用时机**（只加方法不规定何时调 = 没修：
-`_query_failures` 仍是 append-only，case A 的失败会一路跟着 case B/C）：
+`_query_failures` 仍是 append-only，case A 的失败会一路跟着 case B/C）。
+★ **Step 2c 修订（checkpoint 8 裁定 R1-A，规格 v1.3）**：原来钉了**三个**点，其中
+`_amulti_route_search` 每轮开头那个已**撤销** —— 一条 query 在 `pipeline.py:448/466/672` 会跑多轮，
+后轮 reset 抹掉前轮**尚未被 `run_case` 消费**的证据（实测注入 3 次故障 ⇒ 读取时 `[]`），
+检测能力反而低于改动前。reset 只允许在**独立取证单元的边界**，共两个：
 
 ```python
     def record_query_failure(self, note: str) -> None:
         self._query_failures.append(note)
 
     def reset_query_failures(self) -> None:
-        """★ 每个「独立取证单元」开跑前调一次，三个调用点缺一不可：
+        """★ 每个「独立取证单元」开跑前调一次，两个边界缺一不可（单元**内部**不许清）：
         ① `retrieval_gate` 每条 query 之前；
-        ② `task_eval.runner.run_case` 每次检索探针之前；
-        ③ `routes._amulti_route_search` 每一**轮**之前（一轮内各路由共享，
-           这样一条路由坏了能在该轮的 `unexpected_query_failures` 里看到）。
+        ② `task_eval.runner.run_case` 每次检索探针之前。
+        ★ 证据必须活到被消费之后才清 —— 任何 intra-unit reset 都在销毁本单元还没读到的失败记录。
         """
         self._query_failures.clear()
 ```
 
-自查三处都真被调用（判据 `8g` 靠它）：
+自查两处单元边界都真被调用（判据 `8g`/`8k` 靠它）：
 
 ```bash
 grep -rn "reset_query_failures()" src | tee /tmp/reset_sites.txt
 ```
-Expected: 恰好 3 处，分别在 `evaluation/retrieval_gate.py`、`evaluation/task_eval/runner.py`、
-`rag/routes.py`。少于 3 处 ⇒ B7 未闭合，**停在本 Step**，不要继续往下写归因门。
+Expected: 恰好 **2** 处 —— `evaluation/retrieval_gate.py`、`evaluation/task_eval/runner.py`。
+★ `rag/routes.py` 里**不得**再出现该调用（`8k` 是这条撤销的回归锁）。
+少于 2 处 ⇒ B7 未闭合，**停在本 Step**，不要继续往下写归因门。
+
+- [ ] **Step 2b/2c: 消费者与覆盖面（v1.3 新增，随 Step 2 同批做）**
+
+```python
+# src/evaluation/task_eval/runner.py —— 纯函数，判据直接打它，别在判据里做 IO
+def map_route_failures(failures: list[str], probe_status: str) -> tuple[str, list[str]]:
+    """路由侧记下了失败 ⇒ 该 case 的检索层证据等级就是 `error`。
+
+    ★ 只升级不降级：已经是 `error` 不动；空清单原样返回（不许把 `ok` 折成 `empty`）。
+    """
+    if not failures:
+        return probe_status, []
+    if probe_status in ("ok", "empty"):
+        return "error", list(failures)
+    return probe_status, list(failures)
+```
+
+`run_case` 在探针返回后调用它，把新状态写进 `record.retrieval_status`，并把清单落进
+**只作凭据**的诊断字段 `route_failure_notes`（与 `judge_failure_reasons` 同构：不进任何比率的
+分子或分母、不参与 `pick_primary_failure`）。
+
+覆盖面同时收进一个地方：`routes._safe_to_thread` 的 `TimeoutError` 与 `Exception` 两个分支
+各调一次 `record_query_failure(f"{name}: {e.__class__.__name__}")` ⇒ 任何路由的故障/超时都留痕。
+★ **不要**继续往 `bm25.py` 的 `count()` / 逐词 `get()` 里撒记录点 —— 那会把「记录失败」变成多套现实。
 
 - [ ] **Step 3: `memory_scorer` 加 `read_status` 参数并前置判定**
 
@@ -2281,9 +2317,9 @@ def check_9() -> None:
           D([], active=True, raised=False, empty_result=False) == "degraded")
 ```
 
-`_EXPECTED_ITEMS = 61`（Task 8 结束时为 **56**，本步 +5：9a/9b/9c/9d/9e）。
+`_EXPECTED_ITEMS = 67`（Task 8 结束时为 **62**，本步 +5：9a/9b/9c/9d/9e）。
 Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
-★ 原 `9f`（reset 三处调用）跟着 B7 一起搬进 Task 8，现在是那里的 `8g`。
+★ 原 `9f`（reset 调用点）跟着 B7 一起搬进 Task 8，现在是那里的 `8g` + `8k`；v1.3 后是**两处单元边界**。
 
 - [ ] **Step 2: B2 —— `rerank_status` 四值 + 派生 `rerank_used`**
 

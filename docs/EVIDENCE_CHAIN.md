@@ -6,6 +6,12 @@
 > v1.2（2026-10-08）：v1.1 并入第一轮 review 的 12 条 + R5；**v1.2 并入第二轮 7 条**
 > —— gold 补齐从「可选路线」升级为 **P0 前置**、R5 补**分母语义与 `required_when`**、
 > 业务链二分（阻塞正式实验 / 登记 limitation）、新增 **B7 检索失败传播**、V0 加硬、**盲标规程**。
+> v1.3（2026-10-09）：**执行期裁定，两处规格修订**（checkpoint 8，由项目所有者批准，
+> **不是**实现者自行纠正代码）：B7-② 的实现前提被实测推翻（异常收敛点在**路由内部**的
+> `_safe_to_thread`，探针收不到异常 ⇒ 光让错误发生不足以让 `error` 可达，须由 `run_case`
+> **消费 `_query_failures`**）；B7-③ 的第三个 reset 调用点经实测**净降低**故障检测能力
+> （一条 query 触发多轮，后轮 reset 抹掉前轮尚未被消费的证据）⇒ **撤销该调用点**，
+> reset 只允许发生在独立取证单元的边界。两条的证据与验收见 §5 B7 行与 `EVIDENCE_CHAIN_PLAN.md` Task 8。
 > 第二轮同时修正 v1.1 两处事实错误：`gold_review.jsonl` 并非 30 行全空（见 §4.2）；BM25 路由失败对门禁不可见。
 > 背景：全仓 review 发现「系统实际表现」与「项目声称已被实验/门禁证明的表现」之间存在断层。
 > 关系：**不改写任何冻结件**（`EFFECT_PLAN.md` §3.1/§4、`RETRIEVAL_POLICY.md` 等），
@@ -294,7 +300,7 @@ Grade 不再要求补标 —— 它的两极 gold 是语料性质决定的，改
 
 ### 5.A P0 Runtime Correctness —— **不修就禁止正式实验**（证据链本身会失真）
 
-★ 执行顺序上 **B7 必须与 §4.3 的归因门同批、且先于它**（生产者先于消费者）：归因门要读
+★ 执行顺序上 **B7 必须与 §4.3 的归因门同批、且先于它**（生产者先于消费者）；且 B7 的「生产者」按 v1.3 含**两侧**——路由侧记录失败、评测侧消费失败 —— 只修前者等于没修。归因门要读
 `retrieval_status == "error"`，而 B7 之前这个值不可达。详见 `EVIDENCE_CHAIN_PLAN.md` 的依赖矩阵。
 
 | # | 位置 | 改法 | 数字影响 |
@@ -302,7 +308,7 @@ Grade 不再要求补标 —— 它的两极 gold 是语料性质决定的，改
 | B1 | `rag/layer_recall.py:128-131` + `evidence_policy.py:138` | R4 语义统一后排序方向自然转正 | **会变**（top-up 选中的文档变了）→ 重录受影响路由 + 差异登记 §20.7 |
 | B2 | `rag/pipeline.py:593` | ★ 不再只给布尔。新增 tier-0 枚举 **`rerank_status`**：`off` / `success` / `degraded`（调用成功但无分或空结果，回落原序）/ `failed`（抛错或超时走 `default`）。`rerank_used` 降级为**派生字段**：仅 `success ⇒ True`，其余全 `False`。派生条件判 **metadata 含 `rerank_score` 键**（`reranker.py:246` 有合法写 `0.0` 的路径，用真值判断会把假重排 `on` 路由误翻成 False，等于借修诚实度换基线）。★ `rerank_status` 要**落进 record**（含 `run --no-agent` 的检索探针归档），不能只进遥测 | **不变**（`RERANK_ENABLED=false` 时走 `:565-570` 已返回 False；`on` 路由 `_fake_rerank` 确实写分）。⇒ 消融从此能区分「重排关」与「重排开但坏了」 |
 | B4 | `agents/teaching_graph.py:44-46` + `memory/safe.py` | 新增 tier-0 **`memory_read_status`** 四值 + 映射：<br>`not_attempted`（`uid is None`，`:43` 那条分支就是它，今天被压成 `""`）→ 三维 `None`<br>`success` + 命中期望值 → `recalled=True`；`success` 未命中 → `recalled=False`<br>`empty`（读成功但无卡）→ `recalled=False`<br>`failed`（超时/异常）→ 三维 `None`<br>⇒ 「这个 0.5 是不是 Store 挂了」变成**有证据可答**的问题 | 只影响今后归档；已归档 Memory 数标 `superseded`，新状态待重跑 |
-| B7 | `rag/bm25.py:54-59`、`rag/vectorstore.py:142,340`、`evaluation/retrieval_gate.py:1262`、`retrieval_probe.py:111,140,149` | **检索失败必须传播**：BM25 取 collection 失败时 `return []` 且**不写 `_query_failures`**（向量路径 `:340` 会写），门禁的 `unexpected_query_failures` 看不见它。★ 更深一层的后果是**归因被污染**：探针的契约是「异常收敛为 `status="error"`」，而咽掉的异常让探针看到「查到空」⇒ 写成 `empty`，于是 `error` **今天不可达**，归因层没有「路由坏了」这个证据可用。改法：① 失败计入 `_query_failures`；② 让 `retrieval_status` 真的能取到既有的 `error`（**不发明新枚举名** `route_error`：`judge.py:373` 已在比较 `== "error"`，改名会打断这条既有判定）。★ 实测 27 份 task_eval 归档 / 367 条记录里 `error` **出现 0 次**（`ok`×309、`empty`×34、24 条键缺失）——它只是 `retrieval_probe.py:66` 的代码默认值，那条分支从未被触发过；这正是「坏了被说成没查到」的实证，也是 Task 8 归因门必须为 `error` 自带取证的原因。③ `_query_failures` 可清零，并钉死三个 reset 调用点（gate 每条 query / `run_case` 每次探针 / `_amulti_route_search` 每轮） | 基线数字预期不变（BM25 今天跑得通）；修的是「坏消息看不见」+「坏了被说成没查到」 |
+| B7 | `rag/bm25.py:54-59`、`rag/vectorstore.py:142,340`、`evaluation/retrieval_gate.py:1262`、`retrieval_probe.py:111,140,149` | **检索失败必须传播**：BM25 取 collection 失败时 `return []` 且**不写 `_query_failures`**（向量路径 `:340` 会写），门禁的 `unexpected_query_failures` 看不见它。★ 更深一层的后果是**归因被污染**：探针的契约是「异常收敛为 `status="error"`」，而咽掉的异常让探针看到「查到空」⇒ 写成 `empty`，于是 `error` **今天不可达**，归因层没有「路由坏了」这个证据可用。改法：① 失败计入 `_query_failures`；② 让 `retrieval_status` 真的能取到既有的 `error`（**不发明新枚举名** `route_error`：`judge.py:373` 已在比较 `== "error"`，改名会打断这条既有判定）。★ **v1.3 更正实现方式**：原设想「让异常真的抛出，探针既有契约自会收敛为 `error`」经实测**不成立** —— 收敛发生在 `_safe_to_thread`（`routes.py:257-275`，按路由逐个收敛）而**不在探针层**，抛出的异常到不了 `retrieval_probe` ⇒ 探针仍写 `ok`/`empty`。正确做法是让**消费侧**接上 tier-0 证据：`run_case` 在探针返回后读 `query_failures`，非空即把 `retrieval_status` 升为 `error`（只升级不降级）并据此关闭检索层归因门；失败清单同时落成**只作凭据、不进任何比率分子分母**的诊断字段。★ 实测 27 份 task_eval 归档 / 367 条记录里 `error` **出现 0 次**（`ok`×309、`empty`×34、24 条键缺失）——它只是 `retrieval_probe.py:66` 的代码默认值，那条分支从未被触发过；这正是「坏了被说成没查到」的实证，也是 Task 8 归因门必须为 `error` 自带取证的原因。③ `_query_failures` 可清零，但 **reset 只允许发生在独立取证单元的边界**：`retrieval_gate` 每条 query 前、`task_eval.runner.run_case` 每次探针前 —— 共**两个**单元边界调用点。★ **v1.3 撤销**原列的第三点（`_amulti_route_search` 每轮开头）：一条 query 在 `pipeline.py:448/466/672` 会触发多轮（HyDE 恰在「第一轮空/差」之后才跑），后一轮的 reset 会抹掉前一轮**尚未被 `run_case` 消费**的失败证据 ⇒ 实测（注入 BM25 全线故障）失败记录从产生时的非空到读取时为 `[]`，检测能力**低于改动前**（旧实现永不 reset，读取时至少能看到实时列表）。失败证据必须保留到被消费之后才清 | 基线数字预期不变（BM25 今天跑得通）；修的是「坏消息看不见」+「坏了被说成没查到」 |
 
 ### 5.B P1 Product Correctness —— **不修可以正式实验，但必须登记 limitation**
 
