@@ -1026,8 +1026,17 @@ async def aretrieve_documents(
     cat: QueryCategory | None = None,
     precomputed_sub_queries: list[str] | None = None,
     on_stage: StageSink | None = None,
+    rerank_status_out: dict[str, str] | None = None,
 ) -> list[Document]:
-    """异步底层检索。参数 ``use_rerank`` 的语义见模块文档串（**不是**「是否重排」的开关）。"""
+    """异步底层检索。参数 ``use_rerank`` 的语义见模块文档串（**不是**「是否重排」的开关）。
+
+    ★ ``rerank_status_out``（修复批 Important-3，B2 送达断链的堵点）：非 None 时，
+      本函数**无论结果包是否为空**，都会把最终 ``rerank_status`` 写进这个调用方传入的
+      dict。此前状态只经 ``doc.metadata["_rerank_status"]`` 逐文档携带（`_finalize_retrieval`
+      :960）——包空时没有文档可挂，`_stage_rerank` 已算出的 ``off``/``degraded``/``failed``
+      在 retriever 桥接这一跳被**整包丢弃**，实测 28 份归档 / 433 条记录含
+      ``rerank_status`` = 0。异常发生在重排阶段**之前** ⇒ 写入 ``""``（未知，不回填）。
+    """
     start = time.perf_counter()
     raw_results_count = 0
     post_dedup_count = 0
@@ -1194,3 +1203,11 @@ async def aretrieve_documents(
             },
         )
         raise
+    finally:
+        # ★ 修复批 Important-3：状态**必须在返回空包/抛异常时同样送达**调用方。
+        #   放在 `finally` 而非 `return` 之前 —— 异常路径同样要落（此时多半是 ""，
+        #   即「未知」，与「不回填」纪律一致；绝不凭空造出 success/off）。
+        #   这是 B2 四态从「算得出」走到「工件里有」的关键一跳；回归锁见
+        #   `scripts/evidence_chain_gate.py` 的 `9m`（纯内存，零 Chroma 零 TEI）。
+        if rerank_status_out is not None:
+            rerank_status_out["rerank_status"] = rerank_status

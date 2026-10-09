@@ -189,14 +189,17 @@ class VectorStoreManager:
                 logger.debug("异常对象不可挂属性，跳过幂等标记: %s", note)
 
     def reset_query_failures(self) -> None:
-        """★ 每个「独立取证单元」开跑前调一次，**只允许**两个单元边界：
+        """★ 每个「独立取证单元」开跑前调一次，**只允许**在单元边界（不在单元内部）：
         ① `evaluation.retrieval_gate` 每条 query 之前（`finally` 里紧接着收割）；
-        ② `evaluation.task_eval.runner.run_case` 每次检索探针之前。
+        ② `evaluation.task_eval.runner.run_case` 每次检索探针之前；
+        ③ `evaluation.task_eval.cli._reprobe` 每条 record 的 reprobe 之前
+           （修复批 Important-1：reprobe 与 ② 同构 —— 一次探针 = 一个单元，
+           原先直接写 `probe.status` 会把路由故障吞掉并把 `error` 降回 ok/empty）。
 
         ★★ v1.3（checkpoint 8 裁定 R1-A）：原列的第三点（`rag/routes._amulti_route_search`
            每轮开头）已**撤销** —— 单元**内部**的清空会销毁本单元尚未被消费的失败证据
            （一条 query 跑多轮，后轮 reset 抹掉前轮的记录），实测净降低检测能力。
-           回归锁：`scripts/evidence_chain_gate.py` 的 `8k`。
+           回归锁：`scripts/evidence_chain_gate.py` 的 `8k`（期望文件集随 ③ 同步）。
         """
         self._query_failures.clear()
 

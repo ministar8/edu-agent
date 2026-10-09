@@ -64,6 +64,16 @@ async def run(tasks: tuple[str, ...] = ("generate", "qa")) -> dict[str, int]:
     still_na: list[str] = []
     for c in cases:
         _pairs.clear()
+        # ★ 修复批 Important-1 的三调用方判定：本脚本**不需要** `query_failures` 消费侧，
+        #   理由是**有意**的，不是遗漏：
+        #   ① 它不落任何归档工件 —— 探针返回值直接被丢弃，只消费 `_to_item` 间谍记下的
+        #      **同一次检索内的两套 KP 读数**（old vs new），没有 `retrieval_status` 状态位
+        #      可以被写错或降级，消费侧规则（`map_route_failures`）在这里没有作用对象。
+        #   ② 成对读数的口径是「同一 query、同一索引、同一融合包」——若某条路由故障，
+        #      两套读数**同等地**受影响，配对比较本身不失真；失真的是「索引健康」这类
+        #      绝对结论，而本脚本的 docstring/打印早已自我限定为「机制的量级」，
+        #      从不声称健康度。⇒ 按「不许顺手改成消费」，这里刻意不加 reset/消费。
+        #   若将来把它升级为可归档的取证件（写 record），必须先接上 runner 同款消费侧。
         await rp.probe_retrieval(c.query, task_mode=c.task_mode, k=5, use_rerank=True)
         old_kps = [kp for o, _n in _pairs for kp in o]
         new_kps = [kp for _o, n in _pairs for kp in n]

@@ -223,6 +223,8 @@ async def _reprobe(args: argparse.Namespace) -> int:
     重跑探针只打 TEI embedding，不调用任何 LLM ⇒ 可放心重算。
     """
     from evaluation.task_eval.retrieval_probe import probe_retrieval
+    from evaluation.task_eval.runner import map_route_failures
+    from rag.vectorstore import get_vector_store_manager
 
     records = _load_all_records(args.records)
     if not records:
@@ -244,16 +246,37 @@ async def _reprobe(args: argparse.Namespace) -> int:
     }
 
     out: list[dict] = []
+    _mgr = get_vector_store_manager()
     for i, rec in enumerate(records, 1):
         case = cases.get(str(rec.get("case_id") or ""))
         if case is None:
             out.append(rec)
             continue
         logger.info("[%d/%d] %s", i, len(records), case.case_id)
+        # ★★ B7 消费侧（修复批 Important-1）：每条 record 的 reprobe = 一个**独立取证单元**，
+        #   与 `runner.run_case`（runner.py:696）和 `retrieval_gate` 的既有边界同构 ——
+        #   探针**之前** reset、探针返回后**立即**消费，两句必须成对（cf. 判据 `8m`/回归锁 `8k`）。
+        #   为什么这里也必须有：异常收敛发生在 `routes._safe_to_thread`（按路由逐个），
+        #   探针收不到异常、只会自报 `ok`/`empty` ⇒ 直接写 `probe.status` 会
+        #   ① 吞掉本次 reprobe 期间的路由故障，② 把原 run 合法升上来的 `error` **降回**
+        #   ok/empty。规则**只复用** `runner.map_route_failures`（只升不降的纯函数），
+        #   不在此另写一份 —— 第二份真源正是本项目要消灭的东西。
+        _mgr.reset_query_failures()
         probe = await probe_retrieval(
             case.query, task_mode=case.task_mode, k=args.k, use_rerank=not args.no_rerank
         )
-        _update_retrieval_fields(rec, case, probe, k=args.k, cfg=cfg)
+        effective_status, route_failure_notes = map_route_failures(
+            _mgr.query_failures, probe.status
+        )
+        _update_retrieval_fields(
+            rec,
+            case,
+            probe,
+            k=args.k,
+            cfg=cfg,
+            effective_status=effective_status,
+            route_failure_notes=route_failure_notes,
+        )
         out.append(rec)
 
     if args.out:
@@ -277,13 +300,29 @@ def _current_code_version() -> str:
     return str(inner.get("code_version") or "")
 
 
-def _update_retrieval_fields(rec: dict, case, probe, *, k: int, cfg: dict) -> None:
+def _update_retrieval_fields(
+    rec: dict,
+    case,
+    probe,
+    *,
+    k: int,
+    cfg: dict,
+    effective_status: str,
+    route_failure_notes: list[str],
+) -> None:
     """只重算检索侧指标；provenance 必须与新的读数同源，否则归档会自相矛盾。
 
     ★ §3「旧输入新输出」：旧版用**当前**检索覆盖 `kp_hit`/`category_hit`/`exam_hit`，
       却把 `retrieval_cfg`/`code_version`/`prompt_set_version` 留在旧值上，且把
       `k` 硬编码成 5（无视 `--k`）。规则：**覆盖指标必须同写 provenance，否则拒绝写入**
       —— `k` 与 `cfg` 由调用方显式传入；被覆盖前的读数归属记入 `reprobe_of`。
+
+    ★ 修复批 Important-1（B7 消费侧）：`retrieval_status` 写的必须是调用方经
+      `runner.map_route_failures` **消费 `query_failures` 之后**的状态
+      （`effective_status`），不是探针自报的 `probe.status` —— 路由故障在
+      `_safe_to_thread` 里按路由逐个收敛，探针永远看不到异常。
+      状态与凭据**成对刷新**：`route_failure_notes` 与 `rerank_status` 一并落到
+      本次 reprobe 的读数上，否则「新状态 + 旧凭据/旧重排状态」互相矛盾。
     """
     from evaluation.task_eval import metrics
     from evaluation.task_eval.runner import _all_kp
@@ -292,8 +331,11 @@ def _update_retrieval_fields(rec: dict, case, probe, *, k: int, cfg: dict) -> No
     rec["pack_len"] = probe.pack_len
     rec["evidence_count"] = probe.evidence_count
     rec["retrieval_ok"] = probe.ok
-    rec["retrieval_status"] = probe.status
+    rec["retrieval_status"] = effective_status
+    rec["route_failure_notes"] = list(route_failure_notes)
     rec["retrieval_error"] = probe.error
+    # ★ B2：重探针同样刷新 tier-0 重排状态（缺 ⇒ ""，未知不回填，与 runner 同口径）。
+    rec["rerank_status"] = getattr(probe, "rerank_status", "")
     top = probe.top_k(k)
     retrieved_kp = _all_kp(top)
     rec["kp_hit"] = (

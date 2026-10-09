@@ -1142,13 +1142,22 @@ def build_baseline_payload(
     golden_path: str | Path,
     indexed_chunks: int,
     route_contributions: Counter[str] | None = None,
+    rerank_observations: list[RerankObservation] | None = None,
 ) -> dict[str, Any]:
     """构造基线 JSON 的载荷（`_meta` 里记录口径，供 `load_baseline` 校验）。
 
     ``_meta.route_contributions`` 记录本次各路由的贡献条数 —— 它不是**指标**（无方向/容差，
     故不参与退化判定），而是**口径快照**：将来某条路由静默变成 0 贡献时，可与它对比发现。
+
+    ★ ``_meta.rerank_status_counts``（修复批 Important-3，B2 四态送达基线工件）：
+      本次逐 query 的 tier-0 重排状态分布（`off`/`success`/`degraded`/`failed`；
+      老链路没写该字段的按 ``unknown`` 单列，**不折进任何一态**）。同样是口径快照、
+      非指标。此前基线**完全不导出**该状态 ⇒ 「四态已实现」在工件面上零证据
+      （实测 9 份基线含该字样 = 0）。★ 本字段自本批起对**新录制**的基线生效；
+      历史 9 份基线（含 pre_task9 一代）**没有**这个键，引用时必须区分这两件事。
+      `rerank_observations=None` ⇒ 不写该键（没观察 = 没证据，不造空分布冒充「全未知」）。
     """
-    return {
+    payload: dict[str, Any] = {
         "_meta": {
             "note": "由 evaluation.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
             "embedding_mode": embedding_mode(),
@@ -1171,6 +1180,12 @@ def build_baseline_payload(
         "metrics": metrics.as_dict(),
         **build_provenance("src/evaluation/retrieval_gate.py"),
     }
+    if rerank_observations is not None:
+        status_counts: Counter[str] = Counter(
+            (o.rerank_status or "unknown") for o in rerank_observations
+        )
+        payload["_meta"]["rerank_status_counts"] = dict(status_counts)
+    return payload
 
 
 # ── 重录基线前的合理性校验（2026-09-24）───────────────────────────────
@@ -1323,6 +1338,7 @@ def main(argv: list[str] | None = None) -> int:
             golden_path=args.golden,
             indexed_chunks=total,
             route_contributions=route_contributions,
+            rerank_observations=rerank_observations,
         )
 
         if args.update_baseline:

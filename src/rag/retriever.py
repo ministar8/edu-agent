@@ -193,6 +193,9 @@ async def aretrieve_evidence(
     async_decompose_ms = round((time.perf_counter() - _decompose_start) * 1000, 3)
 
     _stage_start = time.perf_counter()
+    # ★ 修复批 Important-3（B2 送达断链）：空包时没有文档可挂 `_rerank_status`，
+    #   改由 `rerank_status_out` 这个**旁路出参**把 `_stage_rerank` 已算出的状态带回桥接处。
+    _rerank_status_bridge: dict[str, str] = {}
     docs = await aretrieve_documents(
         query=query,
         collection_name=collection_name,
@@ -204,6 +207,7 @@ async def aretrieve_evidence(
         cat=_cat,
         precomputed_sub_queries=precomputed_sub_queries,
         on_stage=on_stage,
+        rerank_status_out=_rerank_status_bridge,
     )
     retrieval_latency_ms = round((time.perf_counter() - _stage_start) * 1000, 3)
 
@@ -222,6 +226,11 @@ async def aretrieve_evidence(
                 "score_threshold": score_threshold,
                 "retrieval_latency_ms": retrieval_latency_ms,
                 "rerank_latency_ms": None,
+                # ★ B2（修复批 Important-3）：**空包分支同样写 `rerank_status`** ——
+                #   旧版这里根本没有该键，`_stage_rerank` 算出的 off/degraded/failed
+                #   被整包丢弃（实测 28 份归档 / 433 条记录、9 份基线含该字段 = 0）。
+                #   桥接处异常早于重排 ⇒ 出参没写 ⇒ 落 `""`（未知，不回填，与非空分支同律）。
+                "rerank_status": _rerank_status_bridge.get("rerank_status", ""),
             },
         )
     else:

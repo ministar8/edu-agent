@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 72  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
+_EXPECTED_ITEMS = 79  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 # ★ 修复轮 F7 再 +4：`8j`（map_route_failures 双向）/`8k`（单元内 reset 回归锁）/
 #   `8l`（run_case 必调 reset_memory_read_statuses，**行为**取证）/`8m`（gate 的 reset↔收割配对）
 #   ⇒ 62；控制器复验发现 F6 的映射只由外部探针证明、62 项里没有一条会因它回归而红
@@ -19,8 +19,15 @@ _EXPECTED_ITEMS = 72  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T
 #   + B1 唯一权威换算点结构锁 `9g` +2 ⇒ 71；控制器复验 B2「产生→存储→聚合→报告」全链路时发现
 #   `rerank_status` 要跨**三跳改名**才落到归档（`_rerank_status` → `rerank_status` → probe → record），
 #   每跳都带 `""` 掩盖默认值、且桥接在 `aretrieve_documents` 内部（纯内存测试拿不到）⇒ 补 `9h`
-#   键名配对结构锁 ⇒ **72**。
-#   计数器只增不减：既有判据一条都不许删。
+#   键名配对结构锁 ⇒ **72**；
+#   ★ 收尾修复批（Important-1/2/3）+7：`9j`（reprobe 的 B7 消费侧**行为**锁：注入故障 ⇒ error
+#   不降级 + 凭据成对刷新 + 下一条干净 record 不受染）/`9k`（verify 缺键/空串/ok/error 四格
+#   **行为**锁，钉死「缺键不得 pass」）/`9l`（`_no_reply` 体内 `has_path` 的 AST 承重锁，8o 同款）/
+#   `9m`（空包送达**行为**锁：真实 aretrieve_documents 的 finally 出参 + 真实 retriever 桥接五格）/
+#   `9n`（基线 payload 导出 `_meta.rerank_status_counts` **行为**锁）/`9o`（probe 读侧五格等值
+#   **行为**锁）/`9p`（record 侧 probe⇒record⇒to_dict 工件送达**行为**锁）⇒ **79**。
+#   计数器只增不减：既有判据一条都不许删；`8g`/`8k` 的期望文件集随 reprobe 第三单元**按事实生长**
+#   （不是放松 —— 单元内部 reset 的禁句 `8k` routes 零调用断言原样保留）。
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -485,17 +492,21 @@ def check_8() -> None:
     #   后一轮的 reset 会抹掉前一轮**尚未被 `run_case` 消费**的失败证据（实测注入 BM25 全线故障
     #   ⇒ 读取时失败记录为 `[]`），检测能力反而**低于改动前**。reset 只允许在**独立取证单元的边界**
     #   （单元内部清空 = 销毁本单元的物证）⇒ 本判据期望 **两处**，撤销的回归锁由 `8k` 承担。
+    # ★ 修复批 Important-1 的**按事实修订**（不是放松，是边界集合随新单元生长）：
+    #   `cli._reprobe` 每条 record 的 reprobe 与 `run_case` 同构 = 独立取证单元 ⇒ 第三处**单元边界**
+    #   （`src/evaluation/task_eval/cli.py`）。单元**内部**依旧禁止 reset（`8k` 的 routes 零调用不变）。
     reset_units = [
         p
         for p in (
             "src/evaluation/retrieval_gate.py",
             "src/evaluation/task_eval/runner.py",
+            "src/evaluation/task_eval/cli.py",
         )
         if "reset_query_failures()" in Path(p).read_text(encoding="utf-8")
     ]
     check(
-        "8g reset 被两个独立取证单元边界各调一次（第三点=单元内清空，v1.3 已撤销）",
-        len(reset_units) == 2,
+        "8g reset 被三个独立取证单元边界各调一次（gate/run_case/reprobe；单元内 reset 于 v1.3 撤销）",
+        len(reset_units) == 3,
         f"只找到 {reset_units}",
     )
 
@@ -680,8 +691,10 @@ def check_8() -> None:
     #     提到 `reset_query_failures` 不算调用点（本文件与 routes.py 的注释里就有好几处，
     #     字符串判据会当场假红/假绿）。
     #   两个断言：① `src/rag/routes.py` 里**零**调用；
-    #            ② 生产面（`src/`）该调用**恰好**落在两个独立取证单元文件
-    #               （按**文件路径**判定，不是出现次数）；
+    #            ② 生产面（`src/`）该调用**恰好**落在**三个**独立取证单元文件
+    #               （gate / run_case / reprobe；按**文件路径**判定，不是出现次数）——
+    #               修复批 Important-1 把 `cli.py` 补成第三单元，`run_case` 与 `_reprobe`
+    #               都以「一次检索探针」为单元边界；
     #            ③ `scripts/` 侧唯一持有者是 gate 自己的取证夹具（8h）——列进白名单并说明理由，
     #               否则「谁都能拿 reset 当测试脚手架」这件事也会变成隐式的第三点。
     import ast
@@ -708,9 +721,14 @@ def check_8() -> None:
     src_units = _reset_call_files("src")
     scripts_units = _reset_call_files("scripts")
     check(
-        "8k 单元内 reset 回归锁：routes 零调用 + src 恰好两个单元边界",
+        "8k 单元内 reset 回归锁：routes 零调用 + src 恰好三个单元边界",
         not routes_reset_calls
-        and src_units == {"src/evaluation/retrieval_gate.py", "src/evaluation/task_eval/runner.py"}
+        and src_units
+        == {
+            "src/evaluation/retrieval_gate.py",
+            "src/evaluation/task_eval/runner.py",
+            "src/evaluation/task_eval/cli.py",
+        }
         and scripts_units == {"scripts/evidence_chain_gate.py"},
         f"routes 调用行={routes_reset_calls} src={sorted(src_units)} scripts={sorted(scripts_units)}",
     )
@@ -1061,6 +1079,435 @@ def check_9() -> None:
     )
 
 
+def check_9reprobe() -> None:
+    """收尾修复批 `9j`（Important-1）——reprobe 的 B7 消费侧**行为**锁。
+
+    拆成 `9reprobe`/`9verify`/`9delivery` 三个函数只因 `check_9` 与单函数的圈复杂度
+    已达 ruff C901 上限（判据编号仍属 `9` 系列，计数器链不变：`9h` 之后是 `9j`，
+    `9i` 按 §20.7.2 B12 的登记**留空不占用**）。
+    ★ 全部是**行为**锁（项目所有者的验收原话：「不能再只依赖键名/AST 结构锁」「必须证明
+    状态实际抵达工件」）：真调被修函数/消费链，断言**实际产出的值**。
+    零 token 硬约束的执行方式：IO 依赖一律**纯内存 monkeypatch**
+    （`src/core/llm.py:192` 明说 `USE_FAKE_MODEL` 只让 agent 层变假 ⇒ 任何可能真跑检索
+    链的用例都必须把召回/重排/缓存这些跳整个换掉，本批没有一条会打到 dashscope/TEI）。
+    """
+
+    # ── 9j（Important-1）：reprobe 的 B7 消费侧 —— 行为锁 ──────────────────────
+    #   注入路由故障 ⇒ reprobe 后该 record 的 `retrieval_status` **仍是 `error`**、
+    #   不得降回 ok/empty（探针自报 `ok`——`_safe_to_thread` 按路由收敛，异常到不了探针层）；
+    #   凭据与状态**成对刷新**（`route_failure_notes` / `rerank_status` 都落到本次读数）；
+    #   ★ 下一条**干净** record 必须是 `ok` + 空凭据 ⇒ 这就是 reset 早于每条探针的证据：
+    #     删掉 `_reprobe` 循环里的 reset ⇒ A 的故障漏进 B ⇒ 本判据红（reset↔消费成对锁）。
+    import argparse as _ap9j
+    import asyncio
+    import contextlib as _cl9j
+    import io as _io9j
+    import json as _js9j
+    import tempfile as _tf9j
+
+    from evaluation.task_eval import cli as _cli9j
+    from evaluation.task_eval import retrieval_probe as _rp9j
+    from evaluation.task_eval.cases import load_demo as _ld9j
+    from evaluation.task_eval.retrieval_probe import RetrievalProbe as _Probe9j
+    from rag.vectorstore import get_vector_store_manager as _gvsm
+
+    _qa_cases9j = [c for c in _ld9j() if c.task == "qa"]
+    _case_a, _case_b = _qa_cases9j[0], _qa_cases9j[1]
+    _orig_probe9j = _rp9j.probe_retrieval
+    _note9j = "__9j_gate_fixture__: RuntimeError"
+    _mgr9j = _gvsm()
+
+    async def _fake_probe9j(query: str, **_kw):
+        if str(query) == _case_a.query:
+            # 模拟「路由故障、被 `_safe_to_thread` 收敛」：探针无感、自报 ok，
+            # 故障只落 manager 的 append-only 清单（生产者侧行为，逐字同 8h）。
+            _mgr9j.record_query_failure(_note9j)
+        return _Probe9j(
+            ok=True, status="ok", pack_len=10, evidence_count=1, rerank_status="degraded"
+        )
+
+    def _mkrec9j(c, status: str) -> dict:
+        return {
+            "case_id": c.case_id,
+            "task": "qa",
+            "task_mode": c.task_mode,
+            "query": c.query,
+            "retrieval_status": status,
+            "reply": "经核对：题干与参考答案一致。",
+            "hard_fails": [],
+            "route_failure_notes": [],
+            "rerank_status": "",
+        }
+
+    with _tf9j.TemporaryDirectory() as _td9j:
+        _inp9j = Path(_td9j) / "in.jsonl"
+        _outp9j = Path(_td9j) / "out.jsonl"
+        _inp9j.write_text(
+            "".join(
+                _js9j.dumps(r, ensure_ascii=False) + "\n"
+                for r in (_mkrec9j(_case_a, "error"), _mkrec9j(_case_b, "ok"))
+            ),
+            encoding="utf-8",
+        )
+        _args9j = _ap9j.Namespace(records=str(_inp9j), out=str(_outp9j), k=5, no_rerank=True)
+        _rp9j.probe_retrieval = _fake_probe9j
+        _mgr9j.reset_query_failures()
+        try:
+            with _cl9j.redirect_stdout(_io9j.StringIO()):  # `_reprobe` 会打印报告，吞进内存
+                _rc9j = asyncio.run(_cli9j._reprobe(_args9j))
+        finally:
+            _rp9j.probe_retrieval = _orig_probe9j
+            _mgr9j.reset_query_failures()
+        _rows9j = [
+            _js9j.loads(line)
+            for line in _outp9j.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    _a9j = next((r for r in _rows9j if r.get("case_id") == _case_a.case_id), {})
+    _b9j = next((r for r in _rows9j if r.get("case_id") == _case_b.case_id), {})
+    check(
+        "9j reprobe 消费侧（行为）：故障注入 ⇒ error 不降级 + 凭据/重排状态成对刷新；下一条干净 record 不受染（reset↔消费成对）",
+        _rc9j == 0
+        and _a9j.get("retrieval_status") == "error"
+        and _a9j.get("route_failure_notes") == [_note9j]
+        and _a9j.get("rerank_status") == "degraded"
+        and "reprobe_of" in _a9j
+        and _b9j.get("retrieval_status") == "ok"
+        and _b9j.get("route_failure_notes") == []
+        and _b9j.get("rerank_status") == "degraded",
+        f"rc={_rc9j} A={_a9j.get('retrieval_status')}/{_a9j.get('route_failure_notes')}/{_a9j.get('rerank_status')} "
+        f"B={_b9j.get('retrieval_status')}/{_b9j.get('route_failure_notes')}",
+    )
+
+
+def check_9verify() -> None:
+    """收尾修复批 `9k`/`9l`（Important-2）——verify 侧「缺键 ≠ 可测」的行为锁 + 结构承重锁。"""
+
+    # ── 9k（Important-2）：verify 判据「缺键 ≠ 可测」—— 行为锁 ─────────────────
+    #   四条各一（项目所有者验收原话）：缺键 / 空串 / `ok` / `error`；
+    #   「缺键不得返回 pass」被钉死 —— 修复前的实测反例正是 **缺键 ⇒ `ver_fabricated = pass`**
+    #   （把「没有这个证据」读成「测到了且通过」，与同包 memory.py 的 F6 裁定互相矛盾）。
+    #   ★ `error` 仍属可测（reply 本身是可观测物证，§1.3 tier-1）—— 本批一字未动，这里钉住。
+    from evaluation.task_eval.predicates import registry as _reg9k
+
+    _verf9k = _reg9k.get("ver_fabricated").fn
+    _reply9k = "经核对：2023 年第 14 题参考答案为 B，与真题一致。"  # 三特征不同现 ⇒ 未编题
+    _base9k = {"task": "verify", "case_id": "9k", "reply": _reply9k}
+    _v_missing = _verf9k(dict(_base9k))
+    _v_empty = _verf9k({**_base9k, "retrieval_status": ""})
+    _v_ok = _verf9k({**_base9k, "retrieval_status": "ok"})
+    _v_error = _verf9k({**_base9k, "retrieval_status": "error"})
+    check(
+        "9k verify：缺键/空串 ⇒ missing_premise（★ 缺键不得 pass）；ok/error ⇒ 可测且同判（行为，F6 镜像项）",
+        _v_missing == "missing_premise"
+        and _v_empty == "missing_premise"
+        and _v_ok == "pass"
+        and _v_error == "pass",
+        f"缺键={_v_missing} 空串={_v_empty} ok={_v_ok} error={_v_error}",
+    )
+
+    # ── 9l（Important-2 的**结构**承重锁，与 `8o` 同款）：缺键区分由 `has_path` 承担 ──
+    #   ★ 为什么 9k 不够：`_no_reply` 对「缺键」与「空串」的**输出相同**（都 missing_premise）
+    #     ⇒ 行为用例分不出 `has_path(...)` 与真值写法 `not rec.get("retrieval_status")`
+    #     （后者今天行为等价，但它把「存在性」悄悄换成了「真值」——F6 的教训正是从这里长出来的）。
+    #     与 `8o` 同一理由：只能走 AST，定位 `_no_reply` **函数体内**确有 `has_path` 调用且点名该键。
+    import ast as _ast9l
+    import pathlib as _pl9l
+
+    _ver_src9l = (
+        _pl9l.Path(__file__).resolve().parents[1] / "src/evaluation/task_eval/predicates/verify.py"
+    ).read_text(encoding="utf-8")
+    _fn9l = next(
+        (
+            n
+            for n in _ast9l.walk(_ast9l.parse(_ver_src9l))
+            if isinstance(n, _ast9l.FunctionDef) and n.name == "_no_reply"
+        ),
+        None,
+    )
+    _hp9l = (
+        [
+            n
+            for n in _ast9l.walk(_fn9l)
+            if isinstance(n, _ast9l.Call)
+            and (getattr(n.func, "id", "") or getattr(n.func, "attr", "")) == "has_path"
+        ]
+        if _fn9l is not None
+        else []
+    )
+    _key9l = any(any("retrieval_status" in _ast9l.unparse(a) for a in n.args) for n in _hp9l)
+    check(
+        "9l _no_reply 体内确以 has_path 区分缺键（AST 承重锁，与 8o 同款；import/体外 decoy 不算）",
+        _fn9l is not None and len(_hp9l) >= 1 and _key9l,
+        f"_no_reply 存在={_fn9l is not None}；体内 has_path 调用={len(_hp9l)} 处；点名键={_key9l}",
+    )
+
+
+def check_9delivery() -> None:
+    """收尾修复批 `9m`–`9p`（Important-3）——B2 四态「送达工件」的行为锁链。
+
+    覆盖：pipeline `finally` 出参（9m-A）、retriever 空包桥接（9m-B）、
+    基线 payload 导出（9n）、probe 读侧（9o）、record 落盘（9p）。
+    """
+    import asyncio
+
+    # ── 9m（Important-3）：B2 空包送达 —— 行为锁（破坏性验证 ① 的落点） ─────────────
+    #   A) **真实** `pipeline.aretrieve_documents`（编排层，IO 子阶段纯内存替身）：
+    #      空结果 + HyDE 交回 `failed` ⇒ 调用方出参 `rerank_status_out` 被写入 `failed`
+    #      （写在 `finally` ⇒ 早段异常路径也必须落，且落 `""`＝未知、**不凭空造**）；
+    #   B) **真实** `retriever.aretrieve_evidence` 桥接：off/degraded/failed/success + 未写
+    #      五格 —— 空包分支的 `fused.metadata` **恒有** `rerank_status` 键且值=桥接送出值。
+    #      旧代码空包分支**根本没有这个键**（评审实测：状态在桥接这一跳被整包丢弃）。
+    import rag.pipeline as _pipe9m
+    import rag.retriever as _ret9m
+    import rag.semantic_cache as _sc9m
+    from rag.pipeline import _HydeOutcome as _HO9m
+    from rag.pipeline import _RetrievalPlan as _RP9m
+    from rag.pipeline import _WindowOutcome as _WO9m
+    from rag.retrieval_plan import L2_STANDARD as _L2_9m
+
+    _pnames9m = (
+        "_stage_classify_query",
+        "_stage_resolve_plan",
+        "_stage_decompose_query",
+        "_stage_recall_and_merge",
+        "_stage_dedup_and_threshold",
+        "_stage_hyde",
+        "_stage_expand_windows",
+    )
+    _orig9m_pipe = {n: getattr(_pipe9m, n) for n in _pnames9m}
+    _orig9m_ret = (
+        _ret9m.aclassify_query,
+        _ret9m.decompose,
+        _ret9m.aretrieve_documents,
+        _sc9m.get_semantic_cache,
+    )
+
+    async def _p_classify9m(query, cat=None):
+        return [], cat
+
+    def _p_plan9m(query, cat, k, score_threshold, use_rerank, depth):
+        return _RP9m(
+            depth=depth,
+            k=k,
+            use_rerank=False,
+            effective_threshold=0.0,
+            coarse_k=k,
+            retrieval_layer="L2",
+            route_type="l2_standard",
+        )
+
+    async def _p_decompose9m(query, cat, depth, precomputed_sub_queries):
+        return [query], False
+
+    async def _p_recall9m(req):
+        return []
+
+    async def _p_recall_boom9m(req):
+        raise RuntimeError("9m 模拟重排阶段之前的异常")
+
+    async def _p_dedup9m(results, query, cat, threshold):
+        return [], 0, 0
+
+    async def _p_hyde9m(filtered, **_kw):
+        return _HO9m([], False, 0, "", "failed", 0.0)
+
+    async def _p_window9m(filtered, **_kw):
+        return _WO9m([], 0.0, 0)
+
+    sink_a: dict[str, str] = {}
+    sink_x: dict[str, str] = {}
+    raised9m = False
+    results9mb: dict[object, object] = {}
+    try:
+        _pipe9m._stage_classify_query = _p_classify9m
+        _pipe9m._stage_resolve_plan = _p_plan9m
+        _pipe9m._stage_decompose_query = _p_decompose9m
+        _pipe9m._stage_recall_and_merge = _p_recall9m
+        _pipe9m._stage_dedup_and_threshold = _p_dedup9m
+        _pipe9m._stage_hyde = _p_hyde9m
+        _pipe9m._stage_expand_windows = _p_window9m
+        # A1：空包 + HyDE 交回 failed ⇒ 出参送达（真实编排 + 真实 _stage_rerank + 真实 finally 写入）
+        docs9m = asyncio.run(
+            _pipe9m.aretrieve_documents(
+                "9m 查询", k=3, depth=_L2_9m.depth, rerank_status_out=sink_a
+            )
+        )
+        a_ok = docs9m == [] and sink_a == {"rerank_status": "failed"}
+        # A2：重排**之前**抛异常 ⇒ `finally` 仍要落，且落 ""（未知，不回填）
+        _pipe9m._stage_recall_and_merge = _p_recall_boom9m
+        try:
+            asyncio.run(
+                _pipe9m.aretrieve_documents(
+                    "9m 查询", k=3, depth=_L2_9m.depth, rerank_status_out=sink_x
+                )
+            )
+        except RuntimeError:
+            raised9m = True
+        x_ok = raised9m and sink_x == {"rerank_status": ""}
+
+        # B：真实 `aretrieve_evidence` 桥接（只换掉 IO：分类/分解/召回/缓存）
+        async def _p_aclassify9mb(query, terms):
+            return None
+
+        async def _p_adecompose9mb(query, cat=None):
+            return [query]
+
+        class _NoCache9m:
+            async def alookup(self, *a, **k):
+                raise RuntimeError("9m 缓存关闭")
+
+            async def astore(self, *a, **k):
+                raise RuntimeError("9m 缓存关闭")
+
+        def _mk_aretdocs(status):
+            async def _p_aretdocs9mb(**kw):
+                _sink = kw["rerank_status_out"]  # retriever 忘传出参 ⇒ KeyError ⇒ 行为锁红
+                if status is not None:
+                    _sink["rerank_status"] = status
+                return []
+
+            return _p_aretdocs9mb
+
+        _ret9m.aclassify_query = _p_aclassify9mb
+        _ret9m.decompose = _p_adecompose9mb
+        _sc9m.get_semantic_cache = lambda: _NoCache9m()
+        for _st9mb in ("off", "degraded", "failed", "success", None):
+            _ret9m.aretrieve_documents = _mk_aretdocs(_st9mb)
+            _fused9mb = asyncio.run(
+                _ret9m.aretrieve_evidence("9m 查询", k=3, use_rerank=False, depth=_L2_9m.depth)
+            )
+            results9mb[_st9mb] = _fused9mb.metadata.get("rerank_status", "<键缺失>")
+    finally:
+        for n, f in _orig9m_pipe.items():
+            setattr(_pipe9m, n, f)
+        (
+            _ret9m.aclassify_query,
+            _ret9m.decompose,
+            _ret9m.aretrieve_documents,
+            _sc9m.get_semantic_cache,
+        ) = _orig9m_ret
+
+    b_ok = (
+        results9mb.get("off") == "off"
+        and results9mb.get("degraded") == "degraded"
+        and results9mb.get("failed") == "failed"
+        and results9mb.get("success") == "success"
+        and results9mb.get(None) == ""
+    )
+    check(
+        "9m B2 送达（行为）：aretrieve_documents 出参经 finally 送达（含异常路径落 "
+        "）；retriever 空包分支恒写 rerank_status 且=桥接值（五格）",
+        a_ok and x_ok and b_ok,
+        f"A(空包送达)={sink_a} A2(异常)={sink_x} raised={raised9m} B(桥接五格)={results9mb}",
+    )
+
+    # ── 9n（Important-3）：基线 payload 导出（破坏性验证 ② 的落点） ────────────────
+    #   `build_baseline_payload` 传**合成**观察（四态各一 + 一格老链路未写），断言
+    #   `_meta.rerank_status_counts` 逐格导出、`""` 单列 `unknown`（不折进任何一态）；
+    #   没传观察 ⇒ **不写该键**（没证据就不造一份「全未知」冒充送达）。
+    #   ★ 口径红线：这只锁「自本批起新录基线会带该字段」；历史 9 份基线**没有**这个键，
+    #     引用时不得写成「历史工件已补齐」（见 fixbatch 报告与 §20.7.2 B12 的更正登记）。
+    from evaluation.retrieval_gate import RerankObservation as _RO9n
+    from evaluation.retrieval_gate import RetrievalMetrics as _RM9n
+    from evaluation.retrieval_gate import build_baseline_payload as _bbp9n
+
+    _m9n = _RM9n(
+        n_queries=5,
+        category_hit_at_1=1.0,
+        category_hit_at_k=1.0,
+        category_mrr=1.0,
+        category_precision=1.0,
+        empty_result_rate=0.0,
+        mean_evidence_count=3.0,
+    )
+    _obs9n = [
+        _RO9n(True, s == "success", s == "success", s)
+        for s in ("off", "success", "degraded", "failed")
+    ]
+    _obs9n.append(_RO9n(True, False, False, ""))
+    _pl9n = _bbp9n(
+        metrics=_m9n, golden_path="g.jsonl", indexed_chunks=10, rerank_observations=_obs9n
+    )
+    _pl9n_none = _bbp9n(metrics=_m9n, golden_path="g.jsonl", indexed_chunks=10)
+    check(
+        "9n 基线 payload（行为）：_meta.rerank_status_counts 四态+unknown 各列导出；无观察 ⇒ 不造键",
+        _pl9n["_meta"].get("rerank_status_counts")
+        == {"off": 1, "success": 1, "degraded": 1, "failed": 1, "unknown": 1}
+        and "rerank_status_counts" not in _pl9n_none["_meta"],
+        f"导出={_pl9n['_meta'].get('rerank_status_counts')} 无观察时含键={('rerank_status_counts' in _pl9n_none['_meta'])}",
+    )
+
+    # ── 9o（Important-3）：probe 读侧送达 —— 行为锁（hop ③，评审实证的零 IO 路线） ──
+    #   `aretrieve_evidence_with_retry` 换成返回**带 `rerank_status` 的 fused**（零 Chroma
+    #   零 TEI），四态 + 空串各跑一次**真实** `probe_retrieval`（policy/finalize/apply 真码），
+    #   断言 `probe.rerank_status` 逐格等值 —— 缺省/未知不落任何冒充值。
+    import rag.retriever as _ret9o
+    from evaluation.task_eval.retrieval_probe import probe_retrieval as _probe9o
+    from rag.evidence import FusedEvidence as _FE9o
+
+    _orig9o = _ret9o.aretrieve_evidence_with_retry
+    got9o: dict[str, object] = {}
+    try:
+        for _st9o in ("off", "success", "degraded", "failed", ""):
+
+            def _mk9o(_st: str):
+                async def _fake_retry(_query: str = "", **_kw):
+                    return _FE9o(
+                        final_context="包", sources=[], metadata={"rerank_status": _st}
+                    ), None
+
+                return _fake_retry
+
+            _ret9o.aretrieve_evidence_with_retry = _mk9o(_st9o)
+            _p9o = asyncio.run(
+                _probe9o("数据结构怎么复习", task_mode="learn", k=3, use_rerank=False)
+            )
+            got9o[_st9o] = _p9o.rerank_status
+    finally:
+        _ret9o.aretrieve_evidence_with_retry = _orig9o
+    check(
+        "9o probe 读侧送达（行为）：fused.metadata.rerank_status ⇒ probe.rerank_status 五格等值（含未知不冒充）",
+        all(got9o.get(st) == st for st in ("off", "success", "degraded", "failed", "")),
+        f"读到={got9o}",
+    )
+
+    # ── 9p（Important-3）：record 侧送达 —— 行为锁（probe ⇒ record ⇒ 工件键） ────────
+    #   `run_case(run_agent=False)` + 合成探针（`rerank_status="failed"`），断言
+    #   record.rerank_status、`to_dict()` 工件键、派生 `rerank_used` 三者同时成立 ——
+    #   「failed 不得冒充 success、送达不再断链」在这里闭掉 record 这一跳。
+    from evaluation.task_eval import runner as _runner
+    from evaluation.task_eval.cases import TaskCase
+    from evaluation.task_eval.retrieval_probe import RetrievalProbe as _Probe9p
+
+    _orig9p = _runner.probe_retrieval
+    try:
+
+        async def _fake_probe9p(*_a, **_k):
+            return _Probe9p(
+                ok=True, status="ok", pack_len=5, evidence_count=1, rerank_status="failed"
+            )
+
+        _runner.probe_retrieval = _fake_probe9p
+        _rec9p = asyncio.run(
+            _runner.run_case(
+                TaskCase(case_id="9p", task="qa", task_mode="learn", query="q"),
+                k=1,
+                run_agent=False,
+            )
+        )
+    finally:
+        _runner.probe_retrieval = _orig9p
+    _d9p = _rec9p.to_dict()
+    check(
+        "9p record 侧送达（行为）：probe.rerank_status ⇒ record.rerank_status ⇒ to_dict 工件键；failed ⇒ 派生 rerank_used False",
+        _rec9p.rerank_status == "failed"
+        and _d9p.get("rerank_status") == "failed"
+        and _rec9p.rerank_used is False,
+        f"record={_rec9p.rerank_status!r} 工件={_d9p.get('rerank_status')!r} 派生 used={_rec9p.rerank_used}",
+    )
+
+
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
     """把取证结果落盘成 ledger 的输入（Task 6 的 `falsify_passed` 读它，不靠人回忆）。"""
     import json
@@ -1096,6 +1543,9 @@ def main() -> int:
     check_7()
     check_8()
     check_9()
+    check_9reprobe()
+    check_9verify()
+    check_9delivery()
     if "--emit" in sys.argv:
         emit_falsify_report()
     total = len(_ITEMS)
