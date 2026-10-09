@@ -1,0 +1,396 @@
+{
+  "design": {
+    "population_keyed_items": 514,
+    "n_target": 59,
+    "method": "zero-acceptance attribute sampling",
+    "detect_error_rate_at_least": 0.05,
+    "confidence": 0.95,
+    "formula": "n = ceil(ln(1-c)/ln(1-p))",
+    "seed": 20261009,
+    "unit": "(question_id, answer_key) 原子；清单内不预填源键值以免给核验者定锚",
+    "strata": "来源文件 = 考试年份",
+    "forced_quotas": {
+      "2009": 5,
+      "2010": 5,
+      "2013": 5,
+      "2016": 5
+    },
+    "excluded_from_denominator": "缺答案键的题（单独登记，不入错键率分母）",
+    "shortfall_notes": []
+  },
+  "allocation": {
+    "2009": 5,
+    "2010": 5,
+    "2013": 5,
+    "2016": 5,
+    "2011": 4,
+    "2012": 4,
+    "2014": 3,
+    "2015": 3,
+    "2017": 2,
+    "2018": 2,
+    "2019": 3,
+    "2020": 3,
+    "2021": 3,
+    "2022": 3,
+    "2023": 3,
+    "2024": 3,
+    "2025": 3
+  },
+  "sample": [
+    {
+      "year": "2009",
+      "question_id": "2009-Q2",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2009",
+      "question_id": "2009-Q33",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2009",
+      "question_id": "2009-Q25",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2009",
+      "question_id": "2009-Q7",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2009",
+      "question_id": "2009-Q11",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2010",
+      "question_id": "2010-Q1",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2010",
+      "question_id": "2010-Q40",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2010",
+      "question_id": "2010-Q12",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2010",
+      "question_id": "2010-Q21",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2010",
+      "question_id": "2010-Q2",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2011",
+      "question_id": "2011-Q7",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2011",
+      "question_id": "2011-Q5",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2011",
+      "question_id": "2011-Q34",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2011",
+      "question_id": "2011-Q18",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2012",
+      "question_id": "2012-Q16",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2012",
+      "question_id": "2012-Q35",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2012",
+      "question_id": "2012-Q38",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2012",
+      "question_id": "2012-Q24",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2013",
+      "question_id": "2013-Q1",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2013",
+      "question_id": "2013-Q25",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2013",
+      "question_id": "2013-Q18",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2013",
+      "question_id": "2013-Q27",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2013",
+      "question_id": "2013-Q33",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2014",
+      "question_id": "2014-Q12",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2014",
+      "question_id": "2014-Q3",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2014",
+      "question_id": "2014-Q29",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2015",
+      "question_id": "2015-Q6",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2015",
+      "question_id": "2015-Q2",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2015",
+      "question_id": "2015-Q7",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2016",
+      "question_id": "2016-Q2",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2016",
+      "question_id": "2016-Q17",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2016",
+      "question_id": "2016-Q33",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2016",
+      "question_id": "2016-Q9",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2016",
+      "question_id": "2016-Q25",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2017",
+      "question_id": "2017-Q38",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2017",
+      "question_id": "2017-Q30",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2018",
+      "question_id": "2018-Q4",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2018",
+      "question_id": "2018-Q31",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2019",
+      "question_id": "2019-Q20",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2019",
+      "question_id": "2019-Q19",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2019",
+      "question_id": "2019-Q9",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2020",
+      "question_id": "2020-Q18",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2020",
+      "question_id": "2020-Q2",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2020",
+      "question_id": "2020-Q32",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2021",
+      "question_id": "2021-Q3",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2021",
+      "question_id": "2021-Q29",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2021",
+      "question_id": "2021-Q34",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2022",
+      "question_id": "2022-Q34",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2022",
+      "question_id": "2022-Q2",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2022",
+      "question_id": "2022-Q8",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2023",
+      "question_id": "2023-Q36",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2023",
+      "question_id": "2023-Q25",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2023",
+      "question_id": "2023-Q4",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2024",
+      "question_id": "2024-Q12",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2024",
+      "question_id": "2024-Q22",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2024",
+      "question_id": "2024-Q1",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2025",
+      "question_id": "2025-Q15",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2025",
+      "question_id": "2025-Q35",
+      "verifier_reading": "",
+      "verdict": "pending"
+    },
+    {
+      "year": "2025",
+      "question_id": "2025-Q10",
+      "verifier_reading": "",
+      "verdict": "pending"
+    }
+  ]
+}

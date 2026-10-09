@@ -123,6 +123,10 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
   三项继续 `missing_premise`、Generate 门槛行**不发布综合成绩**、机械替身只作诊断；
   R 行须两人**独立求解**（不看模型给的键与解析）且按 tier-2 单独写。
   ★ 另加**冻结前置条件**：答案键**可靠性抽查规程**（完整性≠可靠性；514 有键题的总体、
+  ⇒ 规程已参数化：`scripts/p1_key_audit_sample.py`（抽样器，含 n 自校验）+
+  `evals/claims/p1_key_audit_sample.json`（**在看到任何核验结果之前**冻结的 59 原子清单，种子 20261009，
+  四个低覆盖批次各 ≥5、合计恰 59、清单内不预填源键值）。复算核对：
+  `uv run python scripts/p1_key_audit_sample.py --check`。扩查与升级规则**待裁定后才冻结**。
   按年份批次分层、预先固定种子与样本量目标、对照原始扫描页人工重读、缺键 160 题不入正确率分母）。  ⇒ Generate 的 P−1 等 gold schema 定义后再开；Task 3 交付的 `missing_premise` 分支是预期状态；
   **Generate 门槛行在可预见的将来走 limitation 路线**（除非之后定义 per-小问 schema 或收窄产出契约）。
 - 机械 answer-key 判据的三条边界（checkpoint 3 裁定）：① `answer_keys_of()` 只对
