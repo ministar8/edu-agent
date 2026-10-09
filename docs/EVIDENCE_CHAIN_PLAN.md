@@ -1944,6 +1944,16 @@ from evaluation.task_eval.predicates.common import has_path, is_reply_part
 ★ 语法实现只有一份（Task 3 建、Task 5 用、Task 7 用）。如果这里再写一份 `_REPLY_PARTS` 名单，
 就是第三套真源 —— 本计划要消灭的正是这种东西。
 
+★ **checkpoint 7 裁定 D5-A（改了 Step 2 片段里的一行语义）**：`item_reasons` 的缺键检查**只对
+`registry.for_task(task)` 非空的任务生效**。实测事实：该键的唯一生产者 `cli._backfill`
+（`cli.py:331-335`）在 `for pred in registry.for_task(task)` 循环**内**才写它，qa/grade 无判据、
+也无任何代码读它们的 `item_reasons` ⇒ 原样写法会把 `ec_r1` 的 30 条（qa15+grade15）算成 V0 红灯，
+而这些行**无论怎么 reanalyse 都不会绿**（先天无法清偿的红灯 = 逼人关掉门禁的成因）。
+`--check` 必须同时打印「跳过 N 条不适用行 + 理由」，且由判据 `7h` 双向钉死（有判据任务必报 /
+qa·grade 必不报 / 跳过条数 == 无判据记录数），防止日后把跳过集合悄悄扩大。
+真缺口一条未丢：`ec_r1` 2 类 30 处（15 条记录）、`phase1` 3 类 66 处（`item_reasons` 在老归档
+连 generate/verify/memory 都没有 ⇒ 那 36 处是真账）。
+
 本 Task 结束时 `_EXPECTED_ITEMS = 49`（Task 6 结束时为 **41**，`check_7` 贡献 8 项：7a/7b/7c/7d/7e + Step 4b 的 7f/7g + 评审 I-4 的 7h。
 ★ 7h 是 checkpoint 7 追加的：`item_reasons` 的不适用跳过集合是**推导**出来的 ⇒ 必须断言它非空且不许越界扩大，否则「整类任务都跳过」不会有任何一项变红）。
 
