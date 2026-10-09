@@ -8,10 +8,12 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 62  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
+_EXPECTED_ITEMS = 63  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 # ★ 修复轮 F7 再 +4：`8j`（map_route_failures 双向）/`8k`（单元内 reset 回归锁）/
 #   `8l`（run_case 必调 reset_memory_read_statuses，**行为**取证）/`8m`（gate 的 reset↔收割配对）
-#   ⇒ **62**。计数器只增不减：既有判据一条都不许删。
+#   ⇒ 62；控制器复验发现 F6 的映射只由外部探针证明、62 项里没有一条会因它回归而红
+#   ⇒ 补 `8n`（缺键/空串/failed ⇒ missing_premise 的双向回归锁）⇒ **63**。
+#   计数器只增不减：既有判据一条都不许删。
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -844,6 +846,45 @@ def check_8() -> None:
         "8m retrieval_gate 的 reset 与收割成对（finalbody 读 query_failures + extend 同一累计变量 + 该变量被 return）",
         bool(_rg_funcs) and not pairing,
         f"含 reset 的函数={[f.name for f in _rg_funcs]}；未配对={pairing}",
+    )
+
+    # ── 8n（修复轮 F6 的回归锁）：四态不许把「键缺失」折成「样本不适用」──────────
+    #   ★ 控制器实测（2026-10-09）：F6 的映射此前只有外部探针脚本在证，62 项里没有一条会因
+    #     它回归而红 ⇒ 这里补成双向断言。老归档（无 `memory_read_status` 键）跨多份归档实测 37 条。
+    from evaluation.task_eval.predicates import registry as _reg8
+
+    _pred = _reg8.get("memory_correct_use")
+    _mech_gold = {
+        "expected_memory": {
+            "type": "weak_topics",
+            "values": ["平衡二叉树"],
+            "should_be_recalled": True,
+        },
+        "expected_answer_property": {"forbidden_values": []},
+    }
+    _base = {"task": "memory", "case_id": "f6", "reply": "", "memory_cards": []}
+    missing_key = {**_base, "gold": _mech_gold}
+    empty_val = {**missing_key, "memory_read_status": ""}
+    failed_val = {**missing_key, "memory_read_status": "failed"}
+    non_mech = {
+        **_base,
+        "memory_read_status": "success",
+        "gold": {**_mech_gold, "expected_memory": {**_mech_gold["expected_memory"], "values": []}},
+    }
+    folded = [
+        name
+        for name, v in (
+            ("缺键", missing_key),
+            ("空串值", empty_val),
+            ("读链故障", failed_val),
+        )
+        if _pred.fn(v) != "missing_premise"
+    ]
+    na_wrong = _pred.fn(non_mech) != "not_applicable"
+    check(
+        "8n 缺键/空串/failed ⇒ missing_premise，只有不可机械判定的样本才是 not_applicable（F6 回归锁）",
+        not folded and not na_wrong,
+        f"被折叠={folded}；不适用正例异常={na_wrong}",
     )
 
 
