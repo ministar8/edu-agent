@@ -216,6 +216,74 @@ def falsify_evidence(
     return ok, "；".join(notes)
 
 
+# tier 声明的是「这个数字由谁决定」，不是可随手改的样式（评审 I-2 的根因就是这个数由人手写、
+# 且没人检查它凭什么）。两条合法来源：
+#   ① registry 派生 —— 依据在判据注册处，行里给 `tier_derived` 指明派生式；
+#   ② 字面量 —— 必须在本表点名依据锚点，且锚点要能在文档/裁定记录里查到同名条目。
+# ★ 表 + 白名单 + `tier_justification()` 抛错，三者合起来防的正是 `tier: 1  # 忘了为什么`，
+#   以及日后有人把 1 机械地改成 2 却不重新证明（改 tier 必须同时改本表的锚点，检查才会跟着走）。
+TIER_ANCHORS = frozenset(
+    {
+        "§1.3-tier0",  # 机械字段：归档里直接读的键值/计数
+        "§1.3-tier1",  # 可观测物证：不经 judge 的确定性计算
+        "§1.3-tier2",  # judge 观点 ⇒ 需要边界校准 + 重复抖动两个前置
+        "D14",  # Verify 行为层判据机械化（仍出题率=0 为硬条件）
+        "D15",  # Memory 分母摊开
+        "G1b-revoked",  # Grade 中段分回填撤销 ⇒ 改读 verdict_agreement 辅助位
+        "§4.1",  # 机械替身「必要非充分」改名规则
+        "§3",  # provenance 八键（字段存在性）
+        "§7-②",  # 两极 gold ⇒ ±10 容差无判别力的偏离登记
+        "§6-no-archive",  # 该维度无归档证据源 ⇒ 只能未测量
+    }
+)
+
+DERIVED_TIER_DIMS = frozenset({"Generate", "Verify", "Memory"})
+
+# dim -> (tier, 依据锚点)。只有**不**从 registry 派生的行才进这张表。
+LITERAL_TIER_REASONS: dict[str, tuple[int, tuple[str, ...]]] = {
+    "QA": (2, ("§1.3-tier2",)),
+    "Grade": (1, ("§1.3-tier1", "G1b-revoked", "§7-②")),
+    "Retrieval": (0, ("§1.3-tier0",)),
+    "hard failure": (0, ("§1.3-tier0",)),
+    "tool error": (0, ("§1.3-tier0",)),
+    "provenance": (0, ("§1.3-tier0", "§3")),
+    "Docker / TEI": (0, ("§6-no-archive",)),
+    "四任务链": (0, ("§6-no-archive",)),
+}
+
+
+def tier_decl(dim: str) -> dict[str, Any]:
+    """字面量行的 tier 申报：数值只存在于 `LITERAL_TIER_REASONS`，构建器拿不到裸 int。"""
+    tier, anchors = LITERAL_TIER_REASONS[dim]
+    return {"tier": tier, "tier_reason": anchors}
+
+
+def tier_decl_derived(dim: str, source: str, tier: int) -> dict[str, Any]:
+    """派生行的 tier 申报：dim 必须在 `DERIVED_TIER_DIMS` 且不在字面量表里（两表互斥 ⇒ 不会漂移）。"""
+    if dim not in DERIVED_TIER_DIMS:
+        raise ValueError(f"{dim}: 未申报为 registry 派生行 ⇒ 不能给裸 max(tier)")
+    if dim in LITERAL_TIER_REASONS:
+        raise ValueError(f"{dim}: 同时出现在字面量表与派生集合 ⇒ tier 依据有歧义")
+    return {"tier": tier, "tier_derived": source}
+
+
+def tier_justification(dim: str, spec: dict[str, Any]) -> tuple[str, str]:
+    """返回 (来源种类, 说明)。字面量缺锚点 / 锚点不在白名单 ⇒ 抛错，不静默放行。"""
+    derived = spec.get("tier_derived")
+    if derived:
+        return "registry", f"tier {spec['tier']} 派生自 {derived}"
+    anchors = tuple(spec.get("tier_reason") or ())
+    if not anchors:
+        raise ValueError(
+            f"{dim}: 字面量 tier={spec.get('tier')} 必须带 tier_reason"
+            "（§1.3 证据种类定义，或 D14/G1b-revoked 等既有降级裁定）"
+        )
+    unknown = sorted(a for a in anchors if a not in TIER_ANCHORS)
+    if unknown:
+        raise ValueError(f"{dim}: tier_reason 锚点 {unknown} 不在白名单 {sorted(TIER_ANCHORS)}")
+    return "literal", f"tier {spec['tier']} 为字面量，锚点 {'+'.join(anchors)}"
+
+
 def tier_ok_for(tier: int, boundary: bool, jitter: dict[str, float]) -> tuple[bool, str]:
     """§1.3 的 tier_ok 取值规则：tier 0/1 恒 True；tier 2 须两个前置都**算出来**为真。"""
     if tier <= 1:
@@ -335,7 +403,7 @@ def _row_qa(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "final_quality≥4 的 case 占比（唯一公式 `metrics.quality_pass`；"
         "judge 观点 ⇒ tier 2，两个前置见「前置」列）",
         "block": (rep.quality_pass if rep else None),
-        "tier": 2,
+        **tier_decl("QA"),
         "backing": (),
         "records": recs,
         "notes": [],
@@ -371,7 +439,11 @@ def _row_generate(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "五项完整交付率 `gen_case_pass`（registry 逐题复合，§3.1 冻结五项；"
         "机械替身 optional 项只作诊断、永不顶替冻结名进本行）",
         "block": cp,
-        "tier": max((p.tier for p in required), default=1),
+        **tier_decl_derived(
+            "Generate",
+            "registry 必需（非 optional）判据 max(tier)",
+            max((p.tier for p in required), default=1),
+        ),
         "backing": tuple(p.name for p in preds),
         "records": recs,
         "notes": notes,
@@ -398,7 +470,7 @@ def _row_grade(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "`score_tolerance@±10`（EFFECT_PLAN §3.1 头号；两极 gold ⇒ 行级判据改读 "
         "verdict_agreement 且只作辅助披露）",
         "block": tol or None,
-        "tier": 1,
+        **tier_decl("Grade"),
         "backing": (),
         "records": recs,
         "notes": notes,
@@ -414,7 +486,11 @@ def _row_verify(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "仍出题率 `ver_fabricated`（硬条件必须 0；D14 行为层把门——§6 原文 "
         "final_quality≥4 在 verify 上测的是检索覆盖，只作诊断）。值为**坏事率**",
         "block": blk,
-        "tier": max((p.tier for p in hard), default=1),
+        **tier_decl_derived(
+            "Verify",
+            "registry 硬条件（非 optional）判据 max(tier)",
+            max((p.tier for p in hard), default=1),
+        ),
         "backing": tuple(p.name for p in hard),
         "records": recs,
         "notes": ["值口径：rate 越高越坏（1.000 = 每条仍在编造真题）；门槛要求见 §6 原文列"],
@@ -437,7 +513,9 @@ def _row_memory(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "correct-use rate `memory_correct_use`（唯一公式 "
         "`metrics.memory_correct_use_from_record` 的 registry verdict 化）",
         "block": blocks.get("memory_correct_use") if recs else None,
-        "tier": max((p.tier for p in preds), default=1),
+        **tier_decl_derived(
+            "Memory", "registry 该任务全部判据 max(tier)", max((p.tier for p in preds), default=1)
+        ),
         "backing": tuple(p.name for p in preds),
         "records": recs,
         "notes": notes,
@@ -451,7 +529,7 @@ def _row_retrieval(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "kp_hit 率（tier 0 机械字段，全任务池化重算；Memory 除外——非知识检索任务）。"
         "§6「不低于 V-2026-10-02」需基线归档对比，未接入本 ledger ⇒ 不下该结论",
         "block": blk,
-        "tier": 0,
+        **tier_decl("Retrieval"),
         "backing": (),
         "records": pool,
         "notes": [],
@@ -464,7 +542,7 @@ def _row_hard_failure(ctx: dict[str, Any]) -> dict[str, Any]:
     return {
         "metric": "`hard_fails` 非空的记录占比（**坏事率**，越低越好）",
         "block": _count_block(k, len(recs)),
-        "tier": 0,
+        **tier_decl("hard failure"),
         "backing": (),
         "records": recs,
         "notes": [],
@@ -478,7 +556,7 @@ def _row_tool_error(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "`failure_reason` 含 `tool_error` 的记录占比（**坏事率**；判定唯一来源 "
         "`runner.mechanical_failures`，检索返空 `empty` 属 retrieval 口径、不计入本行）",
         "block": _count_block(k, len(recs)),
-        "tier": 0,
+        **tier_decl("tool error"),
         "backing": (),
         "records": recs,
         "notes": [],
@@ -497,18 +575,18 @@ def _row_provenance(ctx: dict[str, Any]) -> dict[str, Any]:
         "metric": "嵌套 `provenance` 八键齐全的记录占比（§3；与当前版本是否一致另见 "
         "provenance_match 布尔量）",
         "block": _count_block(k, len(recs)),
-        "tier": 0,
+        **tier_decl("provenance"),
         "backing": (),
         "records": recs,
         "notes": [],
     }
 
 
-def _row_no_archive(ctx: dict[str, Any]) -> dict[str, Any]:
+def _row_no_archive(ctx: dict[str, Any], *, dim: str = "Docker / TEI") -> dict[str, Any]:
     return {
         "metric": "本 ledger 无该维度的归档证据源（需服务验收/演示记录接入后才可算）",
         "block": None,
-        "tier": 0,
+        **tier_decl(dim),
         "backing": (),
         "records": [],
         "notes": [],
@@ -525,8 +603,8 @@ _ROW_BUILDERS = {
     "hard failure": _row_hard_failure,
     "tool error": _row_tool_error,
     "provenance": _row_provenance,
-    "Docker / TEI": _row_no_archive,
-    "四任务链": _row_no_archive,
+    "Docker / TEI": lambda ctx: _row_no_archive(ctx, dim="Docker / TEI"),
+    "四任务链": lambda ctx: _row_no_archive(ctx, dim="四任务链"),
 }
 
 
@@ -544,7 +622,9 @@ def _finish_row(dim: str, requirement: str, spec: dict[str, Any], ctx: dict[str,
     else:
         fp = False
         fp_notes.append("（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）")
+    tier_kind, tier_basis = tier_justification(dim, spec)
     tok, tok_note = tier_ok_for(int(spec["tier"]), ctx["boundary"], ctx["jitter"])
+    tok_note = f"[{tier_kind}] {tier_basis}；{tok_note}"
     pm, pm_note = provenance_match_for(recs, ctx["cur_cv"], ctx["cur_golden"])
     block = spec.get("block")
     disc = bool(block and block.get("rate") is not None)

@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 36
+_EXPECTED_ITEMS = 41
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -273,6 +273,64 @@ def check_6() -> None:
         if line.strip() and not line.startswith("#")
     ]
     check("6f 真实校准集的边界覆盖状态被如实记录", cl.boundary_calibrated(human) is False)
+
+    # ★ 评审 I-2 落地：tier 是「这个数字由谁决定」的声明。字面量必须带白名单锚点，
+    #   且锚点跟着事实走 —— 防 `tier: 1  # 忘了为什么`，也防日后把 1 机械改成 2 而不重新证明。
+    import build_claim_ledger as bcl  # noqa: E402  （同目录脚本，检查申报表的静态一致性）
+
+    lit = bcl.LITERAL_TIER_REASONS
+    bad_anchors = {
+        d: sorted(a for a in ans if a not in bcl.TIER_ANCHORS)
+        for d, (t, ans) in lit.items()
+        if any(a not in bcl.TIER_ANCHORS for a in ans)
+    }
+    empty = sorted(d for d, (_t, ans) in lit.items() if not ans)
+    check(
+        "6g 字面量 tier 锚点全部在册且非空（缺依据 ⇒ 构建即抛）",
+        not bad_anchors and not empty,
+        f"越界 {bad_anchors} 空 {empty}",
+    )
+    # 牙齿实测（不是「存在即通过」）：现场拆掉依据，必须抛 ValueError 而不是放行
+    teeth = []
+    for spec, why in (
+        ({"tier": 1}, "字面量无 tier_reason"),
+        ({"tier": 1, "tier_reason": ("D99-not-a-decision",)}, "锚点不在白名单"),
+    ):
+        try:
+            bcl.tier_justification("Grade", spec)
+            teeth.append(why)
+        except ValueError:
+            pass
+    check("6g2 拆掉依据确实红（漏报=0）", len(teeth) == 0, str(teeth))
+    uncovered = sorted(set(bcl._ROW_BUILDERS) - set(lit) - bcl.DERIVED_TIER_DIMS)
+    check(
+        "6h 每个维度行都申报了 tier 来源（无行能绕过）",
+        not uncovered,
+        f"未申报 {uncovered}",
+    )
+    tier2_dims = sorted(d for d in bcl._ROW_BUILDERS if (lit.get(d, (None, ()))[0] == 2))
+    check(
+        "6h2 走校准前置的 tier-2 行只有 QA（§6 原文的 judge 门槛；Verify/Grade 主指标已换轨 ⇒ 见 §7 偏离）",
+        tier2_dims == ["QA"],
+        str(tier2_dims),
+    )
+    # 派生行的 tier 由 registry 决定 ⇒ 这里核对「当前没有任何派生行落在 tier 2」。
+    # tier=2 的判据若存在，只能是 optional 机械替身（不顶替主行）；其 tier 值本身属 Task 3 遗留
+    # （替身按 §1.3 应为 tier 0/1），登记不在此处改。
+    from evaluation.task_eval.predicates import registry as _reg
+
+    derived_max: dict[str, int] = {}
+    for dim in sorted(bcl.DERIVED_TIER_DIMS):
+        task = {"Generate": "generate", "Verify": "verify", "Memory": "memory"}[dim]
+        preds = _reg.for_task(task)
+        keep = [p for p in preds if not p.optional] if dim != "Memory" else preds
+        derived_max[dim] = max((p.tier for p in keep), default=1)
+    tier2_preds = sorted(p.name for p in _reg.for_task("generate") if p.tier == 2 and p.optional)
+    check(
+        "6h3 派生行当前 max(tier)≤1；tier-2 只出现在 optional 替身（不进主行）",
+        all(v <= 1 for v in derived_max.values()) and bool(tier2_preds),
+        f"{derived_max}；optional tier2={tier2_preds}",
+    )
 
 
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
