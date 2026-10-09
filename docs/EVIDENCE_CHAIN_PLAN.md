@@ -142,8 +142,17 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
 **④ 父题 / part 的缺失、不可判定与复合结果落盘**
 - part 结构：`r_parts: [{part_id, parent_id, status, verdict, reason_code}]`（在 R 工件内）；
   自动化归档侧无 part ⇒ 不影响现有 `generate` 判据。
-- **R 行走新 task 名 `generate_r`**（★ 不复用 `generate`）：否则 part 级判据会被卷进 Q 的
-  `gen_case_pass` 复合，直接把「R 不顶替 Q」这条红线写破。
+- **R 与 Q 的复合隔离怎么做到？** 两个候选（★ 需你选，A 为我修正后的推荐）：
+  - **A（推荐）**：仍用 task `generate`，把 part 复合判据注册为 **`optional=True`** ——
+    这正是 `gen_answer_key_validity` / `gen_analysis_agreement` 两个机械替身**已经用过并被 `6h3` 取证**
+    的机制（optional 不进 `max(tier)`、不进 `gen_case_pass` 的 required 复合）。
+    ⇒ 红线由**既有结构**保证，不需要新词表。
+  - **B（我草案里原来的写法）**：新 task 名 `generate_r`。
+    ★ 成本比看上去大：`cases.py:69` 的 `TASKS` 驱动 `DEMO_FILES`（⇒ 会要求一个 `generate_r_cases.jsonl`）、
+    `GOLD_FIELDS` 白名单、report/loader 遍历；更要紧的是**若 R 要成为 §6 门槛行，就得往冻结件
+    `EFFECT_PLAN.md` §6 加行** —— 那是改冻结契约，不是一个实现细节。
+  ⇒ 修正理由：我写 A 之前先查了 `TASKS` 的实际辐射面（`cases.py:69,89,495`），发现 B 的代价包含
+  「动冻结件」，而 A 用的是仓内已证过的机制。**R 默认不进 §6 门槛行**，作为 ledger 的独立证据区出现。
 - 新注册判据 `gen_item_part_composite`：`contract_inputs` 至少
   `r_parts[].verdict` / `r_parts[].status` / `r_parts[].part_id` / `r_parent_id`；
   `tier=2`、`tier_reason=("§1.3-tier2",)`；`optional=False`（它就是 R 行的主判据）；
