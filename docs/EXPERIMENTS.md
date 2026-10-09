@@ -1227,6 +1227,39 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 「并发下 config 回落会算到别人头上」不成立（contextvar 每 Task 副本，护栏 ⑩e 固化）；
 「`forbidden_values` 应校验是否 canonical」是错的规则（它是回复文本里的自由词，不是 KP 名）。
 **#13**（tool call 缺失 ⇒ 无原文可救）与 **#18**（gold 数据集本体未入版本控制）**只披露、不擅自修**。
+
+### 20.7.1 Task 9 六条路由基线重录（2026-10-09，禁止静默重录 ⇒ 逐条登记）
+
+旧一代基线**整份保留**在 `evals/baselines/pre_task9_20261009/`（与重录同批提交，两代并存可查）；
+每条新基线顶层带 `_meta`（`embedding_mode`/`rerank_mode`/`rerank_backend`/`k`/`indexed_chunks`/`n_queries=156`）
+与 `provenance`（`recorded_at`/`code_version`/`golden_sha256`/`argv`/`experiment_config_hash`/
+`dependency_lock_hash`/`model_refs`）。★ `code_version` 为 `…-dirty` 是**用户本人未提交的
+`src/rag/splitter.py`**（`CODE_PATHS` 含 `src/`）所致；已证明 191/191 个 .md 语料文件新旧切分输出
+逐块相同 ⇒ 对指标无影响，但不得对外称「干净树上的运行」。重录全程 `model_refs.agent = fake:fake`
+⇒ **零 LLM token**，只走检索/重排（TEI 真实服务）。
+
+| 路由（基线文件） | pre→new 的主要 diff | 归因 |
+|---|---|---|
+| fake+off（`retrieval_baseline.json`） | category_hit@1 +0.0065、category_mrr +0.0037、kp_hit@k +0.0064、count +0.0064 | **待定**（未做代码态对照） |
+| fake+on（`retrieval_baseline_rerank.json`） | category_mrr −0.0016、precision +0.0036、kp_hit@k +0.0064、**kp_mrr −0.0198**、count +0.0129 | **待定** |
+| fake+disabled（`retrieval_baseline_fake_disabled.json`） | hit@1 +0.0128、category_mrr +0.0074、kp_hit@k +0.0128、kp_mrr +0.0337 | **待定** |
+| real+off（`retrieval_baseline_real_embed.json`） | category_mrr +0.0030、**kp_mrr +0.0324**、count −0.0256 | **待定** |
+| real+disabled（`retrieval_baseline_real_disabled.json`） | category_mrr +0.0039、precision +0.0024、kp_hit@k +0.0192、kp_mrr +0.0170 | **待定** |
+| **real+on 权威**（`retrieval_baseline_real_rerank.json`） | category_hit@k +0.0064、category_mrr +0.0032、precision +0.0037、kp_hit@k −0.0064、kp_mrr −0.0003、count +0.0449 | **不属本轮代码**（有三方对照，见下） |
+
+★ **权威路由做了三方同路由、完整 156 条的受控对照**（TEI 就绪、只差代码态）：
+`pre_task9` 历史基线 / `dd4e96f`（阶段 A 之前的代码，独立 worktree）/ `6ebe807-dirty`（本轮）。
+拆分结果：**「旧码→新码」五项命中/排序指标逐位 0.0000**（precision +0.0001），
+`mean_evidence_count` 名义 +0.0064 —— ★ 该差值**落在本节 §20.2 已登记的同码运行间抖动带
+[3.9231, 3.9295] 的满幅上**，且两侧各只取单次样本 ⇒ **不能**与已知抖动区分。
+⇒ 正确口径是：「本轮 B1/B2 代码在权威路由上**没有与已知抖动可区分的可测影响**
+（这五项指标本就被同码重跑证明为 bit-stable）」——**不是**「有 +0.0064 的代码效应」。
+而 `pre_task9 → 本轮` 的 category +0.006 / kp −0.006 在**阶段 A 之前的代码上同样复现**
+⇒ 属 `V-2026-10-08` 锚点与今日之间的**索引/服务级漂移**，与 Task 9 无关。
+
+★ **计划的一条预期被实测推翻**：Task 9 Step 4 预期「默认路由逐位复现」，实测六条路由 diff **全非零**
+⇒ 该预期不成立。已登记的这条漂移同样适用于引用 `V-2026-10-08` 基线比较的其它场合：
+凡未做代码态对照的路由，diff 一律记「归因待定」，**不许**写成检索质量改善或退化。
 第三批落 **D1/D3/D4** 三项决定：#2 主指标改逐题聚合（⑭ 6 项）、§7.1 三处「死代码」按实测**只删真死的那一条**（另两条一条是「接了线没人开的开关」、一条注释已自陈惰性，见 §20.5.2）、record 落 `prompt_set_version`（⑮ 6 项）。
 Gate **216 项全绿**（101→116→128→129→134→138→148→157→162→175→179→184→194→201→204→**216**；204→216 = ㉙a~㉙e + ㉚a~㉚g（#37 与翻转器），201→204 = ㉘a~㉘c（#33），194→201 = ㉖ 之后 D14/D15/D16 三组；162→175 = 收尾修复批：`㉑c'`/`㉑f`/`㉑g` 3 项 + **`㉓a~㉓i` 10 项**，见 #28/#29；175→179 = Minor 批（`−㉒d`、`+㉑h`、`+㉔a~d`，见 #31）；179→184 = `+㉕a~e`（#27 / D12）；184→194 = D14① 的 Verify 行为层（`+㉖a~㉖j` 10 项）；194→201 = D15/D16 的 Memory 结构断言（`+㉗a~㉗g` 7 项）。★ **#30 之后这句「全绿」变成脚本自证的**：收尾会比对 `_EXPECTED_ITEMS` 声明值并要求跳过数为 0，少跑或静默 `⏭` 都是 exit 1，见 #30）、`pyrefly` **0 errors（范围 = `src/`；`scripts/` 不在 `project-includes` 内，见 #29）**、ruff check/format 通过、
 `task_eval sanity` 66 条 ERROR 0、两份归档 12 条 validity **逐条不变**（新 gold 不动已发表数字）。
