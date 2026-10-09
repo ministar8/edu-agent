@@ -2469,6 +2469,15 @@ PY
 `tier_ok_for(p.tier, …)`，tier=2 无校准 ⇒ 这两行永远显示 tier✗，理由并不存在。
 主行不受影响（optional 不进 `max(tier)`，由 `6h3` 取证）。改 tier 会让 gate `7g` 变红 ⇒
 同一提交里删掉 `7g` 的债名单条目并在此处写明「已清偿」。
+★ **验收条件（评审 M-4）**：`TIER-DEBT-task3` 这个字面 token 目前只活在代码注释与 scratch 里，
+  `docs/` 全文 grep 为 0 ⇒ 本步必须让它以**同一字面串**出现在 `docs/EXPERIMENTS.md` §20.7，
+  否则 ledger 里的 `tier 依据` 列无法溯源（读者看到一个正式感的锚点却查不到实名 = 第二种假依据）。
+
+★ **另一处待偿（评审 M-5，同批登记）**：`gen_answerability` 现挂 `§1.3-tier1`，而 §1.3 把
+  `answerable` 举为 **tier 2** 的例子（`docs/EVIDENCE_CHAIN.md:85`，且 `judge.py:59` 确有该 judge 字段）。
+  今天它恒返 `missing_premise`（n_measured=0、状态词「未测量」、V0② 已拦）⇒ **无假数**；
+  但 P−1 落地、它一旦能返 pass/fail，`tier_ok_for` 会因 tier≤1 **自动放行两个校准前置**。
+  ⇒ P−1 完成时必须重新申报它的锚点与 tier（与 `7g` 同一条规矩：改判据同步改登记）。
 
 - [ ] **Step 4: 数值工件纳入版本控制**
 
