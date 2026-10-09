@@ -126,7 +126,10 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
   ⇒ 规程已参数化：`scripts/p1_key_audit_sample.py`（抽样器，含 n 自校验）+
   `evals/claims/p1_key_audit_sample.json`（**在看到任何核验结果之前**冻结的 59 原子清单，种子 20261009，
   四个低覆盖批次各 ≥5、合计恰 59、清单内不预填源键值）。复算核对：
-  `uv run python scripts/p1_key_audit_sample.py --check`。扩查与升级规则**待裁定后才冻结**。
+  `uv run python scripts/p1_key_audit_sample.py --check`。
+  ★ 答案形态/状态、扩查五步、R 行启用**已冻结进规格 §4.4**；仍留两个空位待第 3 步：
+  §4.4.3 四态映射、§4.4.4 父题/part 汇总规则（已明令**不得复用 §1.6 R5**）。
+  ⇒ 在这两处冻结 + 标注指南/分歧处理/审计 schema 定稿之前，**不启动盲标、不重录**。
   按年份批次分层、预先固定种子与样本量目标、对照原始扫描页人工重读、缺键 160 题不入正确率分母）。  ⇒ Generate 的 P−1 等 gold schema 定义后再开；Task 3 交付的 `missing_premise` 分支是预期状态；
   **Generate 门槛行在可预见的将来走 limitation 路线**（除非之后定义 per-小问 schema 或收窄产出契约）。
 - 机械 answer-key 判据的三条边界（checkpoint 3 裁定）：① `answer_keys_of()` 只对
