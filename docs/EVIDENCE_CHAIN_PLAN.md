@@ -115,10 +115,15 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
   这是**偏离登记**，不改写冻结件 `EFFECT_PLAN.md` §3.1。
 - grade 15 条的 `human_score` 不新建值，只按 Task 2 Step 4.5 **派生出处**（`notes` 里已有
   `2009-Q1` 这类定位，路径 `knowledge/exams/<年份>/items.md`）；出处已补齐（Task 2 落地）。
-- ★ **P−1 Generate 部分暂停**（checkpoint 3 人裁）：缺的不是标注人手，是 **gold_answer 的
-  单位/结构语义**——真实产物 14/15 是多小问混合卷，`gold_answer` 指整卷、某小问、选项键
-  还是结构化集合，schema 未定义前盲标只会得到「一致地填一个没有定义的字段」。
-  ⇒ Generate 的 P−1 等 gold schema 定义后再开；Task 3 交付的 `missing_premise` 分支是预期状态；
+- ★ **P−1 Generate 暂停理由已于 v1.5 更正**（普查证据：`scripts/p1_corpus_census.py` →
+  `evals/claims/p1_corpus_census.json`）。~~缺的是 gold_answer 的单元定义（语料多小问）~~ ⇒
+  普查显示语料 674 题**全是单选 `choice`**、带小问结构的仅 **2 题**，原理由不成立。
+  真实原因：`gen_correctness`/`gen_answerability`/`gen_difficulty` 的 gold 指向**一道尚未生成的题** ⇒
+  事前无法盲标。项目所有者裁定 **Q 为底线 + R 可选新增行、否决 P**：
+  三项继续 `missing_premise`、Generate 门槛行**不发布综合成绩**、机械替身只作诊断；
+  R 行须两人**独立求解**（不看模型给的键与解析）且按 tier-2 单独写。
+  ★ 另加**冻结前置条件**：答案键**可靠性抽查规程**（完整性≠可靠性；514 有键题的总体、
+  按年份批次分层、预先固定种子与样本量目标、对照原始扫描页人工重读、缺键 160 题不入正确率分母）。  ⇒ Generate 的 P−1 等 gold schema 定义后再开；Task 3 交付的 `missing_premise` 分支是预期状态；
   **Generate 门槛行在可预见的将来走 limitation 路线**（除非之后定义 per-小问 schema 或收窄产出契约）。
 - 机械 answer-key 判据的三条边界（checkpoint 3 裁定）：① `answer_keys_of()` 只对
   「能可靠识别为纯选择题」的 reply 运行，其余一律 `missing_premise`，不得凭 regex 猜键；
