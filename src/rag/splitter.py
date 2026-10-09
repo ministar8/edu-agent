@@ -23,10 +23,8 @@ _CODE_FRAGMENT_START_RE = re.compile(
 def _looks_like_code_chunk(text: str, *, is_code_unit: bool = False) -> bool:
     """判断 chunk 是否应加语义锚点。
 
-    判据不能只看 chunk 内是否残留 ``` —— 围栏块被切开后，中间碎片
-    可能一个围栏标记都没有，却仍是纯代码（实测：讲义 `//…` 碎片、
-    content_type=text 但正文是 C 函数）。这类 chunk 与 #18 同病：
-    缺中文语义 ⇒ embedding/reranker 对中文 query 几乎无分。
+    不能只看 chunk 内是否残留 ```：围栏块被切开后，中间碎片可能一个围栏标记都没有却仍是
+    纯代码。这类 chunk 缺中文语义，embedding/reranker 对中文 query 几乎无分。
     """
     if is_code_unit or "```" in text or "~~~" in text:
         return True
@@ -71,6 +69,8 @@ _CHUNK_HARD_LIMIT = 1600
 _QA_CHUNK_SOFT_LIMIT = 3000
 # 过短阈值：低于此长度的 chunk 尝试与邻居合并
 _CHUNK_MIN_EFFECTIVE = 80
+# 散文单元上限：超过它才按句子拆分
+_PROSE_UNIT_MAX_CHARS = 1200
 _PARENT_WINDOW_CHAR_BUDGET = 4200
 
 
@@ -81,7 +81,6 @@ def _resolve_chunk_params(content_type: str) -> tuple[int, int]:
     return size, overlap
 
 
-# Markdown 标题正则：# 标题 / ## 标题 / ### 标题
 _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+)$", re.MULTILINE)
 _FENCED_CODE_BLOCK_RE = re.compile(r"(?ms)^[ \t]{0,3}(```+|~~~+)[^\n]*\n.*?^[ \t]{0,3}\1[ \t]*$")
 
@@ -95,46 +94,30 @@ def _percentile(values: list[int], ratio: float) -> float:
 
 
 def _is_sentence_complete(text: str) -> bool:
-    """判断文本是否在语义完整的位置结束
+    """判断文本是否在语义完整的位置结束。
 
-    完整结束包括：
-    - 句末标点（。！？.!?;：…）
-    - Markdown 列表项（- 或 数字. 开头的行）
-    - Markdown 标题行（# 开头的行）
-    - 加粗/强调结尾（**）
-    - 代码块结尾（```）
-    - 右括号/右引号结尾
+    完整结束：句末标点、Markdown 列表项/标题行、代码块或加粗闭合、右括号右引号、表格行、引用块。
     """
     stripped = text.rstrip()
     if not stripped:
         return True
-    # 句末标点
     if stripped.endswith(
         ("。", "！", "？", ".", "!", "?", ":", "：", "；", ";", "…", "”", "'", '"')
     ):
         return True
-    # Markdown 结构
     if stripped.endswith("```"):
         return True
-    if stripped.endswith("**"):
-        return True
-    # 列表项行（最后一行是列表项）
     last_line = stripped.splitlines()[-1].strip() if stripped.splitlines() else ""
     if re.match(r"^(?:[-*+]|\d+[.．])\s+", last_line):
         return True
-    # 标题行
     if re.match(r"^#{1,4}\s+", last_line):
         return True
-    # 右括号结尾
     if stripped.endswith(("）", ")", "】", "]", "》", "}", ">")):
         return True
-    # Markdown 表格行
     if stripped.endswith("|"):
         return True
-    # Markdown 引用块
     if stripped.endswith(">"):
         return True
-    # 加粗文本结尾
     if stripped.endswith(("**", "__")):
         return True
     return False
@@ -265,34 +248,29 @@ _LIST_ITEM_RE = re.compile(r"^(?:[-*+]|\d+[.．])\s+", re.MULTILINE)
 # ── Q&A 单元识别正则 ──────────────────────────────────
 # 例题模式：> 例题 / > 例N / > 例1：
 _EXAMPLE_Q_RE = re.compile(r"^>\s*(?:例[题\d]|例\d+[：:])", re.MULTILINE)
-# 答案模式：答案： / 正确答案： / 正确答案选择 X
 # ── 答案标记 ──────────────────────────────────────────
-# 两种**书写形态**都要认，否则真题永远产不出 merged_qa（实测：questions/ 376 chunk
-# 全是 detail，merged_qa = 0）：
-#   1. 讲义形态 `解答：` / `答案：` / `正确答案：` —— 但真题写的是 `**参考解答**：`
-#      与 `**解析**：`，**加粗标记夹在词与冒号之间**，原正则 `(?:解答|答案)[：:]` 匹配不到；
-#   2. 真题形态 —— 正确选项用行尾 `✅` 标出（实测 2024 卷 43 处），且大量题目
-#      根本不写「答案：」，只有 `✅`。
-# 另：真题里还有 `所以答案选择 D。` / `正确答案是 6.72 G` 这类**无冒号**叙述，
-# 但它们所在的 section 必含 `✅`，故不单独加规则 —— 少一条规则少一处误伤。
-# ⚠️ `✅` 实测**只出现在 knowledge/questions/**（讲义 0 处），所以这条扩展对讲义
-#    的 `has_answer_marker` 是零影响；唯一新增命中是 computer_network/01_体系结构.md
-#    的一处 `解析：`，已由下面的回归守卫覆盖。
+# 两种书写形态都要认，否则真题永远产不出 merged_qa：
+#   1. 讲义形态 `解答：` / `答案：` / `正确答案：`；
+#   2. 真题形态 `**参考解答**：` / `**解析**：` —— 加粗标记夹在词与冒号之间；
+#      以及根本不写「答案：」、只用行尾 `✅` 标出正确选项的题。
+# 真题里 `所以答案选择 D。` 这类无冒号叙述不单独加规则 —— 其所在 section 必含 `✅`。
+# ⚠️ `✅` 只出现在 knowledge/questions/**（讲义 0 处）⇒ 这条扩展对讲义的
+#    `has_answer_marker` 是零影响。
 _ANSWER_RE = re.compile(
     r"(?:解答|答案|正确答案|解析)[ \t]*\**[ \t]*[：:；;]"
     r"|✅",
     re.MULTILINE,
 )
-# 答案字母提取，两种形态：
-#   1. 讲义形态：`正确答案：D` / `答案：B`
-#   2. 真题形态：正确选项**行尾的 ✅**（`- **A. xxx** ✅`）——
-#      真题不写「答案：」，若不认它，`qa.answer_key` 会全为空，
-#      而选择题的自动批改正是靠这个字母。
+# 答案字母提取，两种形态：讲义 `正确答案：D` / `答案：B`；真题的正确选项行尾 `✅`
+# （`- **A. xxx** ✅`）。真题不写「答案：」，若不认它 `qa.answer_key` 会全为空，
+# 而选择题的自动批改正是靠这个字母。
 _ANSWER_KEY_RE = re.compile(
     r"(?:正确答案|答案)[：:；;]\s*([A-E](?:,[A-E])*)"
     r"|^[ \t]*[-*+][ \t]*\*{0,2}([A-E])[.、)．][^\n]*✅",
     re.MULTILINE,
 )
+# 非选择题的 answer_key：取「答案:/解答:」之后到 ; 或行尾的内容
+_NON_LETTER_KEY_RE = re.compile(r"(?:答案|解答)[：:；;]\s*(.+?)(?:[；;]|$)", re.MULTILINE)
 # 真题模式：##### N (纯数字标题) 或 ### 第N题（学科·题型）(新格式)
 _EXAM_Q_HEADING_RE = re.compile(r"^(?:#{4,5}\s*\d+\s*$|#{2,4}\s*第\d+题)", re.MULTILINE)
 
@@ -302,7 +280,7 @@ def _merge_qa_blockquotes(text: str) -> str:
 
     识别两种模式：
     1. 例题模式：> 例题/例N 开头，到 答案：/解答：/正确答案： 结束的 blockquote 区域
-    2. 真题模式：##### N 标题行 + 题干 + 正确答案：X + 解析，到下一个 ##### N 或文件结束
+    2. 真题模式：##### N 或 ### 第N题 标题行 + 题干 + 答案 + 解析，到下一个标题或文件结束
 
     合并后的块以 __QA_PAIR_START__ 标记，后续 _parse_semantic_units 会将其识别为原子单元。
     """
@@ -317,7 +295,6 @@ def _merge_qa_blockquotes(text: str) -> str:
 
         # ── 检测例题开头 ──
         if _EXAMPLE_Q_RE.match(line):
-            # 如果之前有未关闭的 QA buffer，先输出
             if in_qa and qa_buffer:
                 result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
                 qa_buffer = []
@@ -328,7 +305,6 @@ def _merge_qa_blockquotes(text: str) -> str:
 
         # ── 检测真题开头（##### N 或 ### 第N题） ──
         if _EXAM_Q_HEADING_RE.match(stripped):
-            # 如果之前有未关闭的 QA buffer，先输出
             if in_qa and qa_buffer:
                 result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
                 qa_buffer = []
@@ -339,7 +315,6 @@ def _merge_qa_blockquotes(text: str) -> str:
 
         if in_qa:
             if qa_source == "example":
-                # 例题模式：收集 blockquote 行和答案行
                 if stripped.startswith(">") or _ANSWER_RE.search(stripped):
                     qa_buffer.append(line)
                     continue
@@ -351,15 +326,8 @@ def _merge_qa_blockquotes(text: str) -> str:
                     result_lines.append(line)
                     continue
             elif qa_source == "exam":
-                # 真题模式：收集所有行直到下一个 ##### N 或空行后的非连续内容
-                # 策略：只要出现 答案标记 就继续收集（含解析部分）
+                # 真题模式：整块持续收集，只在下一个真题标题或输入结束时关闭
                 qa_buffer.append(line)
-                # 如果遇到空行且之前已有答案标记，检查下一行是否是新 ##### N
-                # 这里简单处理：答案标记出现后，遇到连续空行或新标题则关闭
-                if _ANSWER_RE.search(stripped):
-                    # 标记答案已出现，后续行仍收集直到新 ##### N
-                    continue
-                continue
 
         else:
             result_lines.append(line)
@@ -400,14 +368,11 @@ def _extract_qa_fields(text: str) -> dict:
         answer_key = key_match.group(1) or key_match.group(2)
     else:
         # 非选择题：提取 答案:XXX 或 解答:XXX 中到 ; 或行尾的部分
-        _non_letter_key_re = re.compile(r"(?:答案|解答)[：:；;]\s*(.+?)(?:[；;]|$)", re.MULTILINE)
-        nl_match = _non_letter_key_re.search(text)
+        nl_match = _NON_LETTER_KEY_RE.search(text)
         answer_key = nl_match.group(1).strip()[:120] if nl_match else ""
-    # 清理 blockquote 前缀和加粗标记
     answer_key = re.sub(r"^>\s*", "", answer_key, flags=re.MULTILINE)
     answer_key = re.sub(r"\*{1,2}", "", answer_key).strip()
 
-    # 按答案标记分割题目和答案
     answer_match = _ANSWER_RE.search(text)
     if answer_match:
         question = text[: answer_match.start()].strip()
@@ -416,14 +381,11 @@ def _extract_qa_fields(text: str) -> dict:
         question = text.strip()
         answer = ""
 
-    # 清理 question 中的 blockquote 标记和多余前缀
     question = re.sub(r"^>\s*", "", question, flags=re.MULTILINE)
     question = re.sub(r"^例[题\d]+[：:]?\s*", "", question, count=1)
-    # 清理真题标题前缀（##### N）
     question = re.sub(r"^#{4,5}\s*\d+\s*\n?", "", question, count=1)
     question = question.strip()
 
-    # 清理 answer 中的前缀
     answer = re.sub(r"^(?:正确)?(?:答案|解答)[：:；;]\s*", "", answer, count=1)
     answer = answer.strip()
 
@@ -437,14 +399,8 @@ def _extract_qa_fields(text: str) -> dict:
 def _parse_semantic_units(text: str) -> list[dict]:
     """将文本解析为语义单元（段落 / 列表项组 / 代码块 / Q&A 对 / 表格 / 公式块）
 
-    结构化分块的核心：
-    1. 代码块整体保留
-    2. Q&A 对（例题+答案）合并为原子单元，不可拆分
-    3. Markdown 表格整体保留，不可拆分
-    4. LaTeX 公式块整体保留，不可拆分
-    5. 列表项组（连续的 - 或 数字. 行）合并为一个单元
-    6. 段落（空行分隔的文本块）作为一个单元
-    7. 单个段落过长时，按句子边界拆分
+    代码块、表格、公式、Q&A 对为原子单元**不可拆分**；连续列表行合并为一个单元；
+    空行分隔的段落为一个单元，单个过长段落按句子边界再拆。
 
     Returns:
         [{"text": str, "is_code": bool, "is_qa": bool, "is_table": bool, "is_formula": bool}, ...]
@@ -460,7 +416,7 @@ def _parse_semantic_units(text: str) -> list[dict]:
 
     text_no_code = _FENCED_CODE_BLOCK_RE.sub(_code_placeholder, text)
 
-    # 2. 提取 Markdown 表格，替换为占位符（表格原子保留，不拆分）
+    # 2. 提取 Markdown 表格，替换为占位符
     _MD_TABLE_RE = re.compile(r"(?m)(?:^\|.+\|$\n?)+")
     table_blocks: list[str] = []
 
@@ -470,7 +426,7 @@ def _parse_semantic_units(text: str) -> list[dict]:
 
     text_no_table = _MD_TABLE_RE.sub(_table_placeholder, text_no_code)
 
-    # 3. 提取 LaTeX 公式块，替换为占位符（公式原子保留，不拆分）
+    # 3. 提取 LaTeX 公式块，替换为占位符
     _LATEX_BLOCK_RE = re.compile(r"(?ms)\$\$.+?\$\$")
     formula_blocks: list[str] = []
 
@@ -480,7 +436,7 @@ def _parse_semantic_units(text: str) -> list[dict]:
 
     text_no_formula = _LATEX_BLOCK_RE.sub(_formula_placeholder, text_no_table)
 
-    # 4. 预扫描：检测 Q&A 模式，将连续的 blockquote 行合并为 Q&A 块
+    # 4. 预扫描：把 Q&A 合并为原子块
     text_with_qa = _merge_qa_blockquotes(text_no_formula)
 
     # 5. 按空行切分为文本块
@@ -506,7 +462,7 @@ def _parse_semantic_units(text: str) -> list[dict]:
                 )
                 continue
 
-        # 表格占位符还原（原子保留）
+        # 表格占位符还原
         if block.startswith("__TABLE_BLOCK_") and block.endswith("__"):
             idx_match = re.search(r"__TABLE_BLOCK_(\d+)__", block)
             if idx_match:
@@ -521,7 +477,7 @@ def _parse_semantic_units(text: str) -> list[dict]:
                 )
                 continue
 
-        # 公式块占位符还原（原子保留）
+        # 公式块占位符还原
         if block.startswith("__FORMULA_BLOCK_") and block.endswith("__"):
             idx_match = re.search(r"__FORMULA_BLOCK_(\d+)__", block)
             if idx_match:
@@ -558,13 +514,11 @@ def _parse_semantic_units(text: str) -> list[dict]:
 
         for line in lines:
             if _LIST_ITEM_RE.match(line):
-                # 如果前面有散文行，先保存散文单元
                 if prose_lines:
                     _add_prose_unit(units, "\n".join(prose_lines))
                     prose_lines = []
                 list_lines.append(line)
             else:
-                # 如果前面有列表行，先保存列表单元
                 if list_lines:
                     units.append(
                         {
@@ -578,7 +532,7 @@ def _parse_semantic_units(text: str) -> list[dict]:
                     list_lines = []
                 prose_lines.append(line)
 
-        # 处理剩余
+        # 收尾：把缓冲区里剩下的行落进 units
         if list_lines:
             units.append(
                 {
@@ -600,9 +554,8 @@ def _add_prose_unit(units: list[dict], text: str) -> None:
     text = text.strip()
     if not text:
         return
-    # 单个文本块不超过 chunk_size 的大部分情况，直接作为一个单元
-    # 只有极端长段落才按句子拆分
-    if len(text) <= 1200:
+    # 上限以内整块保留，只有极端长段落才按句子拆分
+    if len(text) <= _PROSE_UNIT_MAX_CHARS:
         units.append({"text": text, "is_code": False, "is_qa": False})
     else:
         # 按句子边界拆分
@@ -610,7 +563,7 @@ def _add_prose_unit(units: list[dict], text: str) -> None:
         buf: list[str] = []
         buf_len = 0
         for sent in sentences:
-            if buf and buf_len + len(sent) > 1200:
+            if buf and buf_len + len(sent) > _PROSE_UNIT_MAX_CHARS:
                 units.append({"text": " ".join(buf), "is_code": False, "is_qa": False})
                 buf = []
                 buf_len = 0
@@ -635,9 +588,6 @@ def _split_sentences(text: str) -> list[str]:
     return sentences
 
 
-# _parse_semantic_units is called directly; wrapper removed for clarity
-
-
 def _render_units(units: list[dict]) -> str:
     return "\n\n".join(unit["text"] for unit in units if unit["text"].strip())
 
@@ -660,7 +610,7 @@ def _build_overlap_units(units: list[dict], chunk_overlap: int) -> list[dict]:
         unit_len = len(unit["text"])
         if total + unit_len > chunk_overlap:
             break
-        overlap.insert(0, unit)  # prepend to preserve original order
+        overlap.insert(0, unit)
         total += unit_len
     return [
         {"text": u["text"], "is_code": u.get("is_code", False), "is_qa": u.get("is_qa", False)}
@@ -675,14 +625,9 @@ def _split_section_text(
 ) -> list[dict]:
     """结构化分块：按语义单元贪心合并，强制句子完整边界
 
-    策略：
-    1. 解析文本为语义单元（段落/列表项组/代码块/Q&A 对/表格/公式/句子）
-    2. Q&A / 表格 / 公式 为原子单元，**不被拆分**（过短的原子单元仍会与邻居合并，
-       见 _merge_short_chunks 的说明：合并是整体拼接，不会拆开它们）
-    3. 贪心合并：依次加入单元，直到接近 chunk_size
-    4. 超出时输出当前 chunk，确保句子完整边界
-    5. 超长单元按句子拆分，不超过 _CHUNK_HARD_LIMIT
-    6. overlap 回溯优先同 section 尾部单元
+    Q&A / 表格 / 公式为原子单元**不被拆分**（过短的原子单元仍会与邻居整体拼接，
+    见 _merge_short_chunks）；超长单元按句子拆分，上限 _CHUNK_HARD_LIMIT；
+    overlap 回溯优先取同 section 的尾部单元。
 
     Returns:
         [{"text": str, "is_qa": bool, "qa_fields": dict|None}, ...]
@@ -710,7 +655,6 @@ def _split_section_text(
             if current_units:
                 _flush_chunk(chunks, current_units, chunk_size)
                 current_units = []
-            # 原子单元单独输出（不拆分）
             if is_qa:
                 qa_fields = _extract_qa_fields(unit_text)
                 chunks.append({"text": unit_text, "is_qa": True, "qa_fields": qa_fields})
@@ -718,7 +662,6 @@ def _split_section_text(
                 chunks.append({"text": unit_text, "is_qa": False, "qa_fields": None})
             continue
 
-        # 超长单元：按句子拆分，不超过硬上限
         if len(unit_text) > _CHUNK_HARD_LIMIT:
             if current_units:
                 _flush_chunk(chunks, current_units, chunk_size)
@@ -727,7 +670,6 @@ def _split_section_text(
                 chunks.append({"text": sub, "is_qa": False, "qa_fields": None})
             continue
 
-        # 尝试加入当前 chunk
         candidate = [*current_units, unit]
         candidate_text = _render_units(candidate)
 
@@ -735,113 +677,87 @@ def _split_section_text(
             current_units.append(unit)
             continue
 
-        # 超出：输出当前 chunk（确保句子完整）
-        flushed_units = list(current_units)  # 保存用于 overlap
+        # 超出：先输出当前 chunk，再用它的尾部单元做 overlap 回溯
+        # _flush_chunk / _build_overlap_units 都不改动传入的列表，故无需先拷贝一份
         if current_units:
             _flush_chunk(chunks, current_units, chunk_size)
-            current_units = []
-
-        # overlap 回溯（同 section 尾部优先）
-        overlap_units = _build_overlap_units(flushed_units, chunk_overlap)
+        overlap_units = _build_overlap_units(current_units, chunk_overlap)
         if overlap_units and len(_render_units([*overlap_units, unit])) > chunk_size:
             overlap_units = []
 
         current_units = [*overlap_units, unit]
 
-    # 输出剩余
     if current_units:
         _flush_chunk(chunks, current_units, chunk_size)
 
-    # 后处理：合并过短 chunk
     chunks = _merge_short_chunks(chunks, _CHUNK_MIN_EFFECTIVE, chunk_size)
 
     return chunks
 
 
 def _flush_chunk(chunks: list[dict], units: list[dict], chunk_size: int) -> None:
-    """输出当前 chunk，确保句子完整边界
-
-    如果最后一个单元的文本不在句子完整位置结束，
-    尝试回退到上一个完整边界，避免句中截断。
-
-    """
+    """输出当前 chunk：末尾若不在句子完整处结束，从后向前回退到上一个完整边界，避免句中截断。"""
     if not units:
         return
     text = _render_units(units)
     if not text.strip():
         return
 
-    # 检查是否句子完整
     if _is_sentence_complete(text):
         chunks.append({"text": text, "is_qa": False, "qa_fields": None})
         return
 
-    # 不完整：尝试从后向前找到完整边界
     remaining = list(units)
     tail_units: list[dict] = []
     while remaining and not _is_sentence_complete(_render_units(remaining)):
         tail_units.insert(0, remaining.pop())
 
     if remaining:
-        # 前部分完整，输出
         chunks.append({"text": _render_units(remaining), "is_qa": False, "qa_fields": None})
         if tail_units:
             tail_text = _render_units(tail_units)
             if len(tail_text.strip()) >= MIN_CHUNK_LENGTH:
                 chunks.append({"text": tail_text, "is_qa": False, "qa_fields": None})
     else:
-        # 无法找到完整边界，整体输出（兜底）
+        # 找不到任何完整边界时整体输出，宁可长也不丢内容
         chunks.append({"text": text, "is_qa": False, "qa_fields": None})
+
+
+def _pack_qa_parts(parts: list[str], limit: int) -> list[str]:
+    """把题目片段按顺序累加成段：加入下一题会超 limit 就先切一段，题内绝不拆。"""
+    result: list[str] = []
+    buf: list[str] = []
+    buf_len = 0
+    for part in parts:
+        part = part.strip()
+        if not part:
+            continue
+        if buf and buf_len + len(part) > limit:
+            result.append("\n\n".join(buf))
+            buf = []
+            buf_len = 0
+        buf.append(part)
+        buf_len += len(part)
+    if buf:
+        result.append("\n\n".join(buf))
+    return [r for r in result if r.strip()]
 
 
 def _split_qa_oversized(text: str, limit: int) -> list[str]:
     """将超长 QA 块按题目边界拆分，每段不超过 limit
 
-    识别两种题目边界：
-    1. 真题模式：##### N 标题行
-    2. 例题模式：> 例题/例N 开头
-
+    题目边界有两种：真题的 `##### N` / `### 第N题` 标题行，例题的 `> 例题/例N` 开头。
     每个题目+答案保持原子性，不跨题拆分。
     """
     # 按真题标题拆分（支持旧格式 ##### N 和新格式 ### 第N题）
     parts = re.split(r"(?=^#{2,5}\s*(?:\d+\s*$|第\d+题))", text, flags=re.MULTILINE)
     if len(parts) > 1:
-        result: list[str] = []
-        buf: list[str] = []
-        buf_len = 0
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-            if buf and buf_len + len(part) > limit:
-                result.append("\n\n".join(buf))
-                buf = []
-                buf_len = 0
-            buf.append(part)
-            buf_len += len(part)
-        if buf:
-            result.append("\n\n".join(buf))
-        return [r for r in result if r.strip()]
+        return _pack_qa_parts(parts, limit)
 
     # 按例题标记拆分
     parts = re.split(r"(?=>\s*例[题\d])", text)
     if len(parts) > 1:
-        result = []
-        buf = []
-        buf_len = 0
-        for part in parts:
-            part = part.strip()
-            if not part:
-                continue
-            if buf and buf_len + len(part) > limit:
-                result.append("\n\n".join(buf))
-                buf = []
-                buf_len = 0
-            buf.append(part)
-            buf_len += len(part)
-        if buf:
-            result.append("\n\n".join(buf))
-        return [r for r in result if r.strip()]
+        return _pack_qa_parts(parts, limit)
 
     # 无法按题目边界拆分，整体保留，避免破坏题干-答案-解析原子性
     return [text.strip()] if text.strip() else []
@@ -850,9 +766,8 @@ def _split_qa_oversized(text: str, limit: int) -> list[str]:
 def _split_oversized(text: str, limit: int) -> list[str]:
     """将超长文本按句子边界拆分，保证每段不超过 limit
 
-    单句本身就超过 limit 时（无标点的长列表项、被压成一行的表格等）**必须硬切**：
-    此前这里只写了一句"单句超 limit 的兜底"的注释却没实现，导致 500 字符的单句
-    在 limit=100 下仍然产出 1 个 500 字符的 chunk —— 注释承诺的边界并不存在。
+    单句本身就超 limit 时（无标点的长列表项、被压成一行的表格）**必须硬切**，
+    否则 limit 形同虚设：一个 500 字的单句在 limit=100 下仍会整块落进一个 chunk。
     """
     sentences = _split_sentences(text)
     result: list[str] = []
@@ -883,14 +798,10 @@ def _merge_short_chunks(chunks: list[dict], min_len: int, max_len: int) -> list[
 
     只有 QA 不参与合并 —— 题干与答案必须留在同一个 chunk 里。
 
-    **表格/公式为什么允许被合并**：本函数的合并是"整体拼接"，不会把表格或公式
-    **拆开**，其内部结构始终完整。反过来，若禁止合并，过短的原子 chunk 会连同
-    它过短的邻居一起落到 MIN_CHUNK_LENGTH 之下被丢弃 —— 实测严格禁止合并会让
-    全库留存率从 97.6% 降到 96.5%（少 39 个 chunk），门禁的
-    `category_precision` 也从 0.9014 降到 0.8952。
-
-    所以这里"原子性"的准确含义是**不被拆分**，而不是"不参与合并"。
-    曾按字面理解为后者并加了 `is_atomic` 守卫，被门禁当场判为退化，已回退。
+    表格/公式允许合并：本函数的合并是**整体拼接**，不会把它们拆开，内部结构始终完整。
+    反过来禁止合并，过短的原子 chunk 会连同它的过短邻居一起落到 MIN_CHUNK_LENGTH
+    之下被丢弃（实测全库留存率 97.6% → 96.5%）。
+    所以这里「原子性」的准确含义是**不被拆分**，而不是「不参与合并」。
     """
     if not chunks:
         return chunks
@@ -1030,16 +941,11 @@ def _append_chunk_metadata(
 def split_documents(documents: list[Document]) -> list[Document]:
     """把文档切成 chunk。
 
-    **为什么没有 `chunk_size` / `chunk_overlap` 参数**（backlog #9）：
-    这两个参数曾经存在于签名里，但**函数体内从未被引用** —— 调用方任何调参都**静默失效**，
-    实际尺寸完全由 `_ADAPTIVE_CHUNK_SIZE` / `_ADAPTIVE_CHUNK_OVERLAP` 按**内容类型**决定。
-    一个"看起来能调、实际调不动"的参数比没有参数更糟：它会让调用方以为已经生效。
+    签名里没有 `chunk_size` / `chunk_overlap`：切分尺寸完全由 `_ADAPTIVE_CHUNK_SIZE` /
+    `_ADAPTIVE_CHUNK_OVERLAP` 按 content_type 决定（正文 800 / 代码 400 / 表格与公式不拆），
+    单个全局尺寸无法同时满足这些约束，加参数只会让人误以为调得动。
 
-    尺寸设计是**刻意按类型自适应**的（正文 800 / 代码 400 / 表格与公式不拆），
-    单个全局尺寸无法同时满足这些约束，所以选择**删除参数**而不是"让它生效"。
-
-    若要调整切分尺寸，请改 `_ADAPTIVE_CHUNK_SIZE` / `_ADAPTIVE_CHUNK_OVERLAP`，
-    并**重跑检索质量门禁**确认没有退化。
+    若要调整切分尺寸，请改那两个映射，并**重跑检索质量门禁**确认没有退化。
     """
     valid_chunks: list[Document] = []
 
@@ -1107,7 +1013,7 @@ def split_documents(documents: list[Document]) -> list[Document]:
         for i in range(len(sections)):
             pid = section_parent_ids[i]
             siblings = parent_groups[pid]
-            rank = siblings.index(i)  # position in sibling list
+            rank = siblings.index(i)
             section_sibling_indices.append(rank)
             section_sibling_counts.append(len(siblings))
 
@@ -1150,13 +1056,11 @@ def split_documents(documents: list[Document]) -> list[Document]:
             section_chunks = _split_section_text(section["text"], effective_size, adaptive_overlap)
             detail_chunks: list[tuple[Document, str]] = []
 
-            # 若 content_type 是 merged_qa 但 _split_section_text 未产出 is_qa 块
-            # （真题模式：无 blockquote，整个 section 就是一个 Q&A 对），强制整体输出
-            # 判据用「有没有**可用**的 QA 块」，而不是「有没有 QA 块」。
-            # ★ 实测（2026-09-24）：真题 section 的首行 `### 第N题(…)` 会被切成一个
-            #   **17 字的 is_qa 块**，它随即被 `MIN_CHUNK_LENGTH=80` 过滤掉 ——
-            #   于是「有 QA 块」为真，本兜底分支不触发，正文落进 else 分支变成 `detail`，
-            #   `qa.question` / `qa.answer` 全为空。只看 is_qa 标志是**假信号**。
+            # 若 content_type 是 merged_qa 但 _split_section_text 未产出**可用**的 is_qa 块
+            # （真题模式：无 blockquote，整个 section 就是一个 Q&A 对），强制整体输出。
+            # 判据必须是「可用」而不是「存在」：真题 section 首行 `### 第N题(…)` 会被切成
+            # 一个 17 字的 is_qa 块，随即被 MIN_CHUNK_LENGTH 过滤掉 —— 只看 is_qa 标志是假信号，
+            # 兜底不触发，正文退回 detail 分支，qa.question / qa.answer 全为空。
             usable_qa_chunk = any(
                 isinstance(sc, dict)
                 and sc.get("is_qa", False)
@@ -1179,7 +1083,6 @@ def split_documents(documents: list[Document]) -> list[Document]:
                 else:
                     qa_fields = _extract_qa_fields(section_text)
                     chunk = _make_chunk(doc.metadata, section_text.strip())
-                    # heading_path 不拼入 page_content，避免干扰 embedding/reranker
                     chunk.metadata["_qa_fields"] = qa_fields
                     detail_chunks.append((chunk, "merged_qa"))
             else:
@@ -1189,13 +1092,11 @@ def split_documents(documents: list[Document]) -> list[Document]:
                         continue
                     is_qa = sc.get("is_qa", False) if isinstance(sc, dict) else False
                     qa_fields = sc.get("qa_fields") if isinstance(sc, dict) else None
-                    # 含代码的 chunk：把 heading_path 拼回 page_content 作为语义锚点。
-                    # 纯代码 chunk 的 page_content 缺少中文语义，bge-m3 无法把
-                    # 「用信号量写出生产者—消费者问题的伪代码」这类 query 映射到纯 C 代码上，
-                    # 导致 code 类检索召回失败。判据用 `_looks_like_code_chunk`（围栏、
-                    # `is_code` 单元、或无围栏代码碎片），不能只看 chunk 内是否残留 ```。
-                    # 其余类型仍保持「heading 不进 page_content」的约定。
-                    # merged_qa（真题）本身是中文题干，不需要锚点，加了反而稀释。
+                    # 含代码围栏的 chunk：把 heading_path 拼回 page_content 作为语义锚点。
+                    # 纯代码正文没有中文语义，bge-m3 无法把中文 query 映射到纯 C 代码上。
+                    # 判据用 `_looks_like_code_chunk`（围栏、`is_code` 单元、无围栏代码碎片），
+                    # 不能只看 chunk 内是否残留 ```。其余类型仍守「heading 不进 page_content」。
+                    # merged_qa（真题）本身是中文题干，加锚点反而稀释。
                     _is_code_like = (not is_qa) and _looks_like_code_chunk(
                         chunk_text,
                         is_code_unit=bool(sc.get("is_code")) if isinstance(sc, dict) else False,
@@ -1250,10 +1151,9 @@ def split_documents(documents: list[Document]) -> list[Document]:
                     "merged_qa" if chunk_role == "merged_qa" else content_type
                 )
                 # ── 内容语义标志（供 recall 的 exercise_meta / answer_meta 路由过滤）──
-                # 为什么不复用 content_type：它是**单值形状分类器** —— 一个 chunk 可以既是
-                # 「列表」（形状）又是「习题」（语义），两者会互相挤掉（这正是那两条路由
-                # 恒返回空的根因）。且 content_type 还经 `_resolve_chunk_params` 决定 chunk
-                # 尺寸，改它的判定顺序会连带**重切索引**。语义标志独立成字段 → 零副作用。
+                # 不复用 content_type：它是**单值形状分类器**，一个 chunk 可以既是「列表」（形状）
+                # 又是「习题」（语义），挤在一个字段里会互相挤掉；且 content_type 还经
+                # `_resolve_chunk_params` 决定切分尺寸，改它的判定顺序会连带**重切索引**。
                 chunk.metadata["is_exercise_content"] = heading_is_exercise or heading_is_exam
                 chunk.metadata["has_answer_marker"] = has_answer_marker
                 chunk.metadata["section.parent_id_index"] = sid
