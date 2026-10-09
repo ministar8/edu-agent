@@ -1854,7 +1854,7 @@ def check_7() -> None:
           not empty_required, f"registry 缺：{empty_required}")
 ```
 
-`_EXPECTED_ITEMS = 41`（Task 6 结束时为 36，本步 +5：7a/7b/7c/7d/7e）。
+`_EXPECTED_ITEMS = 46`（Task 6 结束时为 **41** —— checkpoint 6 锁 1 把 36 提到 41，见 Step 4b；本步 +5：7a/7b/7c/7d/7e）。
 
 - [ ] **Step 2: 实现 `schema_gate.py`**
 
@@ -1944,7 +1944,7 @@ from evaluation.task_eval.predicates.common import has_path, is_reply_part
 ★ 语法实现只有一份（Task 3 建、Task 5 用、Task 7 用）。如果这里再写一份 `_REPLY_PARTS` 名单，
 就是第三套真源 —— 本计划要消灭的正是这种东西。
 
-本 Task 结束时 `_EXPECTED_ITEMS = 41`（Task 6 结束时为 36，`check_7` 贡献 5 项：7a/7b/7c/7d/7e）。
+本 Task 结束时 `_EXPECTED_ITEMS = 48`（Task 6 结束时为 **41**，`check_7` 贡献 7 项：7a/7b/7c/7d/7e + Step 4b 的 7f/7g）。
 
 - [ ] **Step 3: `build_claim_ledger --check` 先跑 V0，红灯即退出 1**
 
@@ -1967,10 +1967,51 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.p
 Expected: gate 全绿；ledger `--check` **退出码 1**，且原因包含 `gen_correctness: missing_premise`。
 ★ 这条退出码非 0 是本计划的**目的**而不是事故。
 
+- [ ] **Step 4b: tier 来源申报的**一般化**（checkpoint 6 裁定「A + 两道锁」之锁 1 的推广）**
+
+★ 背景（Task 6 评审 I-2）：`tier` 原本是手写的裸 int，没人检查它凭什么 —— 同一个格子里
+  「Grade 行 tier=1」既可能是正确事实（指标本体是可观测物证、不经 judge），也可能是偷懒的降级。
+  Task 6 已在 **ledger 行侧**落地申报机制（`LITERAL_TIER_REASONS` 表 + `TIER_ANCHORS` 白名单 +
+  `tier_justification()` 缺依据即抛 + gate `6g/6g2/6h/6h2/6h3`，四条漂移路径已实测会红）。
+  本步把同一机制推到 **registry 侧**：判据的 tier 也不许裸写。
+
+1. 把 `TIER_ANCHORS` 与 `tier_justification()` **上移到 `src/evaluation/task_eval/claims.py`**，
+   `scripts/build_claim_ledger.py` 改为从 `claims` 导入 —— 两处共用一份白名单，**禁止复制粘贴**
+   （两份白名单会各自漂移，正是本计划要消灭的「多套现实」）。
+2. `Predicate` 增字段 `tier_reason: tuple[str, ...] = ()`；`register()` 里校验
+   「非空 ∧ 每个锚点 ∈ `cl.TIER_ANCHORS`」，违规 ⇒ `ValueError`。
+   ★ 连 `tier == 0` 也要带锚点：白拿的 0 和手滑的 2 是同一种病。
+3. registry 目前只暴露 `register/get/for_task`（`registry.py:34-49`）⇒ 本步补只读的
+   `def all_preds() -> list[Predicate]`（按注册顺序），供判据遍历。
+4. 新增两条判据（+2；本 Task 结束时 `_EXPECTED_ITEMS = 48`）：
+
+```python
+    from evaluation.task_eval import claims as cl
+    from evaluation.task_eval.predicates import registry as reg
+
+    no_reason = sorted(
+        p.name
+        for p in reg.all_preds()
+        if not p.tier_reason or any(a not in cl.TIER_ANCHORS for a in p.tier_reason)
+    )
+    check("7f 每个判据的 tier 都带白名单锚点（不许裸写）", not no_reason, str(no_reason))
+    tier2 = sorted(p.name for p in reg.all_preds() if p.tier == 2)
+    check(
+        "7g tier=2 判据集合 == 已登记的 Task 3 遗留债名单（改判据须同步改本表）",
+        tier2 == ["gen_analysis_agreement", "gen_answer_key_validity"],
+        str(tier2),
+    )
+```
+
+★ `7g` 里那份名单**就是债的登记表**，不是断言它们正确：这两个是 `optional=True` 的机械替身
+  （选项字母唯一性 / 解析引用键与答案键一致性），按 §1.3 的证据种类定义应为 tier 0/1，
+  但 checkpoint 6 裁定「本轮只登记不改」（Task 3 registry debt）。将来谁把 tier 改成 1，
+  `7g` 会红 ⇒ 逼他同步删除这条债记录，而不是让「改了什么」静默消失。
+
 - [ ] **Step 5: 提交**
 
 ```bash
-git add src/evaluation/task_eval/schema_gate.py scripts/build_claim_ledger.py scripts/evidence_chain_gate.py
+git add src/evaluation/task_eval/schema_gate.py src/evaluation/task_eval/claims.py src/evaluation/task_eval/predicates/registry.py scripts/build_claim_ledger.py scripts/evidence_chain_gate.py
 git commit -m "feat(eval): V0 schema 完整性 + 未测量判据禁进门槛（阻塞范围已划清）"
 ```
 
@@ -2057,7 +2098,7 @@ def check_8() -> None:
           len(sites) == 3, f"只找到 {sites}")
 ```
 
-`_EXPECTED_ITEMS = 48`（Task 7 结束时为 41，本步 +7：8a/8b/8c/8d/8e/8f/8g）。
+`_EXPECTED_ITEMS = 55`（Task 7 结束时为 **48**，本步 +7：8a/8b/8c/8d/8e/8f/8g）。
 Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword argument 'read_status'`
 （真实签名是 `(*, memory_cards, reply, gold)` —— 本 Task 给它加第四个 keyword-only 参数）。
 
@@ -2229,7 +2270,7 @@ def check_9() -> None:
           D([], active=True, raised=False, empty_result=False) == "degraded")
 ```
 
-`_EXPECTED_ITEMS = 53`（Task 8 结束时为 48，本步 +5：9a/9b/9c/9d/9e）。
+`_EXPECTED_ITEMS = 60`（Task 8 结束时为 **55**，本步 +5：9a/9b/9c/9d/9e）。
 Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
 ★ 原 `9f`（reset 三处调用）跟着 B7 一起搬进 Task 8，现在是那里的 `8g`。
 
@@ -2258,7 +2299,7 @@ Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
 `retrieval_gate.py:873` 同时读新旧两个字段（新字段缺 ⇒ `""`，按「未知」处理，不回填）。
 
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
-Expected: `全绿（53 项）`
+Expected: `全绿（60 项）`
 
 - [ ] **Step 3: B1 —— R4 语义统一（唯一换算点）**
 
@@ -2354,7 +2395,7 @@ git commit -m "fix(rag): B2 rerank_status 四态 + B1 score 语义统一（重�
 **Files:**
 - Modify: `docs/README.md`（4 处 + 新增本方案与 `evals/claims/ledger.md` 索引行）
 - Modify: `CLAUDE.md:47`、`README.md:144`（`--dataset` 路径）
-- Modify: `docs/EXPERIMENTS.md` §20.7（已知偏离追加四条）
+- Modify: `docs/EXPERIMENTS.md` §20.7（已知偏离追加六条，checkpoint 6 加 ⑤⑥；另 Step 3b 记 Task 3 tier 误标债）
 - Modify: `evals/results/task_eval/HANDOVER.md`（活文档：本轮改造的状态）
 - Create: `evals/claims/artifact_status.json`
 
@@ -2397,11 +2438,36 @@ print(f"标了 {len(rows)} 份")
 PY
 ```
 
-- [ ] **Step 3: §20.7 追加四条已知偏离**
+- [ ] **Step 3: §20.7 追加六条已知偏离**
 
 照 §7 列的四条写，每条带**命令**而不是数字：① §3.1 五项中三项在 P−1 前 `missing_premise`；
 ② grade gold 两极 ⇒ `score_tolerance@±10` 判别域受限；③ R5 改复合语义，旧归档读数不可沿用；
 ④ 5.B 延后项 limitation 清单。
+
+★ checkpoint 6 追加两条（措辞按裁定 A「主指标已换轨」，**不要**写成「Task 6 偷偷降低了 tier」）：
+
+⑤ **Verify / Grade 门槛行的主指标已从 §6 原文的 tier-2 judge 量换轨为 tier-1 机械/物证量**
+   （依据 D14、G1b 撤销）。由此推论，两条必须写清：
+   - 当前这两行走向「已证明」**不要求** judge 边界校准 —— 因为它们不再建立在 judge 观点上；
+   - 若将来要重新主张 §6 原文那条 tier-2 断言（`final_quality ≥ 4`），那是**另一行**：
+     必须自己声明 `tier=2` 并承担两个前置（`boundary_calibrated` + `repeat_jitter` 非空）。
+   ★ 把「当前可证明的东西」与「未来可能恢复的原始主张」拆干净，比把现有行硬绑回 tier 2 更诚实。
+   取证命令：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
+   的 `6h2`（走校准前置的 tier-2 行只有 QA）与 `6h3`（派生行 max(tier)≤1）。
+
+⑥ **§1.1 状态表与 Task 6 冻结公式在「gold 前提不存在」这一格上口径不同**（评审裁定 B）。
+   冻结公式判「未测量」需 `not discriminating and not falsify_passed`，而 mutation 取证夹具自带
+   gold ⇒ `gen_correctness` 可 (disc=F, fp=T) ⇒ 判据级落「已测量未证明」，尽管归档 n=0 有效测量。
+   本 Task 裁定其一收口（改 §1.1 措辞 or 给 `derive_status` 加 `n_measured == 0 ⇒ 未测量` 前置），
+   并把 `evals/claims/ledger_draft.md` 附表里那条 ★ 注记同步删除或改写。
+
+- [ ] **Step 3b: Task 3 registry debt 的处置登记（tier 误标，非放宽）**
+
+`gen_answer_key_validity` / `gen_analysis_agreement` 注册为 `tier=2`，但二者是 `optional=True` 的
+机械替身 ⇒ 按 §1.3 证据种类定义应为 tier 0/1。后果是**假阴性**（过严）：判据级附表逐条走
+`tier_ok_for(p.tier, …)`，tier=2 无校准 ⇒ 这两行永远显示 tier✗，理由并不存在。
+主行不受影响（optional 不进 `max(tier)`，由 `6h3` 取证）。改 tier 会让 gate `7g` 变红 ⇒
+同一提交里删掉 `7g` 的债名单条目并在此处写明「已清偿」。
 
 - [ ] **Step 4: 数值工件纳入版本控制**
 
