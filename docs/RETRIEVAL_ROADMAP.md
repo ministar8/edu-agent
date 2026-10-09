@@ -129,7 +129,7 @@ backlog #34 的四条路由对照实验：
 
 | 项 | 内容 |
 |---|---|
-| 命令 | `uv sync --group eval` → `PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 20 --tag baseline` |
+| 命令 | `uv sync --group eval` → `PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 20 --tag baseline` |
 | 产出 | `evals/results/*.json` |
 | 验收 | `faithfulness` / `context_recall` / `context_precision` / `answer_relevancy` 四个数字落盘，并回填到本文件 §5 |
 | 风险 | 需要真实 LLM（**会产生费用**）→ 先用 `--limit 20` |

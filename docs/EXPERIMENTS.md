@@ -1235,7 +1235,7 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 与 `provenance`（`recorded_at`/`code_version`/`golden_sha256`/`argv`/`experiment_config_hash`/
 `dependency_lock_hash`/`model_refs`）。★ `code_version` 为 `…-dirty` 是**用户本人未提交的
 `src/rag/splitter.py`**（`CODE_PATHS` 含 `src/`）所致；已证明 191/191 个 .md 语料文件新旧切分输出
-逐块相同 ⇒ 对指标无影响，但不得对外称「干净树上的运行」。重录全程 `model_refs.agent = fake:fake`
+逐块相同 ⇒ **未发现切分结果变化**（这不等于证明对指标无影响），且不得对外称「干净树上的运行」。重录全程 `model_refs.agent = fake:fake`
 ⇒ **零 LLM token**，只走检索/重排（TEI 真实服务）。
 
 | 路由（基线文件） | pre→new 的主要 diff | 归因 |
@@ -1249,13 +1249,24 @@ git show V-2026-10-07:docs/EXPERIMENTS.md  # 该状态下的实验文档（含�
 
 ★ **权威路由做了三方同路由、完整 156 条的受控对照**（TEI 就绪、只差代码态）：
 `pre_task9` 历史基线 / `dd4e96f`（阶段 A 之前的代码，独立 worktree）/ `6ebe807-dirty`（本轮）。
-拆分结果：**「旧码→新码」五项命中/排序指标逐位 0.0000**（precision +0.0001），　—— 证据：`evals/baselines/pre_task9_20261009/` ↔ `evals/baselines/` 两代；抖动带见 §20.2
-`mean_evidence_count` 名义 +0.0064 —— ★ 该差值**落在本节 §20.2 已登记的同码运行间抖动带　—— 证据：`evals/baselines/pre_task9_20261009/` ↔ `evals/baselines/` 两代；抖动带见 §20.2
-[3.9231, 3.9295] 的满幅上**，且两侧各只取单次样本 ⇒ **不能**与已知抖动区分。　—— 证据：`evals/baselines/pre_task9_20261009/` ↔ `evals/baselines/` 两代；抖动带见 §20.2
+拆分结果（数值见下表，三份工件均在库内可重算）：**「旧码→新码」五项命中/排序指标逐位 0.0000**（precision +0.0001）　—— 证据：`evals/baselines/pre_task9_20261009/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/diffcontrol_dd4e96f/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/retrieval_baseline_real_rerank.json`（三方同路由 156 条，三份均已入库可重算）
+`mean_evidence_count` 名义 +0.0064 —— ★ 该差值**落在本节 §20.2 已登记的同码运行间抖动带 [3.9231, 3.9295] 的满幅上**，且两侧各只取单次样本 ⇒ **不能**与已知抖动区分。　—— 证据：§20.2 抖动带 + 下表三方读数
 ⇒ 正确口径是：「本轮 B1/B2 代码在权威路由上**没有与已知抖动可区分的可测影响**
-（这五项指标本就被同码重跑证明为 bit-stable）」——**不是**「有 +0.0064 的代码效应」。　—— 证据：`evals/baselines/pre_task9_20261009/` ↔ `evals/baselines/` 两代；抖动带见 §20.2
-而 `pre_task9 → 本轮` 的 category +0.006 / kp −0.006 在**阶段 A 之前的代码上同样复现**　—— 证据：`evals/baselines/pre_task9_20261009/` ↔ `evals/baselines/` 两代；抖动带见 §20.2
-⇒ 属 `V-2026-10-08` 锚点与今日之间的**索引/服务级漂移**，与 Task 9 无关。
+（这五项指标本就被同码重跑证明为 bit-stable）」——**不是**「有 +0.0064 的代码效应」。　—— 证据：`evals/baselines/pre_task9_20261009/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/diffcontrol_dd4e96f/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/retrieval_baseline_real_rerank.json`（三方同路由 156 条，三份均已入库可重算）
+而 `pre_task9 → 本轮` 的 category +0.006 / kp −0.006 在**阶段 A 之前的代码上同样复现**　—— 证据：`evals/baselines/pre_task9_20261009/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/diffcontrol_dd4e96f/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/retrieval_baseline_real_rerank.json`（三方同路由 156 条，三份均已入库可重算）
+⇒ 属 `V-2026-10-08` 锚点与今日之间的**索引/服务级漂移**，与 Task 9 无关。　—— 证据：`evals/baselines/pre_task9_20261009/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/diffcontrol_dd4e96f/retrieval_baseline_real_rerank.json` ↔ `evals/baselines/retrieval_baseline_real_rerank.json`（三方同路由 156 条，三份均已入库可重算）
+
+
+**三方对照读数**（权威 `real+on`，156 条；三份工件均已入库 ⇒ 本表任何人可重算）
+
+| 指标 | pre_task9（历史） | dd4e96f（阶段 A 之前） | 6ebe807-dirty（本轮） | 旧码→新码 Δ |
+|---|---|---|---|---|
+| category_hit_at_k | 0.9615 | 0.9679 | 0.9679 |+0.0000　证据：本表上方三列路径（三份工件均在库内）|
+| category_mrr | 0.9519 | 0.9551 | 0.9551 |+0.0000　证据：本表上方三列路径（三份工件均在库内）|
+| category_precision | 0.9637 | 0.9673 | 0.9674 |+0.0001　证据：本表上方三列路径（三份工件均在库内）|
+| kp_hit_at_k | 0.9167 | 0.9103 | 0.9103 |+0.0000　证据：本表上方三列路径（三份工件均在库内）|
+| kp_mrr | 0.8051 | 0.8048 | 0.8048 |+0.0000　证据：本表上方三列路径（三份工件均在库内）|
+| mean_evidence_count | 3.8846 | 3.9231 | 3.9295 |+0.0064（在抖动带内，不归因本轮）　证据：本表上方三列路径（三份工件均在库内）|
 
 ★ **计划的一条预期被实测推翻**：Task 9 Step 4 预期「默认路由逐位复现」，实测六条路由 diff **全非零**
 ⇒ 该预期不成立。已登记的这条漂移同样适用于引用 `V-2026-10-08` 基线比较的其它场合：
@@ -1327,7 +1338,7 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 | C4 | `mean_evidence_count` 的名义 +0.0064 | ★ 必须连同 §20.2 已登记的**同码运行间抖动带**一并披露，**不作为代码效果证据**（brief A.2 ④）。正确口径是「本轮代码在权威路由上**没有与已知抖动可区分的可测影响**」 | 证据：抖动带与其三次读数登记在 **§20.2**（Task 9 之前就在）；重录侧的引用在 **§20.7.1** ⇒ 两处回指，本节不另写数字 |
 | C5 | 本轮工件的 `code_version` 为 `…-dirty`；切分输出逐块相同 | 如实写 `-dirty`（成因＝项目所有者本人未提交的 `src/rag/splitter.py`）；切分逐块相同**只能**支持「**未发现切分结果变化**」，★ **不得**改写为「干净树运行」（brief A.2 ⑤） | `uv run python -c` 打印 `evaluation.provenance.code_version()`（活值，随工作区状态变）+ `git status --short`（看脏在谁身上） |
 | C6 | `#32` / `#35` 那两条「工具层没留痕」的失败，其共同前提 **per-case tool-call logging** 仍缺 | 维持 §20.5 的「未确证 / 登记不扩范围」，★ 不因本轮文档收尾而改变 | §20.5 #32/#35 两格 + `PHASE1_VERIFY.md` TODO-1 |
-| C7 | **`evals/results/system_validation/agent_behavior/agent_behavior_quality_20261008.json` 故意不入库**（#34 改默认输出名之后的一次重跑，读数与已发表归档不同）⇒ 提交它容易被读成「重定基线」，而本轮没有任何重定基线的裁定 | 未入库文件**留在工作区、不删不改**；若将来要采纳它的读数，必须先有一条明确裁定（写明取代哪份归档、为什么），再入库。证据：`evals/results/system_validation/agent_behavior/agent_behavior_quality_20261008.json`（未跟踪） ↔ 已入库的 `evals/results/system_validation/agent_behavior/agent_behavior_quality.json` |
+| C7 | **`evals/results/system_validation/agent_behavior/agent_behavior_quality_20261008.json` 故意不入库**（#34 改默认输出名之后的一次重跑，读数与已发表归档不同）⇒ 提交它容易被读成「重定基线」，而本轮没有任何重定基线的裁定 | **不重定基线**：本轮没有任何裁定采纳它的读数 | 未入库文件**留在工作区、不删不改**；若将来要采纳它的读数，必须先有一条明确裁定（写明取代哪份归档、为什么），再入库。证据：`evals/results/system_validation/agent_behavior/agent_behavior_quality_20261008.json`（未跟踪） ↔ 已入库的 `evals/results/system_validation/agent_behavior/agent_behavior_quality.json` |
 
 #### 收尾动作清单（本轮做的四件事，每条都给命令，不给记忆）
 
