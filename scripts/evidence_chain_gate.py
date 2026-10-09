@@ -349,7 +349,7 @@ def check_7() -> None:
     hits, n_scanned = sg.scan_default_masking("evaluation.task_eval.predicates")
     check(
         "7b predicates 包内无 .get(k, False) 掩盖",
-        not hits,
+        not hits and n_scanned > 0,
         f"扫到 {n_scanned} 个 .py" + (f"；命中 {'; '.join(hits)}" if hits else ""),
     )
     check(
