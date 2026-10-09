@@ -102,6 +102,78 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
 
 ## 前置：人工动作（不在任何 Task 内，阻塞 Task 3）
 
+### P−1-4 标注指南 / 分歧裁决 / 审计字段 schema —— **冻结清单草案（★ 待项目所有者确认；未冻结前不启动盲标、不重录）**
+
+**① `answer_status` 与四态 verdict：分别存放、按名字关联，不互相冒充**
+- 存放：`Gold.gold_answer_status: dict[str, str]`，**键空间与既有 `gold_source_ref` 完全一致**
+  （`gold_answer` / `expected_difficulty` / `human_score`）⇒ 「出处指向哪里」与「那里的键处于什么状态」
+  并排可查，不造第二套键名。值域 = §4.4.2 五枚举。**位置在 dataset 文件**（先于模型输出存在 ⇒ 天然盲）。
+- 校验：`gold_sanity` 新增 —— 值 ∈ 枚举；**有 `gold_source_ref[k]` 必有 `gold_answer_status[k]`，反之亦然**；
+  gold 字段有值而 `answer_status` 缺 ⇒ **ERROR**（与既有「有值无出处即 ERROR」同构，复用同一条通道）。
+  ★ 缺 `answer_status` **不得推断为 `present`**（§4.4.7 第 1 条）。
+- verdict 侧不另存 `answer_status`：四态原因走既有 `item_reasons[<predicate>]` 通道，
+  写成可追溯原因码 `missing_premise:answer_status=missing_key`。关联键 = `(case_id, predicate, gold 字段名)`。
+  record 里 `gold` 是 `asdict` 快照 ⇒ 不新增字段就有历史可追。
+
+**② `verdict_requires_figure`：盲于模型输出的确定方式 + 审计**
+- 存放：`Gold.verdict_requires_figure: bool | None`，`None` = 未声明 ⇒ 按 §4.4.3 走 `missing_premise`
+  （★ 硬规则：未声明**不得当作 `false`**，否则漏填即绕过缺图保护）。
+- 确定：先由**题面文本触发词**给候选（`如图|图中|如下图所示|图示|见图`），标注员在只看题目本体时确认终值；
+  留 `verdict_requires_figure_basis`（题面原句片段）+ `decided_by` + `decided_at`。
+- 审计：抽查时核对「声明与题面是否一致」；不一致记 `figure_claim_mismatch`
+  ——**不算错键，但必须披露**。★ 禁止在看过任何生成 reply 之后回填（规程写明 + `decided_at` 留痕）。
+- 语义边界：它只说「评测需要题面图这个前提」，**不代表**图片内容读对了、也不代表答案键已核验。
+
+**③ R 行两名标注者的独立留档（新工件，不进 dataset、不进效果归档）**
+- 文件：`evals/annotations/r_row/<run_id>.jsonl`（一行 = 一个 `annotator × question × part` 判定）
+  + `<run_id>.adjudication.jsonl`（分歧、裁决、原因）。
+- 身份绑定：`provenance` 走 `build_provenance()` 同源（不手搓形状），并**必须**含
+  `annotated_record_sha256`（被标注那份归档的 hash）+ `item_content_hash`（生成题正文 hash）
+  ⇒ 换一次运行或换一版生成题，旧标注不可静默复用。
+- 每人每 part 字段：`annotator_id`（匿名 A/B）、`independent_answer`（先自解，写下前不得见模型给的键/解析）、
+  `saw_model_key: false` + `answered_at`、`decidable: bool`、
+  `part_verdict ∈ {pass, fail, undecidable, missing_premise}`、`reason_code`、
+  `difficulty_band` + `difficulty_rubric_ref`（**预先冻结**的判定标准及其来源，§4.4.6 第③问）、`judged_at`。
+- 分歧裁决字段：`disagreement`、`adjudicator_id`、`adjudication_outcome`、`adjudication_reason`、
+  `escalation` ⇒ 裁决不出来的记 `unresolved` 并**保留两人原值**（不取平均、不静默丢一方）。
+- ★ 三问分开留档（answerability / correctness / difficulty 各一条），**不得合成「人类判对率」**；
+  R 永不回填成机器缺失的 gold（§4.4.6 红线）。
+
+**④ 父题 / part 的缺失、不可判定与复合结果落盘**
+- part 结构：`r_parts: [{part_id, parent_id, status, verdict, reason_code}]`（在 R 工件内）；
+  自动化归档侧无 part ⇒ 不影响现有 `generate` 判据。
+- **R 行走新 task 名 `generate_r`**（★ 不复用 `generate`）：否则 part 级判据会被卷进 Q 的
+  `gen_case_pass` 复合，直接把「R 不顶替 Q」这条红线写破。
+- 新注册判据 `gen_item_part_composite`：`contract_inputs` 至少
+  `r_parts[].verdict` / `r_parts[].status` / `r_parts[].part_id` / `r_parent_id`；
+  `tier=2`、`tier_reason=("§1.3-tier2",)`；`optional=False`（它就是 R 行的主判据）；
+  按 §4.4.4 优先级复合。
+- 缺失 part 路径（先跑结构校验）：父题声明有 part 而某 part 缺失/未标注/无法关联 ⇒
+  `missing_premise` + `reason_code ∈ {part_missing, part_unlabelled, part_unlinkable}`；
+  ★ **不得**当作「该 part 不存在」而汇总通过。
+- 审计字段：`n_parts`、`n_undecidable`、`parent_verdict`、`parts[]` 原样（含两人值与裁决）。
+
+**⑤ registry / contract_inputs / falsifier / mutation gate 的闭环（这条最容易被写成口号）**
+- 进 registry 后**自动**被两件事消费：判据 `5e`（契约输入无未覆盖项）与 V0 `required_predicates()`。
+- ★ mutation 闭环要**两处扩代码**，不是注册就完：
+  ① `falsify.py` 现在对非 `reply#` 输入一律只给 `drop_path`（`_REPLY_OPS_BY_SEMANTICS` + `_DEFAULT_REPLY_OPS`）
+  ⇒ 需新增按输入种类分派的操作表，为 part 输入声明
+  `drop_part` / `flip_part_verdict` / `mark_part_undecidable` / `break_parent_link`；
+  ② `falsify.apply()` 目前只会「删整段 reply 片段」与「按点分路径 drop」⇒ 要支持 part 级注入。
+  ★ 这两处做完之前，**不许**声称 R 行判据「已进证伪矩阵」。
+- 新增 gate 判据（计数器从 79 起，按实施实况报数，不预告数字）：part 三格行为锁（全 pass / 含 fail /
+  含缺 part）、`gold_answer_status`↔`gold_source_ref` 键集相等、
+  `r_*.jsonl` 的 `annotated_record_sha256` 必须能在 `evals/results/**` 找到对应归档
+  （否则「标到哪次运行」不可核 —— 这一环最容易被悄悄丢掉）。
+- R 到「已证明」还欠 §1.3 的两个 tier-2 前置：**重复运行抖动 + 阈值校准**（两人独立作答是必要设计、
+  不是充分证明）⇒ 与 `gen_answerability` 的 tier 重新申报（B11）同批处理。
+
+**工作量与顺序（冻结后）**：抽查 59 题对照扫描页 ≈1.5–2 人时；R 三问双标 + 裁决 ≈2–3 人时；
+代码侧（`cases.py` 字段、`gold_sanity`/`schema_gate` 校验、新判据注册、`falsify` part 操作、
+标注写入与校验器、gate 判据）≈0.5–1 天，**全部零 token**。顺序：先代码 + gate，再抽查执行，
+再 R 双标；`--check`/V0 新增红必须**可追溯到具体缺失字段与受影响判据**（§4.4.7 第 4 条），
+且缺字段红与实际错键**分开统计**。
+
 **P−1 盲标 gold**（`docs/EVIDENCE_CHAIN.md` §4.2 规程）：**约 2 人时，零 token**
 （原 4 人时含 G1b，G1b 已于 checkpoint 2 撤回 —— 两极 gold 是语料性质，改判据不换标签）。
 
