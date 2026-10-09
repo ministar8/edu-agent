@@ -2056,6 +2056,8 @@ git commit -m "feat(eval): V0 schema 完整性 + 未测量判据禁进门槛（�
     由本 Step 的实现者按调用点数量决定并在 commit message 里写明**（当前 `safe_remember` 调用点见 Step 4）
   - `memory_scorer.judge_memory_mechanically(..., read_status: str) -> MemoryJudgement`
 
+★ **v1.4 提示（适用于本 Task 代码块里出现的「两个/两处单元边界」）**：下面嵌入的片段是当时的裁定态原文，**不逐行改写**以免破坏可抄性；现行判据 `8g`/`8k` 期望的是**三个**单元边界（`retrieval_gate` / `runner.run_case` / `cli.reprobe`），以 `scripts/evidence_chain_gate.py` 为准。
+
 - [ ] **Step 1: 写红的判据（四种 read_status 的映射表逐条钉）**
 
 ```python
@@ -2162,7 +2164,7 @@ Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword a
 ★ **Step 2c 修订（checkpoint 8 裁定 R1-A，规格 v1.3）**：原来钉了**三个**点，其中
 `_amulti_route_search` 每轮开头那个已**撤销** —— 一条 query 在 `pipeline.py:448/466/672` 会跑多轮，
 后轮 reset 抹掉前轮**尚未被 `run_case` 消费**的证据（实测注入 3 次故障 ⇒ 读取时 `[]`），
-检测能力反而低于改动前。reset 只允许在**独立取证单元的边界**，共两个：
+检测能力反而低于改动前。reset 只允许在**独立取证单元的边界**，共两个：（★ v1.4：本行记的是当时裁定态的「两个」；`reprobe` 接进消费侧后单元边界为**三个**，以 §5 B7-③ 与判据 `8g`/`8k` 的现行期望为准）
 
 ```python
     def record_query_failure(self, note: str) -> None:
@@ -2177,7 +2179,7 @@ Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword a
         self._query_failures.clear()
 ```
 
-自查两处单元边界都真被调用（判据 `8g`/`8k` 靠它）：
+自查两处单元边界都真被调用（判据 `8g`/`8k` 靠它）：（★ v1.4：本行记的是当时裁定态的「两个」；`reprobe` 接进消费侧后单元边界为**三个**，以 §5 B7-③ 与判据 `8g`/`8k` 的现行期望为准）
 
 ```bash
 grep -rn "reset_query_failures()" src | tee /tmp/reset_sites.txt
@@ -2327,7 +2329,7 @@ def check_9() -> None:
 
 `_EXPECTED_ITEMS = 69`（Task 8 结束时为 **64**，本步 +5：9a/9b/9c/9d/9e）。
 Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
-★ 原 `9f`（reset 调用点）跟着 B7 一起搬进 Task 8，现在是那里的 `8g` + `8k`；v1.3 后是**两处单元边界**。
+★ 原 `9f`（reset 调用点）跟着 B7 一起搬进 Task 8，现在是那里的 `8g` + `8k`；v1.3 后是**两处单元边界**，v1.4 起是**三处**（`reprobe` 已接消费侧）。
 
 - [ ] **Step 2: B2 —— `rerank_status` 四值 + 派生 `rerank_used`**
 
