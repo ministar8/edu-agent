@@ -8,7 +8,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-_EXPECTED_ITEMS = 48  # Step 1（7a–7e）后 = 46；Step 4b（7f/7g）后 = 48
+_EXPECTED_ITEMS = 49  # Step 1（7a–7e）后 = 46；Step 4b（7f/7g）后 = 48；Fix 1（7h）后 = 49
 _ITEMS: list[tuple[str, bool, str]] = []
 
 
@@ -344,8 +344,14 @@ def check_7() -> None:
     bad = {"task": "generate", "case_id": "z", "reply": ""}  # 缺 item_reasons / gold
     errs = sg.check_archive_records([bad])
     check("7a 缺字段 ⇒ 报错，而不是默认 False 通过", bool(errs))
-    hits = sg.assert_no_default_masking("evaluation.task_eval.predicates")
-    check("7b predicates 包内无 .get(k, False) 掩盖", not hits, "; ".join(hits))
+    # ★ 评审 I-1：detail 里带上**实际扫到的文件数** —— 「0 命中」和「扫了 0 个文件」是两件事，
+    #   前者是真绿，后者是包被改名/模块被挪层时的假绿（`rglob` 对不存在的目录不报错）。
+    hits, n_scanned = sg.scan_default_masking("evaluation.task_eval.predicates")
+    check(
+        "7b predicates 包内无 .get(k, False) 掩盖",
+        not hits,
+        f"扫到 {n_scanned} 个 .py" + (f"；命中 {'; '.join(hits)}" if hits else ""),
+    )
     check(
         "7c 任一 required 判据 missing_premise ⇒ 该 claim 不可进门槛",
         sg.gate_rejects({"gen_correctness": "missing_premise"}) is True,
@@ -370,15 +376,49 @@ def check_7() -> None:
     )
     check("7f 每个判据的 tier 都带白名单锚点（不许裸写）", not no_reason, str(no_reason))
     tier2 = sorted(p.name for p in reg.all_preds() if p.tier == 2)
+    # ★ 评审 I-2：债标记是**双向**的锚点，不是只能被单方向验证的字符串 ——
+    #   旧版只锁「tier==2 的集合」⇒ 把 `TIER-DEBT-task3` 贴到 tier=1 的判据上时 7f/7g 全绿，
+    #   正式感很强的锚点于是可以贴在不是债的行上、被稀释成装饰。
+    debt = sorted(p.name for p in reg.all_preds() if "TIER-DEBT-task3" in p.tier_reason)
     check(
         "7g tier=2 判据集合 == 已登记的 Task 3 遗留债名单（改判据须同步改本表）",
-        tier2 == ["gen_analysis_agreement", "gen_answer_key_validity"],
-        str(tier2),
+        tier2 == debt == ["gen_analysis_agreement", "gen_answer_key_validity"],
+        f"tier=2 集合 {tier2}；挂 TIER-DEBT-task3 的集合 {debt}",
     )
     # ★ `7g` 通过的语义是「**债名单与登记一致**」，不是「债务已清偿」：
     #   这两条是 optional 机械替身，按 §1.3 的证据种类应为 tier 0/1（Task 3 registry debt），
     #   checkpoint 6 裁定本轮只登记不改。谁将来把 tier 改成 1，`7g` 会红 ⇒ 逼他同步删这条登记，
     #   而不是让「改了什么」静默消失。⇒ 报告里不得写「V0 全绿 ⇒ schema 问题已解决」。
+
+    # 评审 I-4（= 偏差 D5）：`item_reasons` 缺键检查的**作用域**是推导出来的 ⇒ 必须双向钉死，
+    #   否则「把它扩成整类任务都跳过」甚至「全部跳过」时，现有 7 项里不会有任何一条变红。
+    def _reports_item_reasons(rec: dict[str, Any]) -> bool:
+        return any(
+            str(rec.get("case_id")) in e and "item_reasons" in e
+            for e in sg.check_archive_records([rec])
+        )
+
+    # 夹具覆盖归档里出现过的**全部五个**任务名 ⇒ 跳过集合只要往任何一类上扩，就有一条变红。
+    has_pred = [
+        {"task": "generate", "case_id": "7h-gen"},
+        {"task": "verify", "case_id": "7h-ver"},
+        {"task": "memory", "case_id": "7h-mem"},
+    ]
+    no_pred = [{"task": "qa", "case_id": "7h-qa"}, {"task": "grade", "case_id": "7h-grade"}]
+    reported = sorted(str(r["task"]) for r in has_pred if _reports_item_reasons(r))
+    widened = sorted(str(r["task"]) for r in no_pred if _reports_item_reasons(r))
+    still_clean = not any(sg.check_archive_records([r]) for r in no_pred)
+    stats = sg.missing_key_report(has_pred + no_pred)
+    derived_skip = sum(1 for r in has_pred + no_pred if not reg.for_task(str(r["task"])))
+    check(
+        "7h item_reasons 作用域双向锁：有判据任务必报 / qa·grade 必不报 + 跳过条数==无判据记录数",
+        reported == ["generate", "memory", "verify"]
+        and not widened
+        and still_clean
+        and stats.n_skipped_not_applicable == derived_skip == 2,
+        f"报出={reported} 被多跳={widened} 无判据行仍报错={not still_clean} "
+        f"跳过={stats.n_skipped_not_applicable}(推导 {derived_skip})",
+    )
 
 
 def emit_falsify_report(path: str = "evals/claims/falsify_latest.json") -> None:
@@ -427,6 +467,9 @@ def main() -> int:
         print("红灯：" + ", ".join(failed))
         return 1
     print(f"全绿（{total} 项）")
+    # ★ 评审 M-7：固定脚注（**不是判据**、不进计数器）—— 防止「越读越乐观」：
+    #   gate 绿只证明拦网在位，V0 清偿与否是归档事实，只有 `--check` 第 3 段说得了。
+    print("★ gate 全绿 = 拦网在位；V0 是否清偿只看 build_claim_ledger --check 的第 3 段。")
     return 0
 
 

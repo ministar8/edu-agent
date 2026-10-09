@@ -979,19 +979,30 @@ def run_check(args: argparse.Namespace, text: str, records: list[dict[str, Any]]
             print(f"PASS  {doc} 无孤立结论行")
 
     print("── 第 3 段【V0 拦截】schema 完整性 + 未测量判据禁进门槛（§8①/§8②）──")
-    kinds = schema_gate.summarize_missing_keys(records)
+    stats = schema_gate.missing_key_report(records)
+    kinds = stats.kinds
     if kinds:
         seg3_red = True
-        n_lines = sum(cnt for _k, cnt, _ex in kinds)
         print(
-            f"FAIL  V0 ① schema 缺键：{len(kinds)} 类 / {n_lines} 行"
-            "（老归档没有新字段 ⇒ 需 reanalyse，**禁止**自动回填）"
+            f"FAIL  V0 ① schema 缺键：{len(kinds)} 类 / {stats.n_pairs} 处"
+            f"（涉及 {stats.n_records} 条记录"
+            f"，全归档 {len(records)} 条中；处 = 记录×缺键对数 ⇒ 一条记录缺两个键算两处）"
+            "—— 老归档没有新字段 ⇒ 需 reanalyse，**禁止**自动回填"
         )
         for kind, cnt, examples in kinds:
             print(f"      ×{cnt}  {kind}")
             print(f"          示例 case：{', '.join(str(e) for e in examples)}")
     else:
         print("PASS  V0 ① 判据声明的 contract_inputs 在归档里键真实存在")
+    # ★ 评审 I-4（= 偏差 D5）：跳过多少条、为什么跳过，**必须明说**——
+    #   不打印这句就是真放宽（读者无法区分「跳过不适用行」与「漏查了 30 条」）。
+    print(
+        f"      跳过 {stats.n_skipped_not_applicable} 条不适用行（不计入上面的缺键）："
+        "qa/grade 在 registry 里没有任何判据 ⇒ 无四态项，`item_reasons` 的唯一生产者"
+        " `cli._backfill`（cli.py:331-335）只在 `for pred in registry.for_task(task)` 内写这个键"
+        " ⇒ 这些行无论怎么 reanalyse 都不会绿，把它们当红灯 = 先天无法清偿的红灯"
+        "（正是逼人关掉门禁的成因）。真缺口一条未丢：有判据的任务照旧逐条查。"
+    )
     unmeasurable = schema_gate.unmeasurable_tasks(records)
     if unmeasurable:
         seg3_red = True
