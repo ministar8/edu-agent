@@ -1,0 +1,104 @@
+[
+  {
+    "path": "evals/results/task_eval/phase1_final_gate_20261008.jsonl",
+    "status": "superseded",
+    "superseded_by": "evals/results/task_eval/ec_r1_final_gate.jsonl",
+    "reason": "composite_na_semantics_changed"
+  },
+  {
+    "path": "evals/results/task_eval/phase1_gen_anchor5_20261008.jsonl",
+    "status": "superseded",
+    "superseded_by": "evals/results/task_eval/ec_r1_final_gate.jsonl",
+    "reason": "composite_na_semantics_changed"
+  },
+  {
+    "path": "evals/results/task_eval/phase0_baseline_final.report.md",
+    "status": "superseded",
+    "superseded_by": "docs/EXPERIMENTS.md",
+    "reason": "gold_status_claim_corrected"
+  },
+  {
+    "path": "evals/baselines/pre_task9_20261009/retrieval_baseline.json",
+    "status": "superseded",
+    "superseded_by": "evals/baselines/retrieval_baseline.json",
+    "reason": "task9_baseline_rerecord_after_b1_b2"
+  },
+  {
+    "path": "evals/baselines/pre_task9_20261009/retrieval_baseline_rerank.json",
+    "status": "superseded",
+    "superseded_by": "evals/baselines/retrieval_baseline_rerank.json",
+    "reason": "task9_baseline_rerecord_after_b1_b2"
+  },
+  {
+    "path": "evals/baselines/pre_task9_20261009/retrieval_baseline_fake_disabled.json",
+    "status": "superseded",
+    "superseded_by": "evals/baselines/retrieval_baseline_fake_disabled.json",
+    "reason": "task9_baseline_rerecord_after_b1_b2"
+  },
+  {
+    "path": "evals/baselines/pre_task9_20261009/retrieval_baseline_real_embed.json",
+    "status": "superseded",
+    "superseded_by": "evals/baselines/retrieval_baseline_real_embed.json",
+    "reason": "task9_baseline_rerecord_after_b1_b2"
+  },
+  {
+    "path": "evals/baselines/pre_task9_20261009/retrieval_baseline_real_disabled.json",
+    "status": "superseded",
+    "superseded_by": "evals/baselines/retrieval_baseline_real_disabled.json",
+    "reason": "task9_baseline_rerecord_after_b1_b2"
+  },
+  {
+    "path": "evals/baselines/pre_task9_20261009/retrieval_baseline_real_rerank.json",
+    "status": "superseded",
+    "superseded_by": "evals/baselines/retrieval_baseline_real_rerank.json",
+    "reason": "task9_baseline_rerecord_after_b1_b2"
+  },
+  {
+    "path": "evals/results/task_eval/ec_r1_final_gate.jsonl",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "evals/baselines/retrieval_baseline.json",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "evals/baselines/retrieval_baseline_rerank.json",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "evals/baselines/retrieval_baseline_fake_disabled.json",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "evals/baselines/retrieval_baseline_real_embed.json",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "evals/baselines/retrieval_baseline_real_disabled.json",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "evals/baselines/retrieval_baseline_real_rerank.json",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "docs/EXPERIMENTS.md",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  }
+]

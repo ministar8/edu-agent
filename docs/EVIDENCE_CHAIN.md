@@ -50,7 +50,26 @@ provenance 100%（§6）。断层的全部来源是这一句：
 |---|---|
 | **已证明** | R1-A 机械敏感 **且** R1-B 语义映射已签 **且** R2 层级够 **且** 取证时 `code_version`/`prompt_set_version`/`config_hash`/工件 hash 与所引数字一致 |
 | **已测量未证明** | 有数，但上述任一缺失 |
-| **未测量** | 测不到 / 判据恒真且弄不红 / gold 前提不存在 |
+| **未测量** | ★ **本行由 checkpoint 10 裁定改写**（v1.0–v1.3 写的是「测不到 / 判据恒真且弄不红 / **gold 前提不存在**」三值触发，比下面那条冻结公式多一条 ⇒ 与 `derive_status` 长期口径不一）：现在只认**两行判据**——**`discriminating=False` 且 `falsify_passed=False`** 同时成立才判「未测量」，即「归档上算不出数」**并且**「mutation 取证也证明不了判据对它声明的契约输入敏感」。唯一真源 = `src/evaluation/task_eval/claims.py` 的 `derive_status()`，本节不再手写第二套条件；「gold 前提不存在」单独出现时落**已测量未证明**（残留代价见下面那条，不许读成已消除） |
+
+> ★ **这一格曾有口径差，收口方式与残留代价（checkpoint 10 裁定，2026-10-10；不是「一直在这么写」）**
+> —— 本节 v1.0 起把「gold 前提不存在」直接列为未测量的第三种触发，而 Task 6 冻结在
+> `claims.derive_status` 的公式要 `not discriminating and not falsify_passed` 才判未测量。
+> 两者在 `gen_correctness` / `gen_answerability` 这一格分岔：mutation 取证的夹具**自带 gold** ⇒
+> 判据能被弄红（`falsify_passed=True`），而真实归档 `n_measured=0`（P−1 盲标未做）⇒
+> 状态词落成「已测量未证明」而不是「未测量」。
+> **裁定 = 改本节措辞去对齐公式，不改 `derive_status`**（公式是三态推导、ledger 与 `--check` 的公共依赖，
+> 动它要连带改 tier/债登记，不属文档收尾的范围）。取证命令：
+> `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`（三态推导那一组）
+> 与 `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.py --check`（第 3 段 V0 ② 仍拦）。
+> ★ **诚实代价如实留在这里，不许读成已消除**：
+> ① 读者看到「已测量未证明」配「已测 n=0」这一对时**仍然反直觉** —— 状态词说的是「判据有没有牙齿」，
+> 数值列说的是「归档里有没有数」，两者本来就在问不同的问题，但并排印出来就像矛盾；
+> ② `evals/claims/ledger.md` 判据级附表那条 ★ 注记**保留**（它给的是依据：冻结公式 + mutation 测的是
+> **判据对契约输入的敏感性、不是主张的数值**），★ 但它是 `scripts/build_claim_ledger.py` 的渲染产出、
+> 本 Task 不改代码 ⇒ 注记里「与 §1.1 口径不一致 / 待 Task 10 文档收口」那半句在收口后要读作
+> **历史指向**（现行判据以本节为准）；把注记文本一起刷新需要一次动 `scripts/` 的小改；
+> ③ 这一格**不因此变成「已证明」**，也不免除 V0 ② 对「required 判据全未测量」的拦截。
 
 **工件状态**（artifact_status，历史数据用，不改写数值）：`active` / `superseded` / `invalidated`，
 `superseded` 必须带 `superseded_by` + `reason`（如 `predicate_semantics_changed`）。

@@ -1,0 +1,15 @@
+# E-5 缺陷 E 效果探针（配对：臂 A 词表 162 vs 臂 B 8 示例=E-3 前口径）。
+# 测量，非门禁；模型有随机性，判定看两臂聚合差值。
+# provenance={"probe": "memory_e5_probe", "code_version": "50b5017-dirty", "prompt_set_version": "2f485d2d7ef7", "arm_system_sha256": {"A_vocab162": "adf234e3f7af", "B_examples8": "0fe2deeddf69"}, "model": "dashscope:qwen3.7-flash", "temperature": 0.0, "n_cases": 6, "date": "2026-10-07T11:43:00.560486+00:00"}
+{"arm": "A_vocab162", "qid": "2012-Q4", "expected_any": ["平衡二叉树"], "kp_raw": ["平衡二叉树", "二叉树"], "kp_normalized": ["平衡二叉树", "二叉树"], "all_canonical": true, "non_canonical": [], "expected_hit_after_normalize": true, "score": 0}
+{"arm": "A_vocab162", "qid": "2013-Q3", "expected_any": ["平衡二叉树"], "kp_raw": ["平衡二叉树"], "kp_normalized": ["平衡二叉树"], "all_canonical": true, "non_canonical": [], "expected_hit_after_normalize": true, "score": 0}
+{"arm": "A_vocab162", "qid": "mem-002-T0", "expected_any": ["图", "图的存储", "图的遍历"], "kp_raw": ["图", "图的存储"], "kp_normalized": ["图", "图的存储"], "all_canonical": true, "non_canonical": [], "expected_hit_after_normalize": true, "score": 0}
+{"arm": "A_vocab162", "qid": "mem-002-T1", "expected_any": ["图", "图的存储"], "kp_raw": ["图的存储"], "kp_normalized": ["图的存储"], "all_canonical": true, "non_canonical": [], "expected_hit_after_normalize": true, "score": 0}
+{"arm": "A_vocab162", "qid": "mem-003-T0", "expected_any": ["堆排序"], "kp_raw": ["堆排序"], "kp_normalized": ["堆排序"], "all_canonical": true, "non_canonical": [], "expected_hit_after_normalize": true, "score": 100}
+{"arm": "A_vocab162", "qid": "mem-003-T1", "expected_any": ["快速排序", "排序"], "kp_raw": ["快速排序"], "kp_normalized": ["快速排序"], "all_canonical": true, "non_canonical": [], "expected_hit_after_normalize": true, "score": 100}
+{"arm": "B_examples8", "qid": "2012-Q4", "expected_any": ["平衡二叉树"], "kp_raw": ["平衡二叉树", "平衡因子"], "kp_normalized": ["平衡二叉树", "平衡因子"], "all_canonical": false, "non_canonical": ["平衡因子"], "expected_hit_after_normalize": true, "score": 0}
+{"arm": "B_examples8", "qid": "2013-Q3", "expected_any": ["平衡二叉树"], "kp_raw": ["平衡二叉树", "平衡因子"], "kp_normalized": ["平衡二叉树", "平衡因子"], "all_canonical": false, "non_canonical": ["平衡因子"], "expected_hit_after_normalize": true, "score": 0}
+{"arm": "B_examples8", "qid": "mem-002-T0", "expected_any": ["图", "图的存储", "图的遍历"], "kp_raw": ["无向图的度", "握手定理"], "kp_normalized": ["无向图的度", "握手定理"], "all_canonical": false, "non_canonical": ["无向图的度", "握手定理"], "expected_hit_after_normalize": false, "score": 0}
+{"arm": "B_examples8", "qid": "mem-002-T1", "expected_any": ["图", "图的存储"], "kp_raw": ["图的存储结构", "邻接矩阵"], "kp_normalized": ["图的存储结构", "邻接矩阵"], "all_canonical": false, "non_canonical": ["图的存储结构", "邻接矩阵"], "expected_hit_after_normalize": false, "score": 0}
+{"arm": "B_examples8", "qid": "mem-003-T0", "expected_any": ["堆排序"], "kp_raw": ["堆", "小根堆"], "kp_normalized": ["堆", "小根堆"], "all_canonical": false, "non_canonical": ["堆", "小根堆"], "expected_hit_after_normalize": false, "score": 100}
+{"arm": "B_examples8", "qid": "mem-003-T1", "expected_any": ["快速排序", "排序"], "kp_raw": ["快速排序"], "kp_normalized": ["快速排序"], "all_canonical": true, "non_canonical": [], "expected_hit_after_normalize": true, "score": 100}

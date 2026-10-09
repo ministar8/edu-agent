@@ -1,0 +1,184 @@
+{
+  "n_total": 14,
+  "gold_status": {
+    "reviewed": 4,
+    "draft": 10
+  },
+  "agent_models": [
+    "deepseek:deepseek-flash"
+  ],
+  "judges": [
+    "dashscope:qwen3.8-flash"
+  ],
+  "tasks": {
+    "generate": {
+      "task": "generate",
+      "n": 4,
+      "judged_n": 4,
+      "mean_final_quality": 5.0,
+      "quality_pass": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "n": 4,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 4,
+        "failed": 0,
+        "n": 4,
+        "n_a": 0
+      },
+      "failure_rate": 0.0,
+      "primary_failures": [],
+      "kp_hit": {
+        "rate": 0.3333,
+        "value": 0.3333,
+        "passed": 1,
+        "failed": 2,
+        "n": 3,
+        "n_a": 1
+      },
+      "category_hit": {
+        "rate": 0.5,
+        "value": 0.5,
+        "passed": 2,
+        "failed": 2,
+        "n": 4,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 4,
+        "n": 4,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 2.0,
+      "score_tolerance": {},
+      "score_mae": null,
+      "gen_delivery": {
+        "rate": 0.8667,
+        "value": 0.8667,
+        "passed": 13,
+        "failed": 2,
+        "n": 15,
+        "n_a": 5
+      },
+      "gen_items": {
+        "结构完整率": {
+          "rate": 1.0,
+          "value": 1.0,
+          "passed": 4,
+          "failed": 0,
+          "n": 4,
+          "n_a": 0
+        },
+        "答案可判定率": {
+          "rate": 1.0,
+          "value": 1.0,
+          "passed": 4,
+          "failed": 0,
+          "n": 4,
+          "n_a": 0
+        },
+        "知识点覆盖率": {
+          "rate": 0.3333,
+          "value": 0.3333,
+          "passed": 1,
+          "failed": 2,
+          "n": 3,
+          "n_a": 1
+        },
+        "内容正确率": {
+          "rate": 1.0,
+          "value": 1.0,
+          "passed": 4,
+          "failed": 0,
+          "n": 4,
+          "n_a": 0
+        },
+        "难度匹配": {
+          "rate": null,
+          "value": null,
+          "passed": 0,
+          "failed": 0,
+          "n": 0,
+          "n_a": 4
+        }
+      },
+      "memory_correct_use": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "verify": {
+      "task": "verify",
+      "n": 10,
+      "judged_n": 10,
+      "mean_final_quality": 0.8,
+      "quality_pass": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 10,
+        "n": 10,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 10,
+        "failed": 0,
+        "n": 10,
+        "n_a": 0
+      },
+      "failure_rate": 1.0,
+      "primary_failures": [
+        [
+          "retrieval_miss",
+          10
+        ]
+      ],
+      "kp_hit": {
+        "rate": null,
+        "value": null,
+        "passed": 0,
+        "failed": 0,
+        "n": 0,
+        "n_a": 10
+      },
+      "category_hit": {
+        "rate": 0.3,
+        "value": 0.3,
+        "passed": 3,
+        "failed": 7,
+        "n": 10,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.5,
+        "value": 0.5,
+        "passed": 5,
+        "failed": 5,
+        "n": 10,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 0.8,
+      "mean_evidence_count": 2.5,
+      "score_tolerance": {},
+      "score_mae": null,
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    }
+  }
+}

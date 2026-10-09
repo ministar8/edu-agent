@@ -44,7 +44,8 @@
 ```bash
 uv sync                                  # 安装依赖
 uv sync --group eval                     # RAGAS 评测依赖（可选）
-PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 5
+PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 5
+# ↑ 路径已按实仓校正：旧写法 `evals/sample_408.jsonl` 从来不存在，真实黄金集 = evals/datasets/golden/sample_408.jsonl（= src/evaluation/cli.py 的 --dataset 默认值；核对：git ls-files evals/datasets/golden）
 
 # 任务级评测（论文效果章 · src/evaluation/task_eval）
 PYTHONPATH=src uv run python -m evaluation.task_eval sanity       # Gold 体检，进 0B 前必跑

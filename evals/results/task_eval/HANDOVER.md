@@ -780,3 +780,63 @@ d 未注入别名 / e 降级分支 / f 无花括号 / g 长度上界 / h 篡改�
 | 冻结基线（**只读**） | `evals/results/task_eval/phase0_baseline_final.jsonl` |
 | Phase 1 结果 | `evals/results/task_eval/phase1_baseline_v2.jsonl` |
 | Step 5 原始 record | `evals/results/task_eval/phase1_memory_step5_store_{on,off}.jsonl` |
+
+---
+
+# 十、证据链重建（Task 1–10）本轮改造的**活文档状态**（2026-10-10 收尾）
+
+> 本节只回答两件事：**这一轮改了什么、现在能说到哪一步**。
+> 偏离的账本在 `docs/EXPERIMENTS.md` **§20.7.2**（三类显式分开：**已裁定的设计选择 / 已知局限 / 尚待验证的归因**），
+> 逐条 diff 在 **§20.7.1**，效果口径的 37 条在 **§20.5** —— ★ **本文件不复制第二份**（两处记账必然漂移，这正是本轮要消灭的「多套现实」）。
+
+## 10.1 取证入口（一律给命令，不给记忆；项数会漂、命令不会）
+
+| 要看什么 | 命令 |
+|---|---|
+| 证据链门禁的当前项数与红绿灯 | `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`（只看它自己打印的那行「全绿（N 项）」，文档不抄 N） |
+| Memory 侧护栏是否仍「判定项数 = 声明值」 | `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step4fix_gate.py`；声明值现查 `grep -n "^_EXPECTED_ITEMS" scripts/memory_step4fix_gate.py`（少跑或静默跳过即 exit 1，见 §20.5 #30） |
+| 主张 ↔ 证据的当前状态词 | `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.py --records evals/results/task_eval/ec_r1_final_gate.jsonl --out evals/claims/ledger.md`（★ 生成物，**勿手改**；状态词由 `claims.derive_status` 算出） |
+| ledger 是否漂移 / R3 孤立结论 / V0 是否清偿 | 同命令加 `--check` ⇒ **三段各自表态**。第 1 段必须 PASS（文档 == 重算）；第 2 段红在**历史**文档（本轮不要求全部清偿）；★ **第 3 段本轮就该红** = V0 未清偿（P−1 未做 + 老归档缺 `provenance` / `item_reasons`），不是 ledger 算错了 |
+| Gold 体检 | `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.task_eval sanity` |
+| 旧归档与新一代的替代关系 | `evals/claims/artifact_status.json`（由既有 `evaluation.task_eval.claims.artifact_status()` 生成；★ 标 `superseded` **不是** `invalidated` —— 被替代 ≠ 无效，原文件与数值一律不动） |
+| 现役 / 旧一代检索基线 | `git ls-files evals/baselines`（旧一代整份留在 `evals/baselines/pre_task9_20261009/`，两代并存可查） |
+
+## 10.2 ★ 收尾陈述的两条边界（引用本轮任何「绿灯 / 零 token」都必须连着一起引）
+
+① **gate 全绿 ≠ 历史实验复现 ≠ 语义债清零**。门禁通过只说明「当前这些检查项在位且未被打坏」：
+它**不**证明六条检索基线能逐位复现（实测 diff **全非零**，§20.7.1），**不**证明 §20.5 那 37 条偏离已消化，
+也**不**证明各层级的语义债已清 —— `TIER-DEBT-task3`（两个 optional 替身 tier=2 误标）、`9i`（hop①/③ 仍是结构锁）、
+`gen_answerability` 的 tier 锚点待重新申报，这些项**在绿灯状态下就摆在那儿**；
+护栏 `7g` 通过的语义是「**债名单与登记一致**」，不是「债务已清偿」。
+复现：`evidence_chain_gate.py` + `build_claim_ledger.py --check`（第 3 段 V0 就是「绿灯但债未清」的机械露出）。
+
+② **「零 LLM token」限定在 §20.7.1 那六次路由重录**，不外推到整个项目生命周期。
+依据是工件自己带的字段 —— 每份新基线 `provenance.model_refs.agent = fake:fake`（假模型哨兵），
+TEI 是真实服务但属**非 LLM** 调用。取证方式：`git ls-files evals/baselines` 列出名单后逐个读 `provenance` 键。
+★ 本项目其余环节**照常烧 token**（Step 9 真跑、`memory_step2_gate.py`、§6 整轮都在 §20.8 / §22 里记着调用次数），
+写「零 token」时不得把它们抹掉。
+
+## 10.3 本轮（Task 10）动了什么、**没**动什么
+
+**动了（只有文档与 `evals/claims/` 状态工件）**：
+`docs/README.md`（锚点行 / 两处门禁行 / `task_eval` 跟踪状态行 / `.gitignore` 例外行改成命令形状 + 新增 `EVIDENCE_CHAIN.md`·`EVIDENCE_CHAIN_PLAN.md`·`evals/claims/` 索引 + 「收尾陈述的边界」一节）·
+`CLAUDE.md` + `README.md`（`--dataset` 指向真实在库路径，旧写法 `evals/sample_408.jsonl` 从来不存在）·
+`docs/EVIDENCE_CHAIN.md` §1.1（**checkpoint 10 裁定**：状态表「未测量」那一格改为与冻结公式一致的两行判据，并同处写明残留的诚实代价）·
+`docs/EXPERIMENTS.md` §20.7.2（偏离合并登记 + 开放项的当前状态与后续处理条件）·
+新建 `evals/claims/artifact_status.json` 与 `evals/claims/ledger.md` · `evals/results/task_eval/` 的数值工件（`*.jsonl` / `*.report.json`）纳入版本控制（★ 逐轮 `*.log` 仍不入库，沿用 D11 的体积取舍；剩余名单现查 `git status --short -- evals/results/task_eval`）。
+
+**没动（★ 这些是边界，不是疏漏）**：
+`src/` 与 `scripts/` 的实现**一行未改** —— 含 `derive_status`（口径差按裁定走「改文档」这一路）、
+`_EXPECTED_ITEMS`、以及 `build_claim_ledger.py` 里判据附表那条 ★ 注记的文本（它仍写着「待 Task 10 文档收口」；
+收口已在 `docs/EVIDENCE_CHAIN.md` §1.1 完成，注记文本的刷新属一次动 `scripts/` 的小改 ⇒ **登记为遗留，不在本轮做**）；
+六条基线**未重跑**、任何历史归档数值**未回写**、未用 `--update-baseline`；
+`src/rag/splitter.py` 是**项目所有者本人**的未提交改动 ⇒ 不提交、不覆盖、不重置（本轮全程 `git status` 都留它在外）。
+
+## 10.4 下一跳（按既定顺序，均不在本轮）
+
+| 步 | 内容 | 为什么排在后面 |
+|---|---|---|
+| **P−1** | generate 15 行的 `gold_answer` + `expected_difficulty` 盲标（按 §4.2 盲标规程：只读题面 + KB 出处，标注阶段**不得**打开 `calibration_30.jsonl`） | 零 token、约 2 人时；★ 它是 Generate 门槛行「能出数」的唯一路径，不做则整族只能以 limitation 身份出现 |
+| **R1-B** | 每个判据对着 `EFFECT_PLAN.md` §3.1 原文人工签署一次「已审@版本」，落 `evals/claims/r1b_signatures.json` | 机器证不到的最后一跳 ⇒ ★ **不许写成「已闭合」**；未签之前 ledger 的 `signed` 恒 False、没有任何一行能到「已证明」 |
+| **§7.3 Freeze** | V0 通过（含 P−1 已填 gold）之后才允许全量重跑；届时 ledger 的取证时间整体刷新 | 本轮的 ledger/`artifact_status` 是「重跑之前」的状态快照 |
+| **C 类清理** | 差分 worktree `C:/Users/26452/Desktop/edu-attr-HEADminus` + 仓库根 `tmp_final_table.py` / `tmp_probe_err.py` | 由控制器单独处理；★ 清理前须核对 worktree 有无未提交改动、两个脚本是否仍是复核证据 —— **不得**因为「看起来像崩溃残留」就直接清空 |

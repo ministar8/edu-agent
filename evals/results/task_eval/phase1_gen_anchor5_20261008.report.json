@@ -1,0 +1,144 @@
+{
+  "n_total": 15,
+  "gold_status": {
+    "draft": 15
+  },
+  "agent_models": [
+    "deepseek:deepseek-flash"
+  ],
+  "judges": [
+    "dashscope:qwen3.8-flash"
+  ],
+  "tasks": {
+    "generate": {
+      "task": "generate",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 4.4,
+      "quality_pass": {
+        "rate": 0.8667,
+        "value": 0.8667,
+        "passed": 13,
+        "failed": 2,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 14,
+        "failed": 1,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.2,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "generation_incomplete",
+          2
+        ],
+        [
+          "generation_wrong",
+          1
+        ]
+      ],
+      "kp_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "category_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 2.867,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {
+        "rate": 0.8667,
+        "value": 0.8667,
+        "passed": 13,
+        "failed": 2,
+        "n": 15,
+        "n_a": 0
+      },
+      "gen_delivery": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 56,
+        "failed": 4,
+        "n": 60,
+        "n_a": 15
+      },
+      "gen_items": {
+        "结构完整率": {
+          "rate": 0.9333,
+          "value": 0.9333,
+          "passed": 14,
+          "failed": 1,
+          "n": 15,
+          "n_a": 0
+        },
+        "答案可判定率": {
+          "rate": 0.9333,
+          "value": 0.9333,
+          "passed": 14,
+          "failed": 1,
+          "n": 15,
+          "n_a": 0
+        },
+        "知识点覆盖率": {
+          "rate": 1.0,
+          "value": 1.0,
+          "passed": 15,
+          "failed": 0,
+          "n": 15,
+          "n_a": 0
+        },
+        "内容正确率": {
+          "rate": 0.8667,
+          "value": 0.8667,
+          "passed": 13,
+          "failed": 2,
+          "n": 15,
+          "n_a": 0
+        },
+        "难度匹配": {
+          "rate": null,
+          "value": null,
+          "passed": 0,
+          "failed": 0,
+          "n": 0,
+          "n_a": 15
+        }
+      },
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    }
+  }
+}

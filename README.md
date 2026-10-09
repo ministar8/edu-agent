@@ -141,7 +141,8 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 ```bash
 uv sync --group eval
 # 需 TEI embedding + 知识库 + LLM 配置
-PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/sample_408.jsonl --limit 40
+PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 40
+# ↑ 路径已按实仓校正：旧写法 evals/sample_408.jsonl 不存在，真实黄金集 = evals/datasets/golden/sample_408.jsonl（cli.py 的 --dataset 默认值）
 ```
 
 报告输出到 `evals/results/ragas_*.json`。

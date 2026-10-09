@@ -1,0 +1,489 @@
+{
+  "n_total": 66,
+  "gold_status": {
+    "draft": 66
+  },
+  "agent_models": [
+    "deepseek:deepseek-flash"
+  ],
+  "judges": [
+    "dashscope:qwen3.8-flash"
+  ],
+  "tasks": {
+    "qa": {
+      "task": "qa",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 4.867,
+      "quality_pass": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 14,
+        "failed": 1,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.0667,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "retrieval_miss",
+          1
+        ]
+      ],
+      "kp_hit": {
+        "rate": 0.9286,
+        "value": 0.9286,
+        "passed": 13,
+        "failed": 1,
+        "n": 14,
+        "n_a": 1
+      },
+      "category_hit": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 14,
+        "failed": 1,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 0.9333,
+      "mean_evidence_count": 2.333,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "generate": {
+      "task": "generate",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 3.933,
+      "quality_pass": {
+        "rate": 0.7333,
+        "value": 0.7333,
+        "passed": 11,
+        "failed": 4,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.6,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "generation_wrong",
+          6
+        ],
+        [
+          "generation_incomplete",
+          2
+        ],
+        [
+          "hallucination",
+          1
+        ]
+      ],
+      "kp_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "category_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 2.8,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {
+        "rate": 0.7333,
+        "value": 0.7333,
+        "passed": 11,
+        "failed": 4,
+        "n": 15,
+        "n_a": 0
+      },
+      "gen_delivery": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 56,
+        "failed": 4,
+        "n": 60,
+        "n_a": 15
+      },
+      "gen_items": {
+        "结构完整率": {
+          "rate": 1.0,
+          "value": 1.0,
+          "passed": 15,
+          "failed": 0,
+          "n": 15,
+          "n_a": 0
+        },
+        "答案可判定率": {
+          "rate": 1.0,
+          "value": 1.0,
+          "passed": 15,
+          "failed": 0,
+          "n": 15,
+          "n_a": 0
+        },
+        "知识点覆盖率": {
+          "rate": 1.0,
+          "value": 1.0,
+          "passed": 15,
+          "failed": 0,
+          "n": 15,
+          "n_a": 0
+        },
+        "内容正确率": {
+          "rate": 0.7333,
+          "value": 0.7333,
+          "passed": 11,
+          "failed": 4,
+          "n": 15,
+          "n_a": 0
+        },
+        "难度匹配": {
+          "rate": null,
+          "value": null,
+          "passed": 0,
+          "failed": 0,
+          "n": 0,
+          "n_a": 15
+        }
+      },
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "grade": {
+      "task": "grade",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 4.4,
+      "quality_pass": {
+        "rate": 0.8667,
+        "value": 0.8667,
+        "passed": 13,
+        "failed": 2,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.1333,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "generation_wrong",
+          2
+        ]
+      ],
+      "kp_hit": {
+        "rate": null,
+        "value": null,
+        "passed": 0,
+        "failed": 0,
+        "n": 0,
+        "n_a": 15
+      },
+      "category_hit": {
+        "rate": 0.8,
+        "value": 0.8,
+        "passed": 12,
+        "failed": 3,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 4.867,
+      "score_tolerance": {
+        "rate": null,
+        "value": null,
+        "passed": 13,
+        "failed": 2,
+        "n": 15,
+        "n_a": 0,
+        "raw_rate": 0.8667,
+        "degenerate_gold": true,
+        "n_distinct_gold": 2
+      },
+      "verdict_agreement": {
+        "rate": 0.8667,
+        "value": 0.8667,
+        "passed": 13,
+        "failed": 2,
+        "n": 15,
+        "n_a": 0
+      },
+      "score_mae": 13.333,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "verify": {
+      "task": "verify",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 1.067,
+      "quality_pass": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 1.0,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "retrieval_miss",
+          15
+        ]
+      ],
+      "kp_hit": {
+        "rate": null,
+        "value": null,
+        "passed": 0,
+        "failed": 0,
+        "n": 0,
+        "n_a": 15
+      },
+      "category_hit": {
+        "rate": 0.8,
+        "value": 0.8,
+        "passed": 12,
+        "failed": 3,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.8,
+        "value": 0.8,
+        "passed": 12,
+        "failed": 3,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 3.4,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "ver_item_cited": {
+        "rate": 0.4667,
+        "value": 0.4667,
+        "passed": 7,
+        "failed": 8,
+        "n": 15,
+        "n_a": 0
+      },
+      "ver_year_only": {
+        "rate": 0.1333,
+        "value": 0.1333,
+        "passed": 2,
+        "failed": 13,
+        "n": 15,
+        "n_a": 0
+      },
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "memory": {
+      "task": "memory",
+      "n": 6,
+      "judged_n": 6,
+      "mean_final_quality": 1.667,
+      "quality_pass": {
+        "rate": 0.1667,
+        "value": 0.1667,
+        "passed": 1,
+        "failed": 5,
+        "n": 6,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "n": 6,
+        "n_a": 0
+      },
+      "failure_rate": 0.8,
+      "invalid_n": 1,
+      "primary_failures": [
+        [
+          "memory_miss",
+          4
+        ]
+      ],
+      "kp_hit": {},
+      "category_hit": {},
+      "exam_hit": {},
+      "pack_nonempty_rate": null,
+      "mean_evidence_count": null,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {
+        "rate": 0.8,
+        "value": 0.8,
+        "passed": 4,
+        "failed": 1,
+        "n": 5,
+        "n_a": 1
+      },
+      "memory_measure_scope": {
+        "positives_total": 3,
+        "positives_valid": 2,
+        "positives_invalid": 1,
+        "positives_traceable": 2
+      },
+      "memory_traceability": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "n": 5,
+        "n_a": 1
+      },
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 5,
+        "failed": 0,
+        "n": 5,
+        "n_a": 1
+      },
+      "memory_used_rate": {
+        "rate": 0.4,
+        "value": 0.4,
+        "passed": 2,
+        "failed": 3,
+        "n": 5,
+        "n_a": 1
+      },
+      "memory_correct_rate": {
+        "rate": 0.2,
+        "value": 0.2,
+        "passed": 1,
+        "failed": 4,
+        "n": 5,
+        "n_a": 1
+      }
+    }
+  }
+}
