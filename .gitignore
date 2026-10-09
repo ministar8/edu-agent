@@ -113,3 +113,11 @@ Desktop.ini
 
 # ── 本地 Agent 工具运行时数据 ───────────────────────────
 _e2e_artifacts/
+
+# ── 本地 Agent 会话与验证产物（不入库）──────────────────
+# `.scratch-astcmp/`：splitter 精简重构时的一次性差分验证台
+#   （difftest.py / tamper_recheck.py / HEAD 版快照）。属临时工件，
+#   验证结论已写进提交信息，无需随仓库分发。
+# `.workbuddy-ai/`：本机 Agent 的记忆与工作日志，是运行态、非项目配置。
+.scratch-astcmp/
+.workbuddy-ai/
