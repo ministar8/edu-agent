@@ -305,14 +305,14 @@ C 的运行时行为与 A **完全一致**，唯一收益是消除 `use_rerank` 
 | `.env` | 22 | `RERANK_ENABLED=false` |
 | `src/core/settings.py` | 116 | `RERANK_ENABLED: bool = True` |
 | `src/agents/tools.py` | 152 | `use_rerank=True`（硬编码，路径声明） |
-| `src/rag/retriever.py` | 839 | 闸 1（`depth.skip_rerank`） |
-| `src/rag/retriever.py` | 1028 | `_warn_rerank_disabled_once()`（C4 一次性告警） |
-| `src/rag/retriever.py` | 1063 | 闸 2（`rerank_active = use_rerank and RERANK_ENABLED`） |
-| `src/rag/retriever.py` | 1090 | `_apply_rerank_threshold` 调用（原 D1 伤害点，已修） |
-| `src/rag/retriever.py` | 1092 | `return out, True, ...`（原 D2 谎报点，已修） |
-| `src/rag/retriever.py` | 370-388 / 421 | `use_rerank` 控制候选池（职责 ②） |
-| `src/rag/retriever.py` | 1202 | HyDE 内二次 rerank（已加 `RERANK_ENABLED`） |
-| `src/rag/reranker.py` | 133 | 闸 3（`.env` 开关，现为防御网 + warning） |
+| `src/rag/retrieval/retriever.py` | 839 | 闸 1（`depth.skip_rerank`） |
+| `src/rag/retrieval/retriever.py` | 1028 | `_warn_rerank_disabled_once()`（C4 一次性告警） |
+| `src/rag/retrieval/retriever.py` | 1063 | 闸 2（`rerank_active = use_rerank and RERANK_ENABLED`） |
+| `src/rag/retrieval/retriever.py` | 1090 | `_apply_rerank_threshold` 调用（原 D1 伤害点，已修） |
+| `src/rag/retrieval/retriever.py` | 1092 | `return out, True, ...`（原 D2 谎报点，已修） |
+| `src/rag/retrieval/retriever.py` | 370-388 / 421 | `use_rerank` 控制候选池（职责 ②） |
+| `src/rag/retrieval/retriever.py` | 1202 | HyDE 内二次 rerank（已加 `RERANK_ENABLED`） |
+| `src/rag/retrieval/reranker.py` | 133 | 闸 3（`.env` 开关，现为防御网 + warning） |
 | `src/evaluation/retrieval_gate.py` | 134 / 177 | `_resolve_rerank_mode()` / `SUPPORTED_ROUTES` |
 | `src/evaluation/retrieval_gate.py` | 463 / 600 | mode → settings 覆盖 / 传 `use_rerank=rerank_requested()` |
 

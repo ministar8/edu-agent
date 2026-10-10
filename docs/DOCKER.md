@@ -148,8 +148,8 @@ PYTHONPATH=src uv run python scripts/tei_ready.py
 
 | 调用方 | 打的路由 | 请求体 |
 |---|---|---|
-| `rag/embeddings.py`（`_embed_single` / `_embed_batch` / 异步版） | `{EMBEDDING_API_BASE}/embeddings` | `{"model": self.model, "input": [文本]}` |
-| `rag/reranker.py`（`rerank()`） | `{RERANK_LOCAL_URL}/rerank` | `{"query", "texts", "top_n"}` |
+| `rag/common/embeddings.py`（`_embed_single` / `_embed_batch` / 异步版） | `{EMBEDDING_API_BASE}/embeddings` | `{"model": self.model, "input": [文本]}` |
+| `rag/retrieval/reranker.py`（`rerank()`） | `{RERANK_LOCAL_URL}/rerank` | `{"query", "texts", "top_n"}` |
 | `service/health.py` | `{EMBEDDING_API_BASE}/health`、`{RERANK_LOCAL_URL}/health` | — |
 
 > ⚠️ **422 不是「服务没起来」。** 2026-09-27 踩过一次：手写 curl 用 TEI 原生格式
@@ -160,12 +160,12 @@ PYTHONPATH=src uv run python scripts/tei_ready.py
 >
 > ```bash
 > PYTHONPATH=src .venv/Scripts/python.exe -c "
-> from rag.embeddings import get_embeddings
+> from rag.common.embeddings import get_embeddings
 > print(len(get_embeddings().embed_query('探活')))"
 > ```
 >
 > ★ **这件事已有现成脚本**：`scripts/tei_ready.py`（TEI 就绪巡检）——
->   它**复用项目自己的 `rag.embeddings` / `rag.reranker`** 发最小请求，**同时覆盖两个端点**
+>   它**复用项目自己的 `rag.common.embeddings` / `rag.retrieval.reranker`** 发最小请求，**同时覆盖两个端点**
 >   （两个端点的请求体 schema 不同，见上文）。用法：
 >   `PYTHONPATH=src .venv/Scripts/python.exe scripts/tei_ready.py`
 >   ⇒ **不要**另外手写 curl、也不要再写一个探活脚本 —— 那会造出第二份写法，迟早漂移。

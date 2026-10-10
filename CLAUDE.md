@@ -30,7 +30,7 @@
 | `src/core/` | `settings.py`（配置单例）、`llm.py`（`get_model` / `get_llm` 工厂） |
 | `src/prompts/` | 提示词集中管理（agents 的 system prompt / supervisor 分派 / rag 单轮模板 / service 出题批改模板），import 期校验变量与花括号 |
 | `src/service/` | FastAPI：`service.py`（路由 + SSE）、`auth.py`（JWT）、`threads.py`（会话列表）、`utils.py` |
-| `src/schema/` | Pydantic 协议/领域模型（`schema.py` / `models.py` / `auth.py` / `questions.py` / `grading.py` / `evidence.py` 检索对外契约）；`rag/schemas.py` 只放检索链内部 LLM 输出 |
+| `src/schema/` | Pydantic 协议/领域模型（`schema.py` / `models.py` / `auth.py` / `questions.py` / `grading.py` / `evidence.py` 检索对外契约）；`rag/common/schemas.py` 只放检索链内部 LLM 输出 |
 | `src/memory/` | 短期 checkpointer + 消息窗口 `window.trim_conversation` + 长期 Store（工厂/schema/topic/weak_topics/记忆卡） |
 | `src/db/` | SQLAlchemy User 表与建表逻辑 |
 | `src/tools/` | 离线数据清洗工具（**不参与运行时**） |
@@ -116,7 +116,7 @@ docker compose up --build                # 容器化启动
   部署入口只有 `scripts/tei_deploy.ps1`；日常 `docker start tei-embedding tei-rerank`。
   就绪以 `scripts/tei_ready.py` 为准（`/health` 200 ≠ 模型加载完成）。细节见 `docs/DOCKER.md`「TEI」。
 - **假 embedding 模式**：`pyproject.toml` 的 `[tool.pytest_env]` 设 `USE_FAKE_EMBEDDING=true` 后，
-  `get_embeddings()` 返回本地确定性哈希实现（`rag.embeddings.HashingEmbeddings`）——
+  `get_embeddings()` 返回本地确定性哈希实现（`rag.common.embeddings.HashingEmbeddings`）——
   **检索质量门禁靠它在无 TEI 时做确定性比对**。该实现**只保留词汇重叠信号、
   没有语义泛化能力，严禁用于生产**。
   注意：`semantic_cache._DATA_DIR` / `_JSONL_FILE` 是**模块级常量（import 期固化）**，
@@ -142,7 +142,7 @@ docker compose up --build                # 容器化启动
   `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1`。
   **不要**用 `candidate_trace` 当门禁 —— 它跑生产索引、无就绪屏障、无退出码。
 - **遥测报表（只读，不是门禁）**：`PYTHONPATH=src uv run python -m evaluation.diagnostics.telemetry_report`。
-  它给 `data/metrics/rag_metrics.jsonl`（由 `rag.metrics` 写入、此前**无任何读方**）
+  它给 `data/metrics/rag_metrics.jsonl`（由 `rag.common.metrics` 写入、此前**无任何读方**）
   补上读方：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、入库交叉校验。
   **无基线、无判定**；`--output <path>` 落盘归档（建议 `evals/results/`）。
   ★ 两条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源 —— 实测 **99.4% 是评测流量**

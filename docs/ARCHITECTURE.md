@@ -126,7 +126,7 @@ LangGraph 的 `add_messages` reducer 对**同 ID** 消息做替换。若每轮�
 入口函数（**生产与评测共用同一个**）：
 
 ```python
-from rag.retriever import aretrieve_evidence_with_retry
+from rag.retrieval.retriever import aretrieve_evidence_with_retry
 fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_rerank=...)
 ```
 
@@ -144,7 +144,7 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 阶段顺序在 `pipeline.py` 的 `aretrieve_evidence()` 内由 `_emit_stage(...)` 显式标注
 （8 次调用，**可被 SSE 实时上报**，`StageSink`），所以前端能看到「正在重排」这类中间状态。
 > 注：M1 拆分后阶段函数已从 `retriever.py` 移入 `pipeline.py`；入口仍是
-> `rag.retriever.aretrieve_evidence_with_retry`（门面）。
+> `rag.retrieval.retriever.aretrieve_evidence_with_retry`（门面）。
 
 ### 4.1 输出：`FusedEvidence`
 
@@ -161,7 +161,7 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 M1 拆分后，`retriever.py` 已收敛为**门面（465 行）**，对外只暴露 3 个入口：
 `aretrieve_evidence` / `aretrieve_evidence_with_retry` / `warmup_query_cache`
 （`aretrieve_documents` 与 `_resolve_thresholds` 由 `retriever.py` 从 `pipeline.py` **再导出**，
-保持 `import rag.retriever as R` 的旧调用方式兼容；同步入口 `retrieve_documents` 已删除）。
+保持 `import rag.retrieval.retriever as R` 的旧调用方式兼容；同步入口 `retrieve_documents` 已删除）。
 
 **剩余问题**：8 个阶段函数（`_stage_classify_query` … `_stage_expand_windows`）与
 `aretrieve_documents` 编排都集中在 `pipeline.py`（**1,139 行**），阶段实现与编排同处一文件；
@@ -177,11 +177,11 @@ M1 拆分后，`retriever.py` 已收敛为**门面（465 行）**，对外只暴
 ```
 knowledge/*.md (41 篇)
    │
-   ▼  rag/loader.py        解析（含 PDF 支持）
-   ▼  rag/cleaner.py       清洗
-   ▼  rag/enhancer.py      增强
+   ▼  rag/chunking/loader.py        解析（含 PDF 支持）
+   ▼  rag/chunking/cleaner.py       清洗
+   ▼  rag/chunking/enhancer.py      增强
    ▼  rag/knowledge_tagger.py  打标（学科类目）
-   ▼  rag/splitter.py      切分（1,214 行 —— 含语义分段）
+   ▼  rag/chunking/splitter.py      切分（1,214 行 —— 含语义分段）
    ▼  rag/ingest.py        入库 → chroma_db/
 ```
 
@@ -296,7 +296,7 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 
 | 存储 | 路径 | 内容 | 由谁读写 |
 |---|---|---|---|
-| **向量库** | `chroma_db/` | 41 篇知识文档的向量索引 | `rag/vectorstore.py`、`rag/semantic_cache.py` |
+| **向量库** | `chroma_db/` | 41 篇知识文档的向量索引 | `rag/common/vectorstore.py`、`rag/retrieval/semantic_cache.py` |
 | **会话状态** | `checkpoints.db` | LangGraph checkpoint（thread 级对话状态） | `SQLITE_DB_PATH` |
 | **长期记忆** | `store.db` | Store 向量索引（学生画像、错题） | `memory/sqlite.py`（`SQLITE_STORE_PATH`） |
 | **业务库** | `edu_agent.db` | 用户、认证 | `db/session.py`（SQLAlchemy） |

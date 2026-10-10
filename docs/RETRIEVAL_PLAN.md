@@ -190,7 +190,7 @@ TEI 承载 embedding 与 rerank，本会话内**宕机过一次**（两端点 50
 - 唯一调用方（`agents/tools.py` 的 `_retrieve_payload`）**不依赖精确条数** —— 它只是把证据
   交给 LLM 并下发引用，条数由 `CONTEXT_TOKEN_BUDGET` 兜底。
 - 改成硬上限会**减少**证据，且无任何实测收益 —— 正落在「不做清单」的射程内。
-- ⇒ **已把 `k` 的语义写进 `src/rag/retriever.py` 的模块文档串**（与 `use_rerank` 的说明并列）：
+- ⇒ **已把 `k` 的语义写进 `src/rag/retrieval/retriever.py` 的模块文档串**（与 `use_rerank` 的说明并列）：
   「**目标条数，不是硬上限**；单路最多 `k` 条、分解路径最多 `2k`」。
 
 **复测（临时索引 + 真实路由，`k=5`，2026-09-27）**：6 条抽样中 1 条超过 `k` ——
@@ -261,7 +261,7 @@ L1 短概念返回 3 条、L3 长结构化返回 5 条。**该现象在 Steps 2~
 
 **★ 决策：采纳（2026-09-27）**
 
-用户明确接受该权衡 ⇒ **采纳收窄变体**（改动 `src/rag/postprocess.py`，+72/−5）：
+用户明确接受该权衡 ⇒ **采纳收窄变体**（改动 `src/rag/retrieval/postprocess.py`，+72/−5）：
 
 - 新增 `_rrf_scale` / `_rrf_scale_needed`；在 `merge_route_results` 与 `weighted_rrf_merge`
   两处乘上 scale。**只在「阈值高于可达上限」的类别上启用**（实测：练习/批改；
@@ -318,7 +318,7 @@ kp 级**无一条下降** ⇒ **满足进入 Step 2 的条件**。
 | 动作 | 状态 | 说明 / 核实证据 |
 |---|---|---|
 | `INGEST_SYNONYM_NORMALIZE` 默认改 `false` | ✅ | `settings.py`；开关保留以便对照，默认已为 `False` |
-| **删除 S4**（`RERANK_QUERY_NORMALIZE` 及其在 `rerank()` 内的分支） | ✅ | 字段与分支已删，`from rag.synonyms import normalize_synonyms` 一并清理；全仓仅剩注释、`.env` 无残留键、`ruff check` 通过 |
+| **删除 S4**（`RERANK_QUERY_NORMALIZE` 及其在 `rerank()` 内的分支） | ✅ | 字段与分支已删，`from rag.common.synonyms import normalize_synonyms` 一并清理；全仓仅剩注释、`.env` 无残留键、`ruff check` 通过 |
 | 重入库 | ✅ | 索引 2107 → **2092** chunk；变体回归（`CPU` CO 252 次、`折半查找` DS 35 次，此前均 0） |
 | 清空语义缓存 | ✅ | `chroma_db/semantic_cache/` 为空目录，`semantic_cache` 集合已不存在 |
 | 重录 6 条基线 | ✅ | `_meta.recorded_at = 2026-09-27`。首轮被 `check_baseline_sanity` 拒绝，改用 `--force-baseline` + Chroma 落盘竞态重试；**`real_disabled` 那份来自与其余 5 份不同的轮次**（见 §6） |
@@ -337,7 +337,7 @@ kp 级**无一条下降** ⇒ **满足进入 Step 2 的条件**。
 
 - **必需性已被实测证明**（0.0037 < 绝对阈值 0.15，`top_n` 单独救不回）。
 - **实际做法**：不是「另外附加一句描述」，而是**不再剥掉 `splitter` 已经加好的锚点** ——
-  这样**零逻辑重复**（不新建第二份「考点名」推导规则）。改动仅 `src/rag/reranker.py`：
+  这样**零逻辑重复**（不新建第二份「考点名」推导规则）。改动仅 `src/rag/retrieval/reranker.py`：
   新增 `_rerank_text()`，**含代码围栏的 chunk 保留 `[考点名]` 前缀**；其余 chunk 仍剥掉
   历史遗留的 heading 前缀（作守卫）。原则：**reranker 必须与 embedding 看到同一段文本**。
 - **改动前核实过的前提**：当前索引里 296 个带锚点的 chunk **全部含代码围栏**，非代码 chunk
@@ -404,7 +404,7 @@ kp 级**无一条下降** ⇒ **满足进入 Step 2 的条件**。
 | 项 | 结果 |
 |---|---|
 | **重录 6 条基线** | ✅ 6 份**全部一次成功**，且**未需要 `--force-baseline`**（这次的指标变化幅度在 `check_baseline_sanity` 的范围内）。Step 3/4 让指标全部上升 ⇒ 旧基线**已过松**（会允许退化回旧值）。新值与 Step 4 门禁的测量**逐位一致**；另跑一轮**独立验证**（不带 `--update-baseline`）确认可复现 |
-| **`k` 语义复核** | ✅ 结论：**有意设计，改口径而非改代码**（详见 §3⑥）。已把 `k` 的语义写进 `src/rag/retriever.py` 的模块文档串 |
+| **`k` 语义复核** | ✅ 结论：**有意设计，改口径而非改代码**（详见 §3⑥）。已把 `k` 的语义写进 `src/rag/retrieval/retriever.py` 的模块文档串 |
 | **归档 V2 标记** | ✅ 曾在 `docs/archive/RETRIEVAL_PLAN_V2.md` §5.12 加「已由 3-② 解决」横幅；该归档目录已清理，结论以本文件为准 |
 | **其余文档漂移** | ✅ 修了 2 处：`L1L2L3_RETRIEVAL_REVIEW.md` 头部（指向已归档的 V2 → 改为当前方案，并列出**已被后续 Step 解决/证伪**的条目）；`RETRIEVAL_ROADMAP.md` §0（两条「前置条件」的过期现状） |
 

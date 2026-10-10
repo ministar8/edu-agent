@@ -223,7 +223,7 @@ backlog #34 的四条路由对照实验：
 | 现状 | `section.parent_chunk_id` / `child_chunk_ids` **已经入库**；`_stage_expand_windows` 已有窗口展开能力 |
 | 问题 | `splitter.py` 的 `MIN_CHUNK_LENGTH` 会丢掉 **9.0%** 的短 section（2007 个里 181 个、6808 字符）。#25 试过保留但 MRR 掉了 —— 因为**保留了却没做排序补偿** |
 | 正确做法 | 「**小块检索 + 大块送上下文**」：小块命中后带出父块作为上下文，而不是把小块的原始分数直接留在排序里 |
-| 改哪里 | `src/rag/retriever.py` 的 `_stage_expand_windows` |
+| 改哪里 | `src/rag/retrieval/retriever.py` 的 `_stage_expand_windows` |
 | 验收 | `category_precision` 不降 **且** `kp_hit@k` 提升 **且 真实路由复验通过** |
 | 风险 | 中。务必吸取 #25 教训 |
 
@@ -231,9 +231,9 @@ backlog #34 的四条路由对照实验：
 
 | 项 | 内容 |
 |---|---|
-| 现状 | `src/rag/_metadata_spec.py` 有 **60+ 字段**（`section.path` / `depth` / `chunk_role` / `content_type` / `keywords` / `heading_slug`…），但**大部分没被用于检索** |
+| 现状 | `src/rag/common/_metadata_spec.py` 有 **60+ 字段**（`section.path` / `depth` / `chunk_role` / `content_type` / `keywords` / `heading_slug`…），但**大部分没被用于检索** |
 | 判断 | 典型的「**数据已就绪、能力未开发**」 |
-| 改哪里 | `src/rag/recall.py` 的元数据路由：把 `section.path` / `content_type` 接进过滤与加权 |
+| 改哪里 | `src/rag/retrieval/recall.py` 的元数据路由：把 `section.path` / `content_type` 接进过滤与加权 |
 | 验收 | 各路由门禁全不退化 + `kp_hit@k` 提升 |
 
 ---
@@ -249,7 +249,7 @@ backlog #34 的四条路由对照实验：
 | 病例 | `虚拟内存` 查询：单集合内 OS 的 top-1（0.1843）**高于** CO（0.1824），但**跨集合 RRF 融合后 CO 反超** |
 | 根因 | `all_specs` 是「集合 × 路由」的**笛卡尔积**（26 条列表）全部丢进**同一个 RRF 池**，而 **RRF 奖励「出现在更多列表里」的文档，不奖励「分数更高」的文档** |
 | 佐证 | CO 的知识文件**自己写着**「详见 操作系统 3.内存管理 七、虚拟内存管理」—— 连它都把权威解释指向 OS |
-| 改哪里 | `src/rag/postprocess.py` 的 RRF 融合 |
+| 改哪里 | `src/rag/retrieval/postprocess.py` 的 RRF 融合 |
 | 方案二选一 | ① 按集合归一化后再融合；② 给「推断出的集合」加权 |
 | 验收 | **各路由全跑**；`虚拟内存` 与 `段页式` 不再错排；其余 query 不退化 |
 | 风险 | **高** —— 动核心排序算法。本仓库在该区域已有 3 次「看起来该修、实测有害」的先例（#13 / #25 / #34） |
@@ -280,7 +280,7 @@ backlog #34 的四条路由对照实验：
 | **新增 `merged_qa_meta` 路由** | **两轮真实路由实测均净负**：一轮（问题 4 修复前）`cat@k` −0.039、`kp@k` **−0.064**；二轮（问题 4 修复后）`cat@k` 退化消失，但 **`kp@k` 仍 −0.0642 纹丝不动** —— 证明 `kp@*` 的损失是**真实的考点覆盖损失**，不是度量口径问题 |
 | 清理知识文件标题（1.1） | **2026-09-24 真实路由实测**：中性偏略负（`cat@1` −0.006、`kp_mrr` −0.004、空结果 3→4）；同类改动有 #13 负收益先例；且作用路径与门禁判据不重叠 |
 | **用启发式自动修复真题选项** | **2026-09-24 勘察后否决**：182 个含占位符的块里 **44 块源文件本身就缺选项**；「取末 N 行」这类启发式会在这些块上**静默错配**（已抓到反例 `2019_408_exam.md:146`），而**错配比显式占位符更危险** —— 批改会判错且看不出来。**需重新采集真题原文，不能靠猜** |
-| **完整标题链拼进 chunk 正文**（所有非 QA chunk 拼完整 `heading_path`，含文件级标题） | **2026-10-10 双路由 A/B 实测均净负**（同路由只切开关，chunk 数恒 2257）：**real（bge-m3）** `cat@1` −0.0128（丢 2 赚 0）、`cat_mrr` −0.0066、`cat_precision` −0.0106、`kp_mrr` −0.0037；**fake** `kp@k` −0.0192、`cat@1` −0.0064。★ **反面验证了 splitter 的既有设计**：`heading_path 不拼入 page_content`（`src/rag/splitter.py` 的注释）是对的 —— 标题（尤其文件级泛词）进正文是**稀释**而非增益，唯独纯代码 chunk 例外（无中文语义），现行「只拼考点级父标题」即该例外的最优解。同类有 #13「清理知识文件标题」负收益先例 |
+| **完整标题链拼进 chunk 正文**（所有非 QA chunk 拼完整 `heading_path`，含文件级标题） | **2026-10-10 双路由 A/B 实测均净负**（同路由只切开关，chunk 数恒 2257）：**real（bge-m3）** `cat@1` −0.0128（丢 2 赚 0）、`cat_mrr` −0.0066、`cat_precision` −0.0106、`kp_mrr` −0.0037；**fake** `kp@k` −0.0192、`cat@1` −0.0064。★ **反面验证了 splitter 的既有设计**：`heading_path 不拼入 page_content`（`src/rag/chunking/splitter.py` 的注释）是对的 —— 标题（尤其文件级泛词）进正文是**稀释**而非增益，唯独纯代码 chunk 例外（无中文语义），现行「只拼考点级父标题」即该例外的最优解。同类有 #13「清理知识文件标题」负收益先例 |
 
 **理由**：三次实证，真实口径零收益或有害；且假 embedding 会给出**真实环境里不存在**的假信号。
 

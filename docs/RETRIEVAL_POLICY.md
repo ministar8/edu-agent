@@ -39,9 +39,9 @@ Task Policy（任务决定目标）
 
 | 概念 | 模块 | 旧名（勿再用） |
 |---|---|---|
-| Task Policy | `schema/task_policy.py` · `rag/task_policy.py` | retrieval_policy |
-| Retrieval Plan | `rag/retrieval_plan.py` | retrieval_strategy |
-| Evidence Policy | `rag/evidence_policy.py` | — |
+| Task Policy | `schema/task_policy.py` · `rag/retrieval/task_policy.py` | retrieval_policy |
+| Retrieval Plan | `rag/retrieval/retrieval_plan.py` | retrieval_strategy |
+| Evidence Policy | `rag/retrieval/evidence_policy.py` | — |
 | legacy_policy 字段 | `TaskPolicy.legacy_policy` | legacy_pool_policy |
 
 ---

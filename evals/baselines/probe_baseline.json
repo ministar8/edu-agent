@@ -3,30 +3,30 @@
     "embedding_mode": "real",
     "rerank_mode": "on",
     "rerank_backend": "real",
-    "probe_path": "evals/retrieval_probes.jsonl",
+    "probe_path": "evals/datasets/golden/retrieval_probes.jsonl",
     "k": 5,
-    "recorded_at": "2026-09-27"
+    "recorded_at": "2026-10-10"
   },
   "probes": [
     {
       "id": 4,
       "query": "折半查找的适用条件是什么？",
-      "target": "07_查找.md :: 二分查找",
+      "target": "basic/data_structure/08_search.md :: 折半查找",
       "dropped_by": "survived",
       "stages": [
         {
           "key": "recall",
-          "count": 55,
+          "count": 50,
           "rank": 1
         },
         {
           "key": "section_dedup",
-          "count": 55,
+          "count": 29,
           "rank": 1
         },
         {
           "key": "rrf_threshold",
-          "count": 20,
+          "count": 12,
           "rank": 1
         },
         {
@@ -36,12 +36,12 @@
         },
         {
           "key": "rel_threshold",
-          "count": 5,
+          "count": 3,
           "rank": 1
         },
         {
           "key": "final",
-          "count": 5,
+          "count": 3,
           "rank": 1
         }
       ],
@@ -50,38 +50,38 @@
     {
       "id": 18,
       "query": "用信号量写出生产者—消费者问题的伪代码。",
-      "target": "06_代码实现.md :: 生产者进程",
-      "dropped_by": "survived",
+      "target": "code/operating_system :: 生产者",
+      "dropped_by": "rerank_topn",
       "stages": [
         {
           "key": "recall",
-          "count": 116,
-          "rank": 6
+          "count": 142,
+          "rank": 9
         },
         {
           "key": "section_dedup",
-          "count": 116,
-          "rank": 6
+          "count": 112,
+          "rank": 9
         },
         {
           "key": "rrf_threshold",
-          "count": 27,
-          "rank": 6
+          "count": 10,
+          "rank": 9
         },
         {
           "key": "rerank_topn",
           "count": 6,
-          "rank": 2
+          "rank": null
         },
         {
           "key": "rel_threshold",
-          "count": 5,
-          "rank": 2
+          "count": 3,
+          "rank": null
         },
         {
           "key": "final",
-          "count": 5,
-          "rank": 2
+          "count": 3,
+          "rank": null
         }
       ],
       "note": ""
@@ -89,38 +89,38 @@
     {
       "id": 9,
       "query": "请出一道考查磁盘空闲空间管理的题。",
-      "target": "04_文件管理.md :: 空闲",
-      "dropped_by": "rerank_topn",
+      "target": "basic/operating_system/04_file.md :: 磁盘空闲空间管理",
+      "dropped_by": "survived",
       "stages": [
         {
           "key": "recall",
-          "count": 234,
-          "rank": 15
+          "count": 209,
+          "rank": 2
         },
         {
           "key": "section_dedup",
-          "count": 234,
-          "rank": 15
+          "count": 154,
+          "rank": 2
         },
         {
           "key": "rrf_threshold",
-          "count": 34,
-          "rank": 15
+          "count": 23,
+          "rank": 2
         },
         {
           "key": "rerank_topn",
           "count": 5,
-          "rank": null
+          "rank": 1
         },
         {
           "key": "rel_threshold",
           "count": 5,
-          "rank": null
+          "rank": 1
         },
         {
           "key": "final",
           "count": 5,
-          "rank": null
+          "rank": 1
         }
       ],
       "note": ""
@@ -128,38 +128,38 @@
     {
       "id": 17,
       "query": "用 C 语言写一段程序打印 float 的 32 位二进制表示，并说明如何据此读出阶码与尾数。",
-      "target": "02_数据表示与运算.md :: 浮点数",
-      "dropped_by": "survived",
+      "target": "basic/computer_organization/02_representation.md :: 浮点数",
+      "dropped_by": "section_dedup",
       "stages": [
         {
           "key": "recall",
-          "count": 83,
-          "rank": 2
+          "count": 70,
+          "rank": 9
         },
         {
           "key": "section_dedup",
-          "count": 83,
-          "rank": 2
+          "count": 29,
+          "rank": null
         },
         {
           "key": "rrf_threshold",
-          "count": 18,
-          "rank": 2
+          "count": 5,
+          "rank": null
         },
         {
           "key": "rerank_topn",
-          "count": 6,
-          "rank": 1
+          "count": 5,
+          "rank": null
         },
         {
           "key": "rel_threshold",
-          "count": 3,
-          "rank": 1
+          "count": 2,
+          "rank": null
         },
         {
           "key": "final",
-          "count": 3,
-          "rank": 1
+          "count": 2,
+          "rank": null
         }
       ],
       "note": ""
@@ -167,38 +167,38 @@
     {
       "id": 19,
       "query": "位示图法是怎么工作的？",
-      "target": "04_文件管理.md :: 位示图",
-      "dropped_by": "survived",
+      "target": "basic/operating_system/04_file.md :: 磁盘空闲空间管理",
+      "dropped_by": "section_dedup",
       "stages": [
         {
           "key": "recall",
-          "count": 66,
-          "rank": 1
+          "count": 39,
+          "rank": 16
         },
         {
           "key": "section_dedup",
-          "count": 66,
-          "rank": 1
+          "count": 18,
+          "rank": null
         },
         {
           "key": "rrf_threshold",
-          "count": 16,
-          "rank": 1
+          "count": 12,
+          "rank": null
         },
         {
           "key": "rerank_topn",
           "count": 5,
-          "rank": 1
+          "rank": null
         },
         {
           "key": "rel_threshold",
           "count": 2,
-          "rank": 1
+          "rank": null
         },
         {
           "key": "final",
           "count": 2,
-          "rank": 1
+          "rank": null
         }
       ],
       "note": ""

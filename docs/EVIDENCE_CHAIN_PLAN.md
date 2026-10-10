@@ -2199,7 +2199,7 @@ git commit -m "feat(eval): V0 schema 完整性 + 未测量判据禁进门槛（�
 「路由坏了」会继续伪装成「没查到」。
 
 **Files:**
-- Modify: `src/rag/bm25.py:50-62`、`src/rag/vectorstore.py:142,340`、`src/rag/routes.py:348-350`
+- Modify: `src/rag/retrieval/bm25.py:50-62`、`src/rag/common/vectorstore.py:142,340`、`src/rag/retrieval/routes.py:348-350`
   （★ 原 Task 9 Step 1 的 B7 全部搬到这里）
 - Modify: `src/evaluation/retrieval_gate.py:1038,1262`（每条 query 前 `reset_query_failures()`）
 - Modify: `src/evaluation/task_eval/judge.py:360-400`（`mechanical_reasons_from_record` / `apply_judge_to_dict`）
@@ -2266,11 +2266,11 @@ def check_8() -> None:
         for p in (
             "src/evaluation/retrieval_gate.py",
             "src/evaluation/task_eval/runner.py",
-            "src/rag/routes.py",
+            "src/rag/retrieval/routes.py",
         )
         if "reset_query_failures()" in Path(p).read_text(encoding="utf-8")
     ]
-    # ★ v1.3（checkpoint 8 裁定 R1-A）：原判据要求「三处」，其中 `rag/routes.py` 的单元内 reset
+    # ★ v1.3（checkpoint 8 裁定 R1-A）：原判据要求「三处」，其中 `rag/retrieval/routes.py` 的单元内 reset
     #   已撤销 ⇒ 本判据改为「**两处单元边界**」，撤销的回归锁另由 `8k` 承担（不许有人再把它加回去）。
     check("8g reset 被两个取证单元边界各调一次（只加方法不调用 = B7 没闭合）",
           len(sites) == 3, f"只找到 {sites}")
@@ -2306,7 +2306,7 @@ Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword a
         # 词法路由整条坏掉时，旧实现返回 [] 且不记失败 ⇒ retrieval_gate 的
         # unexpected_query_failures 看不见它，所有指标照常「健康」；更糟的是探针会把
         # 「坏了」写成 status="empty"，于是归因层永远没有 `error` 这个证据可用。
-        from rag.vectorstore import get_vector_store_manager
+        from rag.common.vectorstore import get_vector_store_manager
 
         get_vector_store_manager().record_query_failure(
             f"{collection_name}: bm25 {e.__class__.__name__}"
@@ -2349,7 +2349,7 @@ grep -rn "reset_query_failures()" src | tee /tmp/reset_sites.txt
 ```
 Expected（v1.4 起）：恰好 **3** 处 —— `evaluation/retrieval_gate.py`、`evaluation/task_eval/runner.py`、
 `evaluation/task_eval/cli.py`（`reprobe`，收尾修复批 Important-1 接进消费侧后成为第三个单元边界）。
-★ `rag/routes.py` 里**不得**再出现该调用（`8k` 是这条撤销的回归锁）。
+★ `rag/retrieval/routes.py` 里**不得**再出现该调用（`8k` 是这条撤销的回归锁）。
 少于 2 处 ⇒ B7 未闭合，**停在本 Step**，不要继续往下写归因门。
 
 - [x] **Step 2b/2c: 消费者与覆盖面（v1.3 新增，随 Step 2 同批做）**（完成于 `008eb05+70c7926`）
@@ -2446,7 +2446,7 @@ Expected: 两者全绿。`memory_step4fix_gate.py` 需新增「故障注入 ⇒ 
 - [x] **Step 7: 提交**（完成于 `008eb05+70c7926`）
 
 ```bash
-git add src/rag/bm25.py src/rag/vectorstore.py src/rag/routes.py src/evaluation/retrieval_gate.py \
+git add src/rag/retrieval/bm25.py src/rag/common/vectorstore.py src/rag/retrieval/routes.py src/evaluation/retrieval_gate.py \
         src/evaluation/task_eval/judge.py src/evaluation/task_eval/memory_scorer.py \
         src/agents/teaching_graph.py src/memory/safe.py src/evaluation/task_eval/runner.py \
         src/evaluation/task_eval/predicates/ scripts/evidence_chain_gate.py scripts/memory_step4fix_gate.py
@@ -2461,8 +2461,8 @@ git commit -m "fix(eval,rag): B7 让 error 可达 + 检索层归因只由 tier-0
 本 Task 因此只剩 5.A 的另外两项 + 重录基线。
 
 **Files:**
-- Modify: `src/rag/pipeline.py:564-593`、`src/rag/reranker.py:200-260`
-- Modify: `src/rag/embeddings.py`、`src/rag/layer_recall.py:30-131`、`src/rag/evidence_policy.py:130-145`
+- Modify: `src/rag/retrieval/pipeline.py:564-593`、`src/rag/retrieval/reranker.py:200-260`
+- Modify: `src/rag/common/embeddings.py`、`src/rag/retrieval/layer_recall.py:30-131`、`src/rag/retrieval/evidence_policy.py:130-145`
 - Test: `scripts/evidence_chain_gate.py`（`check_9`）+ `evaluation.gates.retrieval_gate` / `probe_gate`
 
 **Interfaces:**
@@ -2475,7 +2475,7 @@ git commit -m "fix(eval,rag): B7 让 error 可达 + 检索层归因只由 tier-0
 
 ```python
 def check_9() -> None:
-    from rag.pipeline import _derive_rerank_status as D
+    from rag.retrieval.pipeline import _derive_rerank_status as D
 
     class _D:
         def __init__(self, md):
@@ -2566,8 +2566,8 @@ def similarity_from_distance(distance: float, space: str) -> float:
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python - <<'PY'
 import sys
 sys.path.insert(0, "src")
-from rag.embeddings import similarity_from_distance
-from rag.vectorstore import get_vector_store_manager
+from rag.common.embeddings import similarity_from_distance
+from rag.common.vectorstore import get_vector_store_manager
 
 mgr = get_vector_store_manager()
 for coll in ["co", "ds", "os", "cn"]:  # 四个学科集合，名字以 SUBJECT_COLLECTIONS 为准
@@ -2620,7 +2620,7 @@ git commit -m "fix(rag): B2 rerank_status 四态 + B1 score 语义统一（重�
 3. 每项偏离都必须明确标成三态之一：**已裁定的设计选择 / 已知局限 / 尚待验证的归因**
    —— 三类不许统一写成「已解决」。
 4. 完成后**独立核对**：改动 diff、工件清单、新旧工件之间的引用关系、工作树边界
-   （`src/rag/splitter.py` 是**项目所有者本人**的未提交改动，本 Task 不得提交/覆盖/重置它）。
+   （`src/rag/chunking/splitter.py` 是**项目所有者本人**的未提交改动，本 Task 不得提交/覆盖/重置它）。
 
 **A. 必须完成**
 - **A.1 历史工件与状态标记**：被新工件替代的旧结果一律标 `superseded`，保留原文件与可追溯性；

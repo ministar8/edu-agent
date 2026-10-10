@@ -66,9 +66,9 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 |---|---|---|---|
 | Task Policy | `TaskPolicy` | `schema/task_policy.py` | 一次检索的完整策略对象（唯一真源） |
 | Task Mode | `task_mode` | 同上 | `learn / method / practice / grade / explain / verify` |
-| Retrieval Plan | `RetrievalStrategy` | `rag/retrieval_plan.py` | `{layer, route_type, depth}` |
-| Evidence Policy | `apply_evidence_policy` | `rag/evidence_policy.py` | release 唯一出口 |
-| Evidence Pack | `FusedEvidence.text_evidences` | `rag/evidence.py` | 下发给模型的证据集合 |
+| Retrieval Plan | `RetrievalStrategy` | `rag/retrieval/retrieval_plan.py` | `{layer, route_type, depth}` |
+| Evidence Policy | `apply_evidence_policy` | `rag/retrieval/evidence_policy.py` | release 唯一出口 |
+| Evidence Pack | `FusedEvidence.text_evidences` | `rag/retrieval/evidence.py` | 下发给模型的证据集合 |
 | eligibility | `ExamResources` | `schema/task_policy.py` | L3 三种资源的候选资格（question/answer/paper） |
 | release | `answer_policy` / `explanation_policy` | 同上 | 包内能否出现答案 / 解析 |
 | preferred_layers | `preferred_layers` | 同上 | **软偏好**：top-up 补齐 + 排序提权；非硬过滤 |
@@ -139,22 +139,22 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 
 | 概念 | 代码文件 | 行数 | 关联文档 |
 |---|---|---|---|
-| 检索门面（对外入口） | `rag/retriever.py` | 465 | 本文 §3 |
-| 阶段编排 | `rag/pipeline.py` | 1139 | 本文 §1 |
-| 多路召回 / 单路由 | `rag/routes.py` | 393 | §3 |
-| 路由构建 / 权重 / 学科推断 | `rag/recall.py` | 654 | §3 |
-| 融合（RRF）/ 去重 / 窗口 | `rag/postprocess.py` | 688 | §4 |
-| 重排 | `rag/reranker.py` | 271 | `RERANK_SWITCH_ANALYSIS.md` |
-| 查询分类 / depth | `rag/query_classifier.py` | 457 | `RETRIEVAL_POLICY.md` §4 |
-| 查询分解 | `rag/query_decomposer.py` | 195 | §4（零增益） |
-| HyDE 兜底 | `rag/hyde.py` | 58 | §4（零增益） |
-| 层 top-up | `rag/layer_recall.py` | 130 | §4 |
+| 检索门面（对外入口） | `rag/retrieval/retriever.py` | 465 | 本文 §3 |
+| 阶段编排 | `rag/retrieval/pipeline.py` | 1139 | 本文 §1 |
+| 多路召回 / 单路由 | `rag/retrieval/routes.py` | 393 | §3 |
+| 路由构建 / 权重 / 学科推断 | `rag/retrieval/recall.py` | 654 | §3 |
+| 融合（RRF）/ 去重 / 窗口 | `rag/retrieval/postprocess.py` | 688 | §4 |
+| 重排 | `rag/retrieval/reranker.py` | 271 | `RERANK_SWITCH_ANALYSIS.md` |
+| 查询分类 / depth | `rag/retrieval/query_classifier.py` | 457 | `RETRIEVAL_POLICY.md` §4 |
+| 查询分解 | `rag/retrieval/query_decomposer.py` | 195 | §4（零增益） |
+| HyDE 兜底 | `rag/retrieval/hyde.py` | 58 | §4（零增益） |
+| 层 top-up | `rag/retrieval/layer_recall.py` | 130 | §4 |
 | 策略真源 | `schema/task_policy.py` | 255 | `RETRIEVAL_POLICY.md` |
-| 策略解析 / 分类 | `rag/task_policy.py` | 221 | `RETRIEVAL_POLICY.md` §4 |
-| 检索计划 | `rag/retrieval_plan.py` | 59 | 本文 §1 |
-| 证据契约 | `rag/evidence.py` | 100 | 本文 §4 |
-| release 出口 | `rag/evidence_policy.py` | 330 | `RETRIEVAL_LAYER_DESIGN.md` |
-| 同义词 / 领域词 | `rag/synonyms.py` · `rag/rag_utils.py` | 493 · 269 | `EXPERIMENTS.md` §18.2 |
+| 策略解析 / 分类 | `rag/retrieval/task_policy.py` | 221 | `RETRIEVAL_POLICY.md` §4 |
+| 检索计划 | `rag/retrieval/retrieval_plan.py` | 59 | 本文 §1 |
+| 证据契约 | `rag/retrieval/evidence.py` | 100 | 本文 §4 |
+| release 出口 | `rag/retrieval/evidence_policy.py` | 330 | `RETRIEVAL_LAYER_DESIGN.md` |
+| 同义词 / 领域词 | `rag/common/synonyms.py` · `rag/common/rag_utils.py` | 493 · 269 | `EXPERIMENTS.md` §18.2 |
 | 入库链 | `rag/ingest.py` · `loader` · `cleaner` · `splitter` · `enhancer` · `knowledge_tagger` | — | `KB_MASTER_DESIGN.md` |
 
 ---
