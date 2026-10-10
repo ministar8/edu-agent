@@ -184,7 +184,7 @@ def build_baseline_payload(
             "recorded_at": time.strftime("%Y-%m-%d"),
         },
         "metrics": metrics.as_dict(),
-        **build_provenance("src/evaluation/retrieval_gate.py"),
+        **build_provenance("src/evaluation/gates/retrieval_gate/_baseline.py"),
     }
     if rerank_observations is not None:
         status_counts: Counter[str] = Counter(

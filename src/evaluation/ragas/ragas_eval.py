@@ -421,7 +421,7 @@ def _write_report(report: dict[str, Any], cfg: EvaluationConfig) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     tag = cfg.output_tag or "default"
     path = out_dir / f"ragas_{tag}.json"
-    report.update(build_provenance("src/evaluation/ragas_eval.py"))
+    report.update(build_provenance("src/evaluation/ragas/ragas_eval.py"))
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     report["_meta"]["report_path"] = str(path)
     logger.info("RAGAS 报告已写入 %s", path)
