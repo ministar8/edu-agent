@@ -55,6 +55,85 @@ def evaluate_warmup(result: dict, min_success_rate: float) -> tuple[bool, str]:
     return True, f"检索 smoke 成功率 {rate:.1%}（{succeeded}/{total}）"
 
 
+def _collect_category_files(dir_path: str) -> list[str]:
+    """递归收集目录下受支持扩展名的文件，按路径排序。"""
+    all_files: list[str] = []
+    for root, _dirs, files in os.walk(dir_path):
+        for filename in files:
+            if os.path.splitext(filename)[1].lower() in SUPPORTED_EXTENSIONS:
+                all_files.append(os.path.join(root, filename))
+    all_files.sort()
+    return all_files
+
+
+def _ingest_one_file(
+    filepath: str, dir_path: str, category: str, vector_store_manager
+) -> tuple[int, int]:
+    """单文件全链：load → clean → split → enhance → tag → 入库 + 指标。返回 (chunks, indexed)。"""
+    filename = os.path.relpath(filepath, dir_path)
+    start = time.perf_counter()
+    documents = load_single_file(filepath)
+    documents = clean_documents(documents, dedup=True, fuzzy_dedup=False, fuzzy_threshold=0.9)
+    chunks = split_documents(documents)
+    chunks = enhance_documents(chunks)
+    for chunk in chunks:
+        chunk.metadata["category"] = category
+    chunks = tag_chunks_with_knowledge_points(chunks, fallback_category=category)
+    ids = vector_store_manager.add_documents(chunks, collection_name=category)
+
+    elapsed = time.perf_counter() - start
+    metrics.emit_ingest_file_summary(
+        file=filename,
+        category=category,
+        elapsed_ms=round(elapsed * 1000, 3),
+        values={
+            "parse_success": True,
+            "clean_success": True,
+            "split_success": True,
+            "index_success": True,
+            "documents": len(documents),
+            "chunks": len(chunks),
+            "indexed_chunks": len(ids),
+        },
+    )
+    logger.info(
+        "  [OK] %s: %d chunks, %d indexed (%.1fs)",
+        filename,
+        len(chunks),
+        len(ids),
+        elapsed,
+    )
+    return len(chunks), len(ids)
+
+
+def _await_category_ready(vsm, category: str, total_chunks: int) -> tuple[int, bool]:
+    """就绪屏障：等 HNSW 落盘。返回 (重试次数, 是否仍不可查询)。
+
+    调用方（`ingest_all`）紧接着会跑检索 smoke；不等就可能 smoke 全落空，
+    而预热只打印不报错 —— 表现为"上线后第一批查询特别慢"且无从定位。
+    详见 `VectorStoreManager.wait_until_ready` 的 docstring。
+    """
+    if not total_chunks:
+        return 0, False
+    ready_retries = 0
+    try:
+        ready_retries = vsm.wait_until_ready(
+            category,
+            retries=settings.INGEST_READY_RETRIES,
+            delay=settings.INGEST_READY_DELAY,
+        )
+        if ready_retries:
+            logger.warning(
+                "  [WARN] 集合 '%s' 重试 %d 次后才可查询（Chroma 落盘竞态）",
+                category,
+                ready_retries,
+            )
+        return ready_retries, False
+    except RuntimeError as e:
+        logger.error("  [ERR] 集合 '%s' 索引不可查询，后续检索将失败: %s", category, e)
+        return ready_retries, True
+
+
 def ingest_category(category: str, rebuild: bool = False) -> dict:
     """处理单个分类目录。"""
     dir_path = os.path.join(settings.KNOWLEDGE_DIR, category)
@@ -68,99 +147,76 @@ def ingest_category(category: str, rebuild: bool = False) -> dict:
         vector_store_manager.delete_collection(category)
 
     total_chunks = 0
-    total_files = 0
     total_errors = 0
     category_start = time.perf_counter()
 
-    all_files: list[str] = []
-    for root, _dirs, files in os.walk(dir_path):
-        for filename in files:
-            if os.path.splitext(filename)[1].lower() in SUPPORTED_EXTENSIONS:
-                all_files.append(os.path.join(root, filename))
-    all_files.sort()
-
+    all_files = _collect_category_files(dir_path)
     for filepath in all_files:
-        filename = os.path.relpath(filepath, dir_path)
-        total_files += 1
-        start = time.perf_counter()
         try:
-            documents = load_single_file(filepath)
-            documents = clean_documents(
-                documents, dedup=True, fuzzy_dedup=False, fuzzy_threshold=0.9
-            )
-            chunks = split_documents(documents)
-            chunks = enhance_documents(chunks)
-            for chunk in chunks:
-                chunk.metadata["category"] = category
-            chunks = tag_chunks_with_knowledge_points(chunks, fallback_category=category)
-            ids = vector_store_manager.add_documents(chunks, collection_name=category)
-            total_chunks += len(chunks)
-
-            elapsed = time.perf_counter() - start
-            metrics.emit_ingest_file_summary(
-                file=filename,
-                category=category,
-                elapsed_ms=round(elapsed * 1000, 3),
-                values={
-                    "parse_success": True,
-                    "clean_success": True,
-                    "split_success": True,
-                    "index_success": True,
-                    "documents": len(documents),
-                    "chunks": len(chunks),
-                    "indexed_chunks": len(ids),
-                },
-            )
-            logger.info(
-                "  [OK] %s: %d chunks, %d indexed (%.1fs)",
-                filename,
-                len(chunks),
-                len(ids),
-                elapsed,
-            )
+            chunks, _indexed = _ingest_one_file(filepath, dir_path, category, vector_store_manager)
+            total_chunks += chunks
         except Exception as e:
             total_errors += 1
-            logger.info("  [ERR] %s: ERROR - %s", filename, e)
+            logger.info("  [ERR] %s: ERROR - %s", os.path.relpath(filepath, dir_path), e)
 
-    # ── 就绪屏障：等 HNSW 落盘 ──
-    # 调用方（ingest_all）紧接着会跑检索 smoke；不等就可能 smoke 全落空，
-    # 而预热只打印不报错 —— 表现为"上线后第一批查询特别慢"且无从定位。
-    # 详见 VectorStoreManager.wait_until_ready 的 docstring。
-    ready_retries = 0
-    not_ready = False
-    if total_chunks:
-        try:
-            ready_retries = vector_store_manager.wait_until_ready(
-                category,
-                retries=settings.INGEST_READY_RETRIES,
-                delay=settings.INGEST_READY_DELAY,
-            )
-            if ready_retries:
-                logger.warning(
-                    "  [WARN] 集合 '%s' 重试 %d 次后才可查询（Chroma 落盘竞态）",
-                    category,
-                    ready_retries,
-                )
-        except RuntimeError as e:
-            not_ready = True
-            logger.error("  [ERR] 集合 '%s' 索引不可查询，后续检索将失败: %s", category, e)
+    ready_retries, not_ready = _await_category_ready(vector_store_manager, category, total_chunks)
 
     logger.info(
         "  小计(%s): %d 文件, %d chunks, %d 错误, %.1fs",
         category,
-        total_files,
+        len(all_files),
         total_chunks,
         total_errors,
         time.perf_counter() - category_start,
     )
     return {
         "category": category,
-        "files": total_files,
+        "files": len(all_files),
         "chunks": total_chunks,
         "errors": total_errors,
         "ready_retries": ready_retries,
         "not_ready": not_ready,
     }
+
+
+def _log_index_status() -> None:
+    """列出当前各集合的文档数。"""
+    logger.info("\n[STAT] 当前索引状态:")
+    vector_store_manager = get_vector_store_manager()
+    for name in vector_store_manager.list_collections():
+        info = vector_store_manager.get_collection_info(name)
+        logger.info("  %s: %s 条文档", name, info.get("count", 0))
+
+
+def _run_warmup_smoke(not_ready_categories: list[str]) -> None:
+    """入库后跑 1 条检索冒烟，写指标并判定。"""
+    logger.info("\n[SMOKE] 入库后检索冒烟（1 条）...")
+    from rag.retrieval.retriever import warmup_query_cache
+
+    warmup_result = warmup_query_cache(quiet=True)
+    warmup_ok, warmup_verdict = evaluate_warmup(warmup_result, settings.WARMUP_MIN_SUCCESS_RATE)
+    warmup_total = int(warmup_result.get("total", 0) or 0)
+    metrics.emit(
+        event="ingest_warmup_summary",
+        stage="ingest",
+        status="ok" if warmup_ok else "error",
+        duration_ms=warmup_result.get("elapsed_ms"),
+        values={
+            "total": warmup_total,
+            "succeeded": int(warmup_result.get("succeeded", 0) or 0),
+            "failed": int(warmup_result.get("failed", 0) or 0),
+            "success_rate": round(int(warmup_result.get("succeeded", 0) or 0) / warmup_total, 6)
+            if warmup_total
+            else 0.0,
+            "min_success_rate": settings.WARMUP_MIN_SUCCESS_RATE,
+            "not_ready_categories": not_ready_categories,
+        },
+    )
+    if warmup_ok:
+        logger.info("  %s, 耗时 %.0f ms", warmup_verdict, warmup_result.get("elapsed_ms", 0))
+    else:
+        # ERROR 级 + 指标，避免"预热全落空"被当成正常日志滑过去
+        logger.error("  [ERR] %s", warmup_verdict)
 
 
 def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> None:
@@ -207,39 +263,8 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
     logger.info("  总耗时: %.1fs", time.perf_counter() - total_start)
     logger.info("=" * 60)
 
-    logger.info("\n[STAT] 当前索引状态:")
-    vector_store_manager = get_vector_store_manager()
-    for name in vector_store_manager.list_collections():
-        info = vector_store_manager.get_collection_info(name)
-        logger.info("  %s: %s 条文档", name, info.get("count", 0))
-
-    logger.info("\n[SMOKE] 入库后检索冒烟（1 条）...")
-    from rag.retrieval.retriever import warmup_query_cache
-
-    warmup_result = warmup_query_cache(quiet=True)
-    warmup_ok, warmup_verdict = evaluate_warmup(warmup_result, settings.WARMUP_MIN_SUCCESS_RATE)
-    warmup_total = int(warmup_result.get("total", 0) or 0)
-    metrics.emit(
-        event="ingest_warmup_summary",
-        stage="ingest",
-        status="ok" if warmup_ok else "error",
-        duration_ms=warmup_result.get("elapsed_ms"),
-        values={
-            "total": warmup_total,
-            "succeeded": int(warmup_result.get("succeeded", 0) or 0),
-            "failed": int(warmup_result.get("failed", 0) or 0),
-            "success_rate": round(int(warmup_result.get("succeeded", 0) or 0) / warmup_total, 6)
-            if warmup_total
-            else 0.0,
-            "min_success_rate": settings.WARMUP_MIN_SUCCESS_RATE,
-            "not_ready_categories": not_ready_categories,
-        },
-    )
-    if warmup_ok:
-        logger.info("  %s, 耗时 %.0f ms", warmup_verdict, warmup_result.get("elapsed_ms", 0))
-    else:
-        # ERROR 级 + 指标，避免"预热全落空"被当成正常日志滑过去
-        logger.error("  [ERR] %s", warmup_verdict)
+    _log_index_status()
+    _run_warmup_smoke(not_ready_categories)
 
     if not_ready_categories:
         logger.error(
