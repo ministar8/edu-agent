@@ -65,12 +65,13 @@ data/
 backend/data/
 logs/
 *.log
-# ★ 例外：`evals/results/` 下的**门禁验证日志**是证据，性质同 `retrieval_baseline*.json`
-#   （见 `docs/README.md` 的「评测产物」节），必须入库。
-#   上面的 `*.log` 是给运行期日志用的，会把这些证据**静默拦截** ——
-#   实测：`git add -A` 不报任何错，但提交里 0 个 `.log`（2026-09-27 踩过一次）。
-#   与下面 `stage_baseline.json` 的处理同理：只针对具体路径开例外，不放宽整类。
-!evals/results/**/*.log
+# ★ 2026-10-10 收紧：原 `!evals/results/**/*.log` 例外与 Task 10 裁定（逐轮 phase1_* 调试
+#   log 不入库）矛盾，导致 status 常年挂未跟踪文件。现存 6 份已归档到本机
+#   ../edu-agent-eval-archive/evals_logs_20261010/；今后确需入库的门禁日志用
+#   `git add -f <具体路径>` 显式添加，不再放宽整类。
+# agent_behavior 逐轮快照：规范名 `agent_behavior_quality.json` 入库，带日期后缀的不入库
+#   （EXPERIMENTS.md §20.7.2 C7 裁定；首份快照已归档 ../edu-agent-eval-archive/）
+evals/results/system_validation/agent_behavior/*_*.json
 # 阶段追踪基线：`python -m evaluation.stage_trace --record` 的产物。
 # **不进仓库**（理由见该模块文档串）：它绑定某一次**特定索引构建**，放进来只会变成
 # 一份会过期、偶尔变红的负债。★ 注意与 `evals/` 下的**门禁基线**区分 ——
