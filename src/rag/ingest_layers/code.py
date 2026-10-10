@@ -18,19 +18,14 @@ from rag.ingest_layers import _shared
 
 CODE_DIR = _shared.KNOWLEDGE_DIR / "code"
 
-# 目录名 → 目标集合名（按科分，与检索路由一致）
+# 目录名 → 目标集合名（按科分，与检索路由一致）★ 代码库专用（≠ 四科集合名）
 SUBJECT_TO_COLLECTION = {
     "data_structure": "code_ds",
     "computer_organization": "code_co",
     "operating_system": "code_os",
     "computer_network": "code_cn",
 }
-SUBJECT_CODE = {
-    "data_structure": "ds",
-    "computer_organization": "co",
-    "operating_system": "os",
-    "computer_network": "cn",
-}
+SUBJECT_CODE = _shared.SUBJECT_CODE
 
 
 def build(subject: str, kp_ids: set[str]) -> tuple[list[Document], list[dict], dict]:

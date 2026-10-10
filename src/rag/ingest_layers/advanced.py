@@ -14,21 +14,9 @@ from langchain_core.documents import Document
 
 from rag.common.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
+from rag.ingest_layers._shared import SUBJECT_CODE, SUBJECT_TO_COLLECTION
 
 ADVANCED_DIR = _shared.KNOWLEDGE_DIR / "advanced"
-
-SUBJECT_CODE = {
-    "data_structure": "ds",
-    "computer_organization": "co",
-    "operating_system": "os",
-    "computer_network": "cn",
-}
-SUBJECT_TO_COLLECTION = {
-    "data_structure": "data_structure",
-    "computer_organization": "computer_organization",
-    "operating_system": "operating_system",
-    "computer_network": "computer_network",
-}
 
 TOPIC_TAGS_OK = {"选择", "计算", "代码", "填空", "分析"}
 FORBIDDEN_WORDS = re.compile(

@@ -20,6 +20,17 @@ KNOWLEDGE_DIR = ROOT / "knowledge"
 KP_DIR = KNOWLEDGE_DIR / "knowledge_points"
 LINKS_PATH = KP_DIR / "links.jsonl"
 
+# ── 学科 ↔ 集合/短码 映射（单一真源，各层复用，勿再各写一份）──
+SUBJECTS = ("data_structure", "computer_organization", "operating_system", "computer_network")
+SUBJECT_CODE = {
+    "data_structure": "ds",
+    "computer_organization": "co",
+    "operating_system": "os",
+    "computer_network": "cn",
+}
+# 四科集合名与科目同名；代码库另有 `code_<科>`（见 code.py 的 SUBJECT_TO_COLLECTION）
+SUBJECT_TO_COLLECTION = {s: s for s in SUBJECTS}
+
 
 def load_kp_ids() -> set[str]:
     """读出四科 KP 的全部 id（``links.jsonl`` 不算节点）。"""

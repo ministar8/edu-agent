@@ -18,12 +18,7 @@ EXAMS_DIR = _shared.KNOWLEDGE_DIR / "exams"
 COLLECTION = "exams"
 
 # 文件名（stem）→ subject 短码
-SUBJECT_CODE = {
-    "data_structure": "ds",
-    "computer_organization": "co",
-    "operating_system": "os",
-    "computer_network": "cn",
-}
+SUBJECT_CODE = _shared.SUBJECT_CODE
 
 
 def build(kp_ids: set[str]) -> tuple[list[Document], list[dict], dict]:

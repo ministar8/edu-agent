@@ -13,21 +13,10 @@ from langchain_core.documents import Document
 
 from rag.common.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
+from rag.ingest_layers._shared import SUBJECT_TO_COLLECTION, SUBJECTS
 
 BASIC_DIR = _shared.KNOWLEDGE_DIR / "basic"
-
-SUBJECT_DIRS = {
-    "data_structure": BASIC_DIR / "data_structure",
-    "computer_organization": BASIC_DIR / "computer_organization",
-    "operating_system": BASIC_DIR / "operating_system",
-    "computer_network": BASIC_DIR / "computer_network",
-}
-SUBJECT_TO_COLLECTION = {
-    "data_structure": "data_structure",
-    "computer_organization": "computer_organization",
-    "operating_system": "operating_system",
-    "computer_network": "computer_network",
-}
+SUBJECT_DIRS = {s: BASIC_DIR / s for s in SUBJECTS}
 
 
 def parse_basic_doc(text: str) -> dict:
