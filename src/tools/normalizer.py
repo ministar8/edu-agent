@@ -292,6 +292,109 @@ def _detect_heading_level_jumps(text: str) -> list[dict]:
 # ── 主函数 ──────────────────────────────────────────
 
 
+def _apply_text_transforms(
+    text: str,
+    *,
+    simplify: bool,
+    normalize_dates: bool,
+    normalize_lists: bool,
+) -> tuple[str, list[str]]:
+    """对单篇正文依次执行第 1~4 步文本转换
+
+    步骤：全角→半角 → 日期/时间 → 繁简 → 列表编号。
+    仅在文本真正发生变化时记录对应的变更标签。
+
+    Returns:
+        (转换后文本, 变更标签列表)
+    """
+    changes: list[str] = []
+
+    # 1. 全角数字/字母 → 半角
+    converted = _fullwidth_to_halfwidth(text)
+    if converted != text:
+        text = converted
+        changes.append("fullwidth→halfwidth")
+
+    # 2. 日期/时间格式统一
+    if normalize_dates:
+        converted = _normalize_dates(text)
+        if converted != text:
+            text = converted
+            changes.append("date_normalized")
+        converted = _normalize_times(text)
+        if converted != text:
+            text = converted
+            changes.append("time_normalized")
+
+    # 3. 繁简转换 + 异体字统一
+    if simplify:
+        converted = _simplify_chinese(text)
+        if converted != text:
+            text = converted
+            changes.append("simplified_chinese")
+
+    # 4. 列表编号格式统一
+    if normalize_lists:
+        converted = _normalize_list_markers(text)
+        if converted != text:
+            text = converted
+            changes.append("list_markers_normalized")
+
+    return text, changes
+
+
+def _log_normalizer_summary(norm_log: list[dict], total_changes: int) -> None:
+    """汇总变更类型并输出统计日志"""
+    if not norm_log:
+        return
+    change_types: dict[str, int] = {}
+    for entry in norm_log:
+        for change in entry["changes"]:
+            change_types[change] = change_types.get(change, 0) + 1
+    summary = ", ".join(f"{k}:{v}" for k, v in sorted(change_types.items()))
+    logger.info("Normalizer: %d docs transformed — %s", total_changes, summary)
+
+
+def _normalize_one_doc(
+    doc: Document,
+    *,
+    simplify: bool,
+    normalize_dates: bool,
+    normalize_lists: bool,
+) -> dict | None:
+    """处理单篇文档：执行 1~5 步转换，返回转换记录（无变化或空文本时返回 None）"""
+    meta = doc.metadata or {}
+    source = str(meta.get("source_path") or meta.get("source_file") or "unknown")
+    text = doc.page_content
+    if not text or not text.strip():
+        return None
+
+    original = text
+
+    # 1~4. 文本转换
+    text, doc_changes = _apply_text_transforms(
+        text,
+        simplify=simplify,
+        normalize_dates=normalize_dates,
+        normalize_lists=normalize_lists,
+    )
+
+    # 5. 标题层级跳跃检测（仅 .md 文件）
+    if str(meta.get("source_ext") or "") == ".md":
+        jumps = _detect_heading_level_jumps(text)
+        if jumps:
+            doc.metadata["heading_level_jumps"] = jumps
+            doc_changes.append(f"heading_jumps({len(jumps)})")
+
+    if text == original:
+        return None
+
+    doc.page_content = text
+    doc.metadata["normalized"] = True
+    doc.metadata["normalization_changes"] = doc_changes
+    return {"source": source, "changes": doc_changes, "char_delta": len(original) - len(text)}
+
+
 def normalize_documents(
     documents: list[Document],
     *,
@@ -301,7 +404,7 @@ def normalize_documents(
 ) -> tuple[list[Document], list[dict]]:
     """数据转换与标准化主函数
 
-    执行流程：
+    执行流程（逐文档，见 `_normalize_one_doc`）：
     1. 全角数字/字母 → 半角
     2. 日期/时间格式统一
     3. 繁体→简体 + 异体字统一
@@ -318,86 +421,15 @@ def normalize_documents(
         (标准化后文档列表, 转换记录列表)
     """
     norm_log: list[dict] = []
-    total_changes = 0
-
     for doc in documents:
-        meta = doc.metadata or {}
-        source = str(meta.get("source_path") or meta.get("source_file") or "unknown")
-        text = doc.page_content
-        if not text or not text.strip():
-            continue
-
-        original = text
-        doc_changes: list[str] = []
-
-        # 1. 全角数字/字母 → 半角
-        converted = _fullwidth_to_halfwidth(text)
-        if converted != text:
-            text = converted
-            doc_changes.append("fullwidth→halfwidth")
-
-        # 2. 日期格式统一
-        if normalize_dates:
-            converted = _normalize_dates(text)
-            if converted != text:
-                text = converted
-                doc_changes.append("date_normalized")
-
-            # 时间格式统一
-            converted = _normalize_times(text)
-            if converted != text:
-                text = converted
-                doc_changes.append("time_normalized")
-
-        # 3. 繁简转换 + 异体字统一
-        if simplify:
-            converted = _simplify_chinese(text)
-            if converted != text:
-                text = converted
-                doc_changes.append("simplified_chinese")
-
-        # 4. 列表编号格式统一
-        if normalize_lists:
-            converted = _normalize_list_markers(text)
-            if converted != text:
-                text = converted
-                doc_changes.append("list_markers_normalized")
-
-        # 5. 标题层级跳跃检测（仅 .md 文件）
-        source_ext = str(meta.get("source_ext") or "")
-        if source_ext == ".md":
-            jumps = _detect_heading_level_jumps(text)
-            if jumps:
-                doc.metadata["heading_level_jumps"] = jumps
-                doc_changes.append(f"heading_jumps({len(jumps)})")
-
-        # 更新文档内容
-        if text != original:
-            doc.page_content = text
-            reduction = len(original) - len(text)
-            doc.metadata["normalized"] = True
-            doc.metadata["normalization_changes"] = doc_changes
-
-            norm_log.append(
-                {
-                    "source": source,
-                    "changes": doc_changes,
-                    "char_delta": reduction,
-                }
-            )
-            total_changes += 1
-
-    # ── 汇总日志 ──
-    if norm_log:
-        change_types: dict[str, int] = {}
-        for entry in norm_log:
-            for change in entry["changes"]:
-                change_types[change] = change_types.get(change, 0) + 1
-        summary = ", ".join(f"{k}:{v}" for k, v in sorted(change_types.items()))
-        logger.info(
-            "Normalizer: %d docs transformed — %s",
-            total_changes,
-            summary,
+        entry = _normalize_one_doc(
+            doc,
+            simplify=simplify,
+            normalize_dates=normalize_dates,
+            normalize_lists=normalize_lists,
         )
+        if entry is not None:
+            norm_log.append(entry)
 
+    _log_normalizer_summary(norm_log, len(norm_log))
     return documents, norm_log

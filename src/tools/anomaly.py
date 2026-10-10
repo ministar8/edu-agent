@@ -349,6 +349,65 @@ def _suggest_length_action(outlier_type: str | None, zscore: float) -> str | Non
 # ── 阶段1：内容层异常（清洗后、去重前） ────────────
 
 
+def _process_content_anomaly(doc: Document) -> AnomalyRecord:
+    """对单篇文档做内容层检测与处理，返回异常记录（含 actions_taken）
+
+    阶段1三类检测：全乱码文档（命中即返回）→ 乱码段落隔离 → 词频异常清理。
+    """
+    meta = doc.metadata or {}
+    source = str(meta.get("source_path") or meta.get("source_file") or id(doc))
+    text = doc.page_content.strip() if doc.page_content else ""
+    record = AnomalyRecord(source=source)
+
+    # ── 全乱码文档检测 ──
+    if _detect_full_garbage(text):
+        record.full_garbage = True
+        doc.metadata["content_status"] = "full_garbage"
+        doc.metadata["garbage_char_ratio"] = round(
+            len(_GARBAGE_CHAR_RE.findall(text)) / max(len(text), 1), 3
+        )
+        record.actions_taken.append("全乱码文档(不入库)")
+        return record
+
+    # ── 乱码段落检测与隔离 ──
+    garbled_paras = _detect_garbled_paragraphs(text)
+    if garbled_paras:
+        record.garbled_paragraphs = garbled_paras
+        doc.metadata["garbled_paragraphs"] = len(garbled_paras)
+        doc.metadata["garbled_paragraph_indices"] = [gp["index"] for gp in garbled_paras]
+
+        # 隔离乱码段落（替换为占位符，保留上下文）
+        isolated_text = _isolate_garbled_paragraphs(text, garbled_paras)
+        if isolated_text != text:
+            doc.page_content = isolated_text
+            doc.metadata["garbled_isolated"] = True
+            record.actions_taken.append(f"隔离{len(garbled_paras)}个乱码段落")
+
+    # ── 词频异常检测 ──
+    is_anomaly, anomaly_words = _detect_word_freq_anomaly(text)
+    if is_anomaly:
+        record.word_freq_anomaly = True
+        record.word_freq_anomaly_words = anomaly_words
+        doc.metadata["word_freq_anomaly"] = True
+        doc.metadata["word_freq_anomaly_words"] = anomaly_words
+
+        # 清理连续重复词
+        cleaned_text = _clean_repetitions(text)
+        if len(cleaned_text) < len(text):
+            reduction = len(text) - len(cleaned_text)
+            doc.page_content = cleaned_text
+            doc.metadata["repetition_cleaned"] = reduction
+            record.actions_taken.append(f"清理重复词(减少{reduction}字符)")
+
+    # ── 记录异常元数据 ──
+    has_anomaly = bool(record.actions_taken)
+    doc.metadata["has_content_anomaly"] = has_anomaly
+    if has_anomaly:
+        doc.metadata["_content_anomaly_log"] = record.actions_taken
+
+    return record
+
+
 def detect_content_anomalies(
     documents: list[Document],
 ) -> tuple[list[Document], list[AnomalyRecord]]:
@@ -372,69 +431,17 @@ def detect_content_anomalies(
 
     processed_docs: list[Document] = []
     anomaly_records: list[AnomalyRecord] = []
-    total_anomalies = 0
 
     for doc in documents:
-        meta = doc.metadata or {}
-        source = str(meta.get("source_path") or meta.get("source_file") or id(doc))
-        text = doc.page_content.strip() if doc.page_content else ""
-        record = AnomalyRecord(source=source)
-
-        # ── 全乱码文档检测 ──
-        if _detect_full_garbage(text):
-            record.full_garbage = True
-            doc.metadata["content_status"] = "full_garbage"
-            doc.metadata["garbage_char_ratio"] = round(
-                len(_GARBAGE_CHAR_RE.findall(text)) / max(len(text), 1), 3
-            )
-            record.actions_taken.append("全乱码文档(不入库)")
-            total_anomalies += 1
-            anomaly_records.append(record)
-            processed_docs.append(doc)
-            continue
-
-        # ── 乱码段落检测与隔离 ──
-        garbled_paras = _detect_garbled_paragraphs(text)
-        if garbled_paras:
-            record.garbled_paragraphs = garbled_paras
-            doc.metadata["garbled_paragraphs"] = len(garbled_paras)
-            doc.metadata["garbled_paragraph_indices"] = [gp["index"] for gp in garbled_paras]
-
-            # 隔离乱码段落（替换为占位符，保留上下文）
-            isolated_text = _isolate_garbled_paragraphs(text, garbled_paras)
-            if isolated_text != text:
-                doc.page_content = isolated_text
-                doc.metadata["garbled_isolated"] = True
-                record.actions_taken.append(f"隔离{len(garbled_paras)}个乱码段落")
-            total_anomalies += 1
-
-        # ── 词频异常检测 ──
-        is_anomaly, anomaly_words = _detect_word_freq_anomaly(text)
-        if is_anomaly:
-            record.word_freq_anomaly = True
-            record.word_freq_anomaly_words = anomaly_words
-            doc.metadata["word_freq_anomaly"] = True
-            doc.metadata["word_freq_anomaly_words"] = anomaly_words
-
-            # 清理连续重复词
-            cleaned_text = _clean_repetitions(text)
-            if len(cleaned_text) < len(text):
-                reduction = len(text) - len(cleaned_text)
-                doc.page_content = cleaned_text
-                doc.metadata["repetition_cleaned"] = reduction
-                record.actions_taken.append(f"清理重复词(减少{reduction}字符)")
-            total_anomalies += 1
-
-        # ── 记录异常元数据 ──
-        has_anomaly = bool(record.actions_taken)
-        doc.metadata["has_content_anomaly"] = has_anomaly
-        if has_anomaly:
-            doc.metadata["_content_anomaly_log"] = record.actions_taken
-
-        anomaly_records.append(record)
+        anomaly_records.append(_process_content_anomaly(doc))
         processed_docs.append(doc)
 
     # ── 汇总日志 ──
+    # total_anomalies = 各文档命中的异常类别数之和（全乱码计入 1）
+    total_anomalies = sum(
+        bool(rec.full_garbage) + bool(rec.garbled_paragraphs) + bool(rec.word_freq_anomaly)
+        for rec in anomaly_records
+    )
     if total_anomalies > 0:
         anomaly_types: dict[str, int] = {}
         for rec in anomaly_records:
@@ -457,6 +464,52 @@ def detect_content_anomalies(
 
 
 # ── 阶段2：统计层异常（去重后） ────────────────────
+
+
+def _process_statistical_anomaly(
+    doc: Document,
+    length_outliers: dict[str, tuple[str | None, float]],
+    record_map: dict[str, AnomalyRecord],
+) -> AnomalyRecord:
+    """对单篇文档做统计层检测与处理，返回（合并后的）异常记录
+
+    阶段2两类检测：长度离群值（IQR）→ 语言混杂检测。
+    """
+    meta = doc.metadata or {}
+    source = str(meta.get("source_path") or meta.get("source_file") or id(doc))
+    text = doc.page_content.strip() if doc.page_content else ""
+
+    # 合并或新建记录
+    record = record_map.get(source, AnomalyRecord(source=source))
+
+    # ── 统计层：长度离群值 ──
+    if source in length_outliers:
+        outlier_type, zscore = length_outliers[source]
+        record.length_outlier = outlier_type
+        record.length_zscore = zscore
+        doc.metadata["length_outlier"] = outlier_type
+        doc.metadata["length_zscore"] = zscore
+        suggestion = _suggest_length_action(outlier_type, zscore)
+        if suggestion:
+            doc.metadata["length_suggestion"] = suggestion
+            record.actions_taken.append(f"标记长度异常({outlier_type}, z={zscore})")
+
+    # ── 统计层：语言混杂检测 ──
+    is_mixed, mix_ratio = _detect_language_mixing(text)
+    if is_mixed:
+        record.language_mixed = True
+        record.language_mix_ratio = mix_ratio
+        doc.metadata["language_mixed"] = True
+        doc.metadata["language_mix_ratio"] = mix_ratio
+        record.actions_taken.append(f"标记语言混杂(混排度={mix_ratio:.1%})")
+
+    # ── 记录异常元数据 ──
+    has_anomaly = bool(record.actions_taken)
+    doc.metadata["has_anomaly"] = has_anomaly
+    if has_anomaly:
+        doc.metadata["_anomaly_log"] = record.actions_taken
+
+    return record
 
 
 def detect_statistical_anomalies(
@@ -489,49 +542,15 @@ def detect_statistical_anomalies(
 
     processed_docs: list[Document] = []
     all_records: list[AnomalyRecord] = []
-    total_anomalies = 0
-
     for doc in documents:
-        meta = doc.metadata or {}
-        source = str(meta.get("source_path") or meta.get("source_file") or id(doc))
-        text = doc.page_content.strip() if doc.page_content else ""
-
-        # 合并或新建记录
-        record = record_map.get(source, AnomalyRecord(source=source))
-
-        # ── 统计层：长度离群值 ──
-        if source in length_outliers:
-            outlier_type, zscore = length_outliers[source]
-            record.length_outlier = outlier_type
-            record.length_zscore = zscore
-            doc.metadata["length_outlier"] = outlier_type
-            doc.metadata["length_zscore"] = zscore
-            suggestion = _suggest_length_action(outlier_type, zscore)
-            if suggestion:
-                doc.metadata["length_suggestion"] = suggestion
-                record.actions_taken.append(f"标记长度异常({outlier_type}, z={zscore})")
-            total_anomalies += 1
-
-        # ── 统计层：语言混杂检测 ──
-        is_mixed, mix_ratio = _detect_language_mixing(text)
-        if is_mixed:
-            record.language_mixed = True
-            record.language_mix_ratio = mix_ratio
-            doc.metadata["language_mixed"] = True
-            doc.metadata["language_mix_ratio"] = mix_ratio
-            record.actions_taken.append(f"标记语言混杂(混排度={mix_ratio:.1%})")
-            total_anomalies += 1
-
-        # ── 记录异常元数据 ──
-        has_anomaly = bool(record.actions_taken)
-        doc.metadata["has_anomaly"] = has_anomaly
-        if has_anomaly:
-            doc.metadata["_anomaly_log"] = record.actions_taken
-
-        all_records.append(record)
+        all_records.append(_process_statistical_anomaly(doc, length_outliers, record_map))
         processed_docs.append(doc)
 
     # ── 汇总日志 ──
+    # total_anomalies = 各文档命中的异常类别数之和（长度离群 + 语言混杂）
+    total_anomalies = sum(
+        bool(rec.length_outlier) + bool(rec.language_mixed) for rec in all_records
+    )
     if total_anomalies > 0:
         anomaly_types: dict[str, int] = {}
         for rec in all_records:
@@ -551,23 +570,3 @@ def detect_statistical_anomalies(
         )
 
     return processed_docs, all_records
-
-
-# ── 兼容旧接口 ────────────────────────────────────
-
-
-def detect_anomalies(documents: list[Document]) -> tuple[list[Document], list[AnomalyRecord]]:
-    """异常值检测与处理（兼容接口，内部自动分两阶段）
-
-    对于不关心两阶段分离的调用方，提供单入口便捷函数。
-    """
-    # 阶段1：内容层
-    docs, records = detect_content_anomalies(documents)
-
-    # 过滤全乱码文档（不入库）
-    docs = [d for d in docs if d.metadata.get("content_status") != "full_garbage"]
-
-    # 阶段2：统计层
-    docs, records = detect_statistical_anomalies(docs, prev_records=records)
-
-    return docs, records

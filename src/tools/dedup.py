@@ -187,6 +187,83 @@ class _SimpleMinHash:
         return matches / len(self._signatures)
 
 
+def _select_num_perm(n_docs: int, num_perm: int) -> int:
+    """自适应排列数：大文档集降半（128→64），减少内存与计算量"""
+    if n_docs > 50_000:
+        effective_perm = max(64, num_perm // 2)
+        logger.info(
+            "Fuzzy dedup: large dataset (%d docs), reducing num_perm %d→%d",
+            n_docs,
+            num_perm,
+            effective_perm,
+        )
+        return effective_perm
+    return num_perm
+
+
+def _should_use_lsh(n_docs: int, effective_perm: int) -> bool:
+    """内存检查：估算 LSH 索引内存是否低于可用内存（不足则降级暴力比对）"""
+    est_mem = _estimate_lsh_memory(n_docs, effective_perm)
+    avail_mem = _available_memory_mb()
+    use_lsh = est_mem < avail_mem - _MEM_SAFETY_MB
+    if not use_lsh:
+        logger.warning(
+            "Fuzzy dedup: LSH memory estimate %.0fMB exceeds available %.0fMB, "
+            "degrading to batch brute-force",
+            est_mem,
+            avail_mem,
+        )
+    return use_lsh
+
+
+def _compute_minhash_signatures(
+    documents: list[Document], ngram_size: int, effective_perm: int
+) -> list[object]:
+    """为每篇文档计算 MinHash 签名（空文本记 None）"""
+    minhashes: list[object] = []
+    for doc in documents:
+        text = doc.page_content.strip() if doc.page_content else ""
+        ngrams = _shingle_ngrams(text, n=ngram_size)
+        minhashes.append(_compute_minhash(ngrams, effective_perm) if ngrams else None)
+    return minhashes
+
+
+def _run_dedup(
+    documents: list[Document],
+    minhashes: list[object],
+    duplicate_indices: set[int],
+    duplicates: list[dict],
+    threshold: float,
+    effective_perm: int,
+    use_lsh: bool,
+) -> bool:
+    """执行去重：优先 LSH，datasketch 不可用或内存不足时降级暴力比对
+
+    就地填充 `duplicate_indices` / `duplicates`，返回最终是否走了 LSH 路径（供日志）。
+    """
+    # 2a. LSH 路径（datasketch 可用 + 内存充足）
+    if use_lsh:
+        try:
+            from datasketch import MinHashLSH  # noqa: F401 — 可用性探测
+
+            if len(documents) <= _LSH_BATCH_SIZE:
+                _lsh_batch(  # 单批处理
+                    documents, minhashes, duplicate_indices, duplicates, threshold, effective_perm
+                )
+            else:
+                _lsh_batched(  # 分批处理：每批独立 LSH，跨批比对
+                    documents, minhashes, duplicate_indices, duplicates, threshold, effective_perm
+                )
+        except ImportError:
+            use_lsh = False
+
+    # 2b. 暴力比对路径（降级）
+    if not use_lsh:
+        _brute_force_batched(documents, minhashes, duplicate_indices, duplicates, threshold)
+
+    return use_lsh
+
+
 def fuzzy_dedup(
     documents: list[Document],
     similarity_threshold: float = _DEFAULT_THRESHOLD,
@@ -214,83 +291,23 @@ def fuzzy_dedup(
     if n_docs <= 1:
         return documents, []
 
-    # ── 自适应参数调整 ──
-    effective_perm = num_perm
-    if n_docs > 50_000:
-        effective_perm = max(64, num_perm // 2)
-        logger.info(
-            "Fuzzy dedup: large dataset (%d docs), reducing num_perm %d→%d",
-            n_docs,
-            num_perm,
-            effective_perm,
-        )
-
-    # ── 内存检查 ──
-    est_mem = _estimate_lsh_memory(n_docs, effective_perm)
-    avail_mem = _available_memory_mb()
-    use_lsh = est_mem < avail_mem - _MEM_SAFETY_MB
-
-    if not use_lsh:
-        logger.warning(
-            "Fuzzy dedup: LSH memory estimate %.0fMB exceeds available %.0fMB, "
-            "degrading to batch brute-force",
-            est_mem,
-            avail_mem,
-        )
-
-    # 1. 计算所有文档的 MinHash 签名
-    minhashes: list[object] = []
-    for doc in documents:
-        text = doc.page_content.strip() if doc.page_content else ""
-        ngrams = _shingle_ngrams(text, n=ngram_size)
-        if ngrams:
-            minhashes.append(_compute_minhash(ngrams, effective_perm))
-        else:
-            minhashes.append(None)
+    effective_perm = _select_num_perm(n_docs, num_perm)
+    use_lsh = _should_use_lsh(n_docs, effective_perm)
+    minhashes = _compute_minhash_signatures(documents, ngram_size, effective_perm)
 
     duplicate_indices: set[int] = set()
     duplicates: list[dict] = []
+    use_lsh = _run_dedup(
+        documents,
+        minhashes,
+        duplicate_indices,
+        duplicates,
+        similarity_threshold,
+        effective_perm,
+        use_lsh,
+    )
 
-    # 2a. LSH 路径（datasketch 可用 + 内存充足）
-    if use_lsh:
-        try:
-            from datasketch import MinHashLSH  # noqa: F401 — 可用性探测
-
-            if n_docs <= _LSH_BATCH_SIZE:
-                # 单批处理
-                _lsh_batch(
-                    documents,
-                    minhashes,
-                    duplicate_indices,
-                    duplicates,
-                    similarity_threshold,
-                    effective_perm,
-                )
-            else:
-                # 分批处理：每批构建独立 LSH，跨批比对
-                _lsh_batched(
-                    documents,
-                    minhashes,
-                    duplicate_indices,
-                    duplicates,
-                    similarity_threshold,
-                    effective_perm,
-                )
-
-        except ImportError:
-            use_lsh = False
-
-    # 2b. 暴力比对路径（降级）
-    if not use_lsh:
-        _brute_force_batched(
-            documents,
-            minhashes,
-            duplicate_indices,
-            duplicates,
-            similarity_threshold,
-        )
-
-    # 3. 构建去重后文档列表
+    # 构建去重后文档列表
     unique_docs = [doc for i, doc in enumerate(documents) if i not in duplicate_indices]
 
     if duplicates:
@@ -364,6 +381,31 @@ def _lsh_batch(
                 _record_fuzzy_duplicate(i, j, sim, documents, duplicate_indices, duplicates)
 
 
+def _lsh_query_and_record(
+    lsh,
+    documents: list[Document],
+    minhashes: list[object],
+    query_index: int,
+    duplicate_indices: set[int],
+    duplicates: list[dict],
+    threshold: float,
+    min_j: int,
+) -> None:
+    """用第 `query_index` 篇的签名查询 `lsh`，命中且 j ≥ `min_j` 时记录为模糊重复
+
+    `min_j` 承载调用方的顺序守卫：批内传 i+1（跳过 j ≤ i），跨批传 batch_start（跳过 j < batch_start）。
+    """
+    if minhashes[query_index] is None or query_index in duplicate_indices:
+        return
+    for sid in lsh.query(minhashes[query_index]):
+        j = int(sid.split("_")[1])
+        if j in duplicate_indices or j < min_j:
+            continue
+        sim = minhashes[query_index].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
+        if sim >= threshold:
+            _record_fuzzy_duplicate(query_index, j, sim, documents, duplicate_indices, duplicates)
+
+
 def _lsh_batched(
     documents: list[Document],
     minhashes: list[object],
@@ -397,37 +439,23 @@ def _lsh_batched(
 
         # 批内去重
         for i in batch_indices:
-            if minhashes[i] is None or i in duplicate_indices:
-                continue
-
-            similar_ids = lsh.query(minhashes[i])
-            similar_ids = [sid for sid in similar_ids if sid != f"doc_{i}"]
-
-            for sid in similar_ids:
-                j = int(sid.split("_")[1])
-                if j in duplicate_indices or j <= i:
-                    continue
-
-                sim = minhashes[i].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
-                if sim >= threshold:
-                    _record_fuzzy_duplicate(i, j, sim, documents, duplicate_indices, duplicates)
+            _lsh_query_and_record(
+                lsh, documents, minhashes, i, duplicate_indices, duplicates, threshold, i + 1
+            )
 
         # 跨批比对：用之前批的 MinHash 查询当前批的 LSH
         if batch_start > 0:
-            prev_indices = range(0, batch_start)
-            for i in prev_indices:
-                if minhashes[i] is None or i in duplicate_indices:
-                    continue
-
-                similar_ids = lsh.query(minhashes[i])
-                for sid in similar_ids:
-                    j = int(sid.split("_")[1])
-                    if j in duplicate_indices or j < batch_start:
-                        continue
-
-                    sim = minhashes[i].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
-                    if sim >= threshold:
-                        _record_fuzzy_duplicate(i, j, sim, documents, duplicate_indices, duplicates)
+            for i in range(0, batch_start):
+                _lsh_query_and_record(
+                    lsh,
+                    documents,
+                    minhashes,
+                    i,
+                    duplicate_indices,
+                    duplicates,
+                    threshold,
+                    batch_start,
+                )
 
         # 释放 LSH 对象
         del lsh

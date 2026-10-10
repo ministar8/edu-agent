@@ -1,16 +1,4 @@
-"""Offline tools for data cleaning, dedup, and anomaly detection.
+"""离线数据清洗工具：规范化、去重、异常检测、缺失值填充。
 
-Not loaded at runtime; only used by CLI scripts and offline ETL.
+不参与运行时；仅由入库管线（`rag.chunking.cleaner`）与离线 ETL 脚本按需导入子模块。
 """
-
-from tools.anomaly import detect_anomalies
-from tools.dedup import dedup_documents
-from tools.imputer import impute_documents
-from tools.normalizer import normalize_documents
-
-__all__ = [
-    "dedup_documents",
-    "detect_anomalies",
-    "impute_documents",
-    "normalize_documents",
-]
