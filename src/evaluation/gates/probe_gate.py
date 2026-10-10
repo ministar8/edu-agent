@@ -196,7 +196,7 @@ def _format(observations: list[dict[str, Any]], baseline: dict[int, str] | None)
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="探针门禁：目标 chunk 存活层级的回归门禁")
     parser.add_argument("--probe", default=DEFAULT_PROBE_PATH, help="探针表 jsonl 路径")
     parser.add_argument("--baseline", default=DEFAULT_BASELINE_PATH, help="基线 json 路径")
@@ -204,7 +204,36 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--update-baseline", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--verbose", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def _print_report(
+    observations: list[dict[str, Any]], baseline: dict[int, str] | None, k: int
+) -> None:
+    """打印口径抬头 + 探针对比表。"""
+    meta = _meta()
+    print("=" * 78)
+    print(
+        f"  探针门禁   embed={meta['embedding_mode']} "
+        f"rerank={meta['rerank_mode']}/{meta['rerank_backend']}  k={k}"
+    )
+    print("=" * 78)
+    print(_format(observations, baseline))
+    print()
+
+
+def _write_baseline(baseline_path: Path, observations: list[dict[str, Any]]) -> int:
+    """落盘基线并返回退出码。"""
+    baseline_path.write_text(
+        json.dumps(build_baseline_payload(observations), ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(f"基线已更新: {baseline_path}")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
 
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
@@ -230,23 +259,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(build_baseline_payload(observations), ensure_ascii=False, indent=2))
         return 0
 
-    meta = _meta()
-    print("=" * 78)
-    print(
-        f"  探针门禁   embed={meta['embedding_mode']} "
-        f"rerank={meta['rerank_mode']}/{meta['rerank_backend']}  k={args.k}"
-    )
-    print("=" * 78)
-    print(_format(observations, baseline))
-    print()
+    _print_report(observations, baseline, args.k)
 
     if args.update_baseline:
-        baseline_path.write_text(
-            json.dumps(build_baseline_payload(observations), ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        print(f"基线已更新: {baseline_path}")
-        return 0
+        return _write_baseline(baseline_path, observations)
 
     if baseline is None:
         print(
