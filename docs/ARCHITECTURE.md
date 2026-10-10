@@ -2,7 +2,7 @@
 
 > 408 考研智能教学辅导系统 · 多 Agent + RAG
 > 本文用途：**把系统讲清楚**。每一节都可以独立作为答辩/论文的一小节。
-> 数字均为 2026-10-03 实测（`src/` 共 25,364 行 / 118 个 .py 文件）。
+> 数字均为 2026-10-10 实测（`src/` 共 32,887 行 / 140 个 .py 文件）。
 
 ---
 
@@ -317,12 +317,12 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.retrieval_g
 
 | 归属 | 模块 | 行数 | 占比 |
 |---|---|---|---|
-| **论文主体** | `rag` + `agents` + `prompts` + `schema` | 14,632 | 57.7% |
-| **产品外壳** | `service` + `memory` + `core` + `db` | 3,302 | 13.0% |
-| **数据处理工具** | `tools` | 2,858 | 11.3% |
-| **评测设施** | `evaluation` | 4,542 | 17.9% |
+| **论文主体** | `rag` + `agents` + `prompts` + `schema` | 15,180 | 46.2% |
+| **产品外壳** | `service` + `memory` + `core` + `db` | 3,598 | 10.9% |
+| **数据处理工具** | `tools` | 2,823 | 8.6% |
+| **评测设施** | `evaluation` | 11,256 | 34.2% |
 | 顶层入口 | `src/__init__.py` + `run_service.py` | 30 | 0.1% |
-| | **合计** | **25,364** | 100% |
+| | **合计** | **32,887** | 100% |
 
 > `src/tools/` 被 `evaluation/retrieval_gate.py` 与 `rag/ingest.py` 依赖（`clean_documents`），
 > **不能单独归档** —— 删它会让门禁与入库链一起崩。

@@ -7,6 +7,7 @@
 | 文件 | 作用 | 何时读 |
 |---|---|---|
 | **`KB_MASTER_DESIGN.md`** | **知识库总册**（L1/KP/L2/L3 + 边 + gap + ID + 现状） | **动知识库/入库前** |
+| `KP_SKELETON.md` | 四科 KP 骨架（162 节点树，人读版；与 `knowledge_points/*.jsonl` 同步） | 写 / 改 KP 前 |
 | **`RETRIEVAL_LAYER_DESIGN.md`** | **检索层设计（定稿）**（task_mode / eligibility / ranking / release） | **动检索路由前** |
 | **`RETRIEVAL_POLICY.md`** | **策略契约**（retrieval_policy 字段、默认表、LangGraph 落点） | 实现 Classifier/Policy 前 |
 | `BASIC_DESIGN.md` | L1 细节 | 写/改 Basic |
