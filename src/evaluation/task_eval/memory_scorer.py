@@ -137,6 +137,48 @@ def _hits(text: str, needles: list[str]) -> tuple[str, ...]:
     return tuple(out)
 
 
+def _mechanize_memory(
+    memory_cards: list[str],
+    reply: str,
+    em: ExpectedMemory,
+    eap: ExpectedAnswerProperty,
+    read_status: str,
+) -> MemoryJudgement:
+    """gold 合法时的机械三维判定（读链故障 / gold 不合法的短路由调用方先做）。"""
+    assert em.should_be_recalled is not None  # memory_mechanizable() 已保证
+    assert eap.forbidden_values is not None
+    card_text = "\n".join(memory_cards or [])
+    hit_values = _hits(card_text, em.values)
+    recalled_actual = bool(hit_values)
+
+    # ★ 与「期望」对齐 —— 负样本（should=False）时 actual=False 才是通过
+    recalled_pass = recalled_actual == bool(em.should_be_recalled)
+
+    reply_hit_values = _hits(reply or "", em.values)
+    # ★ `used` 的语义是「**用了记忆**」，不是「回复里出现了这个词」。
+    #   只看回复文本会把两种完全不同的事件判成一件事：
+    #     · 负样本（什么都没召回）回复里出现期望值 —— 那来自 **RAG 证据或题面本身**，
+    #       不是记忆 ⇒ 旧实现在此给出 `used=True`（**假阳性**，实测 `mem-006` 即如此）。
+    #   ⇒ 必须有记忆卡的事实前提 `recalled_actual`，才允许谈「用没用」。
+    used = recalled_actual and bool(reply_hit_values)
+
+    forbidden_hits = _hits(reply or "", eap.forbidden_values)
+    # forbidden 为空 ⇒ correct ≡ used（显式退化，已在 gold 契约中注明）
+    correct = used and not forbidden_hits
+
+    return MemoryJudgement(
+        recalled_pass=recalled_pass,
+        used=used,
+        correct=correct,
+        recalled_actual=recalled_actual,
+        should_be_recalled=bool(em.should_be_recalled),
+        hit_values=hit_values,
+        reply_hit_values=reply_hit_values,
+        forbidden_hits=forbidden_hits,
+        read_status=read_status,
+    )
+
+
 def judge_memory_mechanically(
     *,
     memory_cards: list[str],
@@ -187,39 +229,7 @@ def judge_memory_mechanically(
         return MemoryJudgement(read_status=read_status)
 
     assert em is not None and eap is not None  # memory_mechanizable() 已保证
-    assert em.should_be_recalled is not None
-    assert eap.forbidden_values is not None
-
-    card_text = "\n".join(memory_cards or [])
-    hit_values = _hits(card_text, em.values)
-    recalled_actual = bool(hit_values)
-
-    # ★ 与「期望」对齐 —— 负样本（should=False）时 actual=False 才是通过
-    recalled_pass = recalled_actual == bool(em.should_be_recalled)
-
-    reply_hit_values = _hits(reply or "", em.values)
-    # ★ `used` 的语义是「**用了记忆**」，不是「回复里出现了这个词」。
-    #   只看回复文本会把两种完全不同的事件判成一件事：
-    #     · 负样本（什么都没召回）回复里出现期望值 —— 那来自 **RAG 证据或题面本身**，
-    #       不是记忆 ⇒ 旧实现在此给出 `used=True`（**假阳性**，实测 `mem-006` 即如此）。
-    #   ⇒ 必须有记忆卡的事实前提 `recalled_actual`，才允许谈「用没用」。
-    used = recalled_actual and bool(reply_hit_values)
-
-    forbidden_hits = _hits(reply or "", eap.forbidden_values)
-    # forbidden 为空 ⇒ correct ≡ used（显式退化，已在 gold 契约中注明）
-    correct = used and not forbidden_hits
-
-    return MemoryJudgement(
-        recalled_pass=recalled_pass,
-        used=used,
-        correct=correct,
-        recalled_actual=recalled_actual,
-        should_be_recalled=bool(em.should_be_recalled),
-        hit_values=hit_values,
-        reply_hit_values=reply_hit_values,
-        forbidden_hits=forbidden_hits,
-        read_status=read_status,
-    )
+    return _mechanize_memory(memory_cards, reply, em, eap, read_status)
 
 
 def judgement_to_dict(j: MemoryJudgement) -> dict[str, Any]:
@@ -261,6 +271,64 @@ class ValidityResult:
             object.__setattr__(self, "observed", {})
 
 
+def _check_call_bounds(
+    setup: SetupConditions, call_count: int, observed: dict[str, Any]
+) -> ValidityResult | None:
+    """条件 1 / 1b：A 段批改次数的上下限；违反返回 ``ValidityResult(False)``，否则 None。"""
+    # —— 条件 1：批改次数下限 ——
+    if setup.min_grade_calls is not None and call_count < setup.min_grade_calls:
+        return ValidityResult(
+            valid=False,
+            reason=f"A 段批改次数 {call_count} < 期望下限 {setup.min_grade_calls}",
+            observed=observed,
+        )
+    # —— 条件 1b：批改次数上限（负样本对照用，2026-10-07）——
+    #   `min: 0` 单写是永真的（`len < 0` 不可能），所以「A 段不该有任何批改」这个
+    #   意图只有配上限才**真的被验收**。mem-005 若在上限处失败 ⇒ 说明 A 段真发生了
+    #   批改、Store 里确实有画像 ⇒ 此时 B 段「没召回」是**产品失败**而非无话可说，
+    #   把它留在分母里会得出反方向的结论 ⇒ 必须记 case_invalid 排除。
+    if setup.max_grade_calls is not None and call_count > setup.max_grade_calls:
+        return ValidityResult(
+            valid=False,
+            reason=f"A 段批改次数 {call_count} > 期望上限 {setup.max_grade_calls}"
+            "（负样本对照的「无写入」前提不成立）",
+            observed=observed,
+        )
+    return None
+
+
+def _check_score_bands(
+    setup: SetupConditions, scores: list[Any], observed: dict[str, Any]
+) -> ValidityResult | None:
+    """条件 2：每次批改得分落入对应区间；违反返回 ``ValidityResult(False)``，否则 None。"""
+    if not setup.grade_score_bands:
+        return None
+    bands = setup.grade_score_bands
+    for i, (lo, hi) in enumerate(bands):
+        if i >= len(scores):
+            return ValidityResult(
+                valid=False,
+                reason=f"缺少第 {i + 1} 次批改（期望落在 [{lo},{hi}]）",
+                observed=observed,
+            )
+        s = scores[i]
+        if s is None:
+            if not setup.allow_missing_score:
+                return ValidityResult(
+                    valid=False,
+                    reason=f"第 {i + 1} 次批改得分未能解析（未获授权容忍缺分）",
+                    observed=observed,
+                )
+            continue
+        if not (lo <= float(s) <= hi):
+            return ValidityResult(
+                valid=False,
+                reason=f"第 {i + 1} 次批改得分 {s} 不在期望区间 [{lo},{hi}]",
+                observed=observed,
+            )
+    return None
+
+
 def check_case_validity(
     *,
     setup: SetupConditions | None,
@@ -291,53 +359,12 @@ def check_case_validity(
     scores = [g.get("score") for g in calls]
     observed: dict[str, Any] = {"grade_calls": len(calls), "scores": scores}
 
-    # —— 条件 1：批改次数下限 ——
-    if setup.min_grade_calls is not None and len(calls) < setup.min_grade_calls:
-        return ValidityResult(
-            valid=False,
-            reason=f"A 段批改次数 {len(calls)} < 期望下限 {setup.min_grade_calls}",
-            observed=observed,
-        )
-
-    # —— 条件 1b：批改次数上限（负样本对照用，2026-10-07）——
-    #   `min: 0` 单写是永真的（`len < 0` 不可能），所以「A 段不该有任何批改」这个
-    #   意图只有配上限才**真的被验收**。mem-005 若在上限处失败 ⇒ 说明 A 段真发生了
-    #   批改、Store 里确实有画像 ⇒ 此时 B 段「没召回」是**产品失败**而非无话可说，
-    #   把它留在分母里会得出反方向的结论 ⇒ 必须记 case_invalid 排除。
-    if setup.max_grade_calls is not None and len(calls) > setup.max_grade_calls:
-        return ValidityResult(
-            valid=False,
-            reason=f"A 段批改次数 {len(calls)} > 期望上限 {setup.max_grade_calls}"
-            "（负样本对照的「无写入」前提不成立）",
-            observed=observed,
-        )
-
-    # —— 条件 2：每次得分须落入给定区间 ——
-    if setup.grade_score_bands:
-        bands = setup.grade_score_bands
-        for i, (lo, hi) in enumerate(bands):
-            if i >= len(scores):
-                return ValidityResult(
-                    valid=False,
-                    reason=f"缺少第 {i + 1} 次批改（期望落在 [{lo},{hi}]）",
-                    observed=observed,
-                )
-            s = scores[i]
-            if s is None:
-                if not setup.allow_missing_score:
-                    return ValidityResult(
-                        valid=False,
-                        reason=f"第 {i + 1} 次批改得分未能解析（未获授权容忍缺分）",
-                        observed=observed,
-                    )
-                continue
-            if not (lo <= float(s) <= hi):
-                return ValidityResult(
-                    valid=False,
-                    reason=f"第 {i + 1} 次批改得分 {s} 不在期望区间 [{lo},{hi}]",
-                    observed=observed,
-                )
-
+    failed = _check_call_bounds(setup, len(calls), observed)
+    if failed is not None:
+        return failed
+    failed = _check_score_bands(setup, scores, observed)
+    if failed is not None:
+        return failed
     return ValidityResult(valid=True, reason="前置条件满足", observed=observed)
 
 
