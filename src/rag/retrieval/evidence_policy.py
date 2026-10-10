@@ -233,72 +233,74 @@ def finalize_with_layer_ranking(
     return out
 
 
-def apply_evidence_policy(
-    fused: FusedEvidence,
+def _strip_answer_markers(text: str) -> str:
+    """抹掉正文里的答案行 / 加粗选项标答 / ✅ 标记（仅 release 期文本，索引不动）。
+
+    正文与 final_context 两处共用（此前是两段逐字重复的正则）。
+    """
+    text = re.sub(r"(^|\n)\s*(答案[:：]|【答案】|正确答案|标准答案|解析[:：]?)[^\n]*", r"\1…", text)
+    text = re.sub(r"\*+\s*([A-D][.、．][^*]{0,40})\*+\s*✅", r"\1", text)
+    return re.sub(r"✅", "", text)
+
+
+def _apply_policy_to_evidence(
+    ev: TextEvidence,
     policy: TaskPolicy,
-) -> tuple[FusedEvidence, dict[str, Any]]:
-    """返回 (裁剪后的 FusedEvidence, release flags)。不改索引。"""
-    kept: list[TextEvidence] = []
-    hide_answer = not policy.answer_released
-    hide_exp = policy.explanation_policy == "hidden"
-    verified_only = policy.explanation_policy == "verified_only"
+    *,
+    hide_answer: bool,
+    hide_exp: bool,
+    verified_only: bool,
+) -> TextEvidence | None:
+    """对单条证据应用 eligibility / practice / release 规则；被丢弃时返回 None。"""
+    # --- eligibility 类（安全前置在召回；此处再兜底）---
+    if _resource_blocked(policy, ev):
+        return None
+    if _is_incomplete_stem(ev):
+        return None
 
-    for ev in fused.text_evidences:
-        # --- eligibility 类（安全前置在召回；此处再兜底）---
-        if _resource_blocked(policy, ev):
-            continue
-        if _is_incomplete_stem(ev):
-            continue
+    meta = _meta(ev)
+    content = ev.content or ""
 
-        meta = _meta(ev)
-        content = ev.content or ""
+    # practice：禁止具体题号 / related_exams 泄漏（release；索引不动）
+    if policy.eligibility_block_question_ids or not policy.allow_question_id_leak:
+        if _QUESTION_ID_RE.search(content) or str(meta.get("question_id") or ""):
+            # 题干 chunk 可保留正文，但剥题号字段与正文题号
+            content = _QUESTION_ID_RE.sub("（题目）", content)
+        meta.pop("related_exams", None)
+        meta.pop("question_id", None)
 
-        # practice：禁止具体题号 / related_exams 泄漏（release；索引不动）
-        if policy.eligibility_block_question_ids or not policy.allow_question_id_leak:
-            if _QUESTION_ID_RE.search(content) or str(meta.get("question_id") or ""):
-                # 题干 chunk 可保留正文，但剥题号字段与正文题号
-                content = _QUESTION_ID_RE.sub("（题目）", content)
-                meta.pop("related_exams", None)
-                meta.pop("question_id", None)
-            else:
-                meta.pop("related_exams", None)
-                meta.pop("question_id", None)
+    # --- release：字段与正文 ---
+    if hide_answer:
+        meta = _strip_answer_fields(meta)
+        # 旧题库 / 解析正文中的答案行一并抹掉
+        if (
+            _body_has_answer(content)
+            or re.search(r"\*\*[A-D][.、．].*✅", content)
+            or "✅" in content
+        ):
+            content = _strip_answer_markers(content)
+            content = re.sub(r"\n{3,}", "\n\n", content)
 
-        # --- release：字段与正文 ---
-        if hide_answer:
-            meta = _strip_answer_fields(meta)
-            # 旧题库 / 解析正文中的答案行一并抹掉
-            if (
-                _body_has_answer(content)
-                or re.search(r"\*\*[A-D][.、．].*✅", content)
-                or "✅" in content
-            ):
-                content = re.sub(
-                    r"(^|\n)\s*(答案[:：]|【答案】|正确答案|标准答案|解析[:：]?)[^\n]*",
-                    r"\1…",
-                    content,
-                )
-                content = re.sub(r"\*+\s*([A-D][.、．][^*]{0,40})\*+\s*✅", r"\1", content)
-                content = re.sub(r"✅", "", content)
-                content = re.sub(r"\n{3,}", "\n\n", content)
+    if hide_exp and _is_exam_answer(ev):
+        return None
 
-        if hide_exp and _is_exam_answer(ev):
-            continue
+    if verified_only and str(meta.get("explanation_status") or "") != "verified":
+        meta["explanation_unverified"] = str(meta.get("explanation_status") or "") in (
+            "scan",
+            "ocr",
+            "none",
+        )
 
-        if verified_only and str(meta.get("explanation_status") or "") != "verified":
-            meta["explanation_unverified"] = str(meta.get("explanation_status") or "") in (
-                "scan",
-                "ocr",
-                "none",
-            )
+    new_ev = ev.model_copy(deep=True)
+    new_ev.metadata = meta
+    new_ev.content = content
+    return new_ev
 
-        new_ev = ev.model_copy(deep=True)
-        new_ev.metadata = meta
-        new_ev.content = content
-        kept.append(new_ev)
 
+def _policy_flags(policy: TaskPolicy, fused: FusedEvidence) -> dict[str, Any]:
+    """release 决策的对外标记（不含证据本身）。"""
     layer_pack = (fused.metadata or {}).get("layer_pack") or {}
-    flags = {
+    return {
         "task_mode": policy.task_mode,
         "answer_released": policy.answer_released,
         "explanation_released": policy.explanation_released,
@@ -311,6 +313,14 @@ def apply_evidence_policy(
         "sufficiency_refill": int(layer_pack.get("sufficiency_refill") or 0),
     }
 
+
+def _rebuild_fused(
+    fused: FusedEvidence,
+    kept: list[TextEvidence],
+    policy: TaskPolicy,
+    flags: dict[str, Any],
+) -> FusedEvidence:
+    """用 kept 重建 FusedEvidence：final_context 重算；未释放答案时再抹一次。"""
     rebuilt = fused.model_copy(deep=True)
     rebuilt.text_evidences = kept
     # final_context 由 kept 重建，避免原始融合正文带答案
@@ -319,12 +329,27 @@ def apply_evidence_policy(
     elif not policy.answer_released:
         rebuilt.final_context = ""
     if not policy.answer_released:
-        ctx = rebuilt.final_context or ""
-        ctx = re.sub(
-            r"(^|\n)\s*(答案[:：]|【答案】|正确答案|标准答案|解析[:：]?)[^\n]*", r"\1…", ctx
-        )
-        ctx = re.sub(r"\*+\s*([A-D][.、．][^*]{0,40})\*+\s*✅", r"\1", ctx)
-        ctx = re.sub(r"✅", "", ctx)
-        rebuilt.final_context = ctx
+        rebuilt.final_context = _strip_answer_markers(rebuilt.final_context or "")
     rebuilt.metadata = {**(rebuilt.metadata or {}), "evidence_policy": flags}
-    return rebuilt, flags
+    return rebuilt
+
+
+def apply_evidence_policy(
+    fused: FusedEvidence,
+    policy: TaskPolicy,
+) -> tuple[FusedEvidence, dict[str, Any]]:
+    """返回 (裁剪后的 FusedEvidence, release flags)。不改索引。"""
+    hide_answer = not policy.answer_released
+    hide_exp = policy.explanation_policy == "hidden"
+    verified_only = policy.explanation_policy == "verified_only"
+
+    kept: list[TextEvidence] = []
+    for ev in fused.text_evidences:
+        new_ev = _apply_policy_to_evidence(
+            ev, policy, hide_answer=hide_answer, hide_exp=hide_exp, verified_only=verified_only
+        )
+        if new_ev is not None:
+            kept.append(new_ev)
+
+    flags = _policy_flags(policy, fused)
+    return _rebuild_fused(fused, kept, policy, flags), flags
