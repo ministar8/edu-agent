@@ -131,6 +131,53 @@ def classify_task_mode(
     return default
 
 
+def _resolve_mode_profile(mode: TaskMode) -> tuple[ExamResources, str, str, str]:
+    """返回该 task_mode 的 (exam_resources, answer_policy, explanation_policy, related 策略)。"""
+    if mode == "practice":
+        return (
+            ExamResources(question="forbidden", answer="forbidden", paper="forbidden"),
+            "hidden",
+            "hidden",
+            "off",
+        )
+    if mode == "verify":
+        return (
+            ExamResources(question="allowed", answer="forbidden", paper="forbidden"),
+            "hidden",
+            "hidden",
+            "weak",
+        )
+    if mode == "explain":
+        return (
+            ExamResources(question="allowed", answer="allowed", paper="allowed"),
+            "released",
+            "released",
+            "strong",
+        )
+    if mode == "grade":
+        return (
+            ExamResources(question="allowed", answer="allowed", paper="forbidden"),
+            "released",
+            "verified_only",
+            "weak",
+        )
+    return (
+        ExamResources(question="forbidden", answer="forbidden", paper="forbidden"),
+        "hidden",
+        "hidden",
+        "off",
+    )
+
+
+def _preferred_layers(mode: TaskMode, query: str) -> list[str]:
+    """preferred 层默认取自 `_PREFERRED`；grade 再看 query 是否含题号语境决定顺序。"""
+    if mode == "grade" and query:
+        if _QUESTION_CTX.search(query):
+            return ["exams", "advanced", "basic"]
+        return ["advanced", "basic", "exams"]
+    return list(_PREFERRED[mode])
+
+
 def policy_for_mode(
     task_mode: TaskMode,
     *,
@@ -141,28 +188,8 @@ def policy_for_mode(
     k: int | None = None,
 ) -> TaskPolicy:
     mode = task_mode
-    if mode == "practice":
-        exam_resources = ExamResources(question="forbidden", answer="forbidden", paper="forbidden")
-        answer_policy, explanation_policy, related = "hidden", "hidden", "off"
-    elif mode == "verify":
-        exam_resources = ExamResources(question="allowed", answer="forbidden", paper="forbidden")
-        answer_policy, explanation_policy, related = "hidden", "hidden", "weak"
-    elif mode == "explain":
-        exam_resources = ExamResources(question="allowed", answer="allowed", paper="allowed")
-        answer_policy, explanation_policy, related = "released", "released", "strong"
-    elif mode == "grade":
-        exam_resources = ExamResources(question="allowed", answer="allowed", paper="forbidden")
-        answer_policy, explanation_policy, related = "released", "verified_only", "weak"
-    else:
-        exam_resources = ExamResources(question="forbidden", answer="forbidden", paper="forbidden")
-        answer_policy, explanation_policy, related = "hidden", "hidden", "off"
-
-    preferred = list(_PREFERRED[mode])
-    if mode == "grade" and query:
-        if _QUESTION_CTX.search(query):
-            preferred = ["exams", "advanced", "basic"]
-        else:
-            preferred = ["advanced", "basic", "exams"]
+    exam_resources, answer_policy, explanation_policy, related = _resolve_mode_profile(mode)
+    preferred = _preferred_layers(mode, query)
 
     depth_name: RetrievalDepthName = (
         depth

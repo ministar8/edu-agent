@@ -145,6 +145,79 @@ def apply_layer_ranking(
     return out
 
 
+def _evidence_score(ev: TextEvidence) -> float:
+    """证据排序分数（metadata.score 优先，退回 ev.score，再退回 0）。"""
+    return float((ev.metadata or {}).get("score") or ev.score or 0.0)
+
+
+def _split_pool_by_policy(
+    items: list[TextEvidence], pool_policy: str
+) -> tuple[list[TextEvidence], list[TextEvidence], int]:
+    """按 legacy_policy 拆主池 / legacy 池，返回 (main_items, legacy_items, dropped_legacy)。
+
+    - `exclude`：legacy 全部丢弃，计入 dropped；
+    - `include`：与主池混排（后续统一 ranking），legacy 池清空；
+    - 其余（`fallback`）：主池与 legacy 池分开保留，legacy 备用。
+    """
+    main_items = [ev for ev in items if not is_legacy_asset(ev)]
+    legacy_items = [ev for ev in items if is_legacy_asset(ev)]
+    if pool_policy == "exclude":
+        return main_items, [], len(legacy_items)
+    if pool_policy == "include":
+        return items, [], 0
+    return main_items, legacy_items, 0
+
+
+def _rank_and_truncate(
+    fused: FusedEvidence,
+    policy: TaskPolicy,
+    main_items: list[TextEvidence],
+    keep: int,
+    boost: float,
+) -> list[TextEvidence]:
+    """在主池上做层偏好排序并截断到 keep。"""
+    filtered = fused.model_copy(deep=True)
+    filtered.text_evidences = main_items
+    ranked = apply_layer_ranking(filtered, policy, boost=boost)
+    pack = list(ranked.text_evidences or [])
+    if keep > 0 and len(pack) > keep:
+        pack = pack[:keep]
+    return pack
+
+
+def _sufficiency_refill(
+    policy: TaskPolicy, main_items: list[TextEvidence], pack: list[TextEvidence], keep: int
+) -> tuple[list[TextEvidence], int]:
+    """包内已无合规项时，从候选里按 score 回填合规项，返回 (pack, 回填条数)。
+
+    ★ sufficiency 兜底（2026-10-01）：错误层偏好（如 prefer_l3）把 eligibility 禁止的
+      exam 资源顶进 pack，Evidence Policy 随后**全部**裁掉 → n_pack=0（包被掏空，任务
+      不可用）。这里只做**不放松安全**的兜底，且**只回填 `main_items`**（已按
+      legacy_policy 过滤），不引入被排除的资产。
+    """
+    if not (keep > 0 and main_items and all(pack_blocked(policy, ev) for ev in pack)):
+        return pack, 0
+    eligible_pool = sorted(
+        (ev for ev in main_items if not pack_blocked(policy, ev)),
+        key=_evidence_score,
+        reverse=True,
+    )
+    refilled = eligible_pool[:keep]
+    return refilled, len(refilled)
+
+
+def _legacy_fallback(
+    pool_policy: str, legacy_items: list[TextEvidence], pack: list[TextEvidence], keep: int
+) -> tuple[list[TextEvidence], int]:
+    """fallback 策略下主池不足 keep 时，按 score 从 legacy 池补入。返回 (pack, 补入条数)。"""
+    if not (pool_policy == "fallback" and keep > 0 and len(pack) < keep and legacy_items):
+        return pack, 0
+    reserve = sorted(legacy_items, key=_evidence_score, reverse=True)
+    filled = reserve[: keep - len(pack)]
+    pack.extend(filled)
+    return pack, len(filled)
+
+
 def finalize_with_layer_ranking(
     fused: FusedEvidence,
     policy: TaskPolicy,
@@ -164,51 +237,11 @@ def finalize_with_layer_ranking(
     """
     pool_policy = policy.legacy_policy
     items = list(fused.text_evidences or [])
-    main_items = [ev for ev in items if not is_legacy_asset(ev)]
-    legacy_items = [ev for ev in items if is_legacy_asset(ev)]
-    dropped_legacy = 0
-    if pool_policy == "exclude":
-        dropped_legacy = len(legacy_items)
-        legacy_items = []
-    elif pool_policy == "include":
-        # 与主池混排，后续统一 ranking
-        main_items = items
-        legacy_items = []
+    main_items, legacy_items, dropped_legacy = _split_pool_by_policy(items, pool_policy)
 
-    def _score(ev: TextEvidence) -> float:
-        return float((ev.metadata or {}).get("score") or ev.score or 0.0)
-
-    filtered = fused.model_copy(deep=True)
-    filtered.text_evidences = main_items
-    ranked = apply_layer_ranking(filtered, policy, boost=boost)
-    pack = list(ranked.text_evidences or [])
-    if keep > 0 and len(pack) > keep:
-        pack = pack[:keep]
-
-    # ── sufficiency 兜底（2026-10-01）──────────────────────────────
-    # 症状：错误层偏好（如 prefer_l3）把 eligibility 禁止的 exam 资源顶进 pack，
-    # Evidence Policy 随后**全部**裁掉 → n_pack=0（包被掏空，任务直接不可用）。
-    # 这里只做**不放松安全**的兜底：若包内已无合规项，从候选里按 score 回填合规项。
-    # 注意：只回填 `main_items`（已按 legacy_policy 过滤），不引入被排除的资产。
-    sufficiency_refill = 0
-    if keep > 0 and main_items and all(pack_blocked(policy, ev) for ev in pack):
-        eligible_pool = sorted(
-            (ev for ev in main_items if not pack_blocked(policy, ev)),
-            key=lambda e: float((e.metadata or {}).get("score") or e.score or 0.0),
-            reverse=True,
-        )
-        refilled = eligible_pool[:keep]
-        sufficiency_refill = len(refilled)
-        pack = refilled
-
-    used_fallback = 0
-    if pool_policy == "fallback" and keep > 0 and len(pack) < keep and legacy_items:
-        # 主池不足：按 score 从 fallback 池补入（显式记录，不静默）
-        reserve = sorted(legacy_items, key=_score, reverse=True)
-        need = keep - len(pack)
-        filled = reserve[:need]
-        pack.extend(filled)
-        used_fallback = len(filled)
+    pack = _rank_and_truncate(fused, policy, main_items, keep, boost)
+    pack, sufficiency_refill = _sufficiency_refill(policy, main_items, pack, keep)
+    pack, used_fallback = _legacy_fallback(pool_policy, legacy_items, pack, keep)
 
     out = fused.model_copy(deep=True)
     out.text_evidences = pack
