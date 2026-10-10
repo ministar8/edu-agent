@@ -146,39 +146,26 @@ def sentence_window_expand(
     return result
 
 
-def _chroma_window_expand(
-    docs: list[Document],
-    collection_name: str,
-    window_size: int = _WINDOW_SIZE,
-    budget: int = _WINDOW_TOKEN_BUDGET,
-    global_budget: int = _GLOBAL_WINDOW_TOKEN_BUDGET,
-) -> list[Document]:
-    """ChromaDB Sentence Window 扩展：从向量库查询同 section 相邻 chunk"""
-    from rag.common.vectorstore import get_vector_store_manager
-
-    # 按 section.id 分组原始命中
-    section_hits: dict[str, Document] = {}
+def _group_hits_by_section(docs: list[Document]) -> dict[str, Document]:
+    """按 `section.id` 分组，每 section 取**首个**命中 chunk 作锚点（无 section.id 的丢弃）。"""
+    hits: dict[str, Document] = {}
     for doc in docs:
         sec_id = str(doc.metadata.get("section.id") or "")
-        if not sec_id:
-            continue
-        if sec_id not in section_hits:
-            section_hits[sec_id] = doc
+        if sec_id and sec_id not in hits:
+            hits[sec_id] = doc
+    return hits
 
-    if not section_hits:
-        return docs
 
-    result: list[Document] = []
-    seen_chunk_ids: set[str] = set()
-    for doc in docs:
-        cid = str(doc.metadata.get("section.chunk_id") or "")
-        if cid:
-            seen_chunk_ids.add(cid)
-        result.append(doc)
+def _fetch_section_details(
+    collection_name: str, sec_ids: list[str]
+) -> dict[str, list[tuple[int, Document]]]:
+    """批量取各 section 的 detail chunk（每 50 个 section 一次 `$or` 查询，避免 N 次串行）。
 
-    # 批量查询：合并所有 section 为单次 $or 查询，避免 N 次串行调用
-    sec_ids = list(section_hits.keys())
-    all_section_details: dict[str, list[tuple[int, Document]]] = {sid: [] for sid in sec_ids}
+    返回 ``{section_id: [(chunk_index, Document), ...]}``；查询失败时返回全空表（不抛）。
+    """
+    from rag.common.vectorstore import get_vector_store_manager
+
+    details: dict[str, list[tuple[int, Document]]] = {sid: [] for sid in sec_ids}
     try:
         raw_collection = get_vector_store_manager().client.get_collection(collection_name)
         for batch_start in range(0, len(sec_ids), 50):
@@ -198,16 +185,101 @@ def _chroma_window_expand(
                     continue
                 sid = str(meta.get("section.id", ""))
                 idx = meta.get("section.chunk_index")
-                if (
-                    sid in all_section_details
-                    and idx is not None
-                    and isinstance(idx, int)
-                    and idx >= 0
-                ):
+                if sid in details and isinstance(idx, int) and idx >= 0:
                     d = Document(page_content=text or "", metadata=dict(meta))
-                    all_section_details[sid].append((idx, d))
+                    details[sid].append((idx, d))
     except Exception as e:
         logger.warning("Sentence window ChromaDB query failed: %s", e)
+    return details
+
+
+def _window_bounds(
+    all_details: list[tuple[int, Document]],
+    anchor_idx: int,
+    window_size: int,
+    budget: int,
+) -> tuple[int, int, int]:
+    """锚点左右各 window_size 的 `[lo, hi]`，再按 token 预算从两端裁到 ≤ budget。
+
+    **锚点始终保留**。返回 ``(lo, hi, 裁剪后窗口的 token 数)``。
+
+    ★ 锚点定位用一个 `next(...)` 生成器（等价于原「for + if + break」循环，少了 2 个判定点，
+    backlog #36 第三步）；找不到（理论上不会）时退回 0。
+    """
+    anchor_pos = next((pos for pos, (idx, _d) in enumerate(all_details) if idx == anchor_idx), 0)
+    lo = max(0, anchor_pos - window_size)
+    hi = min(len(all_details) - 1, anchor_pos + window_size)
+    window_tokens = sum(_estimate_tokens(all_details[i][1].page_content) for i in range(lo, hi + 1))
+    while window_tokens > budget and (hi - lo) > 0:
+        if lo < anchor_pos:
+            window_tokens -= _estimate_tokens(all_details[lo][1].page_content)
+            lo += 1
+        elif hi > anchor_pos:
+            window_tokens -= _estimate_tokens(all_details[hi][1].page_content)
+            hi -= 1
+        else:
+            break  # lo == anchor_pos == hi：只剩锚点，停止裁剪
+    return lo, hi, window_tokens
+
+
+def _append_window_chunks(
+    result: list[Document],
+    seen_chunk_ids: set[str],
+    all_details: list[tuple[int, Document]],
+    lo: int,
+    hi: int,
+    anchor_doc: Document,
+) -> int:
+    """把窗口内**尚未出现过**的 chunk 追加进 result（标 `_window_expanded`），返回新增数。"""
+    added = 0
+    for _idx, d in all_details[lo : hi + 1]:
+        chunk_id = str(d.metadata.get("section.chunk_id") or "")
+        if chunk_id in seen_chunk_ids:
+            continue
+        d.metadata["_window_expanded"] = True
+        d.metadata["_window_anchor_chunk_id"] = str(
+            anchor_doc.metadata.get("section.chunk_id") or ""
+        )
+        result.append(d)
+        seen_chunk_ids.add(chunk_id)
+        added += 1
+    return added
+
+
+def _trim_global_budget(result: list[Document], base_len: int, global_budget: int) -> None:
+    """全局 token 超预算时，从尾部（低优先级 window chunk）裁到 ≤ 预算。
+
+    `base_len` = 原始命中数 —— 保证不裁掉原始证据本身（`len(result) > base_len`）。
+    """
+    total_tokens = sum(_estimate_tokens(d.page_content) for d in result)
+    if total_tokens <= global_budget:
+        return
+    while total_tokens > global_budget and len(result) > base_len:
+        total_tokens -= _estimate_tokens(result.pop().page_content)
+    logger.debug(
+        "Window budget trim: %d tokens > %d budget, → %d docs",
+        total_tokens,
+        global_budget,
+        len(result),
+    )
+
+
+def _chroma_window_expand(
+    docs: list[Document],
+    collection_name: str,
+    window_size: int = _WINDOW_SIZE,
+    budget: int = _WINDOW_TOKEN_BUDGET,
+    global_budget: int = _GLOBAL_WINDOW_TOKEN_BUDGET,
+) -> list[Document]:
+    """ChromaDB Sentence Window 扩展：从向量库查询同 section 相邻 chunk"""
+    section_hits = _group_hits_by_section(docs)
+    if not section_hits:
+        return docs
+
+    result = list(docs)
+    seen_chunk_ids = {str(d.metadata.get("section.chunk_id") or "") for d in docs} - {""}
+
+    all_section_details = _fetch_section_details(collection_name, list(section_hits.keys()))
 
     for sec_id, anchor_doc in section_hits.items():
         all_details = all_section_details.get(sec_id, [])
@@ -216,63 +288,15 @@ def _chroma_window_expand(
         all_details.sort(key=lambda x: x[0])
 
         anchor_idx = anchor_doc.metadata.get("section.chunk_index")
-        if anchor_idx is None or not isinstance(anchor_idx, int) or anchor_idx < 0:
+        if not isinstance(anchor_idx, int) or anchor_idx < 0:
             anchor_idx = 0
 
-        # 锚点在按索引排序后的位置；找不到（理论上不会）时退回 0。
-        # ★ 原来是一个「for + if + break」的循环 —— 等价，但少了 2 个判定点（backlog #36 第三步）。
-        anchor_pos = next(
-            (pos for pos, (idx, _d) in enumerate(all_details) if idx == anchor_idx), 0
-        )
-
-        lo = max(0, anchor_pos - window_size)
-        hi = min(len(all_details) - 1, anchor_pos + window_size)
-
-        window_tokens = 0
-        for idx, d in all_details[lo : hi + 1]:
-            window_tokens += _estimate_tokens(d.page_content)
-
-        while window_tokens > budget and (hi - lo) > 0:
-            # Always keep the anchor chunk in the window
-            if lo < anchor_pos:
-                window_tokens -= _estimate_tokens(all_details[lo][1].page_content)
-                lo += 1
-            elif hi > anchor_pos:
-                window_tokens -= _estimate_tokens(all_details[hi][1].page_content)
-                hi -= 1
-            else:
-                # lo == anchor_pos == hi: only anchor remains, stop trimming
-                break
-
-        added = 0
-        for idx, d in all_details[lo : hi + 1]:
-            chunk_id = str(d.metadata.get("section.chunk_id") or "")
-            if chunk_id in seen_chunk_ids:
-                continue
-            d.metadata["_window_expanded"] = True
-            d.metadata["_window_anchor_chunk_id"] = str(
-                anchor_doc.metadata.get("section.chunk_id") or ""
-            )
-            result.append(d)
-            seen_chunk_ids.add(chunk_id)
-            added += 1
-
+        lo, hi, window_tokens = _window_bounds(all_details, anchor_idx, window_size, budget)
+        added = _append_window_chunks(result, seen_chunk_ids, all_details, lo, hi, anchor_doc)
         if added > 0:
             logger.debug("Window expand +%d sec=%s tokens≈%d", added, sec_id, window_tokens)
 
-    # 全局 token 预算控制：从尾部（低优先级 window chunk）开始裁剪
-    total_tokens = sum(_estimate_tokens(d.page_content) for d in result)
-    if total_tokens > global_budget:
-        while total_tokens > global_budget and len(result) > len(docs):
-            removed_doc = result.pop()
-            total_tokens -= _estimate_tokens(removed_doc.page_content)
-        logger.debug(
-            "Window budget trim: %d tokens > %d budget, → %d docs",
-            total_tokens,
-            global_budget,
-            len(result),
-        )
-
+    _trim_global_budget(result, len(docs), global_budget)
     return result
 
 
