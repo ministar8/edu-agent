@@ -224,7 +224,7 @@ async def _reprobe(args: argparse.Namespace) -> int:
     """
     from evaluation.task_eval.retrieval_probe import probe_retrieval
     from evaluation.task_eval.runner import map_route_failures
-    from rag.vectorstore import get_vector_store_manager
+    from rag.common.vectorstore import get_vector_store_manager
 
     records = _load_all_records(args.records)
     if not records:

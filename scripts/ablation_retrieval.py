@@ -36,7 +36,7 @@ from evaluation.retrieval_gate import (  # noqa: E402
     compute_metrics,
     load_golden_queries,
 )
-from rag.query_classifier import QueryCategory  # noqa: E402
+from rag.retrieval.query_classifier import QueryCategory  # noqa: E402
 
 OUT_DIR = ROOT / "evals" / "results" / "retrieval"
 
@@ -129,8 +129,8 @@ REPORT_COLS = (
 @contextmanager
 def apply_config(flags: dict[str, Any]):
     """按配置临时开关组件；退出时恢复。"""
-    import rag.pipeline as pipeline
-    import rag.routes as routes
+    import rag.retrieval.pipeline as pipeline
+    import rag.retrieval.routes as routes
     from core import settings
 
     saved: list[tuple[Any, str, Any]] = []
@@ -179,7 +179,7 @@ def apply_config(flags: dict[str, Any]):
             _patch(settings, "HYDE_ENABLED", False)
         if flags.get("no_window"):
             # 短路窗口阶段：原样返回
-            from rag.pipeline import _WindowOutcome
+            from rag.retrieval.pipeline import _WindowOutcome
 
             async def expand_off(filtered, **kw: Any):
                 return _WindowOutcome(filtered, 0.0)
@@ -204,7 +204,7 @@ async def run_one_config(
     flags: dict[str, Any],
     queries: list[tuple[str, tuple[str, ...], tuple[str, ...]]],
 ) -> dict[str, Any]:
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     use_topup = bool(flags.get("topup"))
     preferred = ["basic", "advanced", "exams"] if use_topup else None

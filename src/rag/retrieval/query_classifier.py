@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from core.cache import BoundedCache
 from core.settings import settings
 from prompts import CLASSIFY_PROMPT
-from rag.llm_calls import call_structured
-from rag.synonyms import SYNONYM_MAP
+from rag.common.synonyms import SYNONYM_MAP
+from rag.retrieval.llm_calls import call_structured
 
 logger = logging.getLogger(__name__)
 
@@ -306,7 +306,7 @@ async def _classify_by_llm(query: str) -> QueryCategory | None:
 
     超时/解析失败/API 错误一律由 call_structured 归一为 None → 降级回规则分类。
     """
-    from rag.schemas import QueryClassifyResult
+    from rag.common.schemas import QueryClassifyResult
 
     result = await call_structured(
         CLASSIFY_PROMPT.format_messages(query=query),
@@ -397,7 +397,7 @@ async def aclassify_query(query: str, terms: list[str] | None = None) -> QueryCa
     Returns:
         QueryCategory 分类结果
     """
-    from rag.rag_utils import extract_query_terms, normalize_query_text
+    from rag.common.rag_utils import extract_query_terms, normalize_query_text
 
     normalized = normalize_query_text(query)
     if not normalized:
@@ -439,7 +439,7 @@ def classify_query(query: str, terms: list[str] | None = None) -> QueryCategory:
     Returns:
         QueryCategory 分类结果（仅规则层）
     """
-    from rag.rag_utils import extract_query_terms, normalize_query_text
+    from rag.common.rag_utils import extract_query_terms, normalize_query_text
 
     normalized = normalize_query_text(query)
     if not normalized:

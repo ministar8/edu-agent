@@ -50,8 +50,8 @@ async def run_retrieval_arm(arm: str, queries, limit: int | None) -> dict:
     """在黄金集上跑检索口径指标（basic_rag = 纯向量，ours = 完整）。"""
     from dataclasses import replace
 
-    from rag.query_classifier import RetrievalDepth
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.query_classifier import RetrievalDepth
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     basic = arm == "basic_rag"
     # baseline 用浅层策略：跳过分解/元数据/BM25/重排

@@ -85,7 +85,7 @@ async def run_one_run(run_id: int) -> dict[str, Any]:
     # 延迟 import：避免子进程启动路径差异
     from ablation_retrieval import CONFIGS, apply_config
 
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     queries = load_golden_queries(DEFAULT_GOLDEN_PATH, limit=60)
     from evaluation.retrieval_gate import chapter_of_source

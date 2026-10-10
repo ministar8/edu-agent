@@ -13,8 +13,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
-from rag.evidence import FusedEvidence, TextEvidence
-from rag.topic_relevance import is_topic_relevant, topic_relevance_score
+from rag.retrieval.evidence import FusedEvidence, TextEvidence
+from rag.retrieval.topic_relevance import is_topic_relevant, topic_relevance_score
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +82,7 @@ async def topup_preferred_layers(
     if not missing:
         return fused
 
-    from rag.vectorstore import get_vector_store_manager
+    from rag.common.vectorstore import get_vector_store_manager
 
     mgr = get_vector_store_manager()
     existing_ids = {

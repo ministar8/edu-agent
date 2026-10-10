@@ -17,27 +17,27 @@ from dataclasses import dataclass
 from langchain_core.documents import Document
 
 from core.settings import settings
-from rag.hyde import generate_hyde_query, should_trigger_hyde
-from rag.metrics import metrics
-from rag.postprocess import (
+from rag.common.metrics import metrics
+from rag.common.rag_utils import content_key, extract_query_terms, normalize_query_text
+from rag.retrieval.hyde import generate_hyde_query, should_trigger_hyde
+from rag.retrieval.postprocess import (
     dedup_same_section,
     downgrade_window_noise,
     merge_window_into_anchors,
     sentence_window_expand,
     weighted_rrf_merge,
 )
-from rag.query_classifier import (
+from rag.retrieval.query_classifier import (
     QueryCategory,
     RetrievalDepth,
     aclassify_query,
     classify_query,
 )
-from rag.query_decomposer import decompose
-from rag.rag_utils import content_key, extract_query_terms, normalize_query_text
-from rag.recall import ALL_ROUTES
-from rag.reranker import rerank
-from rag.retrieval_plan import resolve_retrieval_plan, strategy_from_depth
-from rag.routes import (
+from rag.retrieval.query_decomposer import decompose
+from rag.retrieval.recall import ALL_ROUTES
+from rag.retrieval.reranker import rerank
+from rag.retrieval.retrieval_plan import resolve_retrieval_plan, strategy_from_depth
+from rag.retrieval.routes import (
     _amulti_route_search,
     _cache_stats_fields,
     _log_final_retrieval_summary,
@@ -153,7 +153,7 @@ def _resolve_thresholds(
     # 原理：w/(k+rank) < threshold 等价于 rank > w/threshold - k
     # 高权重路由(w=2.5)的 rank-20 噪声分数 = 2.5/40 = 0.0625 > 0.05，直接通过
     # 缩放后 threshold × (max_w / baseline_w) 让高权重路由的噪声也被过滤
-    from rag.recall import get_route_weight
+    from rag.retrieval.recall import get_route_weight
 
     _BASELINE_WEIGHT = settings.RRF_BASELINE_WEIGHT  # semantic default 权重作为基准
     # 路由名单来自 `recall.ALL_ROUTES`（单一真源）——

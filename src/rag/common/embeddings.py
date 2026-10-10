@@ -10,8 +10,8 @@ from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel
 
 from core.settings import settings
-from rag.errors import RagInternalError, RetrievalUnavailable
-from rag.metrics import metrics
+from rag.common.errors import RagInternalError, RetrievalUnavailable
+from rag.common.metrics import metrics
 
 logger = logging.getLogger(__name__)
 

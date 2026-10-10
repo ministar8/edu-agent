@@ -66,7 +66,7 @@ async def _probe_reranker(client: httpx.AsyncClient) -> dict[str, Any]:
 async def _probe_chromadb() -> dict[str, Any]:
     """先探 Chroma server，不可达时退化为本地持久化目录检查。
 
-    与 rag.vectorstore 选择客户端的方式保持一致（server 优先，否则用本地目录）。
+    与 rag.common.vectorstore 选择客户端的方式保持一致（server 优先，否则用本地目录）。
     """
     started = time.perf_counter()
     target = f"{settings.CHROMA_HOST}:{settings.CHROMA_PORT}"

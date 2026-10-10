@@ -24,9 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from evaluation.provenance import build_provenance  # noqa: E402
-from rag.evidence_policy import apply_evidence_policy  # noqa: E402
-from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
-from rag.task_policy import resolve_task_policy  # noqa: E402
+from rag.retrieval.evidence_policy import apply_evidence_policy  # noqa: E402
+from rag.retrieval.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.retrieval.task_policy import resolve_task_policy  # noqa: E402
 
 # 与 layer_policy_experiment 相同固定 probe
 PROBES = [

@@ -26,7 +26,7 @@
     ③ 命中 rag 同义词表        → **仅当目标值 ∈ canonical 才采纳**（否则视为无映射）
     ④ 其余                    → 压缩空白作为稳定化（稳定即可）
 
-★ 关于 ③ 的**实际覆盖面**（勿夸大）：`rag.synonyms.SYNONYM_MAP` 共 338 条，
+★ 关于 ③ 的**实际覆盖面**（勿夸大）：`rag.common.synonyms.SYNONYM_MAP` 共 338 条，
   其中 **269 条目标值非 canonical**（约 80%）⇒ 只有 **69 条**可安全采纳。
   它是**薄覆盖补充**，不是主力；`'AVL树' → '平衡二叉树'` 属**本步骤命中**，
   而非别名表覆盖 —— 不要据此高估本函数的确定性。
@@ -137,12 +137,12 @@ def normalize_topic(raw: str) -> str:
 
 
 def _rag_synonym(text: str, canonical: frozenset[str]) -> str | None:
-    """从 `rag.synonyms.SYNONYM_MAP` 取映射，**仅当目标是 canonical** 时返回。
+    """从 `rag.common.synonyms.SYNONYM_MAP` 取映射，**仅当目标是 canonical** 时返回。
 
     惰性 import + 静默降级：`rag` 依赖较重，且缺失时不影响记忆层基本功能。
     """
     try:
-        from rag.synonyms import SYNONYM_MAP
+        from rag.common.synonyms import SYNONYM_MAP
     except Exception:  # pragma: no cover - 环境缺 rag 时退化
         return None
     for cand in (text, text.lower()):

@@ -14,12 +14,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from rag.evidence_policy import (  # noqa: E402
+from rag.retrieval.evidence_policy import (  # noqa: E402
     apply_evidence_policy,
     finalize_with_layer_ranking,
 )
-from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
-from rag.task_policy import resolve_task_policy  # noqa: E402
+from rag.retrieval.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.retrieval.task_policy import resolve_task_policy  # noqa: E402
 
 _QID_RE = re.compile(r"(?:19|20)\d{2}-Q\d+")
 _ANS_FIELD_RE = re.compile(r"answer_key|reference_answer", re.I)

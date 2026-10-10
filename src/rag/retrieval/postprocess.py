@@ -9,13 +9,13 @@ import logging
 
 from langchain_core.documents import Document
 
-from rag.query_classifier import QueryCategory
-from rag.rag_utils import (
+from rag.common.rag_utils import (
     estimate_tokens as _estimate_tokens,
 )
-from rag.rag_utils import (
+from rag.common.rag_utils import (
     extract_query_terms as _extract_query_terms,
 )
+from rag.retrieval.query_classifier import QueryCategory
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def _rrf_scale_needed(cat: QueryCategory | None, k: int) -> bool:
     if cat is None:
         return False
 
-    from rag.recall import ALL_ROUTES, get_route_weight
+    from rag.retrieval.recall import ALL_ROUTES, get_route_weight
 
     weights = sorted((get_route_weight(r, cat) for r in ALL_ROUTES), reverse=True)
 
@@ -132,7 +132,7 @@ def merge_route_results(
     - 跨路由重复文档自然获得更高分数
     - 精准路由（metadata 过滤）权重高于宽泛路由（semantic）
     """
-    from rag.recall import get_route_weight
+    from rag.retrieval.recall import get_route_weight
 
     # 动态 k：路由多时 k 更大，让多路融合更平滑
     k = _dynamic_rrf_k(len(route_results))
@@ -208,7 +208,7 @@ def weighted_rrf_merge(
              使分解路径与非分解路径的 RRF 分数分布归一化到同一尺度。
     去重 key 使用 content_hash + collection（与 merge_route_results 一致，避免同前缀误合并）。
     """
-    from rag.recall import get_route_weight
+    from rag.retrieval.recall import get_route_weight
 
     # 动态 k：k=0 时按路由数自动计算
     if k <= 0:
@@ -440,7 +440,7 @@ def _chroma_window_expand(
     global_budget: int = _GLOBAL_WINDOW_TOKEN_BUDGET,
 ) -> list[Document]:
     """ChromaDB Sentence Window 扩展：从向量库查询同 section 相邻 chunk"""
-    from rag.vectorstore import get_vector_store_manager
+    from rag.common.vectorstore import get_vector_store_manager
 
     # 按 section.id 分组原始命中
     section_hits: dict[str, Document] = {}

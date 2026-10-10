@@ -23,9 +23,9 @@ def _make_raw_search(mode: str):
     import jieba
     from langchain_core.documents import Document  # noqa: F401
 
-    from rag.bm25 import bm25_search
-    from rag.rag_utils import content_key
-    from rag.routes import _SEMANTIC_OVERSAMPLE, _copy_results, _query_cache
+    from rag.common.rag_utils import content_key
+    from rag.retrieval.bm25 import bm25_search
+    from rag.retrieval.routes import _SEMANTIC_OVERSAMPLE, _copy_results, _query_cache
 
     def _raw_search(query, collection_name, k, filter=None, route_name=""):
         filter_key = json.dumps(filter, sort_keys=True, ensure_ascii=False) if filter else ""
@@ -35,7 +35,7 @@ def _make_raw_search(mode: str):
             return _copy_results(cached)
 
         if route_name == "keyword_bm25":
-            from rag.recall import _BM25_STOP_WORDS
+            from rag.retrieval.recall import _BM25_STOP_WORDS
 
             allow = {
                 "栈",
@@ -65,7 +65,7 @@ def _make_raw_search(mode: str):
                 terms = [query.strip()]
             results = bm25_search(terms, collection_name, k, filter=filter)
         else:
-            from rag.vectorstore import get_vector_store_manager
+            from rag.common.vectorstore import get_vector_store_manager
 
             oversampled = get_vector_store_manager().similarity_search_with_score(
                 collection_name, query, k=k * _SEMANTIC_OVERSAMPLE, filter=filter
@@ -88,9 +88,9 @@ def _kp_rank(outcome) -> int | None:
 
 
 async def collect(mode: str, queries) -> tuple[list, dict]:
-    import rag.routes as routes
+    import rag.retrieval.routes as routes
     from evaluation.retrieval_gate import QueryOutcome, chapter_of_source
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     routes._raw_search = _make_raw_search(mode)  # type: ignore[assignment]
     routes._query_cache.clear()

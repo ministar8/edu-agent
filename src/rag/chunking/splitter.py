@@ -4,7 +4,7 @@ import re
 
 from langchain_core.documents import Document
 
-from rag.metrics import metrics
+from rag.common.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -994,7 +994,7 @@ def split_documents(documents: list[Document]) -> list[Document]:
             section_sibling_counts.append(len(siblings))
 
         # ── 切分 chunk ──
-        from rag.rag_utils import detect_content_type as _detect_content_type
+        from rag.common.rag_utils import detect_content_type as _detect_content_type
 
         for i, section in enumerate(sections):
             sid = section_ids[i]

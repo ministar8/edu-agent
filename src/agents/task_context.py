@@ -98,7 +98,7 @@ def remember_query_mode(
 
     ⚠️ 有 thread_id 时以**该线程 Store** 为准，避免把上一线程的 ContextVar 带进新线程。
     """
-    from rag.task_policy import classify_task_mode
+    from rag.retrieval.task_policy import classify_task_mode
 
     tid = thread_id or _thread_id_from_config(config)
     if context_mode:

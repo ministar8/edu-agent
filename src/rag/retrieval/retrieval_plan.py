@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rag.query_classifier import (
+from rag.retrieval.query_classifier import (
     CODE_DEPTH,
     DEEP_DEPTH,
     SHALLOW_DEPTH,

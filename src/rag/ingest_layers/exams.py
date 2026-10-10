@@ -12,8 +12,8 @@ import re
 from langchain_core.documents import Document
 
 from rag.chunking.splitter import split_documents
+from rag.common.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
-from rag.vectorstore import get_vector_store_manager
 
 EXAMS_DIR = _shared.KNOWLEDGE_DIR / "exams"
 COLLECTION = "exams"

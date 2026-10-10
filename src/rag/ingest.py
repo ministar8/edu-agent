@@ -18,9 +18,9 @@ from rag.chunking.cleaner import clean_documents
 from rag.chunking.enhancer import enhance_documents
 from rag.chunking.loader import SUPPORTED_EXTENSIONS, load_single_file
 from rag.chunking.splitter import split_documents
+from rag.common.metrics import metrics
+from rag.common.vectorstore import get_vector_store_manager
 from rag.knowledge_tagger import tag_chunks_with_knowledge_points
-from rag.metrics import metrics
-from rag.vectorstore import get_vector_store_manager
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,7 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
 
     if rebuild:
         # 全量重建时清空语义缓存，避免旧知识残留导致跨版本缓存命中
-        from rag.semantic_cache import get_semantic_cache
+        from rag.retrieval.semantic_cache import get_semantic_cache
 
         get_semantic_cache().clear()
         logger.info("  已清空语义缓存")
@@ -214,7 +214,7 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
         logger.info("  %s: %s 条文档", name, info.get("count", 0))
 
     logger.info("\n[SMOKE] 入库后检索冒烟（1 条）...")
-    from rag.retriever import warmup_query_cache
+    from rag.retrieval.retriever import warmup_query_cache
 
     warmup_result = warmup_query_cache(quiet=True)
     warmup_ok, warmup_verdict = evaluate_warmup(warmup_result, settings.WARMUP_MIN_SUCCESS_RATE)

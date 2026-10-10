@@ -1,6 +1,6 @@
-"""LangGraph 侧入口：委托 rag.task_policy（与 tools 同一真源）。"""
+"""LangGraph 侧入口：委托 rag.retrieval.task_policy（与 tools 同一真源）。"""
 
-from rag.task_policy import (
+from rag.retrieval.task_policy import (
     DEFAULT_TASK_MODE,
     classify_task_mode,
     policy_for_mode,

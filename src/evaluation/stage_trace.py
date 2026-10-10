@@ -11,7 +11,7 @@
 ------------------
 被追踪的阶段函数**已经是独立的模块级函数**（`_amulti_route_search` / `dedup_same_section` /
 `rerank` / `sentence_window_expand` …），单体函数只是把它们串起来。所以只要在
-`rag.retriever` 上临时替换这些名字，就能记录"阶段之间的接口"，而不用改一行源码。
+`rag.retrieval.retriever` 上临时替换这些名字，就能记录"阶段之间的接口"，而不用改一行源码。
 这个性质也决定了它对重构友好：**拆分只改变调用点，不改变这些函数的契约**，
 因此同一份记录在拆分前后必须逐字匹配。
 
@@ -77,13 +77,13 @@ from typing import Any
 
 from langchain_core.documents import Document
 
-from rag.evidence import TextEvidence
+from rag.retrieval.evidence import TextEvidence
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASELINE_PATH = "evals/stage_baseline.json"
 
-# (阶段标签, rag.retriever 上的属性名)。顺序仅用于展示。
+# (阶段标签, rag.retrieval.retriever 上的属性名)。顺序仅用于展示。
 STAGE_TARGETS: tuple[tuple[str, str], ...] = (
     ("resolve_strategy", "resolve_retrieval_plan"),
     ("resolve_policy", "_resolve_thresholds"),
@@ -98,7 +98,7 @@ STAGE_TARGETS: tuple[tuple[str, str], ...] = (
     ("fuse_rrf_main", "merge_route_results"),
     # ── 门面层三步（此前是观测盲区）────────────────────────────────
     # `afuse_documents` / `averify_evidence` 在 `aretrieve_evidence` 里是**函数内局部导入**
-    # （`from rag.fusion import afuse_documents`），因此**不是** `rag.retriever` 的模块级属性，
+    # （`from rag.retrieval.fusion import afuse_documents`），因此**不是** `rag.retrieval.retriever` 的模块级属性，
     # 用 `getattr(R, ...)` 取不到。故目标支持 `"module:attr"` 写法 → 直接 patch 源模块的属性；
     # 局部导入每次调用都会重读源模块属性，所以 patch 生效。
     # 这样不必为了可追踪而把局部导入提到模块级（不动运行时模块，零风险）。
@@ -203,12 +203,12 @@ class StageTrace:
 def trace_stages():
     """在上下文内拦截检索链的阶段函数，把调用记录进 yield 出的列表。
 
-    目标写法见 ``STAGE_TARGETS``：裸名 → ``rag.retriever.<name>``；
+    目标写法见 ``STAGE_TARGETS``：裸名 → ``rag.retrieval.retriever.<name>``；
     ``"module:attr"`` → ``rag.<module>.<attr>``（用于函数内局部导入的依赖）。
     """
     import importlib
 
-    import rag.retriever as R
+    import rag.retrieval.retriever as R
 
     steps: list[StageStep] = []
     originals: list[tuple[Any, str, Any]] = []  # (所属模块, 属性名, 原函数)
@@ -265,7 +265,7 @@ async def _retrieve_fused(query: str, *, k: int, use_rerank: bool):
     ``max_retries=0`` 是为了**可复现**：带重试时同一条 query 调用 `aretrieve_evidence`
     的次数会随 verdict 变化，阶段序列长度不稳定，「逐阶段比对」就失去意义了。
     """
-    import rag.retriever as R
+    import rag.retrieval.retriever as R
 
     fused, _verdict = await R.aretrieve_evidence_with_retry(
         query=query,

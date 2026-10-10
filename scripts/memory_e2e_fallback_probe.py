@@ -41,7 +41,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from pydantic import ValidationError  # noqa: E402
 
-import rag.llm_calls as L  # noqa: E402
+import rag.retrieval.llm_calls as L  # noqa: E402
 from schema.grading import GradingResult  # noqa: E402
 
 # 缺陷 A 的真实形态：**多行** `key: value` + 混入工具标记（形状取自 Step 5 实测日志与 gate ⑨d）。

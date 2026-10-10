@@ -84,7 +84,7 @@ def classify_retrieval_error(exc: BaseException) -> RagError:
     """把任意异常归类到检索域层级。
 
     这是**兜底**判据，不是主要机制 —— 精确归类要求**调用点自己抛出正确的类型**
-    （见 `rag.embeddings` 的 TEI 调用）。本函数负责那些没被标注过的异常，
+    （见 `rag.common.embeddings` 的 TEI 调用）。本函数负责那些没被标注过的异常，
     避免它们被静默当成"代码缺陷"或反之。
 
     规则：

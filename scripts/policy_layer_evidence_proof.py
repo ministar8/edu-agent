@@ -24,9 +24,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from rag.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking  # noqa: E402
-from rag.retriever import aretrieve_evidence_with_retry  # noqa: E402
-from rag.task_policy import resolve_task_policy  # noqa: E402
+from rag.retrieval.evidence_policy import (  # noqa: E402
+    apply_evidence_policy,
+    finalize_with_layer_ranking,
+)
+from rag.retrieval.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.retrieval.task_policy import resolve_task_policy  # noqa: E402
 
 BASELINE_PATH = ROOT / "evals" / "policy_layer_evidence_baseline.json"
 

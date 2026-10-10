@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     USE_FAKE_EMBEDDING: bool = False
     # 测试用：以确定性本地打分替代 TEI ``/rerank``，使**重排链路**（预筛选 / top_k 截断 /
     # 双重阈值过滤 / rerank_score 写入）在无 TEI 环境下也能被门禁覆盖。
-    # 同样与 USE_FAKE_MODEL 同一模式（实现见 rag.reranker._fake_rerank）。
+    # 同样与 USE_FAKE_MODEL 同一模式（实现见 rag.retrieval.reranker._fake_rerank）。
     #
     # ⚠️ 它只让**管线**可跑，不复制 bge-reranker 的分数分布 —— 生产里的绝对阈值
     # （RERANK_ABSOLUTE_MIN_SCORE 等）是按真实模型分布标定的。所以假重排路由上的

@@ -51,9 +51,9 @@ def _has_item(ev) -> bool:
 
 
 async def run_case(name: str, mode: str, query: str) -> list[str]:
-    from rag.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
-    from rag.retriever import aretrieve_evidence_with_retry
-    from rag.task_policy import policy_for_mode
+    from rag.retrieval.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.task_policy import policy_for_mode
 
     fails: list[str] = []
     policy = policy_for_mode(mode)  # type: ignore[arg-type]

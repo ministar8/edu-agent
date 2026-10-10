@@ -20,14 +20,14 @@ logger = logging.getLogger(__name__)
 
 def _query_cache_stats() -> dict[str, int | float]:
     """检索结果缓存的命中统计。"""
-    from rag.retriever import cache_stats
+    from rag.retrieval.retriever import cache_stats
 
     return cache_stats()
 
 
 def _semantic_cache_stats() -> dict[str, Any]:
     """语义缓存的命中统计（含条目数与上限）。"""
-    from rag.semantic_cache import get_semantic_cache
+    from rag.retrieval.semantic_cache import get_semantic_cache
 
     return get_semantic_cache().stats()
 

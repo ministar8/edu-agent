@@ -169,7 +169,7 @@ def preflight_check() -> list[str]:
             # ★ 关键的一步：health 通过 ≠ 能推理。真发一次 embedding 请求。
             infer_problem: str | None = None
             try:
-                from rag.embeddings import get_embeddings
+                from rag.common.embeddings import get_embeddings
 
                 vec = get_embeddings().embed_query("预检")
                 if not vec or len(vec) < 8:
@@ -398,7 +398,7 @@ def generation_ok(task: str, reply: str, hard_fails: list[str]) -> bool:
 def map_route_failures(failures: list[str], probe_status: str) -> tuple[str, list[str]]:
     """路由侧记下了失败 ⇒ 该 case 的检索层证据等级就是 `error`（B7 消费侧，v1.3）。
 
-    ★ 为什么必须有这一层（实测，非措辞）：异常收敛发生在 `rag.routes._safe_to_thread`
+    ★ 为什么必须有这一层（实测，非措辞）：异常收敛发生在 `rag.retrieval.routes._safe_to_thread`
       （**按路由逐个**收敛成空结果），**不在探针层** ⇒ 探针永远收不到 exception，
       于是 `probe_retrieval` 把「路由全线故障」写成 `status="ok"`（实测注入 BM25 抛错：
       `status='ok' pack_len=755 evidence=3`）。光让错误**被记录**不足以让 `error` 可达，
@@ -691,7 +691,7 @@ async def run_case(
     #   ⇒ 探针期间记录的查询故障**只属于这次探针**，紧接着在下面被消费。
     #   顺序不可颠倒（reset 早于消费）也不许在单元内部再加清点（v1.3 撤销了第三点，
     #   见 `rag/routes._amulti_route_search` 的注释与回归锁 `8k`）。
-    from rag.vectorstore import get_vector_store_manager
+    from rag.common.vectorstore import get_vector_store_manager
 
     get_vector_store_manager().reset_query_failures()
     probe = await probe_retrieval(

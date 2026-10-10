@@ -16,16 +16,16 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
 from agents.utils import CustomData
-from rag.errors import RetrievalUnavailable, classify_retrieval_error
-from rag.evidence import FusedEvidence
-from rag.evidence_policy import (
+from rag.common.errors import RetrievalUnavailable, classify_retrieval_error
+from rag.retrieval.evidence import FusedEvidence
+from rag.retrieval.evidence_policy import (
     apply_evidence_policy,
     finalize_with_layer_ranking,
 )
-from rag.query_classifier import TEXT_ONLY_DEPTH
-from rag.retriever import StageSink, aretrieve_evidence_with_retry
-from rag.task_policy import resolve_task_policy
-from rag.verifier import VerificationResult
+from rag.retrieval.query_classifier import TEXT_ONLY_DEPTH
+from rag.retrieval.retriever import StageSink, aretrieve_evidence_with_retry
+from rag.retrieval.task_policy import resolve_task_policy
+from rag.retrieval.verifier import VerificationResult
 from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
 
 logger = logging.getLogger(__name__)

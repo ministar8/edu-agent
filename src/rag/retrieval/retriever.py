@@ -27,19 +27,19 @@ import time
 from collections.abc import Sequence
 
 from core.settings import settings
-from rag.evidence import FusedEvidence
-from rag.metrics import metrics
-from rag.pipeline import (  # noqa: F401  兼容评测脚本 `R._resolve_thresholds`
+from rag.common.metrics import metrics
+from rag.common.rag_utils import extract_query_terms, normalize_query_text
+from rag.retrieval.evidence import FusedEvidence
+from rag.retrieval.pipeline import (  # noqa: F401  兼容评测脚本 `R._resolve_thresholds`
     SCORE_THRESHOLD,
     StageSink,
     _resolve_thresholds,
     aretrieve_documents,
 )
-from rag.query_classifier import RetrievalDepth, aclassify_query
-from rag.query_decomposer import decompose
-from rag.rag_utils import extract_query_terms, normalize_query_text
-from rag.retrieval_plan import L2_STANDARD, resolve_retrieval_plan, strategy_from_depth
-from rag.verifier import VerificationResult
+from rag.retrieval.query_classifier import RetrievalDepth, aclassify_query
+from rag.retrieval.query_decomposer import decompose
+from rag.retrieval.retrieval_plan import L2_STANDARD, resolve_retrieval_plan, strategy_from_depth
+from rag.retrieval.verifier import VerificationResult
 
 __all__ = [
     "StageSink",
@@ -52,7 +52,7 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-# 兼容：部分评测脚本 `import rag.retriever as R; R._resolve_thresholds`
+# 兼容：部分评测脚本 `import rag.retrieval.retriever as R; R._resolve_thresholds`
 
 
 def cache_stats() -> dict[str, int | float]:
@@ -61,7 +61,7 @@ def cache_stats() -> dict[str, int | float]:
     键名与 `SemanticCache.stats()` 对齐（`hits` / `misses` / `hit_rate`），
     这样 `/api/metrics` 能把多个缓存并排展示而不用做字段映射。
     """
-    from rag.routes import cache_stats as _stats
+    from rag.retrieval.routes import cache_stats as _stats
 
     return _stats()
 
@@ -137,9 +137,9 @@ async def aretrieve_evidence(
     on_stage: StageSink | None = None,
 ) -> FusedEvidence:
     """异步检索主实现。参数 ``use_rerank`` 的语义见模块文档串（**不是**「是否重排」的开关）。"""
-    from rag.evidence import FusedEvidence
-    from rag.fusion import afuse_documents
-    from rag.verifier import averify_evidence
+    from rag.retrieval.evidence import FusedEvidence
+    from rag.retrieval.fusion import afuse_documents
+    from rag.retrieval.verifier import averify_evidence
 
     _filter_sig = json.dumps(filter, sort_keys=True) if filter else ""
     # 检索结果取决于这些参数，必须全部进缓存 key，否则不同参数会互相污染。
@@ -150,7 +150,7 @@ async def aretrieve_evidence(
     )
 
     try:
-        from rag.semantic_cache import get_semantic_cache
+        from rag.retrieval.semantic_cache import get_semantic_cache
 
         _sc = get_semantic_cache()
         _cached_fused, _semantic_cache_sim = await _sc.alookup(
@@ -275,7 +275,7 @@ async def aretrieve_evidence(
         logger.warning("Async evidence verification failed: %s", e)
 
     try:
-        from rag.semantic_cache import get_semantic_cache
+        from rag.retrieval.semantic_cache import get_semantic_cache
 
         await get_semantic_cache().astore(
             query,
@@ -328,7 +328,7 @@ async def aretrieve_evidence_with_retry(
     ``eligible_layers``：policy 认定的**合规语义层**（`TaskPolicy.eligible_semantic_layers()`）。
     仅当 preferred 层与资格冲突（全不合规）时用于回退，保证候选池不空；None = 不做回退。
     """
-    from rag.verifier import Verdict, VerificationResult, averify_evidence
+    from rag.retrieval.verifier import Verdict, VerificationResult, averify_evidence
 
     allowed = [ly for ly in (eligible_layers or []) if ly in ("basic", "advanced", "exams")]
 
@@ -336,7 +336,7 @@ async def aretrieve_evidence_with_retry(
         layers = list(preferred_layers or [])
         if not layers:
             return fused
-        from rag.layer_recall import topup_preferred_layers
+        from rag.retrieval.layer_recall import topup_preferred_layers
 
         # ★ 资格一致（2026-10-01）：preferred 层若与 eligibility 矛盾（如 practice 偏好 exams，
         #   而 exam_resources 全 forbidden），top-up 只按 kb_depth 找会被 where 挡空 →

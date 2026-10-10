@@ -12,7 +12,7 @@ TEI 由使用者在 Docker 里另行启动（**不在 `compose.yaml` 内**，那
 2. **它宕机后不报错**，只表现为「检索降级 / rerank 分数全 None」——
    这样测出来的数据**看起来像结论**，实际是环境噪声。
 
-本脚本**复用项目自己的调用路径**（`rag.embeddings` / `rag.reranker`）发最小请求，
+本脚本**复用项目自己的调用路径**（`rag.common.embeddings` / `rag.retrieval.reranker`）发最小请求，
 因此「代码怎么发」与「环境通不通」用的是**同一个真源**，不存在第二份写法。
 
 用法::
@@ -36,7 +36,7 @@ PROBE_TEXT = "探活"
 def probe_embedding() -> tuple[bool, str]:
     """用**项目代码路径**探 embedding。"""
     from core.settings import settings
-    from rag.embeddings import get_embeddings
+    from rag.common.embeddings import get_embeddings
 
     try:
         vec = get_embeddings().embed_query(PROBE_TEXT)
@@ -54,7 +54,7 @@ def probe_rerank() -> tuple[bool, str]:
     from langchain_core.documents import Document
 
     from core.settings import settings
-    from rag.reranker import rerank
+    from rag.retrieval.reranker import rerank
 
     # rerank() 内部按部署开关短路，探活时必须显式打开
     settings.RERANK_ENABLED = True

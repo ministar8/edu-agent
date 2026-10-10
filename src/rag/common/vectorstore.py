@@ -11,9 +11,9 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from core.settings import settings
-from rag._metadata_spec import sanitize_for_chroma
-from rag.embeddings import get_embeddings
-from rag.metrics import metrics
+from rag.common._metadata_spec import sanitize_for_chroma
+from rag.common.embeddings import get_embeddings
+from rag.common.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -166,11 +166,11 @@ class VectorStoreManager:
 
         旧实现里向量路径直接 `self._query_failures.append(...)`，而 BM25 / 服务路由
         失败既不 append 也不抛 ⇒ 「记录失败」这件事没有单一去处，加门也无从加起。
-        现在所有生产者都调这个方法（`vectorstore` 自身、`rag.bm25`、`rag.routes` 的两处收敛点）。
+        现在所有生产者都调这个方法（`vectorstore` 自身、`rag.retrieval.bm25`、`rag.retrieval.routes` 的两处收敛点）。
 
         ★★ `exc`（F3，覆盖面收进一处）：收敛点有**两层** ——
-          ① 生产者就地记录（`rag.bm25.bm25_search` 取 collection 失败 ⇒ 记录后 `raise`）；
-          ② 路由包装收敛（`rag.routes._safe_to_thread` **按路由逐个**把异常/超时收敛成空结果）。
+          ① 生产者就地记录（`rag.retrieval.bm25.bm25_search` 取 collection 失败 ⇒ 记录后 `raise`）；
+          ② 路由包装收敛（`rag.retrieval.routes._safe_to_thread` **按路由逐个**把异常/超时收敛成空结果）。
           同一个异常穿过两层时，若两处各记一条，门禁那句「有 N 次检索期查询异常」会把
           **一次**故障数成两次 —— 计数虚高同样是「多套现实」。
           ⇒ 传入 `exc` 时以**异常对象身份**为去重键（已记过 ⇒ 第二条不落），
@@ -308,7 +308,7 @@ class VectorStoreManager:
         # ★ B1（§1.5 R4）：距离→相似度的**唯一**换算点。space 从集合元数据读，**不给默认值**
         #   （`"l2"` 那种默认就是猜）；未知 space 由 `similarity_from_distance` 抛错。
         #   放在 try 外 ⇒ 方向未知时是**硬失败**，不会被下面的 `except` 静默折成 0.0。
-        from rag.embeddings import similarity_from_distance
+        from rag.common.embeddings import similarity_from_distance
 
         space = (collection.metadata or {}).get("hnsw:space")
         if not space:

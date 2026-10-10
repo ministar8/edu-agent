@@ -525,9 +525,9 @@ def check_8() -> None:
     #   且不需要起 Chroma 服务、不需要 embedding、零 token。
     import asyncio
 
-    from rag import routes
-    from rag.bm25 import bm25_search
-    from rag.vectorstore import get_vector_store_manager
+    from rag.common.vectorstore import get_vector_store_manager
+    from rag.retrieval import routes
+    from rag.retrieval.bm25 import bm25_search
 
     mgr = get_vector_store_manager()
     missing = "__evidence_chain_gate_no_such_collection__"
@@ -958,10 +958,10 @@ def check_8() -> None:
 def check_9() -> None:
     """B2 `rerank_status` 四态（§5 B2 / §6）+ B1 语义统一（§1.5 R4）的取证判据。
 
-    Step 1 先红：`from rag.pipeline import _derive_rerank_status` 触发 ImportError
+    Step 1 先红：`from rag.retrieval.pipeline import _derive_rerank_status` 触发 ImportError
     （生产者尚不存在）⇒ 判据先于实现落地，红→绿才可信。
     """
-    from rag.pipeline import _derive_rerank_status as D
+    from rag.retrieval.pipeline import _derive_rerank_status as D
 
     class _D:
         def __init__(self, md):
@@ -1018,8 +1018,8 @@ def check_9() -> None:
     #   ★ 破坏性验证 ④ 的落点：在 semantic_cache.py 恢复一份 `1.0 - distance` ⇒ 本判据红。
     import pathlib as _pl9
 
-    from rag.embeddings import SUPPORTED_SPACES as _SS
-    from rag.embeddings import similarity_from_distance as _SFD
+    from rag.common.embeddings import SUPPORTED_SPACES as _SS
+    from rag.common.embeddings import similarity_from_distance as _SFD
 
     spaces_ok = _SS == frozenset({"cosine", "l2", "ip"})
     raised_unknown = False
@@ -1116,7 +1116,7 @@ def check_9reprobe() -> None:
     from evaluation.task_eval import retrieval_probe as _rp9j
     from evaluation.task_eval.cases import load_demo as _ld9j
     from evaluation.task_eval.retrieval_probe import RetrievalProbe as _Probe9j
-    from rag.vectorstore import get_vector_store_manager as _gvsm
+    from rag.common.vectorstore import get_vector_store_manager as _gvsm
 
     _qa_cases9j = [c for c in _ld9j() if c.task == "qa"]
     _case_a, _case_b = _qa_cases9j[0], _qa_cases9j[1]
@@ -1265,13 +1265,13 @@ def check_9delivery() -> None:
     #   B) **真实** `retriever.aretrieve_evidence` 桥接：off/degraded/failed/success + 未写
     #      五格 —— 空包分支的 `fused.metadata` **恒有** `rerank_status` 键且值=桥接送出值。
     #      旧代码空包分支**根本没有这个键**（评审实测：状态在桥接这一跳被整包丢弃）。
-    import rag.pipeline as _pipe9m
-    import rag.retriever as _ret9m
-    import rag.semantic_cache as _sc9m
-    from rag.pipeline import _HydeOutcome as _HO9m
-    from rag.pipeline import _RetrievalPlan as _RP9m
-    from rag.pipeline import _WindowOutcome as _WO9m
-    from rag.retrieval_plan import L2_STANDARD as _L2_9m
+    import rag.retrieval.pipeline as _pipe9m
+    import rag.retrieval.retriever as _ret9m
+    import rag.retrieval.semantic_cache as _sc9m
+    from rag.retrieval.pipeline import _HydeOutcome as _HO9m
+    from rag.retrieval.pipeline import _RetrievalPlan as _RP9m
+    from rag.retrieval.pipeline import _WindowOutcome as _WO9m
+    from rag.retrieval.retrieval_plan import L2_STANDARD as _L2_9m
 
     _pnames9m = (
         "_stage_classify_query",
@@ -1449,9 +1449,9 @@ def check_9delivery() -> None:
     #   `aretrieve_evidence_with_retry` 换成返回**带 `rerank_status` 的 fused**（零 Chroma
     #   零 TEI），四态 + 空串各跑一次**真实** `probe_retrieval`（policy/finalize/apply 真码），
     #   断言 `probe.rerank_status` 逐格等值 —— 缺省/未知不落任何冒充值。
-    import rag.retriever as _ret9o
+    import rag.retrieval.retriever as _ret9o
     from evaluation.task_eval.retrieval_probe import probe_retrieval as _probe9o
-    from rag.evidence import FusedEvidence as _FE9o
+    from rag.retrieval.evidence import FusedEvidence as _FE9o
 
     _orig9o = _ret9o.aretrieve_evidence_with_retry
     got9o: dict[str, object] = {}

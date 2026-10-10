@@ -1,6 +1,6 @@
 """检索证据的**对外契约**（tools / 未来 API / 前端引用）。
 
-`rag.evidence.FusedEvidence` 是检索链内部模型，字段与演进绑定 Chroma/融合逻辑；
+`rag.retrieval.evidence.FusedEvidence` 是检索链内部模型，字段与演进绑定 Chroma/融合逻辑；
 本模块只描述「工具与调用方看得见的证据」，**禁止 import rag**。
 
 约定：

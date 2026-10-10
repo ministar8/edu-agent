@@ -2,7 +2,7 @@
 
 为什么需要它
 ------------
-`rag.metrics` 只负责**写**（`MetricsWriter.emit`），全仓**没有任何读方** ——
+`rag.common.metrics` 只负责**写**（`MetricsWriter.emit`），全仓**没有任何读方** ——
 于是这份日志一直是「只写不读」的：它已经积累了 20 万级的事件，却没有任何模块
 消费它。本模块补上读方。
 
@@ -63,7 +63,7 @@ from pathlib import Path
 from statistics import mean
 from typing import Any
 
-from rag.metrics import DEFAULT_METRICS_PATH
+from rag.common.metrics import DEFAULT_METRICS_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -549,7 +549,8 @@ def main(argv: list[str] | None = None) -> int:
     if not log_path.exists():
         print(f"[错误] 遥测日志不存在: {log_path}", file=sys.stderr)
         print(
-            "       提示：它由 rag.metrics 在检索/入库时写入；本机没跑过就没有。", file=sys.stderr
+            "       提示：它由 rag.common.metrics 在检索/入库时写入；本机没跑过就没有。",
+            file=sys.stderr,
         )
         return 2
 

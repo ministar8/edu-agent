@@ -6,8 +6,8 @@ import logging
 from core.cache import BoundedCache
 from core.settings import settings
 from prompts import HYDE_PROMPT
-from rag.llm_calls import call_text_sync
-from rag.query_classifier import QueryCategory
+from rag.retrieval.llm_calls import call_text_sync
+from rag.retrieval.query_classifier import QueryCategory
 
 logger = logging.getLogger(__name__)
 

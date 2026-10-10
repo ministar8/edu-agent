@@ -9,7 +9,7 @@ from langchain_core.embeddings import Embeddings
 
 from core.llm import get_llm
 from evaluation.dataset import EvalSample
-from rag.retriever import aretrieve_evidence_with_retry
+from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ def build_embeddings_for_relevancy() -> Embeddings | None:
     langchain `Embeddings` 原生满足，包装只会引入 deprecated 警告与易错的 kwarg 名。
     """
     try:
-        from rag.embeddings import get_embeddings
+        from rag.common.embeddings import get_embeddings
 
         return get_embeddings()
     except Exception:

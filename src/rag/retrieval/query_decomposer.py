@@ -25,13 +25,13 @@ import re
 from core.cache import BoundedCache
 from core.settings import settings
 from prompts import DECOMPOSE_PROMPT
-from rag.llm_calls import (
+from rag.common.parse_utils import parse_llm_json
+from rag.common.schemas import DecomposeResult
+from rag.retrieval.llm_calls import (
     call_structured,
     call_text,
 )
-from rag.parse_utils import parse_llm_json
-from rag.query_classifier import QueryCategory
-from rag.schemas import DecomposeResult
+from rag.retrieval.query_classifier import QueryCategory
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +104,8 @@ def _set_cached(query: str, sub_queries: list[str]) -> None:
 
 def _ensure_cat(query: str, cat: QueryCategory | None = None) -> QueryCategory:
     if cat is None:
-        from rag.query_classifier import classify_query
-        from rag.rag_utils import extract_query_terms, normalize_query_text
+        from rag.common.rag_utils import extract_query_terms, normalize_query_text
+        from rag.retrieval.query_classifier import classify_query
 
         _norm = normalize_query_text(query)
         _terms = extract_query_terms(_norm)

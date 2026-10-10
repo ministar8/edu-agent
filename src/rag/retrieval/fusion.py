@@ -6,13 +6,13 @@ from collections import Counter, defaultdict
 from langchain_core.documents import Document
 
 from core.settings import settings
-from rag.evidence import (
+from rag.common.rag_utils import estimate_tokens
+from rag.retrieval.evidence import (
     FusedEvidence,
     TextEvidence,
     format_text_evidence,
     text_evidence_from_document,
 )
-from rag.rag_utils import estimate_tokens
 
 logger = logging.getLogger(__name__)
 _MAX_PER_SOURCE = 3

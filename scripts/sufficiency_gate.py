@@ -37,13 +37,13 @@ WRONG_PREF = {"learn": ["exams"], "method": ["exams"], "practice": ["exams"]}
 
 
 async def run_case(mode: str, preferred: list[str] | None) -> tuple[int, list[str], int]:
-    from rag.evidence_policy import (
+    from rag.retrieval.evidence_policy import (
         apply_evidence_policy,
         finalize_with_layer_ranking,
         pack_blocked,
     )
-    from rag.retriever import aretrieve_evidence_with_retry
-    from rag.task_policy import policy_for_mode
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.task_policy import policy_for_mode
 
     policy = policy_for_mode(mode)  # type: ignore[arg-type]
     if preferred is not None:

@@ -103,7 +103,7 @@ def test_backlink(year: int) -> list[str]:
 
 async def test_negative(year: int) -> list[str]:
     fails: list[str] = []
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     async def top(query: str, k: int = 5):
         fused, _ = await aretrieve_evidence_with_retry(query=query, k=k)

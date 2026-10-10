@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from rag.evidence import FusedEvidence, TextEvidence
+from rag.retrieval.evidence import FusedEvidence, TextEvidence
 from schema.task_policy import TaskPolicy
 
 _ANSWER_KEY_RE = re.compile(r"\banswer_key\b|\breference_answer\b", re.I)

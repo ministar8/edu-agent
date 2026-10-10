@@ -87,9 +87,9 @@ def _chapter_index() -> dict[str, int]:
 
 async def _trace_query(query: str) -> dict:
     """单条 method query：L2 在召回池 / final pack 的存在与排名。"""
-    from rag.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
-    from rag.retriever import aretrieve_evidence_with_retry
-    from rag.task_policy import policy_for_mode
+    from rag.retrieval.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.task_policy import policy_for_mode
 
     policy = policy_for_mode("method")
     fused, _ = await aretrieve_evidence_with_retry(

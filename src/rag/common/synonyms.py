@@ -418,7 +418,7 @@ def expand_query_with_synonyms(query: str, max_expansions: int = 8) -> str:
     例："什么是OS" → "什么是OS 操作系统"
     """
     # 使用共享的 extract_query_terms 获取已有 token（避免重复 jieba 调用）
-    from rag.rag_utils import extract_query_terms
+    from rag.common.rag_utils import extract_query_terms
 
     existing = {t.casefold() for t in extract_query_terms(query)}
     # 补充英文缩写

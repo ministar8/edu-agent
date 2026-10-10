@@ -21,7 +21,7 @@
        ──sentence_window_expand / merge_window_into_anchors─► 最终证据
 ```
 
-实现方式：在 `rag.retriever` 上**临时替换**这几个阶段名来记录快照
+实现方式：在 `rag.retrieval.retriever` 上**临时替换**这几个阶段名来记录快照
 （与 `stage_trace` 同一手法），不改一行源码。
 
 ★ **测量纪律**：语义缓存会把「缓存命中」混进「检索质量」，
@@ -64,7 +64,7 @@ DROP_REASONS: tuple[str, ...] = (
     "survived",  # 活到最终证据
 )
 
-# (快照键, 中文名, rag.retriever 上的属性名)
+# (快照键, 中文名, rag.retrieval.retriever 上的属性名)
 _STAGES: tuple[tuple[str, str, str], ...] = (
     ("recall", "召回池", "_stage_recall_and_merge"),
     ("section_dedup", "同section去重后", "dedup_same_section"),
@@ -188,7 +188,7 @@ def _extract(key: str, out: Any) -> list[Document]:
 
 @contextmanager
 def _capture():
-    """在上下文内替换 `rag.retriever` 的阶段名，把每次调用的输出记进列表。
+    """在上下文内替换 `rag.retrieval.retriever` 的阶段名，把每次调用的输出记进列表。
 
     ★ **必须按「所属阶段」限定抓取范围**，不能全局抓：
     `dedup_same_section` 在**分解路径的每个子查询分支**里都会被调用一次
@@ -197,8 +197,8 @@ def _capture():
     「召回池 19 条 → 同section去重后 63 条」这种**条数反而变多**的反常。
     故用两个开关把内部漏斗限定在各自的外层阶段内。
     """
-    # M1 拆分后阶段函数在 rag.pipeline；挂在 pipeline 上才能拦住真实调用
-    import rag.pipeline as R
+    # M1 拆分后阶段函数在 rag.retrieval.pipeline；挂在 pipeline 上才能拦住真实调用
+    import rag.retrieval.pipeline as R
 
     events: list[tuple[str, Any]] = []
     plan_box: dict[str, Any] = {}
@@ -208,7 +208,7 @@ def _capture():
     def _wrap_stage(attr: str, on_enter, on_exit, record_key: str | None):
         original = getattr(R, attr, None)
         if original is None:
-            logger.warning("阶段函数不存在，跳过追踪: rag.retriever.%s", attr)
+            logger.warning("阶段函数不存在，跳过追踪: rag.retrieval.retriever.%s", attr)
             return
 
         originals[attr] = original
@@ -328,7 +328,7 @@ def _resolve_drop_reason(stages: list[StageSnapshot]) -> str:
 
 async def trace_probe(probe: Probe, *, k: int = 5, use_rerank: bool = True) -> TraceResult:
     """跑一条 probe，返回逐层快照与归因。"""
-    import rag.retriever as R
+    import rag.retrieval.retriever as R
 
     with _capture() as (events, plan_box):
         await R.aretrieve_documents(probe.query, k=k, use_rerank=use_rerank)
@@ -434,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
 
     settings.SEMANTIC_CACHE_ENABLED = False
     settings.RERANK_ENABLED = args.rerank
-    import rag.semantic_cache as sc
+    import rag.retrieval.semantic_cache as sc
 
     sc._semantic_cache = None
 

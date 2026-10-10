@@ -20,8 +20,8 @@ from pydantic import BaseModel, Field
 
 from core.settings import settings
 from prompts import RELEVANCE_PROMPT
-from rag.evidence import FusedEvidence, TextEvidence
-from rag.llm_calls import call_text
+from rag.retrieval.evidence import FusedEvidence, TextEvidence
+from rag.retrieval.llm_calls import call_text
 
 logger = logging.getLogger(__name__)
 

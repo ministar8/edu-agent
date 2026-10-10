@@ -41,7 +41,7 @@ def load_samples() -> list[dict]:
 
 async def run() -> None:
     label = sys.argv[1] if len(sys.argv) > 1 else "?"
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     samples = load_samples()
     hit = 0

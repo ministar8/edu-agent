@@ -975,7 +975,7 @@ def check_9() -> None:
     check("⑨b 真错误（越界/缺必填）**仍被拒绝**", rejected == 4, f"{rejected}/4")
 
     # ⑨c 标记清洗
-    from rag.llm_calls import _strip_tool_markup as S
+    from rag.retrieval.llm_calls import _strip_tool_markup as S
 
     cases = [
         ("a<parameter=score>b", "ab"),
@@ -990,7 +990,7 @@ def check_9() -> None:
     # ⑨d 兜底重建
     #   ★ 第二轮 review 补强：原来只断言 `score`，导致 D2-1（is_wrong 反转）/
     #     D2-3（KP 丢失）**都不会变红**。现改为断言**全部已解析字段**。
-    from rag.llm_calls import _salvage_from_raw
+    from rag.retrieval.llm_calls import _salvage_from_raw
 
     kv = "score: 40\nfeedback: 反馈<parameter=x>ok\nis_wrong: true"
     r3 = _salvage_from_raw(kv, GradingResult, "gate")
@@ -1010,7 +1010,7 @@ def check_9() -> None:
     )
 
     # ── ⑨g/h/i：第二轮 review 新增（针对裸文本 KV 解析的三个缺陷）──────────
-    from rag.llm_calls import _KV_ALL_FIELDS, _try_kv_dict
+    from rag.retrieval.llm_calls import _KV_ALL_FIELDS, _try_kv_dict
 
     # ⑨g 协议一致性：KV 白名单必须**覆盖 schema 全部字段**。
     #   漏一个 ⇒ 该字段走 schema 默认值被静默丢弃（D2-3 的根因）。
@@ -1070,7 +1070,7 @@ def check_9() -> None:
         int(_s.STRUCTURED_OUTPUT_RETRIES) >= 1,
         str(_s.STRUCTURED_OUTPUT_RETRIES),
     )
-    import rag.llm_calls as L
+    import rag.retrieval.llm_calls as L
 
     src = inspect.getsource(L.call_structured)
     tree = ast.parse(textwrap.dedent(src))
@@ -3013,8 +3013,8 @@ def check_25() -> None:
     import json as _json25
 
     from evaluation.task_eval.retrieval_probe import _to_item
-    from rag.evidence import TextEvidence, parse_knowledge_points
-    from rag.layer_recall import _doc_to_evidence
+    from rag.retrieval.evidence import TextEvidence, parse_knowledge_points
+    from rag.retrieval.layer_recall import _doc_to_evidence
 
     raw = _json25.dumps(["图的存储", "数组与特殊矩阵"], ensure_ascii=False)
     meta = {

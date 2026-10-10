@@ -87,7 +87,7 @@ def _to_item(ev) -> RetrievedItem:
     #     **不改** —— 那条路的 KP 仍然缺失，属已披露的产品侧偏差（见 §20.5 #27）。
     kps = list(ev.knowledge_points or [])
     if not kps:
-        from rag.evidence import parse_knowledge_points
+        from rag.retrieval.evidence import parse_knowledge_points
 
         kps = parse_knowledge_points(meta.get("knowledge_points"))
     return RetrievedItem(
@@ -114,9 +114,9 @@ async def probe_retrieval(
     任何异常都收敛为 `ok=False, status="error"`，**不抛出** ——
     单条 case 的检索失败不该中断整轮 Phase 0。
     """
-    from rag.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
-    from rag.retriever import aretrieve_evidence_with_retry
-    from rag.task_policy import resolve_task_policy
+    from rag.retrieval.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.task_policy import resolve_task_policy
     from schema.task_policy import merge_where_filters
 
     started = time.perf_counter()

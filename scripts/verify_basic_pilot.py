@@ -107,7 +107,7 @@ def test_backlink() -> list[str]:
 
 async def test_negative() -> list[str]:
     fails = []
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     async def top(query: str, k: int = 5):
         fused, _ = await aretrieve_evidence_with_retry(query=query, k=k)

@@ -34,7 +34,7 @@ Q052 = "目录项与索引结点（inode）的关系是什么？"
 @contextmanager
 def scale_threshold(scale: float):
     """把 effective_threshold 乘 scale（0=禁用阈值）。不改源码。"""
-    import rag.pipeline as pipeline
+    import rag.retrieval.pipeline as pipeline
 
     orig = pipeline._stage_dedup_and_threshold
 
@@ -63,11 +63,11 @@ def capture_fallback():
                 hits["queries"].append(msg[:120])
 
     handler = _H(level=logging.WARNING)
-    logging.getLogger("rag.pipeline").addHandler(handler)
+    logging.getLogger("rag.retrieval.pipeline").addHandler(handler)
     try:
         yield hits
     finally:
-        logging.getLogger("rag.pipeline").removeHandler(handler)
+        logging.getLogger("rag.retrieval.pipeline").removeHandler(handler)
 
 
 from evaluation.provenance import build_provenance  # noqa: E402
@@ -82,7 +82,7 @@ from evaluation.retrieval_gate import (  # noqa: E402
 async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
     from ablation_retrieval import CONFIGS, apply_config
 
-    from rag.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     flags = CONFIGS[arm]
     outcomes: list[QueryOutcome] = []

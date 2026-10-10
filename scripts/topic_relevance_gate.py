@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from rag.topic_relevance import is_topic_relevant, topic_relevance_score  # noqa: E402
+from rag.retrieval.topic_relevance import is_topic_relevant, topic_relevance_score  # noqa: E402
 
 # (query, doc_snippet, meta_section, want_relevant)
 CASES = [

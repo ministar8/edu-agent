@@ -14,11 +14,11 @@ from langchain_core.documents import Document
 
 from core.cache import BoundedCache
 from core.settings import settings
-from rag.bm25 import bm25_search
-from rag.postprocess import merge_route_results
-from rag.query_classifier import QueryCategory, RetrievalDepth
-from rag.rag_utils import content_key
-from rag.recall import (
+from rag.common.rag_utils import content_key
+from rag.retrieval.bm25 import bm25_search
+from rag.retrieval.postprocess import merge_route_results
+from rag.retrieval.query_classifier import QueryCategory, RetrievalDepth
+from rag.retrieval.recall import (
     build_metadata_routes,
     build_recall_queries,
     resolve_collection_routes,
@@ -153,7 +153,7 @@ def _raw_search(
     if route_name == "keyword_bm25":
         import jieba
 
-        from rag.recall import _BM25_STOP_WORDS
+        from rag.retrieval.recall import _BM25_STOP_WORDS
 
         # cut_for_search 同时保留全词和子词：
         # "进程同步机制" → "进程"、"同步"、"机制"、"进程同步"、"同步机制"
@@ -189,7 +189,7 @@ def _raw_search(
             terms = [query.strip()]
         results = bm25_search(terms, collection_name, k, filter=filter)
     else:
-        from rag.vectorstore import get_vector_store_manager
+        from rag.common.vectorstore import get_vector_store_manager
 
         # 走 manager 的检索方法而**不是**直接调 store —— 前者持有 `_rw_lock` 读锁。
         # 直接调 store 会绕过读锁，与 `add_documents` 的写锁形不成互斥：
@@ -283,13 +283,13 @@ async def _safe_to_thread(
         )
     except TimeoutError as e:
         logger.warning("Async route timed out: %s after %.1fs", name, timeout)
-        from rag.vectorstore import get_vector_store_manager
+        from rag.common.vectorstore import get_vector_store_manager
 
         get_vector_store_manager().record_query_failure(f"{name}: {e.__class__.__name__}", exc=e)
         return default
     except Exception as e:
         logger.warning("Async route failed: %s: %s", name, e)
-        from rag.vectorstore import get_vector_store_manager
+        from rag.common.vectorstore import get_vector_store_manager
 
         get_vector_store_manager().record_query_failure(f"{name}: {e.__class__.__name__}", exc=e)
         return default
@@ -361,7 +361,7 @@ async def _amulti_route_search(
         async with sem:
             if route_name != "keyword_bm25":
                 try:
-                    from rag.vectorstore import get_vector_store_manager
+                    from rag.common.vectorstore import get_vector_store_manager
 
                     route_k = _route_adaptive_k(k, use_rerank, route_name)
                     result = await get_vector_store_manager().asimilarity_search_with_score(
@@ -378,11 +378,11 @@ async def _amulti_route_search(
                     logger.warning("Async vector route failed: %s: %s", route_id, e)
                     # ★ B7：只 `logger.warning` 不记失败 ⇒ 这条路由坏了在
                     #   `unexpected_query_failures` 里是隐形的（BM25 半边已由
-                    #   `rag.bm25.bm25_search` 记录）。返回 `[]` 保留（单路失败可容忍），
+                    #   `rag.retrieval.bm25.bm25_search` 记录）。返回 `[]` 保留（单路失败可容忍），
                     #   但必须**留下证据**，否则「坏了」与「没查到」不可区分。
                     #   ★ 局部 import：`try` 里那次 import 若本身失败，except 里就不能
                     #   依赖那个还没绑定的名字（否则 UnboundLocalError 会把证据一起吞掉）。
-                    from rag.vectorstore import get_vector_store_manager as _mgr
+                    from rag.common.vectorstore import get_vector_store_manager as _mgr
 
                     _mgr().record_query_failure(
                         f"{target_collection}: vector_route {e.__class__.__name__}", exc=e

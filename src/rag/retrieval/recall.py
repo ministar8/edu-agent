@@ -10,9 +10,9 @@ from __future__ import annotations
 import logging
 import re
 
-from rag.query_classifier import QueryCategory, classify_query
-from rag.rag_utils import extract_query_terms, get_bm25_stop_words, normalize_query_text
-from rag.synonyms import expand_query_with_synonyms
+from rag.common.rag_utils import extract_query_terms, get_bm25_stop_words, normalize_query_text
+from rag.common.synonyms import expand_query_with_synonyms
+from rag.retrieval.query_classifier import QueryCategory, classify_query
 
 logger = logging.getLogger(__name__)
 

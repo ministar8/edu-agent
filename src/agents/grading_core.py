@@ -1,12 +1,12 @@
 """批改 domain 入口：专用 API 与后续复用共用。
 
-service 层只做 HTTP 映射，不再直接依赖 `rag.llm_calls` / `GRADE_PROMPT`。
+service 层只做 HTTP 映射，不再直接依赖 `rag.retrieval.llm_calls` / `GRADE_PROMPT`。
 """
 
 from agents.temperature import TEMPERATURE_GRADING
 from core import settings
 from prompts import GRADE_PROMPT
-from rag.llm_calls import call_structured
+from rag.retrieval.llm_calls import call_structured
 from schema.grading import GradingResult
 
 _NO_STANDARD_ANSWER = "（无标准答案，请基于学科知识判断）"

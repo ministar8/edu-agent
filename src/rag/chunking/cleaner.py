@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
 
-from rag.metrics import metrics
+from rag.common.metrics import metrics
 
 if TYPE_CHECKING:
     # 仅供类型标注使用；运行时导入保持在函数内（避免循环依赖）
@@ -106,8 +106,8 @@ _COLUMN_LINE_MAX_WIDTH = 40
 _COLUMN_MIN_CONSECUTIVE = 6
 
 
-# ── 同义词归一（统一数据源：rag.synonyms） ──────────
-from rag.synonyms import normalize_synonyms  # noqa: E402
+# ── 同义词归一（统一数据源：rag.common.synonyms） ──────────
+from rag.common.synonyms import normalize_synonyms  # noqa: E402
 
 
 def _get_source_ext(doc: Document) -> str:

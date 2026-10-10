@@ -15,7 +15,7 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-from rag.rag_utils import detect_content_type as _detect_content_type
+from rag.common.rag_utils import detect_content_type as _detect_content_type
 
 logger = logging.getLogger(__name__)
 

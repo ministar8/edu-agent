@@ -55,7 +55,7 @@ from evaluation.provenance import code_version  # noqa: E402
 from memory.topics import normalize_topics  # noqa: E402
 from prompts import GRADE_PROMPT, PROMPT_SET_VERSION  # noqa: E402
 from prompts.service import _knowledge_points_block  # noqa: E402
-from rag.llm_calls import call_structured  # noqa: E402
+from rag.retrieval.llm_calls import call_structured  # noqa: E402
 from schema.grading import GradingResult  # noqa: E402
 
 # ★ 默认落盘路径**不许默默覆写既有证据**：E-5 跑过一次（prompt hash `f09c75642029`），
