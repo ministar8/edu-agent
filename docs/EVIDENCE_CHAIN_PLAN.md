@@ -1,6 +1,9 @@
 # Evidence Chain 实施计划（主张 ↔ 证据对齐）
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> ★ **进度状态（2026-10-10 回填）**：Task 1–10 的 69 个 Step 已全部完成，就地勾 `[x]` 并标注落点提交；
+> 此前 checkbox 从未回填（git log 才是事实源）。**仍未完成的只有前置人工项**：P−1-4 冻结清单待所有者确认、
+> P−1-5 批 2/3/4 未开工（批 1 = `2cceda3`）、66 条 gold 仍 `draft`、ledger 已证明 0 行。
 
 **Goal:** 让效果章每个主张的状态（已证明 / 已测量未证明 / 未测量）由机器算出，而不是由文档写出。
 
@@ -315,7 +318,7 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
   - `scripts/evidence_chain_gate.py: check(label: str, passed: bool, detail: str = "") -> None`、
     `_EXPECTED_ITEMS: int`、`main() -> int`
 
-- [ ] **Step 1: 先写会红的判据（新建 gate）**
+- [x] **Step 1: 先写会红的判据（新建 gate）**（完成于 `23768ed`）
 
 创建 `scripts/evidence_chain_gate.py`：
 
@@ -368,12 +371,12 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-- [ ] **Step 2: 跑它，确认红在缺字段**
+- [x] **Step 2: 跑它，确认红在缺字段**（完成于 `23768ed`）
 
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
 Expected: `AttributeError: 'CaseRecord' object has no attribute 'rerank_status'`
 
-- [ ] **Step 3: 加字段（只加，不动既有字段）**
+- [x] **Step 3: 加字段（只加，不动既有字段）**（完成于 `23768ed`）
 
 在 `runner.py` 的 `retrieval_status` 注释块之后插入：
 
@@ -388,7 +391,7 @@ Expected: `AttributeError: 'CaseRecord' object has no attribute 'rerank_status'`
     provenance: dict[str, Any] = field(default_factory=dict)
 ```
 
-- [ ] **Step 4: 把 `retrieval_status` 的取值集合写进注释**
+- [x] **Step 4: 把 `retrieval_status` 的取值集合写进注释**（完成于 `23768ed`）
 
 `runner.py:281` 那行改为带枚举说明（同一字段，值域写成注释），**沿用仓内既有值，不发明新名**：
 
@@ -406,7 +409,7 @@ Expected: `AttributeError: 'CaseRecord' object has no attribute 'rerank_status'`
     retrieval_status: str = ""
 ```
 
-- [ ] **Step 5: 判据转绿 + 加「老归档不被回填」判据**
+- [x] **Step 5: 判据转绿 + 加「老归档不被回填」判据**（完成于 `23768ed`）
 
 `_EXPECTED_ITEMS = 5`（`check_1()` 现有 4 项 + 下面这 1 项），`check_1()` 末尾追加：
 
@@ -418,7 +421,7 @@ Expected: `AttributeError: 'CaseRecord' object has no attribute 'rerank_status'`
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
 Expected: `全绿（5 项）`
 
-- [ ] **Step 6: 门禁与提交**
+- [x] **Step 6: 门禁与提交**（完成于 `23768ed`）
 
 ```bash
 uv run ruff check src/ scripts/ && uv run ruff format --check src/ scripts/ && uv run pyrefly check
@@ -463,7 +466,7 @@ git commit -m "feat(eval): Evidence Record 扩三状态枚举 + provenance 槽�
 两者必须由同一次 `build_provenance()` 调用的同一个 `_inner` 派生 —— 不允许出现
 「标量来自这次调用、dict 来自那次调用」。这一条要在 `runner.py` 的注释里写明。
 
-- [ ] **Step 1: 写红的判据**
+- [x] **Step 1: 写红的判据**（完成于 `c051495`）
 
 ```python
 def check_2() -> None:
@@ -498,7 +501,7 @@ Expected: **不是 ImportError**（函数已存在，这正是修正的理由）
 这是门禁顺序要求的，不是判据写坏了。若 2a 直接红，说明既有函数签名或返回结构与上面实测不符
 ⇒ 属偏差，停下报告，不要改判据。
 
-- [ ] **Step 2: 扩展现有 `evaluation/provenance.py::build_provenance()`**
+- [x] **Step 2: 扩展现有 `evaluation/provenance.py::build_provenance()`**（完成于 `c051495`）
 
 ★ **不新增第二个 builder**（人裁定）。在 `provenance.py` 里加一个模块级白名单常量与一个私有函数，
 把四项**并入既有嵌套 `provenance`**，既有五个键一字不动、签名不变：
@@ -590,7 +593,7 @@ def _config_evidence() -> dict:
 
 （`record.agent_model` / `prompt_set_version` / `date` 三行**保持原样**，本 Task 不动它们。）
 
-- [ ] **Step 3: `Gold` 加出处字段并进 `GOLD_FIELDS`**
+- [x] **Step 3: `Gold` 加出处字段并进 `GOLD_FIELDS`**（完成于 `c051495`）
 
 ```python
     # gold 的**外部出处**（EVIDENCE_CHAIN.md §4.2 盲标规程第 2 条）：
@@ -603,7 +606,7 @@ def _config_evidence() -> dict:
 `_as_str_dict(raw_gold.get("gold_source_ref"))`（若该 helper 不存在则在 `cases.py:343-388` 区间新增，
 照 `_as_str_list` 的写法：非法值返回 `{}` 不抛错）。
 
-- [ ] **Step 3.5: D2 裁定 —— `gold_source_ref` 是元数据，像 `full_marks` 一样排除在归属扫描外**
+- [x] **Step 3.5: D2 裁定 —— `gold_source_ref` 是元数据，像 `full_marks` 一样排除在归属扫描外**（完成于 `c051495`）
 
 实测缺陷：`gold_sanity.py:186-191` 用
 `v not in (None, [], "")` 判断字段是否「出现」，而 **`{}` 不在这个缺席集合里** ⇒
@@ -624,7 +627,7 @@ def _config_evidence() -> dict:
 ★ 不要顺手把缺席集合改成 `... not in (None, [], "", {})` —— 那会让「有 dict 但为空」在
 其它字段上也被当成缺席，是另一件事，本 Task 不管（要做就单开一条并说明影响面）。
 
-- [ ] **Step 4: sanity 出 ERROR 级检查（有 gold 值但无出处）**
+- [x] **Step 4: sanity 出 ERROR 级检查（有 gold 值但无出处）**（完成于 `c051495`）
 
 ★ 用仓里真实的 `SanityIssue` 结构（`gold_sanity.py:176-180`、`:194-201` 的写法是
 `SanityIssue(case_id, task, level, field, message)` 追加进 `out: list[SanityIssue]`），
@@ -656,7 +659,7 @@ def _check_gold_source_ref(case: TaskCase, out: list[SanityIssue]) -> None:
 
 （注意追加的是 `report.issues` 这个列表，函数形参名仍是 `out` —— 照 `:482` 的既有写法即可。）
 
-- [ ] **Step 4.5: D3 裁定 —— 给 grade 15 条补出处（人裁 A：ERROR 15 → 0）**
+- [x] **Step 4.5: D3 裁定 —— 给 grade 15 条补出处（人裁 A：ERROR 15 → 0）**（完成于 `c051495`）
 
 实测事实让这一步**不需要造任何指针**：每条 grade case 的 `notes` 已经带着语料定位，例如
 `"notes": "2009-Q1（卷面 2 分）；answer_key=B；student_answer=B（答对）"`，
@@ -681,7 +684,7 @@ def _check_gold_source_ref(case: TaskCase, out: list[SanityIssue]) -> None:
 - `gold_status` 仍是 `draft`，本 Step 不翻它（翻转器是 `scripts/gold_review_apply.py`，
   只翻人确认过的 case，且属 P−1 的人工动作）。
 
-- [ ] **Step 5: 转绿、复跑 sanity、并证实下游不会因为多键报错（零 LLM）**
+- [x] **Step 5: 转绿、复跑 sanity、并证实下游不会因为多键报错（零 LLM）**（完成于 `c051495`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py
@@ -698,7 +701,7 @@ Expected:
 - 那条 grep 的产物用来**证实**「读 provenance 的地方都是按键取值、不是严格 schema 校验」。
   若某处对 provenance 的键集合做了全等/长度断言 ⇒ 属偏差，停下报告（不要自己改成宽松比对）。
 
-- [ ] **Step 6: 事实更正 —— `docs/README.md:64` 那行 provenance 说明**
+- [x] **Step 6: 事实更正 —— `docs/README.md:64` 那行 provenance 说明**（完成于 `c051495`）
 
 该行现写「效果章归档**无 `script`/`argv`**」。真相是：`build_provenance()` 一直产出这两个字段，
 是 `runner.py` 的调用方只保存了 `code_version`/`golden_sha256` 而把它们丢弃。改成后者这种说法
@@ -707,7 +710,7 @@ Expected:
 「字段此前由函数产出、被调用方丢弃；Task 2 起不再丢弃」，并给出可复核的位置。
 每次编辑 markdown 后立即 `grep -c "" docs/README.md` 复核行数未减少（本仓有替换吃掉整行的事故）。
 
-- [ ] **Step 7: 门禁与提交**
+- [x] **Step 7: 门禁与提交**（完成于 `c051495`）
 
 ```bash
 uv run ruff check src/ scripts/ && uv run ruff format --check src/ scripts/ && uv run pyrefly check
@@ -748,7 +751,7 @@ Step 4.5 的出处数据是本 Task 判据成立的组成部分，拆开就等�
     `common.drop_path(rec, dotted) -> None`（★ 地址语法的唯一实现处：Task 5 的取证与 Task 7 的 V0 都从这里取）
   - `metrics.option_letters / answer_keys_of / analysis_key_of / difficulty_of / strip_reply_part / rewrite_reply_part`
 
-- [ ] **Step 1: 写红的判据（含 R5 事故回归）**
+- [x] **Step 1: 写红的判据（含 R5 事故回归）**（完成于 `8ce2282`）
 
 ```python
 def check_3() -> None:
@@ -781,7 +784,7 @@ def check_3() -> None:
 `_EXPECTED_ITEMS = 17`（Task 2 结束时为 10，本步 +7）。
 Run 预期：`ModuleNotFoundError: evaluation.task_eval.predicates`。
 
-- [ ] **Step 2: `common.py` 实现四态与 R5**
+- [x] **Step 2: `common.py` 实现四态与 R5**（完成于 `8ce2282`）
 
 ```python
 """四态判据与复合语义（EVIDENCE_CHAIN.md §1.3/§1.6）。"""
@@ -911,7 +914,7 @@ def drop_path(rec: dict, dotted: str) -> None:
 `has_path` / `drop_path` / `is_reply_part` 是**路径语法的唯一实现处**：Task 5 的取证与 Task 7 的
 V0 都从这里取，两边不可能再说两种地址语言（这正是 P1-6 要消灭的分叉）。
 
-- [ ] **Step 3: `registry.py` + `generate.py` 的五个判据**
+- [x] **Step 3: `registry.py` + `generate.py` 的五个判据**（完成于 `8ce2282`）
 
 ```python
 # registry.py
@@ -1171,12 +1174,12 @@ metrics.difficulty_of(reply))`，并加两条前置：`gold.expected_difficulty`
 的新判据（Run：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -c` 一段临时读取，**不要**把
 这段核对脚本提交进仓 —— 它是标定过程，不是判据）。
 
-- [ ] **Step 4: 判据转绿**
+- [x] **Step 4: 判据转绿**（完成于 `8ce2282`）
 
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
 Expected: `全绿（17 项）`
 
-- [ ] **Step 5: 找到旧合取的全部调用点（不许凭记忆）**
+- [x] **Step 5: 找到旧合取的全部调用点（不许凭记忆）**（完成于 `8ce2282`）
 
 ```bash
 grep -rn "every_item_passes\|gen_case_pass\|delivery_rate" src scripts | tee /tmp/ec_callsites.txt
@@ -1184,7 +1187,7 @@ grep -rn "every_item_passes\|gen_case_pass\|delivery_rate" src scripts | tee /tm
 Expected: 至少命中 `report.py:157`、`report.py:160-162`、`cli.py`（backfill）、
 `scripts/memory_step4fix_gate.py` 里断言它的项。逐处记下，Task 4 一并切换。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**（完成于 `8ce2282`）
 
 ```bash
 git add src/evaluation/task_eval/predicates/ scripts/evidence_chain_gate.py
@@ -1215,7 +1218,7 @@ git commit -m "feat(eval): predicate registry + 四态 + R5 复合语义（corre
   - `report.TaskReport.gen_case_pass: dict`（同上）
   - `cli._backfill` 重算**所有**任务的 registry 判据（不止 generate）
 
-- [ ] **Step 1: 写红的判据**
+- [x] **Step 1: 写红的判据**（完成于 `3f5f6fc`）
 
 ```python
 def check_4() -> None:
@@ -1281,7 +1284,7 @@ D. 6
 那时才把声明值改成 21 —— 提前写 21 会让严格按 checkbox 执行的 agent 在 Step 1 就撞上计数矛盾）。
 Run 预期 4a 先红（现在 `summarize_task` 返回的是百分数而非 `rate()` dict）。
 
-- [ ] **Step 2: `summarize_task` 的 generate 块改为驱动 registry**
+- [x] **Step 2: `summarize_task` 的 generate 块改为驱动 registry**（完成于 `3f5f6fc`）
 
 ```python
     if task == "generate":
@@ -1309,7 +1312,7 @@ Run 预期 4a 先红（现在 `summarize_task` 返回的是百分数而非 `rate
 （原 `item_keys` 五元组字面量与 `metrics.delivery_rate` 调用整段删除；`rep.gen_delivery`
 若仍被 `render_markdown` 引用则同样接 `pc.rate()`，不留旧路径。）
 
-- [ ] **Step 3: 删 `metrics.every_item_passes` 与 `delivery_rate`，连带删断言它们的 gate 项**
+- [x] **Step 3: 删 `metrics.every_item_passes` 与 `delivery_rate`，连带删断言它们的 gate 项**（完成于 `3f5f6fc`）
 
 ```bash
 # 先确认 /tmp/ec_callsites.txt（Task 3 Step 5）里剩下的只有定义与 gate
@@ -1332,7 +1335,7 @@ grep -n "every_item_passes\|delivery_rate" /tmp/ec_callsites.txt
      有键但列表为空 ⇒ 仍是 `fail`（那是「查了且没覆盖」，与「没证据」不同）。
      ⑭d 的断言值随之锁定为 `rate=None, n_a_missing_premise=15`。
 
-- [ ] **Step 4: `_backfill` 改为按 registry 重算所有任务**
+- [x] **Step 4: `_backfill` 改为按 registry 重算所有任务**（完成于 `3f5f6fc`）
 
 ```python
     from evaluation.task_eval.predicates import common as pc
@@ -1351,7 +1354,7 @@ grep -n "every_item_passes\|delivery_rate" /tmp/ec_callsites.txt
 后写回 —— **「谁写 final_quality，谁负责刷新依赖它的派生指标」这条归属规则保留**，
 只是实现从本地公式换成 registry 定义。
 
-- [ ] **Step 5: 修 `reprobe` 的 provenance 脱钩（§3 那条「旧输入新输出」）**
+- [x] **Step 5: 修 `reprobe` 的 provenance 脱钩（§3 那条「旧输入新输出」）**（完成于 `3f5f6fc`）
 
 `cli.py:260-279` 的 `_update_retrieval_fields` 用**当前**检索覆盖 `kp_hit`/`category_hit`/`exam_hit`，
 却把 `retrieval_cfg`、`top_items`、`code_version`、`prompt_set_version` 留在旧值上；
@@ -1384,7 +1387,7 @@ def _update_retrieval_fields(rec: dict, case, probe, *, k: int, cfg: dict) -> No
           {"k", "cfg"} <= set(sig.parameters))
 ```
 
-- [ ] **Step 6: 零 token 重算 ④/⑤ 两份归档，核对 §4.2 的预期**
+- [x] **Step 6: 零 token 重算 ④/⑤ 两份归档，核对 §4.2 的预期**（完成于 `3f5f6fc`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.task_eval backfill \
@@ -1395,7 +1398,7 @@ Expected: Generate 块打印 `gen_case_pass` 的 `rate=None`、`n=0`、`n_a_miss
 ⇒ **正是 §4.2 说的「0.867 与 0.733 一起失效」**。确认 `structure`/`coverage` 单项率仍在（`n>0`）。
 ★ 本步不得覆写原文件（`--out` 指向新名），原归档留待 Task 10 标 `superseded`。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**（完成于 `3f5f6fc`）
 
 ```bash
 uv run ruff check src/ scripts/ && uv run pyrefly check
@@ -1430,7 +1433,7 @@ git commit -m "refactor(eval): report/backfill 驱动 registry，删 every_item_
   （★ Task 7 的 V0 复用同一对函数 —— 路径语法只允许有一份）、
   `evals/claims/falsify_latest.json`（Task 6 的 `falsify_passed` 输入）
 
-- [ ] **Step 1: 写红的判据（R1-A 的形状，含「只删一个字段」的反例）**
+- [x] **Step 1: 写红的判据（R1-A 的形状，含「只删一个字段」的反例）**（完成于 `a5408a0`）
 
 ```python
 def check_5() -> None:
@@ -1488,7 +1491,7 @@ Run 预期：`ModuleNotFoundError: evaluation.task_eval.falsify`。
 ★ 这张表就是「P0-2 的取证模型」与「P1-6 的 schema 检查」之间的胶水：两边都用同一套地址，
 V0 才不会对 `reply` 内部的片段报「缺键」，R1-A 才不会去 diff 猜输入。
 
-- [ ] **Step 2: 实现 `falsify.py`**
+- [x] **Step 2: 实现 `falsify.py`**（完成于 `a5408a0`）
 
 ```python
 """R1-A 机械敏感性取证：在 **record 层**弄坏，看判据是否恰好变红。
@@ -1629,7 +1632,7 @@ def coverage(preds: list[Predicate], covered: dict[str, set[str]]) -> dict[str, 
 Task 4 的 `report.py`/`cli.py` 里用 `common.to_record_value`。★ 别在 falsify 里留未使用的导入，
 ruff 钩子会在 commit 时直接拦下。
 
-- [ ] **Step 2.5: `rewrite_reply_part` 必须替换整段，不是只换 label**
+- [x] **Step 2.5: `rewrite_reply_part` 必须替换整段，不是只换 label**（完成于 `a5408a0`）
 
 控制器实测（把 Task 5 夹具跑过冻结解析器）：现实现 `pattern.sub(new_text, reply, count=1)`
 只替换匹配到的**标签**（如「解析」二字），原正文留在后面 ⇒ `flip_conclusion` mutation 无效：
@@ -1652,7 +1655,7 @@ def rewrite_reply_part(reply: str, part: str, new_text: str) -> str:
 ★ 改完必须重跑一遍控制器的实测序列并贴进报告（四件套齐全基线 ⇒ `flip_conclusion` 让
 `analysis_key_of` 变 `A`、`gen_analysis_agreement` 变 `fail`、其余不动）。
 
-- [ ] **Step 2.6: checkpoint 3 裁定的落点 —— 机械 answer-key 判据只对纯选择题运行**
+- [x] **Step 2.6: checkpoint 3 裁定的落点 —— 机械 answer-key 判据只对纯选择题运行**（完成于 `a5408a0`）
 
 裁定：`answer_keys_of()` 只对**能可靠识别为纯选择题**的 reply 运行；混合卷/无可靠选项集
 ⇒ `missing_premise`；**不得凭 regex 猜一个键**。落到 `predicates/generate.py`：
@@ -1685,7 +1688,7 @@ contract_inputs 必须声明**现实依赖**，包括经守卫引入的间接依
 Task 5 的夹具本来就是纯选择题形状（题干/四个选项/一条答案/一条解析），因此 5a-5e 不受影响；
 若受影响说明夹具或守卫写错了，停下报告。
 
-- [ ] **Step 3: gate 里的分段夹具（record 层弄坏的唯一手段）**
+- [x] **Step 3: gate 里的分段夹具（record 层弄坏的唯一手段）**（完成于 `a5408a0`）
 
 `scripts/evidence_chain_gate.py` 内实现夹具（**测试侧**，不进 `src/`）：
 
@@ -1731,7 +1734,7 @@ def _base_record(**overrides) -> dict:
 ★ 少了这条 op，「two correct options」在 R1-A 里就是**形式覆盖、语义没覆盖** ——
 输入名齐了，语义一条没测。这也是为什么 `declared_mutations()` 按「输入 → op 列表」建模。
 
-- [ ] **Step 4: 把取证结果落盘成 ledger 的输入**
+- [x] **Step 4: 把取证结果落盘成 ledger 的输入**（完成于 `a5408a0`）
 
 Task 6 的 `derive_status(..., falsify_passed=?)` 需要一份「哪些判据被证过」的机器可读结果，
 不能靠人去回忆跑过没有。在本 Step 加一个写盘入口（`scripts/evidence_chain_gate.py` 的 `--emit`）：
@@ -1780,7 +1783,7 @@ Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain
 Expected: `全绿`（若 5b 红，说明某判据其实只读了 `reply` 的一个片段 —— **正是 R1-A 要抓的事**，
 按判据补实 `contract_inputs` 与 `fn`，**不要**放宽 mutation 让它过）。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**（完成于 `a5408a0`）
 
 ```bash
 git add src/evaluation/task_eval/falsify.py evals/datasets/falsify/ scripts/evidence_chain_gate.py
@@ -1805,7 +1808,7 @@ git commit -m "feat(eval): falsify —— mutation 覆盖 contract_inputs（R1-A
   - `claims.artifact_status(path: str, *, superseded_by: str = "", reason: str = "") -> dict`
   - `scripts/build_claim_ledger.py --check` → 退出码 0/1（红灯 = 有孤立结论 或 ledger 与重算不一致）
 
-- [ ] **Step 1: 写红的判据（含「已证明」四条件缺一不可）**
+- [x] **Step 1: 写红的判据（含「已证明」四条件缺一不可）**（完成于 `e47377d前`）
 
 ```python
 def check_6() -> None:
@@ -1830,7 +1833,7 @@ def check_6() -> None:
 
 `_EXPECTED_ITEMS = 35`（Task 5 结束时为 26，本步 +9：6a/6b×5/6c/6d/6e）。
 
-- [ ] **Step 2: `claims.py` 实现**
+- [x] **Step 2: `claims.py` 实现**（完成于 `e47377d前`）
 
 ```python
 """主张状态推导（EVIDENCE_CHAIN.md §1.1）。状态是算出来的，不是写出来的。"""
@@ -1870,7 +1873,7 @@ def artifact_status(path: str, *, superseded_by: str = "", reason: str = "") -> 
     }
 ```
 
-- [ ] **Step 3: `tier_ok` 的两个前置怎么算（§1.3）**
+- [x] **Step 3: `tier_ok` 的两个前置怎么算（§1.3）**（完成于 `e47377d前`）
 
 `derive_status(..., tier_ok=?)` 不能靠人写「抖动已量化」。`claims.py` 补两个纯函数：
 
@@ -1926,7 +1929,7 @@ def repeat_jitter(by_run: list[dict[str, float]], *, case_ids: list[str]) -> dic
 `_EXPECTED_ITEMS` 从 35 升到 36（本步 +1）。**若**将来补齐了边界标注、此判据变 True，
 就把这条判据改成断言 True 并在 commit message 里引用 §7.2 —— 判据跟着事实走，不是跟着愿望走。
 
-- [ ] **Step 4: `build_claim_ledger.py` 生成 `evals/claims/ledger.md`**
+- [x] **Step 4: `build_claim_ledger.py` 生成 `evals/claims/ledger.md`**（完成于 `e47377d前`）
 
 必需内容（按 §6 门槛行逐条）：`维度 | 主指标 | 数值或 N/A | 状态词 | 证据锚点 | 复现命令 | R1-B 签署`。
 ★ 数值一律从归档经 `predicates` 重算，**代码里不允许出现任何手写的百分数字面量**。
@@ -1939,7 +1942,7 @@ def repeat_jitter(by_run: list[dict[str, float]], *, case_ids: list[str]) -> dic
     ap.add_argument("--check", action="store_true", help="只校验：文档引用与重算是否一致")
 ```
 
-- [ ] **Step 5: R3「孤立结论」检查器（禁止的是无来源的可验证断言，不是结论句）**
+- [x] **Step 5: R3「孤立结论」检查器（禁止的是无来源的可验证断言，不是结论句）**（完成于 `e47377d前`）
 
 ```python
 _ORPHAN_RE = re.compile(
@@ -1962,7 +1965,7 @@ def orphan_lines(md_path: Path) -> list[int]:
 输出行号清单并**返回 1**（本 Task 只报警不阻塞：历史文档大量既有结论句需要逐条补锚点，
 那是 Task 10 的收尾工作，不该在此处把 CI 式红灯提前点亮）。
 
-- [ ] **Step 6: 转绿 + 生成一次 ledger 试跑（零 LLM）**
+- [x] **Step 6: 转绿 + 生成一次 ledger 试跑（零 LLM）**（完成于 `e47377d前`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py
@@ -1972,7 +1975,7 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.p
 Expected: `全绿`；`ledger_draft.md` 里 Generate/Grade 行状态为 **未测量**（gold 未填），
 其余行按 §6 逐条有状态词。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**（完成于 `e47377d前`）
 
 ```bash
 git add src/evaluation/task_eval/claims.py scripts/build_claim_ledger.py evals/claims/
@@ -1993,7 +1996,7 @@ git commit -m "feat(claims): 三态推导 + tier_ok 两个前置 + ledger 生成
 - Produces: `schema_gate.check_archive(path: str) -> list[str]`（错误清单，空 = 通过）、
   `schema_gate.assert_no_default_masking(module_pkg: str) -> list[str]`（AST 扫 `.get(k, False)` / `.get(k, 0)`）
 
-- [ ] **Step 1: 写红的判据**
+- [x] **Step 1: 写红的判据**（完成于 `e47377d`）
 
 ```python
 def check_7() -> None:
@@ -2016,7 +2019,7 @@ def check_7() -> None:
 
 `_EXPECTED_ITEMS = 46`（Task 6 结束时为 **41** —— checkpoint 6 锁 1 把 36 提到 41，见 Step 4b；本步 +5：7a/7b/7c/7d/7e）。
 
-- [ ] **Step 2: 实现 `schema_gate.py`**
+- [x] **Step 2: 实现 `schema_gate.py`**（完成于 `e47377d`）
 
 ```python
 """V0：正式实验的前置闸（EVIDENCE_CHAIN.md §8）。
@@ -2117,7 +2120,7 @@ qa·grade 必不报 / 跳过条数 == 无判据记录数），防止日后把跳
 本 Task 结束时 `_EXPECTED_ITEMS = 49`（Task 6 结束时为 **41**，`check_7` 贡献 8 项：7a/7b/7c/7d/7e + Step 4b 的 7f/7g + 评审 I-4 的 7h。
 ★ 7h 是 checkpoint 7 追加的：`item_reasons` 的不适用跳过集合是**推导**出来的 ⇒ 必须断言它非空且不许越界扩大，否则「整类任务都跳过」不会有任何一项变红）。
 
-- [ ] **Step 3: `build_claim_ledger --check` 先跑 V0，红灯即退出 1**
+- [x] **Step 3: `build_claim_ledger --check` 先跑 V0，红灯即退出 1**（完成于 `e47377d`）
 
 ```python
     errs = schema_gate.check_archive_records(all_records)
@@ -2128,7 +2131,7 @@ qa·grade 必不报 / 跳过条数 == 无判据记录数），防止日后把跳
         return 1
 ```
 
-- [ ] **Step 4: 转绿并验证「V0 真的拦得住 §4.2 那个事故」**
+- [x] **Step 4: 转绿并验证「V0 真的拦得住 §4.2 那个事故」**（完成于 `e47377d`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py
@@ -2138,7 +2141,7 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.p
 Expected: gate 全绿；ledger `--check` **退出码 1**，且原因包含 `gen_correctness: missing_premise`。
 ★ 这条退出码非 0 是本计划的**目的**而不是事故。
 
-- [ ] **Step 4b: tier 来源申报的**一般化**（checkpoint 6 裁定「A + 两道锁」之锁 1 的推广）**
+- [x] **Step 4b: tier 来源申报的**一般化**（checkpoint 6 裁定「A + 两道锁」之锁 1 的推广）**（完成于 `e47377d`）
 
 ★ 背景（Task 6 评审 I-2）：`tier` 原本是手写的裸 int，没人检查它凭什么 —— 同一个格子里
   「Grade 行 tier=1」既可能是正确事实（指标本体是可观测物证、不经 judge），也可能是偷懒的降级。
@@ -2179,7 +2182,7 @@ Expected: gate 全绿；ledger `--check` **退出码 1**，且原因包含 `gen_
   但 checkpoint 6 裁定「本轮只登记不改」（Task 3 registry debt）。将来谁把 tier 改成 1，
   `7g` 会红 ⇒ 逼他同步删除这条债记录，而不是让「改了什么」静默消失。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**（完成于 `e47377d`）
 
 ```bash
 git add src/evaluation/task_eval/schema_gate.py src/evaluation/task_eval/claims.py src/evaluation/task_eval/predicates/registry.py scripts/build_claim_ledger.py scripts/evidence_chain_gate.py
@@ -2218,7 +2221,7 @@ git commit -m "feat(eval): V0 schema 完整性 + 未测量判据禁进门槛（�
 
 ★ **v1.4 提示（适用于本 Task 代码块里出现的「两个/两处单元边界」）**：下面嵌入的片段是当时的裁定态原文，**不逐行改写**以免破坏可抄性；现行判据 `8g`/`8k` 期望的是**三个**单元边界（`retrieval_gate` / `runner.run_case` / `cli.reprobe`），以 `scripts/evidence_chain_gate.py` 为准。
 
-- [ ] **Step 1: 写红的判据（四种 read_status 的映射表逐条钉）**
+- [x] **Step 1: 写红的判据（四种 read_status 的映射表逐条钉）**（完成于 `008eb05+70c7926`）
 
 ```python
 def _gold(*, should: bool = True, values: tuple[str, ...] = ("平衡二叉树",)):
@@ -2287,7 +2290,7 @@ checkpoint 8 用户再追加 **`8o`**（F6 的**结构**承重锁）：★ 行�
 Run 预期：`TypeError: judge_memory_mechanically() got an unexpected keyword argument 'read_status'`
 （真实签名是 `(*, memory_cards, reply, gold)` —— 本 Task 给它加第四个 keyword-only 参数）。
 
-- [ ] **Step 2: B7 —— 让 `retrieval_status = "error"` 真的可达**
+- [x] **Step 2: B7 —— 让 `retrieval_status = "error"` 真的可达**（完成于 `008eb05+70c7926`）
 
 `bm25.py:54-59` 现在是这样，失败即当作「没查到」：
 
@@ -2349,7 +2352,7 @@ Expected（v1.4 起）：恰好 **3** 处 —— `evaluation/retrieval_gate.py`�
 ★ `rag/routes.py` 里**不得**再出现该调用（`8k` 是这条撤销的回归锁）。
 少于 2 处 ⇒ B7 未闭合，**停在本 Step**，不要继续往下写归因门。
 
-- [ ] **Step 2b/2c: 消费者与覆盖面（v1.3 新增，随 Step 2 同批做）**
+- [x] **Step 2b/2c: 消费者与覆盖面（v1.3 新增，随 Step 2 同批做）**（完成于 `008eb05+70c7926`）
 
 ```python
 # src/evaluation/task_eval/runner.py —— 纯函数，判据直接打它，别在判据里做 IO
@@ -2373,7 +2376,7 @@ def map_route_failures(failures: list[str], probe_status: str) -> tuple[str, lis
 各调一次 `record_query_failure(f"{name}: {e.__class__.__name__}")` ⇒ 任何路由的故障/超时都留痕。
 ★ **不要**继续往 `bm25.py` 的 `count()` / 逐词 `get()` 里撒记录点 —— 那会把「记录失败」变成多套现实。
 
-- [ ] **Step 3: `memory_scorer` 加 `read_status` 参数并前置判定**
+- [x] **Step 3: `memory_scorer` 加 `read_status` 参数并前置判定**（完成于 `008eb05+70c7926`）
 
 在 `judge_memory_mechanically`（`:128`）的断言之前插入：
 
@@ -2389,7 +2392,7 @@ def map_route_failures(failures: list[str], probe_status: str) -> tuple[str, lis
 
 `MemoryJudgement` 加 `read_status: str = ""`；`judgement_to_dict` 一并输出。
 
-- [ ] **Step 4: 生产侧写状态**
+- [x] **Step 4: 生产侧写状态**（完成于 `008eb05+70c7926`）
 
 ```bash
 grep -rn "safe_remember" src scripts | tee /tmp/sr_callsites.txt
@@ -2409,7 +2412,7 @@ async def abuild_card_with_status(store, uid: str | None) -> tuple[str, str]:
 
 `run_case` 把捕获到的状态写进 `record.memory_read_status`。
 
-- [ ] **Step 5: Verify 归因门（judge 的观点不得越过机械证据）**
+- [x] **Step 5: Verify 归因门（judge 的观点不得越过机械证据）**（完成于 `008eb05+70c7926`）
 
 `judge.py:360-400`：在合并 `failure_reason` 前加机械门。规则用**仓内既有的值名**，不是新发明的：
 
@@ -2429,7 +2432,7 @@ async def abuild_card_with_status(store, uid: str | None) -> tuple[str, str]:
 在这里**没触发** ⇒ 那 15 条 `retrieval_miss` 只能来自 judge 的意见，再被 `metrics.py:47-50`
 的优先级顶成根因。两个 tier-0 见证都反对的归因，不该有资格当「主要失败原因」。
 
-- [ ] **Step 6: 转绿 + 跑现有 Memory gate（零 LLM 部分）**
+- [x] **Step 6: 转绿 + 跑现有 Memory gate（零 LLM 部分）**（完成于 `008eb05+70c7926`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py
@@ -2440,7 +2443,7 @@ Expected: 两者全绿。`memory_step4fix_gate.py` 需新增「故障注入 ⇒ 
 少一项就是「更小的绿」）。★ 若 `read_status` 参数让该 gate 里手写的 record 构造失败，
 补默认值 `"success"`（保持既有断言语义不变），不要改断言。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**（完成于 `008eb05+70c7926`）
 
 ```bash
 git add src/rag/bm25.py src/rag/vectorstore.py src/rag/routes.py src/evaluation/retrieval_gate.py \
@@ -2468,7 +2471,7 @@ git commit -m "fix(eval,rag): B7 让 error 可达 + 检索层归因只由 tier-0
   `embeddings.SUPPORTED_SPACES`；`pipeline` 的 rerank 阶段返回 `(docs, rerank_status, ms)`；
   `rerank_used` 变为派生 property
 
-- [ ] **Step 1: 写红的取证判据（先红再实现）**
+- [x] **Step 1: 写红的取证判据（先红再实现）**（完成于 `6ebe807+9904ec2`）
 
 ```python
 def check_9() -> None:
@@ -2491,7 +2494,7 @@ def check_9() -> None:
 Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
 ★ 原 `9f`（reset 调用点）跟着 B7 一起搬进 Task 8，现在是那里的 `8g` + `8k`；v1.3 后是**两处单元边界**，v1.4 起是**三处**（`reprobe` 已接消费侧）。
 
-- [ ] **Step 2: B2 —— `rerank_status` 四值 + 派生 `rerank_used`**
+- [x] **Step 2: B2 —— `rerank_status` 四值 + 派生 `rerank_used`**（完成于 `6ebe807+9904ec2`）
 
 `pipeline.py:593` 的 `return out, True, elapsed_ms` 改为返回真实状态；判定用**键存在**，不用真值：
 
@@ -2518,7 +2521,7 @@ Run 预期先红：`ImportError: cannot import name '_derive_rerank_status'`。
 Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`
 Expected: `全绿（61 项）`
 
-- [ ] **Step 3: B1 —— R4 语义统一（唯一换算点）**
+- [x] **Step 3: B1 —— R4 语义统一（唯一换算点）**（完成于 `6ebe807+9904ec2`）
 
 `embeddings.py` 新增：
 
@@ -2557,7 +2560,7 @@ def similarity_from_distance(distance: float, space: str) -> float:
 `evidence_policy.py:138` 同。RRF 融合分改名写进 `metadata["rrf_score"]`，
 `EvidenceDoc.score` 从此只有相似度一种语义。
 
-- [ ] **Step 3.5: 每个 space 用真实 fixture 验方向（把「假设」变成「实测」）**
+- [x] **Step 3.5: 每个 space 用真实 fixture 验方向（把「假设」变成「实测」）**（完成于 `6ebe807+9904ec2`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python - <<'PY'
@@ -2582,7 +2585,7 @@ Expected: 四个集合都打印出 space 与换算序列且 `单调不增=True`�
 ★ 任一集合 False 或 space 不在支持表 ⇒ **停止 B1**，先回 spec §5 把这个 space 登记清楚；
 不要带着方向可疑的 `score` 去重录 6 条基线（那会把「语义契约不统一」换成「数值合法的反序」）。
 
-- [ ] **Step 4: 重录 6 条路由（机器时间大头，TEI 需就绪）**
+- [x] **Step 4: 重录 6 条路由（机器时间大头，TEI 需就绪）**（完成于 `6ebe807+9904ec2`）
 
 ```bash
 uv run python scripts/tei_ready.py            # 就绪以它为准，/health 200 不算
@@ -2597,7 +2600,7 @@ Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.retrieva
 Expected: 默认路由**逐位复现**（B2 在 `RERANK_ENABLED=false` 下不改行为）；
 B1 相关路由允许小幅变化，但**必须在 §20.7 留下「变化多少、为什么可接受」**。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**（完成于 `6ebe807+9904ec2`）
 
 ```bash
 uv run ruff check src/ scripts/ && uv run pyrefly check
@@ -2669,7 +2672,7 @@ git commit -m "fix(rag): B2 rerank_status 四态 + B1 score 语义统一（重�
 - Consumes: `claims.artifact_status`、`build_claim_ledger --check`
 - Produces: 可被 V0/R3 校验的文档终态
 
-- [ ] **Step 1: 勘误一律改成「可重跑命令」形状**
+- [x] **Step 1: 勘误一律改成「可重跑命令」形状**（完成于 `888f206`）
 
 `docs/README.md:40` 的门禁计数、`:73` 的跟踪状态、`:3` 的「标签待打」——
 按 §7 的表逐条替换成命令（例：`` `grep -n "^_EXPECTED_ITEMS" scripts/memory_step4fix_gate.py` 的生成值 ``）。
@@ -2677,7 +2680,7 @@ git commit -m "fix(rag): B2 rerank_status 四态 + B1 score 语义统一（重�
 每次 Edit 只替换**整行**，替换后立即 `grep -c ""` 复核行数未减少
 （本仓 markdown 有过替换吃掉整条 bullet 的事故）。
 
-- [ ] **Step 2: 旧归档标 superseded（不删、不改数值）**
+- [x] **Step 2: 旧归档标 superseded（不删、不改数值）**（完成于 `888f206`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python - <<'PY'
@@ -2704,7 +2707,7 @@ print(f"标了 {len(rows)} 份")
 PY
 ```
 
-- [ ] **Step 3: §20.7 追加六条已知偏离**
+- [x] **Step 3: §20.7 追加六条已知偏离**（完成于 `888f206`）
 
 照 §7 列的四条写，每条带**命令**而不是数字：① §3.1 五项中三项在 P−1 前 `missing_premise`；
 ② grade gold 两极 ⇒ `score_tolerance@±10` 判别域受限；③ R5 改复合语义，旧归档读数不可沿用；
@@ -2727,7 +2730,7 @@ PY
    本 Task 裁定其一收口（改 §1.1 措辞 or 给 `derive_status` 加 `n_measured == 0 ⇒ 未测量` 前置），
    并把 `evals/claims/ledger_draft.md` 附表里那条 ★ 注记同步删除或改写。
 
-- [ ] **Step 3b: Task 3 registry debt 的处置登记（tier 误标，非放宽）**
+- [x] **Step 3b: Task 3 registry debt 的处置登记（tier 误标，非放宽）**（完成于 `888f206`）
 
 `gen_answer_key_validity` / `gen_analysis_agreement` 注册为 `tier=2`，但二者是 `optional=True` 的
 机械替身 ⇒ 按 §1.3 证据种类定义应为 tier 0/1。后果是**假阴性**（过严）：判据级附表逐条走
@@ -2744,7 +2747,7 @@ PY
   但 P−1 落地、它一旦能返 pass/fail，`tier_ok_for` 会因 tier≤1 **自动放行两个校准前置**。
   ⇒ P−1 完成时必须重新申报它的锚点与 tier（与 `7g` 同一条规矩：改判据同步改登记）。
 
-- [ ] **Step 4: 数值工件纳入版本控制**
+- [x] **Step 4: 数值工件纳入版本控制**（完成于 `888f206`）
 
 ```bash
 git status --short -- evals/results/task_eval | grep '^??' | awk '{print $2}' \
@@ -2754,7 +2757,7 @@ git ls-files evals/results/task_eval | wc -l
 Expected: 计数明显上升且 `.jsonl` 出现在 `git ls-files` 里。
 ★ 只加 `evals/` 下的证据工件；根目录 `checkpoints.db`（38MB）/`store.db`/`chroma_db/` 一律不加。
 
-- [ ] **Step 5: 全量门禁 + ledger 复核**
+- [x] **Step 5: 全量门禁 + ledger 复核**（完成于 `888f206`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py
@@ -2765,7 +2768,7 @@ uv run ruff check src/ scripts/ && uv run ruff format --check src/ scripts/ && u
 Expected: 全绿。R3 检查器对刚改过的三个文件**行号清空**（`--check` 仍可对全 docs 报警，
 剩余历史行进入 §7.3 Freeze 的收尾清单，不阻塞本计划）。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**（完成于 `888f206`）
 
 ```bash
 git add docs/ CLAUDE.md README.md evals/claims/ evals/results/task_eval/
