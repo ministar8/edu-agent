@@ -31,7 +31,14 @@ from evaluation.task_eval.assets import (
     load_kp_index,
     parse_exam_items,
 )
-from evaluation.task_eval.cases import GOLD_FIELDS, TASKS, TaskCase
+from evaluation.task_eval.cases import (
+    GOLD_FIELDS,
+    TASKS,
+    ExpectedAnswerProperty,
+    ExpectedMemory,
+    SetupConditions,
+    TaskCase,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -222,29 +229,63 @@ def _check_gold_source_ref(case: TaskCase, out: list[SanityIssue]) -> None:
             )
 
 
-def _check_memory(case: TaskCase, kp_index: dict, out: list[SanityIssue]) -> None:
-    """Memory 的 gold 检查（v1 契约，2026-10-06 定稿）。
+def _check_memory_values(
+    case: TaskCase,
+    values: list[str],
+    should_be_recalled: bool | None,
+    kp_index: dict,
+    out: list[SanityIssue],
+) -> None:
+    """``values`` 的规范名 + 粒度校验（正样本必须是具体考点，不能是章名 / 课程根节点）。"""
+    # ★ 这里必须校验 **name（规范名）**，不是 **ID**（2026-10-06 修）：
+    #   `kp_index` 的 key 是 ID（如 `ds.graph`），value.name 才是给人看的规范名
+    #   （如 `图`）。而 Memory 的 `values` 要匹配的是**记忆卡正文/回复里的文本**
+    #   —— 那里面出现的是「图」，不是「ds.graph」。
+    #   用 `is_valid_kp_id`（校验 ID）会把合法名全判非法（本 Gate ⑤c 实测抓到）。
+    canonical_names = {str(v.get("name") or "") for v in kp_index.values()}
+    for v in values:
+        if v not in canonical_names:
+            out.append(
+                SanityIssue(
+                    case.case_id,
+                    case.task,
+                    ERROR,
+                    "expected_memory.values",
+                    f"{v!r} 不是 kp_index 的 canonical name —— "
+                    f"会导致 recalled/used 恒 False 的口径错配（应写规范名，如「图」而非「图论」）",
+                )
+            )
+    # ★ 粒度 lint（2026-10-08 review M10，接 #26）：**正样本**的 `values` 必须是
+    #   具体考点（`topic` / `point`），不能是章名（`domain`）或课程根节点（`subject`）。
+    #   为什么只管正样本：`recalled` 是**子串包含**判定，章名会被它下面任何
+    #   一个具体 KP 满足 ⇒ 「召回成功」测不出「召回的是不是设计的那个薄弱点」。
+    #   负样本（`should_be_recalled=False`）保留章名是**刻意**的：偏松匹配让它更难通过，
+    #   方向保守，不存在假通过（#26 已披露）。
+    #   ★ 没有这条 lint，D8 的「收到具体考点」只是人工承诺 —— 改回 `图` 依旧 ERROR 0。
+    if should_be_recalled:
+        from core.kp_vocab import node_kinds as _node_kinds  # 局部导入：core 侧较重
 
-    为什么必须 ERROR 而非 PENDING
-    ----------------------------
-    Memory 三项主指标已改为**机械判定**（`memory_scorer.py`，judge 不参与）。
-    机械判定需要 `expected_memory` 与 `expected_answer_property` 里的**每一个字段**：
-    缺 `values` ⇒ `used`/`recalled` 无从计算；缺 `should_be_recalled` ⇒ 分不清正负样本；
-    缺 `forbidden_values` ⇒ `correct` 退化成 `used` 的副本。
+        kinds = _node_kinds()
+        for v in values:
+            if kinds.get(v) in ("domain", "subject"):
+                out.append(
+                    SanityIssue(
+                        case.case_id,
+                        case.task,
+                        ERROR,
+                        "expected_memory.values",
+                        f"{v!r} 是 {kinds[v]}（粗粒度）节点，而这是正样本 —— "
+                        f"子串判定下任何子考点都算召回，请写具体薄弱点（如「图的存储」而非「图」）",
+                    )
+                )
 
-    ⇒ 缺任一字段都让该项判定**退回主观猜测** —— 这正是本轮要根除的问题。
-      故标 **ERROR**（不是 PENDING）：宁可不测，不可假测。
 
-    ★ `values` 必须是 **canonical KP 名**：与 `expected_kp` 同源校验。
-      理由：避免「LLM 输出 `AVL树旋转`、gold 写 `AVL树`」这类字符串漂移，
-      使 `in` 判定产生**系统性假阴性**（与 kp_hit 恒 0 是同一类口径错配）。
-    """
+def _check_memory_expected(
+    case: TaskCase, em: ExpectedMemory | None, kp_index: dict, out: list[SanityIssue]
+) -> None:
+    """``expected_memory`` 的字段合法性（缺失 / 类型 / values 规范名 / 粒度 / should_be_recalled）。"""
     from evaluation.task_eval.cases import MEMORY_TYPES
 
-    em = case.gold.expected_memory
-    eap = case.gold.expected_answer_property
-
-    # —— expected_memory ——
     if em is None:
         out.append(
             SanityIssue(
@@ -255,81 +296,48 @@ def _check_memory(case: TaskCase, kp_index: dict, out: list[SanityIssue]) -> Non
                 "缺失 —— Memory 三项无法机械判定（禁止退化为 judge 主观判定）",
             )
         )
+        return
+    if em.type not in MEMORY_TYPES:
+        out.append(
+            SanityIssue(
+                case.case_id,
+                case.task,
+                ERROR,
+                "expected_memory.type",
+                f"{em.type!r} 不在允许集合 {sorted(MEMORY_TYPES)}（产品当前仅支持 weak_topics）",
+            )
+        )
+    if not em.values:
+        out.append(
+            SanityIssue(
+                case.case_id,
+                case.task,
+                ERROR,
+                "expected_memory.values",
+                "空或缺失 —— used / recalled 无从计算",
+            )
+        )
     else:
-        if em.type not in MEMORY_TYPES:
-            out.append(
-                SanityIssue(
-                    case.case_id,
-                    case.task,
-                    ERROR,
-                    "expected_memory.type",
-                    f"{em.type!r} 不在允许集合 {sorted(MEMORY_TYPES)}（产品当前仅支持 weak_topics）",
-                )
+        _check_memory_values(case, em.values, em.should_be_recalled, kp_index, out)
+    if em.should_be_recalled is None:
+        out.append(
+            SanityIssue(
+                case.case_id,
+                case.task,
+                ERROR,
+                "expected_memory.should_be_recalled",
+                "未标注 —— 无法区分正样本/负样本，recalled_pass 会失真",
             )
-        if not em.values:
-            out.append(
-                SanityIssue(
-                    case.case_id,
-                    case.task,
-                    ERROR,
-                    "expected_memory.values",
-                    "空或缺失 —— used / recalled 无从计算",
-                )
-            )
-        else:
-            # ★ 这里必须校验 **name（规范名）**，不是 **ID**（2026-10-06 修）：
-            #   `kp_index` 的 key 是 ID（如 `ds.graph`），value.name 才是给人看的规范名
-            #   （如 `图`）。而 Memory 的 `values` 要匹配的是**记忆卡正文/回复里的文本**
-            #   —— 那里面出现的是「图」，不是「ds.graph」。
-            #   用 `is_valid_kp_id`（校验 ID）会把合法名全判非法（本 Gate ⑤c 实测抓到）。
-            canonical_names = {str(v.get("name") or "") for v in kp_index.values()}
-            for v in em.values:
-                if v not in canonical_names:
-                    out.append(
-                        SanityIssue(
-                            case.case_id,
-                            case.task,
-                            ERROR,
-                            "expected_memory.values",
-                            f"{v!r} 不是 kp_index 的 canonical name —— "
-                            f"会导致 recalled/used 恒 False 的口径错配（应写规范名，如「图」而非「图论」）",
-                        )
-                    )
-            # ★ 粒度 lint（2026-10-08 review M10，接 #26）：**正样本**的 `values` 必须是
-            #   具体考点（`topic` / `point`），不能是章名（`domain`）或课程根节点（`subject`）。
-            #   为什么只管正样本：`recalled` 是**子串包含**判定，章名会被它下面任何
-            #   一个具体 KP 满足 ⇒ 「召回成功」测不出「召回的是不是设计的那个薄弱点」。
-            #   负样本（`should_be_recalled=False`）保留章名是**刻意**的：偏松匹配让它更难通过，
-            #   方向保守，不存在假通过（#26 已披露）。
-            #   ★ 没有这条 lint，D8 的「收到具体考点」只是人工承诺 —— 改回 `图` 依旧 ERROR 0。
-            if em.should_be_recalled:
-                from core.kp_vocab import node_kinds as _node_kinds  # 局部导入：core 侧较重
+        )
 
-                kinds = _node_kinds()
-                for v in em.values:
-                    if kinds.get(v) in ("domain", "subject"):
-                        out.append(
-                            SanityIssue(
-                                case.case_id,
-                                case.task,
-                                ERROR,
-                                "expected_memory.values",
-                                f"{v!r} 是 {kinds[v]}（粗粒度）节点，而这是正样本 —— "
-                                f"子串判定下任何子考点都算召回，请写具体薄弱点（如「图的存储」而非「图」）",
-                            )
-                        )
-        if em.should_be_recalled is None:
-            out.append(
-                SanityIssue(
-                    case.case_id,
-                    case.task,
-                    ERROR,
-                    "expected_memory.should_be_recalled",
-                    "未标注 —— 无法区分正样本/负样本，recalled_pass 会失真",
-                )
-            )
 
-    # —— expected_answer_property ——
+def _check_memory_answer_property(
+    case: TaskCase,
+    em: ExpectedMemory | None,
+    eap: ExpectedAnswerProperty | None,
+    out: list[SanityIssue],
+) -> None:
+    """``expected_answer_property`` 的字段合法性 + 与 ``values`` 的重叠检查。"""
     if eap is None:
         out.append(
             SanityIssue(
@@ -363,11 +371,81 @@ def _check_memory(case: TaskCase, kp_index: dict, out: list[SanityIssue]) -> Non
                 )
             )
 
-    # —— setup_conditions（case-validity，2026-10-06 Step 5）——
-    #   ★ 为什么也要求标注：A 段的前置条件（低分/高分次数）若**不声明**，
-    #     则「B 段没召回」无法区分「前置条件没凑成」与「产品失败」——
-    #     而前者是 grading LLM 的随机性，后者才是产品问题。缺它 ⇒ 结论不可信。
-    sc = case.gold.setup_conditions
+
+def _check_memory_setup_bands(case: TaskCase, sc: SetupConditions, out: list[SanityIssue]) -> None:
+    """``grade_score_bands`` 的区间合法性（得分是 0–100 制）。"""
+    if not sc.grade_score_bands:
+        return
+    for band in sc.grade_score_bands:
+        lo, hi = band
+        if not (0 <= lo <= hi <= 100):
+            out.append(
+                SanityIssue(
+                    case.case_id,
+                    case.task,
+                    ERROR,
+                    "setup_conditions.grade_score_bands",
+                    f"区间 ({lo},{hi}) 非法 —— 得分是 0–100 制",
+                )
+            )
+
+
+def _check_memory_setup_consistency(
+    case: TaskCase, sc: SetupConditions, out: list[SanityIssue]
+) -> None:
+    """三类「前置条件不可能成立」的自相矛盾（空标 / max<min / bands 与 max 冲突）。"""
+    # ★ 「空标」检测（2026-10-07）：`min_grade_calls: 0` 单独存在时**永不失败**
+    #   （`len(calls) < 0` 不可能成立），但它又能骗过 `is_valid()`（字段非 None）。
+    #   于是 gold_sanity 全绿、case 却处于「声明了前置条件但其实没校验」状态 ——
+    #   mem-005「全新用户无写入」正是靠这条前置条件自证，写 `min: 0` 时它自证不了。
+    if sc.min_grade_calls == 0 and sc.max_grade_calls is None and not sc.grade_score_bands:
+        out.append(
+            SanityIssue(
+                case.case_id,
+                case.task,
+                ERROR,
+                "setup_conditions.min_grade_calls",
+                "min_grade_calls=0 单独存在是**永真**（次数不可能 < 0）⇒ 前置条件等于没校验。"
+                "若意图是「A 段一次批改都不许发生」，请改写成 min:0 + max:0",
+            )
+        )
+    # 上下限互相矛盾 ⇒ validity 恒 False，该 case 永远只能记 case_invalid
+    if (
+        sc.max_grade_calls is not None
+        and sc.min_grade_calls is not None
+        and sc.max_grade_calls < sc.min_grade_calls
+    ):
+        out.append(
+            SanityIssue(
+                case.case_id,
+                case.task,
+                ERROR,
+                "setup_conditions.max_grade_calls",
+                f"上限 {sc.max_grade_calls} < 下限 {sc.min_grade_calls} —— 前置条件不可能成立",
+            )
+        )
+    # bands 要求逐次对分（隐含「至少 len(bands) 次」），上限比它小 ⇒ 同样不可能成立
+    if sc.grade_score_bands and sc.max_grade_calls is not None:
+        if sc.max_grade_calls < len(sc.grade_score_bands):
+            out.append(
+                SanityIssue(
+                    case.case_id,
+                    case.task,
+                    ERROR,
+                    "setup_conditions.max_grade_calls",
+                    f"上限 {sc.max_grade_calls} < grade_score_bands 要求的 "
+                    f"{len(sc.grade_score_bands)} 次 —— 两者不可能同时满足",
+                )
+            )
+
+
+def _check_memory_setup(case: TaskCase, sc: SetupConditions | None, out: list[SanityIssue]) -> None:
+    """``setup_conditions``（case-validity）的合法性。
+
+    ★ 为什么也要求标注：A 段的前置条件（低分/高分次数）若**不声明**，
+      则「B 段没召回」无法区分「前置条件没凑成」与「产品失败」——
+      而前者是 grading LLM 的随机性，后者才是产品问题。缺它 ⇒ 结论不可信。
+    """
     if sc is None or not sc.is_valid():
         out.append(
             SanityIssue(
@@ -379,63 +457,37 @@ def _check_memory(case: TaskCase, kp_index: dict, out: list[SanityIssue]) -> Non
                 "（至少标 min_grade_calls 或 grade_score_bands）",
             )
         )
-    elif sc.grade_score_bands or sc.min_grade_calls is not None or sc.max_grade_calls is not None:
-        if sc.grade_score_bands:
-            for band in sc.grade_score_bands:
-                lo, hi = band
-                if not (0 <= lo <= hi <= 100):
-                    out.append(
-                        SanityIssue(
-                            case.case_id,
-                            case.task,
-                            ERROR,
-                            "setup_conditions.grade_score_bands",
-                            f"区间 ({lo},{hi}) 非法 —— 得分是 0–100 制",
-                        )
-                    )
-        # ★ 「空标」检测（2026-10-07）：`min_grade_calls: 0` 单独存在时**永不失败**
-        #   （`len(calls) < 0` 不可能成立），但它又能骗过 `is_valid()`（字段非 None）。
-        #   于是 gold_sanity 全绿、case 却处于「声明了前置条件但其实没校验」状态 ——
-        #   mem-005「全新用户无写入」正是靠这条前置条件自证，写 `min: 0` 时它自证不了。
-        if sc.min_grade_calls == 0 and sc.max_grade_calls is None and not sc.grade_score_bands:
-            out.append(
-                SanityIssue(
-                    case.case_id,
-                    case.task,
-                    ERROR,
-                    "setup_conditions.min_grade_calls",
-                    "min_grade_calls=0 单独存在是**永真**（次数不可能 < 0）⇒ 前置条件等于没校验。"
-                    "若意图是「A 段一次批改都不许发生」，请改写成 min:0 + max:0",
-                )
-            )
-        # 上下限互相矛盾 ⇒ validity 恒 False，该 case 永远只能记 case_invalid
-        if (
-            sc.max_grade_calls is not None
-            and sc.min_grade_calls is not None
-            and sc.max_grade_calls < sc.min_grade_calls
-        ):
-            out.append(
-                SanityIssue(
-                    case.case_id,
-                    case.task,
-                    ERROR,
-                    "setup_conditions.max_grade_calls",
-                    f"上限 {sc.max_grade_calls} < 下限 {sc.min_grade_calls} —— 前置条件不可能成立",
-                )
-            )
-        # bands 要求逐次对分（隐含「至少 len(bands) 次」），上限比它小 ⇒ 同样不可能成立
-        if sc.grade_score_bands and sc.max_grade_calls is not None:
-            if sc.max_grade_calls < len(sc.grade_score_bands):
-                out.append(
-                    SanityIssue(
-                        case.case_id,
-                        case.task,
-                        ERROR,
-                        "setup_conditions.max_grade_calls",
-                        f"上限 {sc.max_grade_calls} < grade_score_bands 要求的 "
-                        f"{len(sc.grade_score_bands)} 次 —— 两者不可能同时满足",
-                    )
-                )
+        return
+    if not (
+        sc.grade_score_bands or sc.min_grade_calls is not None or sc.max_grade_calls is not None
+    ):
+        return
+    _check_memory_setup_bands(case, sc, out)
+    _check_memory_setup_consistency(case, sc, out)
+
+
+def _check_memory(case: TaskCase, kp_index: dict, out: list[SanityIssue]) -> None:
+    """Memory 的 gold 检查（v1 契约，2026-10-06 定稿）。
+
+    为什么必须 ERROR 而非 PENDING
+    ----------------------------
+    Memory 三项主指标已改为**机械判定**（`memory_scorer.py`，judge 不参与）。
+    机械判定需要 `expected_memory` 与 `expected_answer_property` 里的**每一个字段**：
+    缺 `values` ⇒ `used`/`recalled` 无从计算；缺 `should_be_recalled` ⇒ 分不清正负样本；
+    缺 `forbidden_values` ⇒ `correct` 退化成 `used` 的副本。
+
+    ⇒ 缺任一字段都让该项判定**退回主观猜测** —— 这正是本轮要根除的问题。
+      故标 **ERROR**（不是 PENDING）：宁可不测，不可假测。
+
+    ★ `values` 必须是 **canonical KP 名**：与 `expected_kp` 同源校验。
+      理由：避免「LLM 输出 `AVL树旋转`、gold 写 `AVL树`」这类字符串漂移，
+      使 `in` 判定产生**系统性假阴性**（与 kp_hit 恒 0 是同一类口径错配）。
+    """
+    em = case.gold.expected_memory
+    eap = case.gold.expected_answer_property
+    _check_memory_expected(case, em, kp_index, out)  # —— expected_memory ——
+    _check_memory_answer_property(case, em, eap, out)  # —— expected_answer_property ——
+    _check_memory_setup(case, case.gold.setup_conditions, out)  # —— setup_conditions ——
 
 
 def _check_structure(case: TaskCase, out: list[SanityIssue]) -> None:
