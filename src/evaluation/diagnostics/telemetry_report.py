@@ -324,6 +324,120 @@ def build_ingest_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _group_by_type(
+    eval_rows: list[dict[str, Any]], query_index: dict[str, dict[str, str]]
+) -> dict[str, list[dict[str, Any]]]:
+    """把评测行按黄金集 `query_type` 分桶。"""
+    by_type: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in eval_rows:
+        meta = query_index.get(row["query_preview"])
+        if meta:
+            by_type[meta["query_type"]].append(row)
+    return by_type
+
+
+def _build_thresholds(by_type: dict[str, list[dict[str, Any]]]) -> dict[str, dict[str, int]]:
+    """每个 query_type 的 `threshold` 取值分布（按键数值升序）。"""
+    thresholds: dict[str, dict[str, int]] = {}
+    for name in QUERY_TYPES:
+        counter: Counter[str] = Counter()
+        for row in by_type.get(name, []):
+            value = row["values"].get("threshold")
+            if isinstance(value, (int, float)):
+                counter[str(round(value, 4))] += 1
+        thresholds[name] = dict(sorted(counter.items(), key=lambda kv: float(kv[0])))
+    return thresholds
+
+
+def _build_meta(
+    scan: dict[str, Any],
+    log_path: Path,
+    golden: list[str],
+    query_index: dict[str, dict[str, str]],
+    window: dict[str, str | None] | None,
+) -> dict[str, Any]:
+    """报表自描述头（口径全部写进这里）。"""
+    return {
+        "log_path": str(log_path),
+        "log_bytes": scan["bytes"],
+        "log_lines": scan["lines"],
+        "bad_lines": scan["bad_lines"],
+        "time_span": scan["time_span"],
+        "golden_paths": golden,
+        "golden_queries": len(query_index),
+        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        # 时间窗口：**必须**随报表一起落盘。日志混了多个代码版本，
+        # 离开窗口就无法判断这份数字是哪一版代码跑出来的。
+        "window": window or {"since": None, "until": None, "filtered": False},
+        "note": (
+            "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ "
+            "本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。"
+            "② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 "
+            "不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
+        ),
+    }
+
+
+def _build_traffic_split(
+    query_rows: list[dict[str, Any]],
+    eval_rows: list[dict[str, Any]],
+    other_rows: list[dict[str, Any]],
+    evidence_rows: list[dict[str, Any]],
+    eval_ev: list[dict[str, Any]],
+    other_ev: list[dict[str, Any]],
+    other_top: list[tuple[str, int]],
+) -> dict[str, Any]:
+    """流量构成：评测 vs 其余（按 query_preview 是否命中黄金集）。"""
+    return {
+        "retrieve_query": {
+            "total": len(query_rows),
+            "evaluation": len(eval_rows),
+            "other": len(other_rows),
+            "evaluation_ratio": round(len(eval_rows) / len(query_rows), 4) if query_rows else None,
+        },
+        "retrieve_evidence": {
+            "total": len(evidence_rows),
+            "evaluation": len(eval_ev),
+            "other": len(other_ev),
+        },
+        "other_top_queries": [[q, n] for q, n in other_top],
+    }
+
+
+def _build_distribution(eval_rows: list[dict[str, Any]]) -> dict[str, dict[str, int]]:
+    """评测流量在若干 `values` 字段上的取值分布。"""
+    return {
+        key: summarize_by_key(eval_rows, key)
+        for key in (
+            "retrieval_layer",
+            "route_type",
+            "use_rerank",
+            "rerank_used",
+            "decomposed",
+            "classifier_source",
+        )
+    }
+
+
+def _build_evidence_block(evidence_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """证据层聚合：语义缓存命中率 + 判定 / 重试分布。"""
+    cache_hits = [
+        1.0 if r["values"].get("semantic_cache_hit") else 0.0
+        for r in evidence_rows
+        if "semantic_cache_hit" in r["values"]
+    ]
+    return {
+        "semantic_cache_hit_rate": round(mean(cache_hits), 4) if cache_hits else None,
+        "semantic_cache_samples": len(cache_hits),
+        "verifier_used": summarize_by_key(evidence_rows, "verifier_used"),
+        "evidence_verdict": summarize_by_key(evidence_rows, "evidence_verdict"),
+        # ★ 读 `hard_fail` 占比前必须同时看 `retry_count`：本字段只反映**该次**
+        # 证据事件的判定，不反映「治理层是否随后重试成功」。实测 retry_count 全为 0，
+        # 说明重试另走路径 —— 所以 hard_fail 占比**不能**直接读成「16% 的查询失败」。
+        "retry_count": summarize_by_key(evidence_rows, "retry_count"),
+    }
+
+
 def build_report(
     scan: dict[str, Any],
     query_index: dict[str, dict[str, str]],
@@ -337,99 +451,27 @@ def build_report(
     eval_rows, other_rows = split_traffic(query_rows, query_index)
     eval_ev, other_ev = split_traffic(evidence_rows, query_index)
 
-    by_type: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in eval_rows:
-        meta = query_index.get(row["query_preview"])
-        if meta:
-            by_type[meta["query_type"]].append(row)
-
+    by_type = _group_by_type(eval_rows, query_index)
     funnel: dict[str, Any] = {name: summarize_funnel(by_type.get(name, [])) for name in QUERY_TYPES}
     funnel["_all_eval"] = summarize_funnel(eval_rows)
-
-    thresholds: dict[str, dict[str, int]] = {}
-    for name in QUERY_TYPES:
-        counter: Counter[str] = Counter()
-        for row in by_type.get(name, []):
-            value = row["values"].get("threshold")
-            if isinstance(value, (int, float)):
-                counter[str(round(value, 4))] += 1
-        thresholds[name] = dict(sorted(counter.items(), key=lambda kv: float(kv[0])))
-
     other_top = Counter(r["query_preview"] for r in other_rows).most_common(10)
 
-    cache_hits = [
-        1.0 if r["values"].get("semantic_cache_hit") else 0.0
-        for r in evidence_rows
-        if "semantic_cache_hit" in r["values"]
-    ]
-
     return {
-        "_meta": {
-            "log_path": str(log_path),
-            "log_bytes": scan["bytes"],
-            "log_lines": scan["lines"],
-            "bad_lines": scan["bad_lines"],
-            "time_span": scan["time_span"],
-            "golden_paths": golden,
-            "golden_queries": len(query_index),
-            "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            # 时间窗口：**必须**随报表一起落盘。日志混了多个代码版本，
-            # 离开窗口就无法判断这份数字是哪一版代码跑出来的。
-            "window": window or {"since": None, "until": None, "filtered": False},
-            "note": (
-                "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ "
-                "本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。"
-                "② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 "
-                "不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
-            ),
-        },
+        "_meta": _build_meta(scan, log_path, golden, query_index, window),
         "event_counts": dict(Counter(scan["event_counts"]).most_common()),
-        "traffic_split": {
-            "retrieve_query": {
-                "total": len(query_rows),
-                "evaluation": len(eval_rows),
-                "other": len(other_rows),
-                "evaluation_ratio": round(len(eval_rows) / len(query_rows), 4)
-                if query_rows
-                else None,
-            },
-            "retrieve_evidence": {
-                "total": len(evidence_rows),
-                "evaluation": len(eval_ev),
-                "other": len(other_ev),
-            },
-            "other_top_queries": [[q, n] for q, n in other_top],
-        },
+        "traffic_split": _build_traffic_split(
+            query_rows, eval_rows, other_rows, evidence_rows, eval_ev, other_ev, other_top
+        ),
         "funnel_by_query_type": funnel,
-        "threshold_by_query_type": thresholds,
-        "distribution": {
-            key: summarize_by_key(eval_rows, key)
-            for key in (
-                "retrieval_layer",
-                "route_type",
-                "use_rerank",
-                "rerank_used",
-                "decomposed",
-                "classifier_source",
-            )
-        },
-        "evidence": {
-            "semantic_cache_hit_rate": round(mean(cache_hits), 4) if cache_hits else None,
-            "semantic_cache_samples": len(cache_hits),
-            "verifier_used": summarize_by_key(evidence_rows, "verifier_used"),
-            "evidence_verdict": summarize_by_key(evidence_rows, "evidence_verdict"),
-            # ★ 读 `hard_fail` 占比前必须同时看 `retry_count`：本字段只反映**该次**
-            # 证据事件的判定，不反映「治理层是否随后重试成功」。实测 retry_count 全为 0，
-            # 说明重试另走路径 —— 所以 hard_fail 占比**不能**直接读成「16% 的查询失败」。
-            "retry_count": summarize_by_key(evidence_rows, "retry_count"),
-        },
+        "threshold_by_query_type": _build_thresholds(by_type),
+        "distribution": _build_distribution(eval_rows),
+        "evidence": _build_evidence_block(evidence_rows),
         "ingest": build_ingest_summary(scan["ingest_rows"]),
     }
 
 
-def format_report(report: dict[str, Any]) -> str:
-    """人类可读版。刻意保持窄表 —— 宽表在终端会折行。"""
-    meta = report["_meta"]
+def _fmt_header(meta: dict[str, Any]) -> list[str]:
+    """报表抬头：标题 + 日志规模 + 时间跨度 + 时间窗口过滤态。"""
     out: list[str] = []
     out.append("=" * 78)
     out.append("  遥测报表（只读；非门禁、非线上统计）")
@@ -448,25 +490,35 @@ def format_report(report: dict[str, Any]) -> str:
             "  时间窗口  **未过滤** ⚠ 日志混了多个代码版本，此报表是混合口径"
             "（用 --since/--until 钉到单一版本）"
         )
+    return out
 
+
+def _fmt_traffic(report: dict[str, Any]) -> list[str]:
+    """流量构成一节。"""
     split = report["traffic_split"]["retrieve_query"]
-    out.append("")
-    out.append("-- 流量构成（query_preview ∩ 黄金集）--")
-    out.append(
+    out: list[str] = [
+        "",
+        "-- 流量构成（query_preview ∩ 黄金集）--",
         f"  retrieve_query 共 {split['total']}：评测 {split['evaluation']}"
-        f"（{split['evaluation_ratio']:.1%}） / 其余 {split['other']}"
-    )
-    out.append("  ★ 评测占比接近 100% ⇒ 本日志**不是**线上统计，别拿它推断生产表现")
+        f"（{split['evaluation_ratio']:.1%}） / 其余 {split['other']}",
+        "  ★ 评测占比接近 100% ⇒ 本日志**不是**线上统计，别拿它推断生产表现",
+    ]
     other_top = report["traffic_split"]["other_top_queries"]
     if other_top:
         out.append("  其余流量的高频 query（多为探针/手工测试）：")
         for query, count in other_top[:5]:
             out.append(f"    {count:5d}  {query[:52]}")
+    return out
 
-    out.append("")
-    out.append("-- 逐阶段漏斗（评测流量，按黄金集 query_type）--")
-    header = f"  {'type':9s} {'n':>6s} {'去重后':>8s} {'过阈后':>8s} {'重排后':>8s} {'过阈率':>8s} {'hit率':>7s}"
-    out.append(header)
+
+def _fmt_funnel(report: dict[str, Any]) -> list[str]:
+    """逐阶段漏斗一节。"""
+    out: list[str] = [
+        "",
+        "-- 逐阶段漏斗（评测流量，按黄金集 query_type）--",
+        f"  {'type':9s} {'n':>6s} {'去重后':>8s} {'过阈后':>8s} {'重排后':>8s} "
+        f"{'过阈率':>8s} {'hit率':>7s}",
+    ]
     for name in QUERY_TYPES:
         item = report["funnel_by_query_type"][name]
         if not item["n"]:
@@ -477,38 +529,51 @@ def format_report(report: dict[str, Any]) -> str:
             f" {item['threshold_keep_rate']:8.3f} {item['hit_rate']:7.3f}"
         )
     out.append("  ★ 过阈率 = 过阈后 / 去重后。它低 = 阈值层砍得狠（见方案 §3⑦）")
+    return out
 
-    out.append("")
-    out.append("-- 有效阈值分布（每个 query_type 的阈值应当一致且可解释）--")
+
+def _fmt_thresholds(report: dict[str, Any]) -> list[str]:
+    """有效阈值分布一节。"""
+    out: list[str] = ["", "-- 有效阈值分布（每个 query_type 的阈值应当一致且可解释）--"]
     for name in QUERY_TYPES:
         dist = report["threshold_by_query_type"][name]
         if dist:
             out.append(f"  {name:9s} {dist}")
+    return out
 
-    out.append("")
-    out.append("-- 分层 / 路由分布（评测流量）--")
+
+def _fmt_distribution(report: dict[str, Any]) -> list[str]:
+    """分层 / 路由分布一节。"""
+    out: list[str] = ["", "-- 分层 / 路由分布（评测流量）--"]
     for key, dist in report["distribution"].items():
         out.append(f"  {key:18s} {dist}")
+    return out
 
+
+def _fmt_evidence(report: dict[str, Any]) -> list[str]:
+    """证据层一节。"""
     evidence = report["evidence"]
-    out.append("")
-    out.append("-- 证据层 --")
-    out.append(
+    return [
+        "",
+        "-- 证据层 --",
         f"  语义缓存命中率 {evidence['semantic_cache_hit_rate']}"
-        f"  (n={evidence['semantic_cache_samples']})"
-    )
-    out.append(f"  evidence_verdict {evidence['evidence_verdict']}")
-    out.append(f"  retry_count      {evidence['retry_count']}")
-    out.append("  ★ hard_fail 占比不等于「查询失败率」—— 它不含治理层的重试结果")
+        f"  (n={evidence['semantic_cache_samples']})",
+        f"  evidence_verdict {evidence['evidence_verdict']}",
+        f"  retry_count      {evidence['retry_count']}",
+        "  ★ hard_fail 占比不等于「查询失败率」—— 它不含治理层的重试结果",
+    ]
 
+
+def _fmt_ingest(report: dict[str, Any]) -> list[str]:
+    """入库侧一节。"""
     ingest = report["ingest"]
-    out.append("")
-    out.append("-- 入库侧（每文件取最后一次；indexed 合计应与生产索引规模一致）--")
-    out.append(
+    out: list[str] = [
+        "",
+        "-- 入库侧（每文件取最后一次；indexed 合计应与生产索引规模一致）--",
         f"  文件 {ingest['files']} 个（事件 {ingest['events']} 条）"
-        f"  切分产出 {ingest['split_total']} → 实际入库 {ingest['indexed_total']}"
-    )
-    out.append(f"  分集合（实际入库）{ingest['per_category']}")
+        f"  切分产出 {ingest['split_total']} → 实际入库 {ingest['indexed_total']}",
+        f"  分集合（实际入库）{ingest['per_category']}",
+    ]
     if ingest["mismatched_files"]:
         out.append("  ⚠ 切分产出 ≠ 实际入库的文件（差额 = 内容哈希判重丢弃）：")
         for item in ingest["mismatched_files"]:
@@ -516,10 +581,23 @@ def format_report(report: dict[str, Any]) -> str:
                 f"    {item['category']:22s} {item['file']:26s}"
                 f" {item['chunks']} → {item['indexed_chunks']}  丢 {item['dropped']}"
             )
+    return out
+
+
+def format_report(report: dict[str, Any]) -> str:
+    """人类可读版。刻意保持窄表 —— 宽表在终端会折行。"""
+    out: list[str] = []
+    out += _fmt_header(report["_meta"])
+    out += _fmt_traffic(report)
+    out += _fmt_funnel(report)
+    out += _fmt_thresholds(report)
+    out += _fmt_distribution(report)
+    out += _fmt_evidence(report)
+    out += _fmt_ingest(report)
     return "\n".join(out)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="遥测报表：把 rag_metrics.jsonl 聚合成人可读报表")
     parser.add_argument("--log", default=str(DEFAULT_METRICS_PATH), help="遥测日志 jsonl 路径")
     parser.add_argument(
@@ -538,7 +616,34 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--until", default=None, help="只统计该时刻之前的记录（格式同 --since）")
     parser.add_argument("--json", action="store_true", help="打印 JSON 而不是表格")
     parser.add_argument("--verbose", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def _resolve_time_window(
+    args: argparse.Namespace, anchor: datetime
+) -> tuple[dict[str, Any], datetime | None, datetime | None]:
+    """解析 ``--since`` / ``--until`` → ``(window 描述, since, until)``；非法值抛 ValueError。"""
+    since = parse_when(args.since, anchor) if args.since else None
+    until = parse_when(args.until, anchor) if args.until else None
+    window: dict[str, Any] = {
+        "since": since.isoformat() if since else None,
+        "until": until.isoformat() if until else None,
+        "filtered": bool(since or until),
+        "anchor": anchor.isoformat(),
+    }
+    return window, since, until
+
+
+def _write_report(report: dict[str, Any], output: str) -> None:
+    """把 JSON 报表落盘（父目录自动创建），并打印路径。"""
+    out_path = Path(output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"报表已写入: {out_path}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
 
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
@@ -565,30 +670,17 @@ def main(argv: list[str] | None = None) -> int:
     # 相对时间量的锚点 = 日志里最新的一条事件（不是「现在」，见 `parse_when`）。
     anchor = _latest_ts(scan)
     try:
-        since = parse_when(args.since, anchor) if args.since else None
-        until = parse_when(args.until, anchor) if args.until else None
+        window, since, until = _resolve_time_window(args, anchor)
     except ValueError as exc:
         print(f"[错误] 无法解析时间参数: {exc}", file=sys.stderr)
         return 2
-
-    window: dict[str, Any] = {
-        "since": since.isoformat() if since else None,
-        "until": until.isoformat() if until else None,
-        "filtered": bool(since or until),
-        "anchor": anchor.isoformat(),
-    }
     for key in ("query_rows", "evidence_rows", "ingest_rows"):
         scan[key] = filter_rows_by_time(scan[key], since, until)
 
     report = build_report(scan, query_index, log_path, golden, window)
 
     if args.output:
-        out_path = Path(args.output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(
-            json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
-        print(f"报表已写入: {out_path}")
+        _write_report(report, args.output)
 
     print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else format_report(report))
     return 0

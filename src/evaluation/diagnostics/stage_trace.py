@@ -389,31 +389,34 @@ def _volatile_delta(exp_out: Any, act_out: Any, ratio: float) -> tuple[int, int]
     return delta, allowed
 
 
-def compare_traces(
-    expected: dict[str, Any],
-    actual: dict[str, Any],
-    *,
-    rel_tol: float = 1e-9,
-    volatile_stages: frozenset[str] = VOLATILE_OUTPUT_STAGES,
-    volatile_ratio: float = VOLATILE_RATIO,
-) -> TraceComparison:
-    """**分级**比对两份 trace。
+def _collect_volatile(
+    exp_steps: list[dict[str, Any]],
+    act_steps: list[dict[str, Any]],
+    volatile_stages: frozenset[str],
+    rel_tol: float,
+) -> tuple[set[str], bool]:
+    """第一遍：recall 层是否抖动，以及它输出了哪些文档（供判定下游是否吃到抖动输出）。"""
+    volatile_hashes: set[str] = set()
+    volatile_drifted = False
+    for exp, act in zip(exp_steps, act_steps, strict=True):
+        if exp.get("stage") not in volatile_stages:
+            continue
+        volatile_hashes |= _doc_hashes(exp.get("out")) | _doc_hashes(act.get("out"))
+        if not _deep_equal(exp.get("out"), act.get("out"), rel_tol=rel_tol):
+            volatile_drifted = True
+    return volatile_hashes, volatile_drifted
 
-    为什么不能一律严格：recall 层走的是 Chroma 的**近似**索引，top-k 边界本来就可能抖动。
-    若把它也当严格失败，重构时会把上游噪声误判成"重构引入了退化"，
-    最后只能靠人肉判断 —— 那等于没有安全网。
 
-    分级规则：
-
-    ========================================  ==========================================
-    比较对象                                   判定
-    ========================================  ==========================================
-    阶段调用**序列**                             严格（编排被改动最直接的证据）
-    各阶段**入参**                               严格，除非它吃到了抖动的 recall 输出
-    recall 层**输出**                            容许 ``volatile_ratio`` 比例的差异
-    recall 之后的阶段                            若其入参含抖动的 recall 输出 → 无法判定
-    最终返回                                    严格（"不改行为"的最终契约）
-    ========================================  ==========================================
+def _judge_steps(
+    exp_steps: list[dict[str, Any]],
+    act_steps: list[dict[str, Any]],
+    volatile_stages: frozenset[str],
+    volatile_hashes: set[str],
+    volatile_drifted: bool,
+    volatile_ratio: float,
+    rel_tol: float,
+) -> tuple[list[str], list[str], int]:
+    """第二遍：逐条判定，返回 ``(failures, advisories, max_delta)``。
 
     **"吃到抖动输出"的判定与顺序无关**：不能用"遍历到抖动之后就算污染"这种线性推断 ——
     比对前 steps 会按 (阶段名, 入参) 排序，`dedup_section` 会排在
@@ -424,38 +427,10 @@ def compare_traces(
     advisories: list[str] = []
     max_delta = 0
 
-    exp_stages = sorted(expected.get("stages_called", []))
-    act_stages = sorted(actual.get("stages_called", []))
-    if exp_stages != act_stages:
-        # 比**多重集**而不是原序列：`stages_called` 是调用发生的先后次序，
-        # 而阶段内部存在并发（`_amulti_route_search` 走 asyncio.gather、
-        # 去重走线程池），完成次序天然不定 —— 实测同一份代码两次运行的
-        # recall / dedup 交错顺序就不同。按序列比对会稳定误报。
-        # 这里断言的是"调用了哪些阶段、各几次"，"以什么输入调用"由下面的 steps 负责。
-        failures.append(f"被调用的阶段集合不同：期望 {exp_stages}，实际 {act_stages}")
-        return TraceComparison(failures, advisories, 0)
-
-    exp_steps = expected.get("steps", [])
-    act_steps = actual.get("steps", [])
-    if len(exp_steps) != len(act_steps):
-        failures.append(f"阶段调用次数不同：期望 {len(exp_steps)} 次，实际 {len(act_steps)} 次")
-        return TraceComparison(failures, advisories, 0)
-
-    # ── 第一遍：recall 层是否抖动，以及它输出了哪些文档 ──
-    volatile_hashes: set[str] = set()
-    volatile_drifted = False
-    for exp, act in zip(exp_steps, act_steps, strict=True):
-        if exp.get("stage") not in volatile_stages:
-            continue
-        volatile_hashes |= _doc_hashes(exp.get("out")) | _doc_hashes(act.get("out"))
-        if not _deep_equal(exp.get("out"), act.get("out"), rel_tol=rel_tol):
-            volatile_drifted = True
-
     def _fed_by_recall(step: dict[str, Any]) -> bool:
         """该阶段的入参是否包含 recall 输出里的文档。"""
         return bool(_doc_hashes(step.get("in")) & volatile_hashes)
 
-    # ── 第二遍：逐条判定 ──
     for idx, (exp, act) in enumerate(zip(exp_steps, act_steps, strict=True)):
         stage = exp.get("stage", "?")
         fed = _fed_by_recall(exp) or _fed_by_recall(act)
@@ -491,6 +466,66 @@ def compare_traces(
             failures.append(f"[{idx}] 阶段 {stage} 的**入参**变了")
         if not out_same:
             failures.append(f"[{idx}] 阶段 {stage} 的**返回值**变了")
+    return failures, advisories, max_delta
+
+
+def compare_traces(
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+    *,
+    rel_tol: float = 1e-9,
+    volatile_stages: frozenset[str] = VOLATILE_OUTPUT_STAGES,
+    volatile_ratio: float = VOLATILE_RATIO,
+) -> TraceComparison:
+    """**分级**比对两份 trace。
+
+    为什么不能一律严格：recall 层走的是 Chroma 的**近似**索引，top-k 边界本来就可能抖动。
+    若把它也当严格失败，重构时会把上游噪声误判成"重构引入了退化"，
+    最后只能靠人肉判断 —— 那等于没有安全网。
+
+    分级规则：
+
+    ========================================  ==========================================
+    比较对象                                   判定
+    ========================================  ==========================================
+    阶段调用**序列**                             严格（编排被改动最直接的证据）
+    各阶段**入参**                               严格，除非它吃到了抖动的 recall 输出
+    recall 层**输出**                            容许 ``volatile_ratio`` 比例的差异
+    recall 之后的阶段                            若其入参含抖动的 recall 输出 → 无法判定
+    最终返回                                    严格（"不改行为"的最终契约）
+    ========================================  ==========================================
+    """
+    exp_stages = sorted(expected.get("stages_called", []))
+    act_stages = sorted(actual.get("stages_called", []))
+    if exp_stages != act_stages:
+        # 比**多重集**而不是原序列：`stages_called` 是调用发生的先后次序，
+        # 而阶段内部存在并发（`_amulti_route_search` 走 asyncio.gather、
+        # 去重走线程池），完成次序天然不定 —— 实测同一份代码两次运行的
+        # recall / dedup 交错顺序就不同。按序列比对会稳定误报。
+        # 这里断言的是"调用了哪些阶段、各几次"，"以什么输入调用"由下面的 steps 负责。
+        return TraceComparison(
+            [f"被调用的阶段集合不同：期望 {exp_stages}，实际 {act_stages}"], [], 0
+        )
+
+    exp_steps = expected.get("steps", [])
+    act_steps = actual.get("steps", [])
+    if len(exp_steps) != len(act_steps):
+        return TraceComparison(
+            [f"阶段调用次数不同：期望 {len(exp_steps)} 次，实际 {len(act_steps)} 次"], [], 0
+        )
+
+    volatile_hashes, volatile_drifted = _collect_volatile(
+        exp_steps, act_steps, volatile_stages, rel_tol
+    )
+    failures, advisories, max_delta = _judge_steps(
+        exp_steps,
+        act_steps,
+        volatile_stages,
+        volatile_hashes,
+        volatile_drifted,
+        volatile_ratio,
+        rel_tol,
+    )
 
     if not _deep_equal(expected.get("final"), actual.get("final"), rel_tol=rel_tol):
         failures.append("最终返回的文档序列变了")
@@ -577,7 +612,7 @@ def _stage_trigger_report(traces: list[StageTrace]) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="检索链阶段级行为追踪")
     parser.add_argument("--baseline", default=DEFAULT_BASELINE_PATH)
     parser.add_argument("--limit", type=int, default=12, help="追踪前 N 条 query")
@@ -606,31 +641,112 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--keep-index", action="store_true")
     parser.add_argument("--verbose", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
 
-    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING)
 
+def _setup_index(tmp_dir: str, own_tmp: bool) -> dict[str, int]:
+    """配置并构建（或复用）索引，打印就绪信息，返回各集合 chunk 数。
+
+    为什么允许固定索引目录：Chroma 的 HNSW 是**近似**索引，跨进程重建得到的图
+    不一定逐位相同，于是原始召回结果（recall_multi_route*）会有微小差异 ——
+    门禁的聚合指标会吸收掉这种差异，但阶段级追踪看得见，表现为"每次跑都有几处不同"。
+    复用同一个持久化索引可以把这一层变量消掉，让"阶段级一致"成为可判定的断言。
+    """
     from evaluation.gates.retrieval_gate import (
         build_index,
         configure_for_gate,
         wait_for_index_ready,
     )
 
-    # 为什么允许固定索引目录：Chroma 的 HNSW 是**近似**索引，跨进程重建得到的图
-    # 不一定逐位相同，于是原始召回结果（recall_multi_route*）会有微小差异 ——
-    # 门禁的聚合指标会吸收掉这种差异，但阶段级追踪看得见，表现为"每次跑都有几处不同"。
-    # 复用同一个持久化索引可以把这一层变量消掉，让"阶段级一致"成为可判定的断言。
+    configure_for_gate(tmp_dir)
+    start = time.perf_counter()
+    counts = build_index()
+    wait_for_index_ready(sorted(counts))
+    print(
+        f"索引就绪：{sum(counts.values())} chunks（{time.perf_counter() - start:.1f}s）"
+        f"{'（复用 ' + tmp_dir + '）' if not own_tmp else ''}"
+    )
+    return counts
+
+
+def _print_trace_summary(traces: list[StageTrace], excluded: list[str], elapsed: float) -> None:
+    """打印：追踪条数 / 平均阶段调用数 + 阶段触发率表 + 被排除的不可复现 query。"""
+    print(
+        f"追踪 {len(traces)} 条 query（{elapsed:.1f}s），"
+        f"平均每条约 {sum(len(t.steps) for t in traces) / max(len(traces), 1):.1f} 个阶段调用"
+    )
+    print(_stage_trigger_report(traces))
+    if excluded:
+        print(
+            f"[已排除] {len(excluded)} 条 query 的最终结果不可复现"
+            f"（上游 ANN 边界抖动传导，非本项目缺陷）："
+        )
+        for query in excluded[:6]:
+            print(f"    {query[:44]}")
+
+
+def _build_payload(traces: list[StageTrace]) -> dict[str, Any]:
+    """把追踪结果打包成基线 payload。"""
+    return {
+        "_meta": {
+            "note": "由 evaluation.diagnostics.stage_trace 生成；拆分检索链后必须与本文件逐阶段一致",
+            "embedding": "USE_FAKE_EMBEDDING (deterministic hashing)",
+            "rerank_enabled": False,
+            "k": 5,
+            "n_queries": len(traces),
+            "recorded_at": time.strftime("%Y-%m-%d"),
+        },
+        "traces": [t.as_dict() for t in traces],
+    }
+
+
+def _compare_and_report(
+    saved: list[dict[str, Any]], current: list[dict[str, Any]], volatile_ratio: float
+) -> int:
+    """逐条比对基线并打印差异；返回退出码（0 通过 / 1 有严格差异）。"""
+    total_failures = 0
+    total_advisories = 0
+    max_delta = 0
+    for exp, act in zip(saved, current, strict=True):
+        result = compare_traces(exp, act, volatile_ratio=volatile_ratio)
+        max_delta = max(max_delta, result.max_volatile_delta)
+        if result.failures:
+            total_failures += len(result.failures)
+            print(f"\n[失败] {exp['query'][:44]}")
+            for item in result.failures[:6]:
+                print(f"    {item}")
+        if result.advisories:
+            total_advisories += len(result.advisories)
+            print(f"\n[无法判定] {exp['query'][:44]}")
+            for item in result.advisories[:4]:
+                print(f"    {item}")
+
+    if total_failures:
+        print(f"\n阶段级比对未通过：{total_failures} 处严格差异")
+        if total_advisories:
+            print(f"（另有 {total_advisories} 处因上游 ANN 抖动无法判定）")
+        return 1
+
+    if total_advisories:
+        print(
+            f"\n阶段级比对通过：0 处严格差异；"
+            f"{total_advisories} 处因上游 ANN 抖动无法判定（最大文档差异 {max_delta}）"
+        )
+        return 0
+
+    print("\n阶段级比对通过：所有阶段入参与返回值逐条一致。")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+
+    logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING)
+
     own_tmp = args.persist_dir is None
     tmp_dir = args.persist_dir or tempfile.mkdtemp(prefix="stage_trace_")
     try:
-        configure_for_gate(tmp_dir)
-        start = time.perf_counter()
-        counts = build_index()
-        wait_for_index_ready(sorted(counts))
-        print(
-            f"索引就绪：{sum(counts.values())} chunks（{time.perf_counter() - start:.1f}s）"
-            f"{'（复用 ' + tmp_dir + '）' if not own_tmp else ''}"
-        )
+        _setup_index(tmp_dir, own_tmp)
 
         start = time.perf_counter()
         traces, excluded = asyncio.run(
@@ -640,31 +756,9 @@ def main(argv: list[str] | None = None) -> int:
                 stable_repeats=args.stable_repeats,
             )
         )
-        print(
-            f"追踪 {len(traces)} 条 query（{time.perf_counter() - start:.1f}s），"
-            f"平均每条约 {sum(len(t.steps) for t in traces) / max(len(traces), 1):.1f} 个阶段调用"
-        )
-        print(_stage_trigger_report(traces))
-        if excluded:
-            print(
-                f"[已排除] {len(excluded)} 条 query 的最终结果不可复现"
-                f"（上游 ANN 边界抖动传导，非本项目缺陷）："
-            )
-            for query in excluded[:6]:
-                print(f"    {query[:44]}")
+        _print_trace_summary(traces, excluded, time.perf_counter() - start)
 
-        payload = {
-            "_meta": {
-                "note": "由 evaluation.diagnostics.stage_trace 生成；拆分检索链后必须与本文件逐阶段一致",
-                "embedding": "USE_FAKE_EMBEDDING (deterministic hashing)",
-                "rerank_enabled": False,
-                "k": 5,
-                "n_queries": len(traces),
-                "recorded_at": time.strftime("%Y-%m-%d"),
-            },
-            "traces": [t.as_dict() for t in traces],
-        }
-
+        payload = _build_payload(traces)
         baseline_path = Path(args.baseline)
         if args.record:
             baseline_path.parent.mkdir(parents=True, exist_ok=True)
@@ -683,38 +777,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[错误] 条数不一致：基线 {len(saved)} vs 当前 {len(payload['traces'])}")
             return 2
 
-        total_failures = 0
-        total_advisories = 0
-        max_delta = 0
-        for exp, act in zip(saved, payload["traces"], strict=True):
-            result = compare_traces(exp, act, volatile_ratio=args.volatile_ratio)
-            max_delta = max(max_delta, result.max_volatile_delta)
-            if result.failures:
-                total_failures += len(result.failures)
-                print(f"\n[失败] {exp['query'][:44]}")
-                for item in result.failures[:6]:
-                    print(f"    {item}")
-            if result.advisories:
-                total_advisories += len(result.advisories)
-                print(f"\n[无法判定] {exp['query'][:44]}")
-                for item in result.advisories[:4]:
-                    print(f"    {item}")
-
-        if total_failures:
-            print(f"\n阶段级比对未通过：{total_failures} 处严格差异")
-            if total_advisories:
-                print(f"（另有 {total_advisories} 处因上游 ANN 抖动无法判定）")
-            return 1
-
-        if total_advisories:
-            print(
-                f"\n阶段级比对通过：0 处严格差异；"
-                f"{total_advisories} 处因上游 ANN 抖动无法判定（最大文档差异 {max_delta}）"
-            )
-            return 0
-
-        print("\n阶段级比对通过：所有阶段入参与返回值逐条一致。")
-        return 0
+        return _compare_and_report(saved, payload["traces"], args.volatile_ratio)
     finally:
         # 只清理自己创建的临时目录；--persist-dir 指定的目录归调用方管
         if own_tmp and not args.keep_index:
