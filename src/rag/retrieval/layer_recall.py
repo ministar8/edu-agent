@@ -45,6 +45,91 @@ def _doc_to_evidence(doc, score: float, collection: str) -> TextEvidence:
     )
 
 
+def _evidence_key(ev: TextEvidence) -> str:
+    """证据去重键：优先 `chunk_id`，缺失退回 `evidence_id`。"""
+    return str((ev.metadata or {}).get("chunk_id") or ev.evidence_id)
+
+
+def _existing_layer_pool(fused: FusedEvidence) -> set[str]:
+    """候选池里已有的语义层（空串 = legacy 资产，不计入层）。"""
+    return {
+        str((e.metadata or {}).get("kb_depth") or "")
+        for e in (fused.text_evidences or [])
+        if str((e.metadata or {}).get("kb_depth") or "") in ("basic", "advanced", "exams")
+    }
+
+
+async def _collect_topup_candidates(
+    query: str,
+    missing: list[str],
+    existing_ids: set[str],
+    *,
+    per_layer: int,
+    eligibility_where: dict | None,
+) -> list[TextEvidence]:
+    """对每个缺口层逐集合定向召回，滤掉已存在/错域项，返回带 `topic_relevance` 的候选。"""
+    from rag.common.vectorstore import get_vector_store_manager
+    from schema.task_policy import merge_where_filters
+
+    mgr = get_vector_store_manager()
+    candidates: list[TextEvidence] = []
+    for layer in missing:
+        # 层约束 + 资格约束（policy 真源）；layer_recall 不实现资格规则
+        filt = merge_where_filters({"kb_depth": layer}, eligibility_where)
+        for coll in SUBJECT_COLLECTIONS:
+            try:
+                hits = await mgr.asimilarity_search_with_score(coll, query, per_layer, filter=filt)
+            except Exception:
+                logger.debug("layer topup %s/%s failed", layer, coll, exc_info=True)
+                continue
+            for doc, score in hits:
+                ev = _doc_to_evidence(doc, score, coll)
+                key = _evidence_key(ev)
+                if key in existing_ids:
+                    continue
+                # ★ 主题门：错域 top-up 直接丢弃（哈夫曼≠CSMA）
+                rel = topic_relevance_score(query, ev.content, ev.metadata)
+                if not is_topic_relevant(query, ev.content, ev.metadata, min_score=0.25):
+                    logger.debug(
+                        "topup reject off-topic %s rel=%.2f %s",
+                        key,
+                        rel,
+                        (ev.metadata or {}).get("section_id"),
+                    )
+                    continue
+                existing_ids.add(key)
+                ev.metadata = {
+                    **(ev.metadata or {}),
+                    "layer_topup": True,
+                    "topic_relevance": round(rel, 3),
+                }
+                candidates.append(ev)
+    return candidates
+
+
+def _merge_topup_into_fused(
+    fused: FusedEvidence,
+    candidates: list[TextEvidence],
+    missing: list[str],
+    max_add: int,
+) -> FusedEvidence:
+    """按 (topic_relevance, score) 排序取前 max_add，追加进融合证据包。"""
+    candidates.sort(
+        key=lambda e: (float((e.metadata or {}).get("topic_relevance") or 0.0), e.score),
+        reverse=True,
+    )
+    added = candidates[:max_add]
+
+    out = fused.model_copy(deep=True)
+    out.text_evidences = list(fused.text_evidences or []) + added
+    out.metadata = {
+        **(fused.metadata or {}),
+        "layer_topup_added": len(added),
+        "layer_topup_layers": missing,
+    }
+    return out
+
+
 async def topup_preferred_layers(
     query: str,
     preferred_layers: Sequence[str],
@@ -66,76 +151,18 @@ async def topup_preferred_layers(
       —— 例如 verify 禁 `exam_answer`，但 top-up 只按 `kb_depth=exams`
       会把 answer.md 拉进池，随后被 Evidence Policy 裁掉，形成空 L3。
     """
-    from schema.task_policy import merge_where_filters
-
     preferred = list(preferred_layers or [])
     if not preferred:
         return fused
 
-    # 语义层集合（空串 = legacy 资产，不是层）
-    pool_layers = {
-        str((e.metadata or {}).get("kb_depth") or "")
-        for e in (fused.text_evidences or [])
-        if str((e.metadata or {}).get("kb_depth") or "") in ("basic", "advanced", "exams")
-    }
-    missing = [ly for ly in preferred if ly not in pool_layers]
+    missing = [ly for ly in preferred if ly not in _existing_layer_pool(fused)]
     if not missing:
         return fused
 
-    from rag.common.vectorstore import get_vector_store_manager
-
-    mgr = get_vector_store_manager()
-    existing_ids = {
-        str((e.metadata or {}).get("chunk_id") or e.evidence_id)
-        for e in (fused.text_evidences or [])
-    }
-    candidates: list[TextEvidence] = []
-    for layer in missing:
-        # 层约束 + 资格约束（policy 真源）；layer_recall 不实现资格规则
-        filt = merge_where_filters({"kb_depth": layer}, eligibility_where)
-        for coll in SUBJECT_COLLECTIONS:
-            try:
-                hits = await mgr.asimilarity_search_with_score(coll, query, per_layer, filter=filt)
-            except Exception:
-                logger.debug("layer topup %s/%s failed", layer, coll, exc_info=True)
-                continue
-            for doc, score in hits:
-                ev = _doc_to_evidence(doc, score, coll)
-                key = str((ev.metadata or {}).get("chunk_id") or ev.evidence_id)
-                if key in existing_ids:
-                    continue
-                # ★ 主题门：错域 top-up 直接丢弃（哈夫曼≠CSMA）
-                rel = topic_relevance_score(query, ev.content, ev.metadata)
-                if not is_topic_relevant(query, ev.content, ev.metadata, min_score=0.25):
-                    logger.debug(
-                        "topup reject off-topic %s rel=%.2f %s",
-                        key,
-                        rel,
-                        (ev.metadata or {}).get("section_id"),
-                    )
-                    continue
-                existing_ids.add(key)
-                ev.metadata = {
-                    **(ev.metadata or {}),
-                    "layer_topup": True,
-                    "topic_relevance": round(rel, 3),
-                }
-                candidates.append(ev)
-
+    existing_ids = {_evidence_key(e) for e in (fused.text_evidences or [])}
+    candidates = await _collect_topup_candidates(
+        query, missing, existing_ids, per_layer=per_layer, eligibility_where=eligibility_where
+    )
     if not candidates:
         return fused
-
-    candidates.sort(
-        key=lambda e: (float((e.metadata or {}).get("topic_relevance") or 0.0), e.score),
-        reverse=True,
-    )
-    added = candidates[:max_add]
-
-    out = fused.model_copy(deep=True)
-    out.text_evidences = list(fused.text_evidences or []) + added
-    out.metadata = {
-        **(fused.metadata or {}),
-        "layer_topup_added": len(added),
-        "layer_topup_layers": missing,
-    }
-    return out
+    return _merge_topup_into_fused(fused, candidates, missing, max_add)
