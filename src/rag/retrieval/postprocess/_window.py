@@ -105,45 +105,48 @@ def sentence_window_expand(
         result = _chroma_window_expand(docs, collection_name, window_size, budget, global_budget)
 
     # ── Stage 2: Parent window fallback（对 sentence window 未覆盖的 section）──
-    # 收集已被 sentence window 展开的 section.id
-    sw_expanded_sections: set[str] = set()
-    for doc in result:
-        if doc.metadata.get("_window_expanded"):
-            sid = str(doc.metadata.get("section.id") or "")
-            if sid:
-                sw_expanded_sections.add(sid)
-
-    # 找出未被 sentence window 覆盖的锚点文档
-    needs_parent = [
-        doc for doc in docs if str(doc.metadata.get("section.id") or "") not in sw_expanded_sections
-    ]
-
-    if needs_parent:
-        parent_added = _parent_window_expand(needs_parent, global_budget)
-        if len(parent_added) > len(needs_parent):
-            existing_keys = {
-                str(d.metadata.get("section.chunk_id") or d.page_content[:80]) for d in result
-            }
-            current_tokens = sum(_estimate_tokens(d.page_content) for d in result)
-            for doc in parent_added:
-                if doc.metadata.get("_parent_expanded"):
-                    # 去重键必须**区分父文档与它的锚点**。
-                    # 父文档的 metadata 是从锚点复制来的，因此它带着**锚点的
-                    # `section.chunk_id`**。若直接用 chunk_id 做键，父文档必然与锚点撞键
-                    # 而被永远挡掉 —— 实测确认这就是原本的行为：**只要锚点有 chunk_id
-                    # （生产环境的正常情况），父窗口兜底就从未真正生效过**，
-                    # 只有锚点恰好没有 chunk_id 时才会被加进去。
-                    key = "parent:" + str(
-                        doc.metadata.get("_parent_anchor_chunk_id") or doc.page_content[:80]
-                    )
-                    if key not in existing_keys:
-                        doc_tokens = _estimate_tokens(doc.page_content)
-                        if current_tokens + doc_tokens <= global_budget:
-                            result.append(doc)
-                            existing_keys.add(key)
-                            current_tokens += doc_tokens
-
+    _merge_parent_fallbacks(result, docs, global_budget)
     return result
+
+
+def _merge_parent_fallbacks(
+    result: list[Document], docs: list[Document], global_budget: int
+) -> None:
+    """阶段 2：对 sentence window **未覆盖**的 section，用 `section.parent_text` 补全上下文。
+
+    **就地追加**到 `result`。去重键必须**区分父文档与它的锚点**：父文档的 metadata
+    复制自锚点、带着**锚点的 `section.chunk_id`**；若直接用 `chunk_id` 做键，父文档必然
+    与锚点撞键而被永远挡掉 —— 实测确认这就是原本的行为（**只要锚点有 chunk_id（生产环境
+    的正常情况），父窗口兜底就从未真正生效过**，只有锚点恰好没有 chunk_id 时才加得进去）。
+    """
+    sw_sections = {
+        str(d.metadata["section.id"])
+        for d in result
+        if d.metadata.get("_window_expanded") and d.metadata.get("section.id")
+    }
+    needs_parent = [
+        doc for doc in docs if str(doc.metadata.get("section.id") or "") not in sw_sections
+    ]
+    if not needs_parent:
+        return
+
+    parent_added = _parent_window_expand(needs_parent, global_budget)
+    if len(parent_added) <= len(needs_parent):
+        return
+
+    existing_keys = {str(d.metadata.get("section.chunk_id") or d.page_content[:80]) for d in result}
+    current_tokens = sum(_estimate_tokens(d.page_content) for d in result)
+    for doc in parent_added:
+        if not doc.metadata.get("_parent_expanded"):
+            continue
+        key = "parent:" + str(doc.metadata.get("_parent_anchor_chunk_id") or doc.page_content[:80])
+        if key in existing_keys:
+            continue
+        doc_tokens = _estimate_tokens(doc.page_content)
+        if current_tokens + doc_tokens <= global_budget:
+            result.append(doc)
+            existing_keys.add(key)
+            current_tokens += doc_tokens
 
 
 def _group_hits_by_section(docs: list[Document]) -> dict[str, Document]:
@@ -306,6 +309,40 @@ _NOISE_MIN_COVERAGE = 0.15  # chunk 中至少 15% 的 query 关键词被命中�
 _NOISE_PENALTY_FACTOR = 0.5  # fusion 评分惩罚系数（越低排越后）
 
 
+def _is_window_chunk(doc: Document) -> bool:
+    """是否为窗口展开带进来的 chunk（sentence window 或 parent window）。"""
+    return bool(doc.metadata.get("_window_expanded") or doc.metadata.get("_parent_expanded"))
+
+
+def _noise_coverage(doc: Document, term_set: set[str]) -> float:
+    """window chunk 的 query 关键词覆盖率（命中词项数 / 词项总数）。"""
+    content_lower = doc.page_content.lower()
+    hit = sum(1 for t in term_set if t in content_lower)
+    return hit / len(term_set) if term_set else 0.0
+
+
+def _mark_window_noise(docs: list[Document], term_set: set[str], min_coverage: float) -> int:
+    """对 window chunk 逐个标记覆盖率，低于阈值者打软降级标记；返回降级条数。
+
+    只处理 window 展开的 chunk（策略 1：原始检索结果不动）；不删除、只标记，
+    保证 Recall 不丢（策略 3）。
+    """
+    downgraded = 0
+    for doc in docs:
+        if not _is_window_chunk(doc):
+            continue
+        coverage = _noise_coverage(doc, term_set)
+        if coverage < min_coverage:
+            doc.metadata["_noise_downgraded"] = True
+            doc.metadata["_noise_downgrade_factor"] = _NOISE_PENALTY_FACTOR
+            doc.metadata["_noise_coverage"] = round(coverage, 3)
+            downgraded += 1
+        else:
+            # 相关的 window chunk，保留并标记覆盖率供诊断
+            doc.metadata["_noise_coverage"] = round(coverage, 3)
+    return downgraded
+
+
 def downgrade_window_noise(
     docs: list[Document],
     query: str,
@@ -343,38 +380,14 @@ def downgrade_window_noise(
     if not term_set:
         return docs
 
-    downgraded = 0
-    for doc in docs:
-        # 只处理 window 展开的 chunk（策略 1: 原始检索结果保留）
-        if not doc.metadata.get("_window_expanded") and not doc.metadata.get("_parent_expanded"):
-            continue
-
-        content_lower = doc.page_content.lower()
-
-        # 计算关键词覆盖率
-        hit = sum(1 for t in term_set if t in content_lower)
-        coverage = hit / len(term_set) if term_set else 0.0
-
-        if coverage < min_coverage:
-            doc.metadata["_noise_downgraded"] = True
-            doc.metadata["_noise_downgrade_factor"] = _NOISE_PENALTY_FACTOR
-            doc.metadata["_noise_coverage"] = round(coverage, 3)
-            downgraded += 1
-        else:
-            # 相关的 window chunk，保留并标记覆盖率供诊断
-            doc.metadata["_noise_coverage"] = round(coverage, 3)
-
+    downgraded = _mark_window_noise(docs, term_set, min_coverage)
     if downgraded > 0:
         logger.debug(
             "Window noise downgrade: query='%s' terms=%s downgraded=%d/%d threshold=%.2f",
             query[:40],
             term_set,
             downgraded,
-            sum(
-                1
-                for d in docs
-                if d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded")
-            ),
+            sum(1 for d in docs if _is_window_chunk(d)),
             min_coverage,
         )
 
@@ -398,7 +411,7 @@ def merge_window_into_anchors(docs: list[Document]) -> list[Document]:
     # （parent window 尤甚），若一并索引会与锚点撞 key。
     anchor_by_chunk_id: dict[str, Document] = {}
     for d in docs:
-        if d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded"):
+        if _is_window_chunk(d):
             continue
         cid = str(d.metadata.get("section.chunk_id") or "")
         if cid:
@@ -406,7 +419,7 @@ def merge_window_into_anchors(docs: list[Document]) -> list[Document]:
 
     result: list[Document] = []
     for d in docs:
-        is_window = d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded")
+        is_window = _is_window_chunk(d)
         if not is_window:
             result.append(d)
             continue
