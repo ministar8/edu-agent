@@ -425,6 +425,80 @@ class VectorStoreManager:
         self._hash_cache[collection_name] = (hashes, now)
         return hashes
 
+    def _dedup_by_content_hash(
+        self, documents: list[Document], collection_name: str
+    ) -> tuple[list[Document], int]:
+        """按内容哈希跳过集合中已存在的文档；返回 (去重后文档, 跳过条数)。"""
+        existing_hashes = self._get_existing_hashes(collection_name)
+        unique_docs: list[Document] = []
+        skipped = 0
+        for doc in documents:
+            content_hash = _content_hash(doc.page_content)
+            if content_hash in existing_hashes:
+                skipped += 1
+                continue
+            doc.metadata["content_hash"] = content_hash
+            unique_docs.append(doc)
+
+        if skipped > 0:
+            logger.info(
+                "Dedup: skipped %d/%d documents in collection '%s'",
+                skipped,
+                len(documents),
+                collection_name,
+            )
+        return unique_docs, skipped
+
+    def _write_documents(self, documents: list[Document], collection_name: str) -> list[str]:
+        """写入 Chroma；PersistentClient 非线程安全，写必须独占锁防止 HNSW 损坏。"""
+        store = self.get_store(collection_name)
+        if self.client_mode == "persistent":
+            with self._rw_lock.write_lock():
+                return store.add_documents(documents)
+        return store.add_documents(documents)
+
+    def _index_and_emit(
+        self,
+        documents: list[Document],
+        collection_name: str,
+        *,
+        started: float,
+        input_docs: int,
+        dedup_skipped: int,
+    ) -> list[str]:
+        """写入集合并写指标；失败时写 error 指标后**原样抛出**（不吞异常）。"""
+        try:
+            ids = self._write_documents(documents, collection_name)
+        except Exception as e:
+            metrics.emit(
+                event="index_documents",
+                stage="vectorstore",
+                status="error",
+                duration_ms=round((time.perf_counter() - started) * 1000, 3),
+                tags={"collection": collection_name},
+                values={
+                    "input_docs": input_docs,
+                    "dedup_skipped": dedup_skipped,
+                    "ready_docs": len(documents),
+                    "error_type": e.__class__.__name__,
+                },
+            )
+            raise
+        metrics.emit(
+            event="index_documents",
+            stage="vectorstore",
+            duration_ms=round((time.perf_counter() - started) * 1000, 3),
+            tags={"collection": collection_name},
+            values={
+                "input_docs": input_docs,
+                "dedup_skipped": dedup_skipped,
+                "ready_docs": len(documents),
+                "indexed_docs": len(ids),
+                "index_success_rate": round(len(ids) / len(documents), 6) if documents else 0.0,
+            },
+        )
+        return ids
+
     def add_documents(
         self,
         documents: list[Document],
@@ -453,24 +527,7 @@ class VectorStoreManager:
         # 去重：计算内容哈希，跳过已存在的文档
         skipped = 0
         if dedup:
-            existing_hashes = self._get_existing_hashes(collection_name)
-            unique_docs: list[Document] = []
-            for doc in documents:
-                content_hash = _content_hash(doc.page_content)
-                if content_hash in existing_hashes:
-                    skipped += 1
-                    continue
-                doc.metadata["content_hash"] = content_hash
-                unique_docs.append(doc)
-
-            if skipped > 0:
-                logger.info(
-                    "Dedup: skipped %d/%d documents in collection '%s'",
-                    skipped,
-                    len(documents),
-                    collection_name,
-                )
-            documents = unique_docs
+            documents, skipped = self._dedup_by_content_hash(documents, collection_name)
 
         if not documents:
             logger.info("All documents are duplicates, nothing to add")
@@ -480,45 +537,16 @@ class VectorStoreManager:
         for doc in documents:
             doc.metadata = sanitize_for_chroma(doc.metadata)
 
-        try:
-            store = self.get_store(collection_name)
-            # PersistentClient 不是线程安全的，写入必须独占锁防止 HNSW 索引损坏
-            if self.client_mode == "persistent":
-                with self._rw_lock.write_lock():
-                    ids = store.add_documents(documents)
-            else:
-                ids = store.add_documents(documents)
-            metrics.emit(
-                event="index_documents",
-                stage="vectorstore",
-                duration_ms=round((time.perf_counter() - start) * 1000, 3),
-                tags={"collection": collection_name},
-                values={
-                    "input_docs": original_count,
-                    "dedup_skipped": skipped,
-                    "ready_docs": len(documents),
-                    "indexed_docs": len(ids),
-                    "index_success_rate": round(len(ids) / len(documents), 6) if documents else 0.0,
-                },
-            )
-            # Invalidate hash cache after successful add (new hashes incoming)
-            self._hash_cache.pop(collection_name, None)
-            return ids
-        except Exception as e:
-            metrics.emit(
-                event="index_documents",
-                stage="vectorstore",
-                status="error",
-                duration_ms=round((time.perf_counter() - start) * 1000, 3),
-                tags={"collection": collection_name},
-                values={
-                    "input_docs": original_count,
-                    "dedup_skipped": skipped,
-                    "ready_docs": len(documents),
-                    "error_type": e.__class__.__name__,
-                },
-            )
-            raise
+        ids = self._index_and_emit(
+            documents,
+            collection_name,
+            started=start,
+            input_docs=original_count,
+            dedup_skipped=skipped,
+        )
+        # Invalidate hash cache after successful add (new hashes incoming)
+        self._hash_cache.pop(collection_name, None)
+        return ids
 
     def delete_collection(self, collection_name: str) -> None:
         """删除集合"""
