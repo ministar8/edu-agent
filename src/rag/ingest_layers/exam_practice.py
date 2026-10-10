@@ -56,21 +56,7 @@ def build(kp_ids: set[str]) -> tuple[list[Document], list[dict], dict]:
                     "category": COLLECTION,
                 },
             )
-            chunks.extend(
-                _shared.split_section(
-                    doc,
-                    sid,
-                    {
-                        "kb_depth": "exams",
-                        "doc_role": "exam_item",
-                        "subject": code,
-                        "document_id": document_id or f"exam-practice-{code}",
-                        "section_id": sid,
-                        "knowledge_points": doc.metadata["knowledge_points"],
-                    },
-                    keep_short=False,
-                )
-            )
+            chunks.extend(_shared.split_section(doc, sid, keep_short=False))
     return chunks, edges, {"chunks": len(chunks)}
 
 

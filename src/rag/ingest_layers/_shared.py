@@ -111,10 +111,10 @@ def parse_sections(text: str) -> tuple[str, list[dict]]:
     return document_id, sections
 
 
-def split_section(
-    doc: Document, sid: str, extra_meta: dict, *, keep_short: bool = True
-) -> list[Document]:
-    """把一节 Document 切分，并给每个 chunk 打上 ``chunk_id`` 与继承元数据。
+def split_section(doc: Document, sid: str, *, keep_short: bool = True) -> list[Document]:
+    """把一节 Document 切分，并给每个 chunk 打上 ``chunk_id``。
+
+    splitter 生成 chunk 时已把 ``doc.metadata`` 继承到每个 chunk，故此处**无需**再补元数据。
 
     ``keep_short=True``：splitter 因 ``MIN_CHUNK_LENGTH`` 丢弃过短节时，仍保留整节为单 chunk
     （``basic`` / ``advanced`` 的行为）；``False`` 则不加兜底（``code`` / ``exam_practice``）。
@@ -122,11 +122,9 @@ def split_section(
     chunks: list[Document] = []
     for i, ch in enumerate(split_documents([doc]), 1):
         ch.metadata["chunk_id"] = f"{sid}-{i:03d}"
-        ch.metadata.update(extra_meta)
         chunks.append(ch)
     if not chunks and keep_short:
         ch = Document(page_content=doc.page_content, metadata=dict(doc.metadata))
         ch.metadata["chunk_id"] = f"{sid}-001"
-        ch.metadata.update(extra_meta)
         chunks.append(ch)
     return chunks

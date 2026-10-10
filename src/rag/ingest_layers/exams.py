@@ -80,15 +80,14 @@ def years() -> list[int]:
     )
 
 
-def _split_exam_doc(doc: Document, sid: str, role: str, per_chunk: dict) -> list[Document]:
+def _split_exam_doc(doc: Document, sid: str, role: str) -> list[Document]:
     """把题目/答案 Document 切成 `{sid}-{role}-NNN`；全被短度过滤时兜底一个 `-001`。
 
-    兜底 chunk 只补 `chunk_id` —— 其余元数据已在 `doc.metadata` 里。
+    splitter 已把 `doc.metadata` 继承到每个 chunk，此处只补 `chunk_id`。
     """
     out: list[Document] = []
     for i, ch in enumerate(split_documents([doc]), 1):
         ch.metadata["chunk_id"] = f"{sid}-{role}-{i:03d}"
-        ch.metadata.update(per_chunk)
         out.append(ch)
     if not out:
         ch = Document(page_content=doc.page_content, metadata=dict(doc.metadata))
@@ -176,36 +175,10 @@ def build(year: int, kp_ids: set[str]) -> tuple[list[Document], list[dict], dict
         if ANSWER_IN_BODY_RE.search(it.get("body") or ""):
             fails.append(f"{qid} answer leaked into item body")
 
-        chunks.extend(
-            _split_exam_doc(
-                _make_item_doc(it, sid, year),
-                sid,
-                "items",
-                {
-                    "document_id": f"exam-{year}-items",
-                    "section_id": sid,
-                    "kb_depth": "exams",
-                    "doc_role": "exam_item",
-                    "question_id": qid,
-                },
-            )
-        )
+        chunks.extend(_split_exam_doc(_make_item_doc(it, sid, year), sid, "items"))
         ans = answers.get(qid)
         if ans:
-            chunks.extend(
-                _split_exam_doc(
-                    _make_answer_doc(ans, it, sid, qid, year),
-                    sid,
-                    "answer",
-                    {
-                        "document_id": f"exam-{year}-answer",
-                        "section_id": sid,
-                        "kb_depth": "exams",
-                        "doc_role": "exam_answer",
-                        "question_id": qid,
-                    },
-                )
-            )
+            chunks.extend(_split_exam_doc(_make_answer_doc(ans, it, sid, qid, year), sid, "answer"))
     return chunks, assesses, {"year": year, "chunks": len(chunks), "fails": fails}
 
 

@@ -168,32 +168,16 @@ def _section_metadata(parsed: dict, sec: dict, subject: str, rel: str) -> dict:
     return meta
 
 
-def _chunk_extra(sec: dict, subject: str) -> dict:
-    """逐 chunk 附加 metadata（供 `_shared.split_section`）。"""
-    extra = {
-        "kb_depth": "advanced",
-        "doc_role": "method",
-        "subject": subject,
-        "knowledge_points": json.dumps(sec["kp_ids"], ensure_ascii=False),
-        "topic_tags": json.dumps(sec["topic_tags"], ensure_ascii=False),
-        "scope": sec["scope"],
-        "related_exams": json.dumps(sec["related_exams"], ensure_ascii=False),
-    }
-    if sec.get("difficulty") is not None:
-        extra["difficulty"] = int(sec["difficulty"])
-    return extra
-
-
 def _section_chunks(
     parsed: dict, sec: dict, subject: str, rel: str, kp_ids: set[str]
-) -> tuple[list[tuple[Document, str, dict]], list[dict]]:
-    """单个 section → (待切分的 (doc, sid, extra) 列表, `trains` 边列表)。
+) -> tuple[Document | None, str, list[dict]]:
+    """单个 section → (文档, sid, `trains` 边列表)。
 
-    sid / body 缺失时两者都为空（与拆分前 `continue` 等价）。
+    sid / body 缺失时文档为 None（与拆分前 `continue` 等价）。
     """
     sid = sec["section_id"]
     if not sid or not sec["body"]:
-        return [], []
+        return None, sid, []
     edges = [
         {"from": f"advanced:{sid}", "to": kp, "type": "trains"}
         for kp in sec["kp_ids"]
@@ -203,7 +187,7 @@ def _section_chunks(
         page_content=f"## {sec['title']}\n\n{sec['body']}",
         metadata=_section_metadata(parsed, sec, subject, rel),
     )
-    return [(doc, sid, _chunk_extra(sec, subject))], edges
+    return doc, sid, edges
 
 
 def build(
@@ -234,10 +218,10 @@ def build(
 
         for sec in parsed["sections"]:
             parse_fails.extend(validate_section(sec, parsed, kp_ids))
-            items, edges = _section_chunks(parsed, sec, subject, rel, kp_ids)
+            doc, sid, edges = _section_chunks(parsed, sec, subject, rel, kp_ids)
             trains.extend(edges)
-            for doc, sid, extra in items:
-                by_col[collection].extend(_shared.split_section(doc, sid, extra, keep_short=True))
+            if doc is not None:
+                by_col[collection].extend(_shared.split_section(doc, sid, keep_short=True))
                 stats["sections"] += 1
     stats["chunks"] = sum(len(v) for v in by_col.values())
     return by_col, trains, stats

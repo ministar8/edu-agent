@@ -92,19 +92,7 @@ def build(kp_ids: set[str]) -> tuple[dict[str, list[Document]], list[dict], dict
                         "source": str(path.relative_to(_shared.ROOT)).replace("\\", "/"),
                     },
                 )
-                by_col[collection].extend(
-                    _shared.split_section(
-                        doc,
-                        sid,
-                        {
-                            "kb_depth": "basic",
-                            "doc_role": "textbook",
-                            "subject": subject_name,
-                            "knowledge_points": json.dumps(sec["kp_ids"], ensure_ascii=False),
-                        },
-                        keep_short=True,
-                    )
-                )
+                by_col[collection].extend(_shared.split_section(doc, sid, keep_short=True))
     return by_col, teaches, {"chunks": sum(len(v) for v in by_col.values())}
 
 
