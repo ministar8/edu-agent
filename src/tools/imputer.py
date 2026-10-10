@@ -811,9 +811,7 @@ def _detect_pdf_title_lines(text: str) -> list[dict]:
         is_title = False
 
         # 跳过页码/纯数字行
-        if stripped.isdigit() or re.match(
-            r"^\s*(?:第\s*\d+\s*页|page\s*\d+|-?\s*\d+\s*-?)\s*$", stripped, re.IGNORECASE
-        ):
+        if stripped.isdigit() or _PAGE_NUM_RE.match(stripped):
             prev_blank = False
             pos += len(line) + 1
             continue
