@@ -9,9 +9,64 @@ from langchain_core.embeddings import Embeddings
 
 from core.llm import get_llm
 from evaluation.ragas.dataset import EvalSample
+from rag.retrieval.evidence import FusedEvidence, TextEvidence
 from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
 logger = logging.getLogger(__name__)
+
+# 明细行里保留的元数据白名单（其余字段不落，避免明文膨胀）。
+_DETAIL_META_KEYS = (
+    "category",
+    "content_type",
+    "_retrieval_layer",
+    "_route_type",
+    "recall_routes",
+    "_hyde_fallback",
+    "_window_expanded",
+)
+
+
+def _evidence_detail(index: int, ev: TextEvidence) -> dict[str, object]:
+    """把一条 evidence 抽成 RAGAS 的逐条溯源明细（来源 / 章节 / 分数 / 白名单元数据）。"""
+    return {
+        "context_index": index,
+        "source": ev.source,
+        "section_path": ev.section_path,
+        "chunk_id": ev.chunk_id,
+        "parent_id": ev.parent_id,
+        "collection": ev.collection,
+        "score": ev.score,
+        "recall_score": ev.recall_score,
+        "rerank_score": ev.rerank_score,
+        "metadata": {
+            key: ev.metadata.get(key)
+            for key in _DETAIL_META_KEYS
+            if ev.metadata.get(key) is not None
+        },
+    }
+
+
+def _contexts_from_fused(
+    fused: FusedEvidence,
+) -> tuple[list[str], list[dict[str, object]]]:
+    """按 **chunk 粒度**收集 contexts 与明细；同正文只留首次出现（`seen` 去重）。
+
+    证据为空但融合体非空时退回单条 ``final_context``（当前不可达的兜底，
+    理由见 `retrieve_contexts` 的 docstring）。
+    """
+    contexts: list[str] = []
+    details: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for ev in fused.text_evidences:
+        text = (ev.content or "").strip()
+        if text and text not in seen:
+            seen.add(text)
+            contexts.append(text)
+            details.append(_evidence_detail(len(contexts) - 1, ev))
+    if not contexts and fused.final_context.strip():
+        contexts = [fused.final_context.strip()]
+        details = [{"context_index": 0, "source": "", "section_path": ""}]
+    return contexts, details
 
 
 async def retrieve_contexts(
@@ -43,44 +98,7 @@ async def retrieve_contexts(
         max_retries=0,
         use_llm_verify=False,
     )
-    contexts: list[str] = []
-    details: list[dict[str, object]] = []
-    seen: set[str] = set()
-    for ev in fused.text_evidences:
-        text = (ev.content or "").strip()
-        if text and text not in seen:
-            seen.add(text)
-            contexts.append(text)
-            details.append(
-                {
-                    "context_index": len(contexts) - 1,
-                    "source": ev.source,
-                    "section_path": ev.section_path,
-                    "chunk_id": ev.chunk_id,
-                    "parent_id": ev.parent_id,
-                    "collection": ev.collection,
-                    "score": ev.score,
-                    "recall_score": ev.recall_score,
-                    "rerank_score": ev.rerank_score,
-                    "metadata": {
-                        key: ev.metadata.get(key)
-                        for key in (
-                            "category",
-                            "content_type",
-                            "_retrieval_layer",
-                            "_route_type",
-                            "recall_routes",
-                            "_hyde_fallback",
-                            "_window_expanded",
-                        )
-                        if ev.metadata.get(key) is not None
-                    },
-                }
-            )
-    if not contexts and fused.final_context.strip():
-        # 兜底（当前不可达，理由见 docstring）：证据为空但融合体非空时至少给一条
-        contexts = [fused.final_context.strip()]
-        details = [{"context_index": 0, "source": "", "section_path": ""}]
+    contexts, details = _contexts_from_fused(fused)
     return contexts or [""], details
 
 

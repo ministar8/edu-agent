@@ -12,6 +12,73 @@ import json
 import logging
 import sys
 
+from evaluation.ragas.config import EvaluationConfig
+
+
+def _probe_rerank(cfg, settings) -> list[tuple[bool, str]]:
+    """重排可用性探活：请求了重排就实测 ``/rerank``；未请求则记一条**非阻塞**提示。"""
+    if not cfg.use_rerank:
+        return [
+            (
+                False,
+                "重排未启用（--no-rerank）：本次结果**不代表**生产路径（生产是 use_rerank=True）",
+            )
+        ]
+
+    import httpx
+
+    url = f"{settings.RERANK_LOCAL_URL}/rerank"
+    try:
+        resp = httpx.post(
+            url,
+            json={"query": "探活", "texts": ["探活文本"], "raw_scores": False},
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        return [(True, f"重排已请求但不可用：{url} → {type(e).__name__}: {e}")]
+    return []
+
+
+def _probe_embedding(settings) -> list[tuple[bool, str]]:
+    """embedding 可用性探活：真 embedding 就实测；假 embedding 记一条**非阻塞**提示。"""
+    if settings.USE_FAKE_EMBEDDING:
+        return [(False, "USE_FAKE_EMBEDDING=true：检索走确定性哈希向量，**语义质量结论无效**")]
+
+    import httpx
+
+    url = f"{settings.EMBEDDING_API_BASE}/embeddings"
+    try:
+        resp = httpx.post(
+            url,
+            json={"model": settings.EMBEDDING_MODEL, "input": ["探活"]},
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+    except Exception as e:
+        return [(True, f"真实 embedding 不可用：{url} → {type(e).__name__}: {e}")]
+    return []
+
+
+def _probe_llm(
+    model_ref: str | None, *, label: str, model_label: str, model_on_empty: bool
+) -> list[tuple[bool, str]]:
+    """LLM 探活（生成 / judge 共用）：空响应或异常 → 一条**阻塞**项。
+
+    ``model_on_empty`` 控制空响应消息是否附 ``（model=…）`` —— 两个调用点的历史措辞
+    不同，保持**逐字不变**（这些消息会进 preflight 的 JSON 输出）。
+    """
+    from core.llm import get_llm
+
+    suffix = f"（model={model_label}）" if model_on_empty else ""
+    try:
+        probe = get_llm(streaming=False, temperature=0.0, model_ref=model_ref).invoke("ping")
+        if probe is None:
+            return [(True, f"{label} LLM 探活返回空响应{suffix}")]
+    except Exception as e:
+        return [(True, f"{label} LLM 不可用（model={model_label}）：{type(e).__name__}: {e}")]
+    return []
+
 
 def _preflight(cfg) -> list[tuple[bool, str]]:
     """跑前探活：把「静默降级」变成「明确失败」。
@@ -29,87 +96,27 @@ def _preflight(cfg) -> list[tuple[bool, str]]:
     **真实推理探活**，作为口径自描述的双保险 —— 不依赖下游字段语义不变。
     这类「没报错但口径变了」最难排查，所以探活不看 /health，不通就**退出码 2**。
     """
-    import httpx
-
     from core.settings import settings
 
-    problems: list[tuple[bool, str]] = []
+    problems = list(_probe_rerank(cfg, settings))
+    problems += _probe_embedding(settings)
 
-    if cfg.use_rerank:
-        url = f"{settings.RERANK_LOCAL_URL}/rerank"
-        try:
-            resp = httpx.post(
-                url,
-                json={"query": "探活", "texts": ["探活文本"], "raw_scores": False},
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-        except Exception as e:
-            problems.append((True, f"重排已请求但不可用：{url} → {type(e).__name__}: {e}"))
-    else:
-        problems.append(
-            (
-                False,
-                "重排未启用（--no-rerank）：本次结果**不代表**生产路径（生产是 use_rerank=True）",
-            )
-        )
-
-    if not settings.USE_FAKE_EMBEDDING:
-        url = f"{settings.EMBEDDING_API_BASE}/embeddings"
-        try:
-            resp = httpx.post(
-                url,
-                json={"model": settings.EMBEDDING_MODEL, "input": ["探活"]},
-                timeout=60.0,
-            )
-            resp.raise_for_status()
-        except Exception as e:
-            problems.append((True, f"真实 embedding 不可用：{url} → {type(e).__name__}: {e}"))
-    else:
-        problems.append(
-            (False, "USE_FAKE_EMBEDDING=true：检索走确定性哈希向量，**语义质量结论无效**")
-        )
-
-    # ── judge LLM 探活（★ 必须在生成之前拦住）────────────────────────────
+    # ── LLM 探活（★ 必须在生成之前拦住）─────────────────────────────────
     # 为什么必须放在这里：生成 N 条答案要花 LLM 费用，而 judge 与生成**可能不同配额**
     # （DashScope 免费额度按模型分配；judge 另有 `RAGAS_JUDGE_MODEL` 槽位）。
     # 实测（2026-10-01）：judge 侧 403 时生成已经全部跑完 —— 一轮评测的钱白花，
     # 报告里四项指标全 None。探活把「已花钱才发现不可用」变成「一分不花就明确失败」。
-    try:
-        from core.llm import get_llm
-
-        probe = get_llm(streaming=False, temperature=0.0).invoke("ping")
-        if probe is None:
-            problems.append((True, "生成 LLM 探活返回空响应"))
-    except Exception as e:
-        problems.append(
-            (
-                True,
-                f"生成 LLM 不可用（model={settings.LLM_MODEL}）：{type(e).__name__}: {e}",
-            )
-        )
-
+    problems += _probe_llm(None, label="生成", model_label=settings.LLM_MODEL, model_on_empty=False)
     # judge 是评测中调用量最大的一环，且可能配了与生成不同的模型 —— 必须单独探。
     judge_ref = settings.ragas_judge_model
     if judge_ref != settings.LLM_MODEL:
-        try:
-            from core.llm import get_llm
-
-            probe = get_llm(streaming=False, temperature=0.0, model_ref=judge_ref).invoke("ping")
-            if probe is None:
-                problems.append((True, f"RAGAS judge LLM 探活返回空响应（model={judge_ref}）"))
-        except Exception as e:
-            problems.append(
-                (
-                    True,
-                    f"RAGAS judge LLM 不可用（model={judge_ref}）：{type(e).__name__}: {e}",
-                )
-            )
-
+        problems += _probe_llm(
+            judge_ref, label="RAGAS judge", model_label=judge_ref, model_on_empty=True
+        )
     return problems
 
 
-def main(argv: list[str] | None = None) -> int:
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="edu-agent RAGAS evaluation")
     parser.add_argument("--dataset", default="evals/datasets/golden/sample_408.jsonl")
     parser.add_argument("--limit", type=int, default=None)
@@ -148,18 +155,11 @@ def main(argv: list[str] | None = None) -> int:
         help="跳过跑前探活（仅用于明知降级仍要出数的场景）",
     )
     parser.add_argument("-v", "--verbose", action="store_true")
-    args = parser.parse_args(argv)
+    return parser
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
 
-    from core.settings import settings
-    from evaluation.ragas.config import EvaluationConfig
-    from evaluation.ragas.ragas_eval import run_rag_evaluation
-
-    cfg = EvaluationConfig(
+def _config_from_args(args: argparse.Namespace) -> EvaluationConfig:
+    return EvaluationConfig(
         dataset_path=args.dataset,
         dataset_limit=args.limit,
         sample_per_type=args.sample_per_type,
@@ -175,6 +175,20 @@ def main(argv: list[str] | None = None) -> int:
         ragas_batch_size=args.ragas_batch_size,
         include_details=args.include_details,
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+
+    from core.settings import settings
+    from evaluation.ragas.ragas_eval import run_rag_evaluation
+
+    cfg = _config_from_args(args)
 
     # ★ 显式声明重排开关（照 `retrieval_gate.configure_for_gate` 的模式）。
     # 不这样做的话，`use_rerank=True` 会被 `.env` 的 RERANK_ENABLED=false 静默吃掉。
