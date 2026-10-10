@@ -12,7 +12,7 @@ import tempfile
 import time
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from ._baseline import (
     build_baseline_payload,
@@ -35,20 +35,60 @@ from ._modes import (
 )
 
 
+class _GateRunResult(NamedTuple):
+    """``run_gate`` 的返回值（具名以取代裸 6 元组；对位置解包向后兼容）。"""
+
+    metrics: RetrievalMetrics
+    outcomes: list[QueryOutcome]
+    errors: list[tuple[str, str]]
+    rerank_observations: list[RerankObservation]
+    route_contributions: Counter[str]
+    query_failures: list[str]
+
+
+def _observe_query(
+    query: str,
+    expected: tuple[str, ...],
+    expected_kps: tuple[str, ...],
+    fused: Any,
+    route_contributions: Counter[str],
+) -> tuple[QueryOutcome, RerankObservation]:
+    """把一条 query 的检索结果折叠成 ``(outcome, rerank 观察)``；顺带累计路由贡献。"""
+    categories = [_effective_category(ev.metadata) for ev in fused.text_evidences]
+    # 章级知识点：逐条证据的章（来自 source 文件名），按排名顺序排列。
+    kp_labels = [chapter_of_source(ev.source) for ev in fused.text_evidences]
+    # 路由贡献：每条证据自报的 `recall_routes`（同一文档可被多条路由命中，逐条计入）
+    for ev in fused.text_evidences:
+        for route in str(ev.metadata.get("recall_routes") or "").replace("|", ",").split(","):
+            if route.strip():
+                route_contributions[route.strip()] += 1
+    # 记录 rerank 是否真的生效：rerank_score > 0 是「rerank 步骤确实跑过」的可靠信号
+    # （真/假 rerank 都会写 >0，只有「跳过 / 异常降级」才写 0.0）。
+    observation = RerankObservation(
+        has_evidence=bool(fused.text_evidences),
+        has_rerank_score=any(ev.rerank_score > 0 for ev in fused.text_evidences),
+        rerank_used=bool(fused.metadata.get("rerank_used")),
+        # ★ B2：新字段缺 ⇒ ""（未知，不回填）。
+        rerank_status=str(fused.metadata.get("rerank_status", "") or ""),
+    )
+    outcome = QueryOutcome(
+        query=query,
+        expected_categories=expected,
+        hit_categories=categories,
+        expected_knowledge_points=list(expected_kps),
+        hit_knowledge_points=kp_labels,
+    )
+    return outcome, observation
+
+
 async def run_gate(
     golden_path: str | Path = DEFAULT_GOLDEN_PATH,
     limit: int | None = None,
-) -> tuple[
-    RetrievalMetrics,
-    list[QueryOutcome],
-    list[tuple[str, str]],
-    list[RerankObservation],
-    Counter[str],
-    list[str],
-]:
+) -> _GateRunResult:
     """在黄金集上跑完整检索链。
 
     Returns:
+        ``_GateRunResult``（字段顺序与旧的 6 元组一致，故位置解包仍可用）：
         ``(指标, 逐条结果, 抛异常的 query 列表, rerank 观察列表, 路由贡献计数, 查询失败记录)``。
         观察列表供 ``_assert_route_preconditions`` 判定 rerank 是否真的执行了（反静默回退）；
         路由贡献计数是 ``"集合:路由" → 出现在最终证据里的次数``，用于回答
@@ -64,6 +104,7 @@ async def run_gate(
     这条路径是真实存在的：CI 无 LLM 凭据时 40 条里有 6 条会抛
     ``openai.OpenAIError: Missing credentials``（见 core.llm.get_llm 的说明）。
     """
+    from rag.common.vectorstore import get_vector_store_manager
     from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     queries = load_golden_queries(golden_path, limit=limit)
@@ -71,11 +112,10 @@ async def run_gate(
     errors: list[tuple[str, str]] = []
     rerank_observations: list[RerankObservation] = []
     route_contributions: Counter[str] = Counter()
-    # ★ 逐条 query 收割下来的失败记录（供末轮 `unexpected_query_failures` 比对）。
-    from rag.common.vectorstore import get_vector_store_manager
 
     _mgr = get_vector_store_manager()
-    # ★ 起点先把**进入本函数之前**已经记录的失败收进累计值（建索引 / `wait_for_index_ready`
+    # ★ 逐条 query 收割下来的失败记录（供末轮 `unexpected_query_failures` 比对）。
+    #   起点先把**进入本函数之前**已经记录的失败收进累计值（建索引 / `wait_for_index_ready`
     #   的探针查询都会记）—— 第一条 query 的 reset 会把实时列表清空，
     #   不先收 = 把那些故障从门禁的检查里抹掉（静默丢失，正是 B7 要消灭的东西）。
     run_query_failures: list[str] = list(_mgr.query_failures)
@@ -113,36 +153,13 @@ async def run_gate(
         finally:
             run_query_failures.extend(_mgr.query_failures)
 
-        categories = [_effective_category(ev.metadata) for ev in fused.text_evidences]
-        # 章级知识点：逐条证据的章（来自 source 文件名），按排名顺序排列。
-        kp_labels = [chapter_of_source(ev.source) for ev in fused.text_evidences]
-        # 路由贡献：每条证据自报的 `recall_routes`（同一文档可被多条路由命中，逐条计入）
-        for ev in fused.text_evidences:
-            for route in str(ev.metadata.get("recall_routes") or "").replace("|", ",").split(","):
-                if route.strip():
-                    route_contributions[route.strip()] += 1
-        # 记录 rerank 是否真的生效：rerank_score > 0 是「rerank 步骤确实跑过」的可靠信号
-        # （真/假 rerank 都会写 >0，只有「跳过 / 异常降级」才写 0.0）。
-        rerank_observations.append(
-            RerankObservation(
-                has_evidence=bool(fused.text_evidences),
-                has_rerank_score=any(ev.rerank_score > 0 for ev in fused.text_evidences),
-                rerank_used=bool(fused.metadata.get("rerank_used")),
-                # ★ B2：新字段缺 ⇒ ""（未知，不回填）。
-                rerank_status=str(fused.metadata.get("rerank_status", "") or ""),
-            )
+        outcome, observation = _observe_query(
+            query, expected, expected_kps, fused, route_contributions
         )
-        outcomes.append(
-            QueryOutcome(
-                query=query,
-                expected_categories=expected,
-                hit_categories=categories,
-                expected_knowledge_points=list(expected_kps),
-                hit_knowledge_points=kp_labels,
-            )
-        )
+        outcomes.append(outcome)
+        rerank_observations.append(observation)
 
-    return (
+    return _GateRunResult(
         compute_metrics(outcomes),
         outcomes,
         errors,
@@ -150,6 +167,73 @@ async def run_gate(
         route_contributions,
         run_query_failures,
     )
+
+
+def _check_rerank_execution(
+    mode: str, with_evidence: list[RerankObservation], reranked_count: int, used_count: int
+) -> list[str]:
+    """rerank 三态下 ``rerank_score`` / ``rerank_used`` 应处的位置（两个静默失效点）。"""
+    violations: list[str] = []
+    if mode == "on":
+        # ``on``：有非空证据的 query 里**至少有一条** ``rerank_score > 0``。抓到「rerank
+        # 一条都没执行」的静默回退（``depth.skip_rerank`` 被错误全局置 True，或 reranker
+        # 异常降级写 0.0）。**不能用「每条都必须 >0」**：short 查询走 SHALLOW_DEPTH 会
+        # **有意**跳过 rerank（省延迟，见 query_classifier），rerank_score 为 0 属预期。
+        if with_evidence and not reranked_count:
+            violations.append(
+                f"rerank 路由开启，但 {len(with_evidence)} 条有证据的 query 里没有一条 "
+                "rerank_score > 0 —— rerank 疑似完全没执行（depth.skip_rerank 被错误全局置 True，"
+                "或 reranker 异常降级）"
+            )
+    else:
+        # ``off`` / ``disabled``：所有证据 ``rerank_score`` 全为 0（反向验证：rerank 关不掉）。
+        # ``disabled`` 是「要求了重排但部署关掉」的生产关闭态，若出现 ``rerank_score > 0``，
+        # 说明**部署开关失效**。``rerank_used`` 必须全 False（守其自报失真）。
+        if reranked_count:
+            violations.append(
+                f"rerank 路由为 {mode}，却有 {reranked_count} 条 query 证据里出现 "
+                "rerank_score > 0 —— rerank 疑似被静默打开"
+            )
+        if used_count:
+            violations.append(
+                f"rerank 路由为 {mode}，却有 {used_count} 条 query 自报 rerank_used=True —— "
+                "rerank_used 失真（应为 False），检查重排阶段是否绕过了部署开关"
+            )
+    return violations
+
+
+def _check_rerank_status(mode: str, with_evidence: list[RerankObservation]) -> list[str]:
+    """``rerank_status``（tier-0 原文）与派生 ``rerank_used`` 必须一致（状态已知时）。"""
+    violations: list[str] = []
+    # ★ B2：`off`/`degraded`/`failed` 永不得与 `rerank_used=True` 并存 ⇒ 守「未执行重排(off)
+    #   不得被误报为重排成功」这条验收。缺字段（老链路 `rerank_status==""`）按未知跳过。
+    known = [o for o in with_evidence if o.rerank_status]
+    status_mismatch = sum(1 for o in known if o.rerank_used != (o.rerank_status == "success"))
+    if status_mismatch:
+        violations.append(
+            f"{status_mismatch} 条 query 的 rerank_used 与其 rerank_status 派生值不一致 "
+            f"（已知状态 {sorted({o.rerank_status for o in known})}）—— "
+            "rerank_used 必须是 rerank_status==success 的派生量"
+        )
+    if mode in ("off", "disabled"):
+        bogus_success = sum(1 for o in known if o.rerank_status == "success")
+        if bogus_success:
+            violations.append(
+                f"rerank 路由为 {mode}，却有 {bogus_success} 条 query 的 rerank_status=success "
+                "—— 未执行重排被误报为重排成功（B2 验收：off/disabled 不得出 success）"
+            )
+    return violations
+
+
+def _check_signal_agreement(with_evidence: list[RerankObservation]) -> list[str]:
+    """与 mode 无关的交叉验证：``rerank_score > 0`` 与 ``rerank_used`` 两信号必须一致。"""
+    inconsistent = sum(1 for o in with_evidence if o.has_rerank_score and not o.rerank_used)
+    if inconsistent:
+        return [
+            f"{inconsistent} 条 query 出现 rerank_score > 0 但 rerank_used=False —— "
+            "两个信号自相矛盾，rerank_used 自报值失真"
+        ]
+    return []
 
 
 def _assert_route_preconditions(rerank_observations: list[RerankObservation]) -> list[str]:
@@ -179,58 +263,16 @@ def _assert_route_preconditions(rerank_observations: list[RerankObservation]) ->
     """
     from core.settings import settings
 
-    violations: list[str] = []
     # 只关心有非空证据的 query：空结果本就没有 rerank_score，属预期而非失效。
     with_evidence = [o for o in rerank_observations if o.has_evidence]
     reranked_count = sum(1 for o in with_evidence if o.has_rerank_score)
     used_count = sum(1 for o in with_evidence if o.rerank_used)
     mode = rerank_mode()
 
-    if mode == "on":
-        if with_evidence and not reranked_count:
-            violations.append(
-                f"rerank 路由开启，但 {len(with_evidence)} 条有证据的 query 里没有一条 "
-                "rerank_score > 0 —— rerank 疑似完全没执行（depth.skip_rerank 被错误全局置 True，"
-                "或 reranker 异常降级）"
-            )
-    else:
-        if reranked_count:
-            violations.append(
-                f"rerank 路由为 {mode}，却有 {reranked_count} 条 query 证据里出现 "
-                "rerank_score > 0 —— rerank 疑似被静默打开"
-            )
-        if used_count:
-            violations.append(
-                f"rerank 路由为 {mode}，却有 {used_count} 条 query 自报 rerank_used=True —— "
-                "rerank_used 失真（应为 False），检查重排阶段是否绕过了部署开关"
-            )
-
-    # ★ B2：`rerank_status`（tier-0 原文）与派生 `rerank_used` 必须一致（状态已知时）。
-    #   `off`/`degraded`/`failed` 永不得与 `rerank_used=True` 并存 ⇒ 守「未执行重排(off)
-    #   不得被误报为重排成功」这条验收。缺字段（老链路 `rerank_status==""`）按未知跳过。
-    known = [o for o in with_evidence if o.rerank_status]
-    status_mismatch = sum(1 for o in known if o.rerank_used != (o.rerank_status == "success"))
-    if status_mismatch:
-        violations.append(
-            f"{status_mismatch} 条 query 的 rerank_used 与其 rerank_status 派生值不一致 "
-            f"（已知状态 {sorted({o.rerank_status for o in known})}）—— "
-            "rerank_used 必须是 rerank_status==success 的派生量"
-        )
-    if mode in ("off", "disabled"):
-        bogus_success = sum(1 for o in known if o.rerank_status == "success")
-        if bogus_success:
-            violations.append(
-                f"rerank 路由为 {mode}，却有 {bogus_success} 条 query 的 rerank_status=success "
-                "—— 未执行重排被误报为重排成功（B2 验收：off/disabled 不得出 success）"
-            )
-
-    # 与 mode 无关的交叉验证：两个信号必须一致。
-    inconsistent = sum(1 for o in with_evidence if o.has_rerank_score and not o.rerank_used)
-    if inconsistent:
-        violations.append(
-            f"{inconsistent} 条 query 出现 rerank_score > 0 但 rerank_used=False —— "
-            "两个信号自相矛盾，rerank_used 自报值失真"
-        )
+    violations: list[str] = []
+    violations += _check_rerank_execution(mode, with_evidence, reranked_count, used_count)
+    violations += _check_rerank_status(mode, with_evidence)
+    violations += _check_signal_agreement(with_evidence)
 
     if GATE_USE_REAL_EMBEDDING and settings.USE_FAKE_EMBEDDING:
         violations.append(
@@ -241,26 +283,25 @@ def _assert_route_preconditions(rerank_observations: list[RerankObservation]) ->
     return violations
 
 
-def _build_report(
-    metrics: RetrievalMetrics,
-    outcomes: list[QueryOutcome],
-    baseline: dict[str, Any] | None,
-    route_contributions: Counter[str] | None = None,
-) -> str:
-    lines: list[str] = []
-    lines.append("=" * 68)
-    lines.append("  检索质量黄金集门禁")
-    # 把路由写进标题：各路由的指标不可互比，报告必须自证口径
+def _report_header() -> list[str]:
+    """报告抬头：标题 + 路由口径（各路由指标不可互比，报告必须自证口径）。"""
     _rerank_label = {
         "off": "off",
         "on": f"on ({rerank_backend()})",
         "disabled": "disabled (requested, deployment off)",
     }[rerank_mode()]
-    lines.append(f"  路由 embed={embedding_mode()}  rerank={_rerank_label}   k={GATE_K}")
-    lines.append("=" * 68)
+    return [
+        "=" * 68,
+        "  检索质量黄金集门禁",
+        f"  路由 embed={embedding_mode()}  rerank={_rerank_label}   k={GATE_K}",
+        "=" * 68,
+    ]
 
+
+def _report_metric_table(metrics: RetrievalMetrics, baseline: dict[str, Any] | None) -> list[str]:
+    """逐指标「当前 / 基线 / 判定」表。"""
     current = metrics.as_dict()
-    lines.append(f"{'指标':<24}{'当前':>10}{'基线':>10}   判定")
+    lines = [f"{'指标':<24}{'当前':>10}{'基线':>10}   判定"]
     for name, spec in _METRIC_SPECS.items():
         cur = float(current[name])
         # 基线里可能没有这一项（新增指标 / 老基线未重录）—— 显示「—」而非硬取，
@@ -279,7 +320,12 @@ def _build_report(
         base_str = f"{base:.4f}" if base is not None else "—"
         lines.append(f"{name:<24}{cur:>10.4f}{base_str:>10}   {verdict}")
     lines.append("")
+    return lines
 
+
+def _report_query_issues(outcomes: list[QueryOutcome]) -> list[str]:
+    """首条未命中 + 返回空证据两类问题查询。"""
+    lines: list[str] = []
     misses = [o for o in outcomes if o.first_correct_rank != 1]
     if misses:
         lines.append(f"首条未命中目标学科的查询（{len(misses)} 条）：")
@@ -296,21 +342,36 @@ def _build_report(
         for outcome in empty:
             lines.append(f"  - {outcome.query[:50]}")
         lines.append("")
+    return lines
 
-    # ── 路由贡献度 ──────────────────────────────────────────────
-    # 回答「13 条召回路由里谁在干活、谁空转」—— 此前只能靠临时脚本统计。
+
+def _report_route_contributions(route_contributions: Counter[str]) -> list[str]:
+    """路由贡献度：回答「13 条召回路由里谁在干活、谁空转」（此前只能靠临时脚本统计）。"""
     # ⚠️ 零贡献**不等于**该路由无用：黄金集全是概念题，`code_meta` / `exercise_meta` /
     # `answer_meta` / `table_meta` 本就只在对应场景（代码/习题/答案/表格查询）才命中。
-    if route_contributions is not None:
-        lines.append(
-            f"路由贡献度（最终证据里各路由出现次数，合计 {sum(route_contributions.values())} 次）："
-        )
-        for name, count in route_contributions.most_common():
-            lines.append(f"  {count:>5}  {name}")
-        if not route_contributions:
-            lines.append("  （无）")
-        lines.append("")
+    lines = [
+        f"路由贡献度（最终证据里各路由出现次数，合计 {sum(route_contributions.values())} 次）："
+    ]
+    for name, count in route_contributions.most_common():
+        lines.append(f"  {count:>5}  {name}")
+    if not route_contributions:
+        lines.append("  （无）")
+    lines.append("")
+    return lines
 
+
+def _build_report(
+    metrics: RetrievalMetrics,
+    outcomes: list[QueryOutcome],
+    baseline: dict[str, Any] | None,
+    route_contributions: Counter[str] | None = None,
+) -> str:
+    lines: list[str] = []
+    lines += _report_header()
+    lines += _report_metric_table(metrics, baseline)
+    lines += _report_query_issues(outcomes)
+    if route_contributions is not None:
+        lines += _report_route_contributions(route_contributions)
     return "\n".join(lines)
 
 
@@ -368,7 +429,11 @@ def report_retrieval_anomalies(failures: list[str], errors: list[tuple[str, str]
     return None
 
 
-def main(argv: list[str] | None = None) -> int:
+class _Rejected(Exception):
+    """门禁配置 / 前提错误 → 退出码 2（非指标退化）。"""
+
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="检索质量黄金集回归门禁")
     parser.add_argument("--golden", default=DEFAULT_GOLDEN_PATH, help="黄金集 jsonl 路径")
     parser.add_argument(
@@ -385,7 +450,140 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--keep-index", action="store_true", help="保留临时索引目录（调试用）")
     parser.add_argument("--verbose", action="store_true", help="打印 INFO 日志")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def _resolve_baseline_path(args: argparse.Namespace) -> Path:
+    """按 (embedding, rerank) 组合或显式 ``--baseline`` 定基线路径；口径非法抛 `_Rejected`。
+
+    ★ 即使用户显式传 ``--baseline``，也要先校验当前组合，避免把 real/fake rerank 混录。
+    """
+    try:
+        auto_baseline_path = Path(default_baseline_path())
+    except ValueError as exc:
+        raise _Rejected(str(exc)) from exc
+    return Path(args.baseline) if args.baseline else auto_baseline_path
+
+
+def _load_baseline_for_run(args: argparse.Namespace, baseline_path: Path) -> dict[str, Any] | None:
+    """读基线并校验口径（``--update-baseline`` 时不读）；口径不符抛 `_Rejected`。"""
+    if args.update_baseline:
+        return None
+    try:
+        return load_baseline(baseline_path)
+    except ValueError as exc:
+        raise _Rejected(str(exc)) from exc
+
+
+def _build_gate_index() -> tuple[dict[str, int], int, float] | None:
+    """建临时索引并等 HNSW 就绪；索引为空返回 None。"""
+    start = time.perf_counter()
+    counts = build_index()
+    index_seconds = time.perf_counter() - start
+    total = sum(counts.values())
+    if total == 0:
+        print("[错误] 索引为空 —— knowledge/ 目录缺失或全部解析失败", file=sys.stderr)
+        return None
+    print(f"索引就绪：{total} chunks（{index_seconds:.1f}s）  {counts}")
+
+    # 必须等 HNSW 落盘，否则会把 Chroma 的间歇性竞态误判成检索退化
+    ready = wait_for_index_ready(sorted(counts))
+    slow = {name: tries for name, tries in ready.items() if tries}
+    if slow:
+        print(f"[提示] 以下集合需要重试才可查询（Chroma 落盘竞态）：{slow}")
+    return counts, total, index_seconds
+
+
+def _update_baseline(
+    args: argparse.Namespace,
+    metrics: RetrievalMetrics,
+    baseline_path: Path,
+    errors: list[tuple[str, str]],
+    payload: dict[str, Any],
+) -> int:
+    """重录基线：先拦异常与静默故障，再写盘；返回退出码。"""
+    if errors:
+        # 带着异常录基线等于把故障固化成"标准"，必须先修
+        print(
+            f"\n[拒绝] 有 {len(errors)} 条 query 抛异常，不录基线 —— "
+            "请先修掉异常，否则基线会把故障当成基准。"
+        )
+        return 2
+
+    # 合理性校验：拦「静默故障」（不抛异常但指标塌陷），见 check_baseline_sanity。
+    suspicious = check_baseline_sanity(metrics, baseline_path)
+    if suspicious and not args.force_baseline:
+        print(
+            f"\n[拒绝] 重录前的合理性校验未通过（{len(suspicious)} 处），**未写盘**：",
+            file=sys.stderr,
+        )
+        for item in suspicious:
+            print(f"  - {item}", file=sys.stderr)
+        print(
+            "\n  先判断这是「故障」还是「预期内的改动」：\n"
+            "    · 故障（如 Chroma 索引竞态）→ 复跑一次，指标应回到原量级\n"
+            "    · 预期内的改动（改语料 / 改切分 / 改检索链）→ 加 --force-baseline 重录，\n"
+            "      并在提交说明里写清为什么指标会变这么多",
+            file=sys.stderr,
+        )
+        return 2
+
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    baseline_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    suffix = "（已跳过合理性校验）" if suspicious and args.force_baseline else ""
+    print(f"基线已更新: {baseline_path}{suffix}")
+    return 0
+
+
+def _check_result(
+    metrics: RetrievalMetrics,
+    baseline: dict[str, Any] | None,
+    baseline_path: Path,
+    errors: list[tuple[str, str]],
+) -> int:
+    """本轮到结果的退出码：异常优先 → 缺基线 → 比退化。"""
+    if errors:
+        # 异常优先于指标退化上报：指标"看起来还行"是因为异常被记成了空结果，
+        # 只报退化会把真正的原因盖掉。
+        print("门禁未通过：存在抛异常的 query（见上），请先修异常。")
+        return 1
+    if baseline is None:
+        print(f"[提示] 基线不存在（{baseline_path}），跳过对比。用 --update-baseline 生成。")
+        return 0
+
+    regressions = compare_to_baseline(metrics.as_dict(), baseline)
+    if regressions:
+        print("门禁未通过：")
+        for item in regressions:
+            print(f"  - {item}")
+        return 1
+
+    print("门禁通过：所有指标不低于基线。")
+    return 0
+
+
+def _validate_run(
+    rerank_observations: list[RerankObservation],
+    query_failures: list[str],
+    counts: dict[str, int],
+    errors: list[tuple[str, str]],
+) -> int | None:
+    """路由前提自检 + 检索期异常上报；需提前退出时返回退出码，否则 None。"""
+    preconditions = _assert_route_preconditions(rerank_observations)
+    if preconditions:
+        print("\n[失败] 路由前提自检未通过（反静默回退）：", file=sys.stderr)
+        for item in preconditions:
+            print(f"  - {item}", file=sys.stderr)
+        return 2
+    return report_retrieval_anomalies(
+        unexpected_query_failures(query_failures, set(counts)), errors
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
 
     logging.basicConfig(
         level=logging.INFO if args.verbose else logging.WARNING,
@@ -398,130 +596,46 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # 基线先读、先校验：口径不对就没必要花一分钟建索引再告诉你。
-    # 即使用户显式传 --baseline，也要先校验当前组合，避免把 real/fake rerank 混录。
     try:
-        auto_baseline_path = Path(default_baseline_path())
-    except ValueError as exc:
+        baseline_path = _resolve_baseline_path(args)
+        baseline = _load_baseline_for_run(args, baseline_path)
+    except _Rejected as exc:
         print(f"[拒绝] {exc}", file=sys.stderr)
         return 2
-    baseline_path = Path(args.baseline) if args.baseline else auto_baseline_path
-
-    baseline: dict[str, Any] | None = None
-    if not args.update_baseline:
-        try:
-            baseline = load_baseline(baseline_path)
-        except ValueError as exc:
-            print(f"[拒绝] {exc}", file=sys.stderr)
-            return 2
 
     tmp_dir = tempfile.mkdtemp(prefix="retrieval_gate_")
     try:
         configure_for_gate(tmp_dir)
-        start = time.perf_counter()
-        counts = build_index()
-        index_seconds = time.perf_counter() - start
-        total = sum(counts.values())
-        if total == 0:
-            print("[错误] 索引为空 —— knowledge/ 目录缺失或全部解析失败", file=sys.stderr)
+        built = _build_gate_index()
+        if built is None:
             return 2
-        print(f"索引就绪：{total} chunks（{index_seconds:.1f}s）  {counts}")
-
-        # 必须等 HNSW 落盘，否则会把 Chroma 的间歇性竞态误判成检索退化
-        ready = wait_for_index_ready(sorted(counts))
-        slow = {name: tries for name, tries in ready.items() if tries}
-        if slow:
-            print(f"[提示] 以下集合需要重试才可查询（Chroma 落盘竞态）：{slow}")
+        counts, total, index_seconds = built
 
         start = time.perf_counter()
-        (
-            metrics,
-            outcomes,
-            errors,
-            rerank_observations,
-            route_contributions,
-            query_failures,
-        ) = asyncio.run(run_gate(args.golden, limit=args.limit))
+        result = asyncio.run(run_gate(args.golden, limit=args.limit))
         query_seconds = time.perf_counter() - start
 
-        preconditions = _assert_route_preconditions(rerank_observations)
-        if preconditions:
-            print("\n[失败] 路由前提自检未通过（反静默回退）：", file=sys.stderr)
-            for item in preconditions:
-                print(f"  - {item}", file=sys.stderr)
-            return 2
-
-        code = report_retrieval_anomalies(
-            unexpected_query_failures(query_failures, set(counts)),
-            errors,
+        code = _validate_run(
+            result.rerank_observations, result.query_failures, counts, result.errors
         )
         if code is not None:
             return code
 
-        print(_build_report(metrics, outcomes, baseline, route_contributions))
+        print(_build_report(result.metrics, result.outcomes, baseline, result.route_contributions))
         print(f"索引 {index_seconds:.1f}s / 检索 {query_seconds:.1f}s")
 
         payload = build_baseline_payload(
-            metrics=metrics,
+            metrics=result.metrics,
             golden_path=args.golden,
             indexed_chunks=total,
-            route_contributions=route_contributions,
-            rerank_observations=rerank_observations,
+            route_contributions=result.route_contributions,
+            rerank_observations=result.rerank_observations,
         )
 
         if args.update_baseline:
-            if errors:
-                # 带着异常录基线等于把故障固化成"标准"，必须先修
-                print(
-                    f"\n[拒绝] 有 {len(errors)} 条 query 抛异常，不录基线 —— "
-                    "请先修掉异常，否则基线会把故障当成基准。"
-                )
-                return 2
+            return _update_baseline(args, result.metrics, baseline_path, result.errors, payload)
 
-            # 合理性校验：拦「静默故障」（不抛异常但指标塌陷），见 check_baseline_sanity。
-            suspicious = check_baseline_sanity(metrics, baseline_path)
-            if suspicious and not args.force_baseline:
-                print(
-                    f"\n[拒绝] 重录前的合理性校验未通过（{len(suspicious)} 处），**未写盘**：",
-                    file=sys.stderr,
-                )
-                for item in suspicious:
-                    print(f"  - {item}", file=sys.stderr)
-                print(
-                    "\n  先判断这是「故障」还是「预期内的改动」：\n"
-                    "    · 故障（如 Chroma 索引竞态）→ 复跑一次，指标应回到原量级\n"
-                    "    · 预期内的改动（改语料 / 改切分 / 改检索链）→ 加 --force-baseline 重录，\n"
-                    "      并在提交说明里写清为什么指标会变这么多",
-                    file=sys.stderr,
-                )
-                return 2
-
-            baseline_path.parent.mkdir(parents=True, exist_ok=True)
-            baseline_path.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
-            suffix = "（已跳过合理性校验）" if suspicious and args.force_baseline else ""
-            print(f"基线已更新: {baseline_path}{suffix}")
-            return 0
-
-        if errors:
-            # 异常优先于指标退化上报：指标"看起来还行"是因为异常被记成了空结果，
-            # 只报退化会把真正的原因盖掉。
-            print("门禁未通过：存在抛异常的 query（见上），请先修异常。")
-            return 1
-
-        if baseline is None:
-            print(f"[提示] 基线不存在（{baseline_path}），跳过对比。用 --update-baseline 生成。")
-            return 0
-
-        regressions = compare_to_baseline(metrics.as_dict(), baseline)
-        if regressions:
-            print("门禁未通过：")
-            for item in regressions:
-                print(f"  - {item}")
-            return 1
-
-        print("门禁通过：所有指标不低于基线。")
-        return 0
+        return _check_result(result.metrics, baseline, baseline_path, result.errors)
     finally:
         if not args.keep_index:
             shutil.rmtree(tmp_dir, ignore_errors=True)
