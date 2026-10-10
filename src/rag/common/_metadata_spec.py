@@ -42,7 +42,7 @@ Chunk 级字段（section.* 续）：
 from __future__ import annotations
 
 # ── 字段定义 ──────────────────────────────────────────
-# (field_name, type_hint, description, writer_module)
+# (字段名, 类型注解, 说明, 写入模块)
 
 FIELDS: list[tuple[str, str, str, str]] = [
     # ── source.* — 来源信息 ──

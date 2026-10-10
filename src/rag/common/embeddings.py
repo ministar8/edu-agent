@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import math
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 from langchain_core.embeddings import Embeddings
@@ -258,8 +260,6 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         if len(batches) <= 1:
             all_embeddings = self._embed_batch(texts)
         else:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
             results: dict[int, list] = {}
             with ThreadPoolExecutor(max_workers=min(len(batches), 4)) as pool:
                 futures = {
@@ -300,8 +300,6 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
             if len(batches) <= 1:
                 all_embeddings = await self._aembed_batch(texts, client=client)
             else:
-                import asyncio
-
                 tasks = [self._aembed_batch(batch, client=client) for batch in batches]
                 batch_results = await asyncio.gather(*tasks)
                 all_embeddings = []

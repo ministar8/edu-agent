@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from pathlib import Path
 
 from langchain_core.documents import Document
@@ -135,8 +136,6 @@ def _extract_simple(text: str, top_k: int = _TOP_KEYWORDS) -> list[str]:
     all_words = [w for w in all_words if w not in _STOP_WORDS and len(w) >= 2]
 
     # 按词频排序
-    from collections import Counter
-
     counter = Counter(all_words)
     return [w for w, _ in counter.most_common(top_k)]
 

@@ -544,7 +544,7 @@ class VectorStoreManager:
             input_docs=original_count,
             dedup_skipped=skipped,
         )
-        # Invalidate hash cache after successful add (new hashes incoming)
+        # 写入成功后失效哈希缓存（新增的哈希需重新读取）
         self._hash_cache.pop(collection_name, None)
         return ids
 

@@ -87,7 +87,7 @@ def _deserialize_evidence(data: str) -> FusedEvidence:
     return FusedEvidence.model_validate_json(data)
 
 
-# ── SemanticCache ─────────────────────────────────────────
+# ── SemanticCache 类 ──────────────────────────────────────
 
 
 class SemanticCache:

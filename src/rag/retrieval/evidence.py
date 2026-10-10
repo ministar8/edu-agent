@@ -109,7 +109,7 @@ def text_evidence_from_document(doc: Document, fallback_score: float = 0.0) -> T
     )
 
 
-# -- Formatting utilities (shared by fusion.py) --
+# ── 格式化工具（fusion.py 共用）──────────────────────────
 
 
 def format_text_evidence(index: int, ev: TextEvidence) -> str:

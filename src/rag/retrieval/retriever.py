@@ -639,12 +639,10 @@ def warmup_query_cache(quiet: bool = False) -> dict:
     原「缓存预热 30+ 条」已删除 —— 检索质量由门禁保证，这里只做冒烟。
     返回统计：{total, succeeded, failed, elapsed_ms}
     """
-    import time as _time
-
     total = len(_SMOKE_QUERIES)
     succeeded = 0
     failed = 0
-    t0 = _time.perf_counter()
+    t0 = time.perf_counter()
 
     for q in _SMOKE_QUERIES:
         try:
@@ -653,7 +651,7 @@ def warmup_query_cache(quiet: bool = False) -> dict:
         except Exception:
             failed += 1
 
-    elapsed_ms = round((_time.perf_counter() - t0) * 1000, 1)
+    elapsed_ms = round((time.perf_counter() - t0) * 1000, 1)
     if not quiet:
         logger.info(
             "Retrieval smoke done: %d/%d queries succeeded, %d failed, %.0f ms",

@@ -107,7 +107,7 @@ def classify_task_mode(
     context_mode: TaskMode | None = None,
     agent_prior: str = "",
 ) -> TaskMode:
-    """conversation context → explicit signal → agent prior → default。"""
+    """按优先级判定任务模式：会话上下文 → 显式信号 → agent 先验 → 默认。"""
     text = (query or "").strip()
     explicit = _explicit_mode(text)
 

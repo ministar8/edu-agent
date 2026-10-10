@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 
@@ -291,7 +292,6 @@ def build_metadata_routes(
     # 去重：同 query + 同 filter 只保留一条
     deduped: list[tuple[str, str, dict | None]] = []
     seen_specs: set[str] = set()
-    import json
 
     for route_name, route_query, route_filter in metadata_routes:
         filter_key = (
