@@ -43,7 +43,7 @@
 
 > 指标锚定在「学科类目」而不是「具体 chunk_id」
 
-实测基线（`evals/retrieval_baseline.json`）：
+实测基线（`evals/baselines/retrieval_baseline.json`）：
 
 | 指标 | 实测值 | 解读 |
 |---|---|---|
@@ -157,7 +157,7 @@ backlog #34 的四条路由对照实验：
 | 项 | 内容 |
 |---|---|
 | 为什么不做 chunk_id 级 | `retrieval_gate.py` 的取舍理由成立：chunk 级期望会在任何切分变更后大面积失效。**用「知识点标签」做中间层** —— 既不随切分失效，又比学科细一档 |
-| 改哪里 ① | `evals/sample_408.jsonl` 每条 `metadata` 加 `knowledge_points: [...]` —— **已完成 40 条**（跨章条目给双标注，如 ARP → 网络层 + 数据链路层） |
+| 改哪里 ① | `evals/datasets/golden/sample_408.jsonl` 每条 `metadata` 加 `knowledge_points: [...]` —— **已完成 40 条**（跨章条目给双标注，如 ARP → 网络层 + 数据链路层） |
 | 改哪里 ② | `src/evaluation/retrieval_gate.py` 加 `kp_hit@k` / `kp_mrr` 指标 —— **已完成**（另加 `kp_annotated` 守标注不被误删） |
 | ★ 陷阱 | `src/evaluation/dataset.py:57` 会把 list 值 **join 成逗号串** → 读取端必须按逗号切分。（门禁直读 JSONL 故不受影响；`_parse_expected_kps` 已**同时兼容两种形态**，RAGAS 侧要读也不会失真） |
 | 验收 | `kp_hit@k` 基线 **< 1.0**（必须有下降空间，否则说明标注粒度还是太粗）→ **0.9250 / 0.9000，达成** |

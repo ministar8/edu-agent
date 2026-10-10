@@ -122,8 +122,7 @@ async def load_memory(state: MessagesState, config=None) -> dict:
     """
     uid = None
     if config is not None:
-        conf = dict(config.get("configurable") or {})
-        uid = conf.get("user_id")
+        uid = (config.get("configurable") or {}).get("user_id")
     store = get_store()
     card, read_status = await abuild_card_with_status(store, uid)
     # ★ 落状态，不落布尔：`load_memory` 每轮都被调用一次，捕获到的顺序就是读链发生的顺序。
@@ -149,7 +148,7 @@ async def load_memory(state: MessagesState, config=None) -> dict:
 
     # 多轮 task_mode：载入线程上下文，并记住本轮用户 query 的 mode
     try:
-        conf = dict((config or {}).get("configurable") or {})
+        conf = (config or {}).get("configurable") or {}
         tid = str(conf.get("thread_id") or "")
         load_thread_context(tid, config)
         last_user = ""

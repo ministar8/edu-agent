@@ -44,10 +44,10 @@ async def agenerate_question_set(
     state = await question_gen_agent.ainvoke({"messages": messages})
     result: GeneratedQuestionSet | None = state.get("structured_response")
     if result is None:
-        state = await question_gen_agent.ainvoke({"messages": messages})
-        result = state.get("structured_response")
-    if result is None:
-        raise RuntimeError("出题失败：未返回结构化结果")
+        retry_state = await question_gen_agent.ainvoke({"messages": messages})
+        result = retry_state.get("structured_response")
+        if result is None:
+            raise RuntimeError("出题失败：未返回结构化结果")
     return result
 
 

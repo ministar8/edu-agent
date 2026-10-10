@@ -129,14 +129,14 @@ docker compose up --build                # 容器化启动
   但 merged_qa 仍会经基础路由被大量召回。
 - **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑
   `PYTHONPATH=src uv run python -m evaluation.retrieval_gate`。
-  它用确定性哈希 embedding + 临时索引跑 156 条黄金集 query，与 `evals/retrieval_baseline.json`
+  它用确定性哈希 embedding + 临时索引跑 156 条黄金集 query（`evals/datasets/golden/sample_408.jsonl`），与 `evals/baselines/retrieval_baseline.json`
   对比，任一指标退化即失败。**它衡量的是检索管线是否退化，不是语义质量**（语义质量用
   `evals/cli.py` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，
   但**必须在 PR 里说明为什么这个变化是可接受的**。
 - **探针门禁（细粒度补充）**：`PYTHONPATH=src uv run python -m evaluation.probe_gate`。
   `retrieval_gate` 的 `kp_*` 是**章级**（只看文件名），测不到「**小节级细节是否进了证据**」；
-  本门禁用 `evals/retrieval_probes.jsonl` 的 5 条 probe，记录每条 probe 的**目标 chunk 在
-  哪一层丢失**（`dropped_by`），与 `evals/probe_baseline.json` 比较 ——
+  本门禁用 `evals/datasets/golden/retrieval_probes.jsonl` 的 5 条 probe，记录每条 probe 的**目标 chunk 在
+  哪一层丢失**（`dropped_by`），与 `evals/baselines/probe_baseline.json` 比较 ——
   **拦「后退」、放行「前进」**（层级序见 `candidate_trace.DROP_REASONS`）。
   跑在**临时索引 + 就绪屏障**上；权威路由为
   `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1`。

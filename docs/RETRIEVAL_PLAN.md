@@ -222,7 +222,7 @@ L1 短概念返回 3 条、L3 长结构化返回 5 条。**该现象在 Steps 2~
 **★ 门禁的尺子测不到它**：`kp_hit@k` 是**章级**（`chapter_of_source` 只看文件名），
 所以 `#9` 在门禁里**本来就是命中**（三份门禁日志中 **0 次**出现在未命中清单）。
 ⇒ 这类**小节级缺陷可以长期藏在「门禁全绿」后面**；探针表
-（`evals/retrieval_probes.jsonl`）才是细粒度尺子。
+（`evals/datasets/golden/retrieval_probes.jsonl`）才是细粒度尺子。
 
 **修法已试两个变体，均未落地**（数据见 `evals/results/step7_threshold_dimensional_2026-09-27/`）：
 
@@ -242,7 +242,7 @@ L1 短概念返回 3 条、L3 长结构化返回 5 条。**该现象在 Steps 2~
 
 - 把探针表变成**基线化的回归门禁**：跑在**临时索引 + 就绪屏障**上（避开生产索引的
   Chroma 竞态 —— 那是 `candidate_trace` 不能当门禁用的原因），记录每条 probe 的
-  **目标 chunk 在哪一层丢失**（`dropped_by`），与 `evals/probe_baseline.json` 比较。
+  **目标 chunk 在哪一层丢失**（`dropped_by`），与 `evals/baselines/probe_baseline.json` 比较。
 - **判据是「管线序」而不是「是否 survived」**：`dropped_by` 的取值**有序**
   （`not_recalled` < `section_dedup` < `rrf_threshold` < `rerank_topn` <
   `rel_threshold` < `window_expand` < `survived`），门禁**拦「后退」、放行「前进」**。

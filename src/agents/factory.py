@@ -55,9 +55,6 @@ def build_agent(
 
     resolved_model = model_ref if model_ref is not None else settings.DEFAULT_MODEL
     model = get_model(resolved_model, temperature=temperature)
-    if response_format is not None:
-        # 结构化输出会触发 create_agent 的 tool_choice="any"，须先降级为 auto
-        model = _patch_tool_choice_safe(model)
     kwargs: dict[str, Any] = {
         "model": model,
         "tools": tools,
@@ -66,5 +63,7 @@ def build_agent(
         "middleware": [runtime_model_middleware],
     }
     if response_format is not None:
+        # 结构化输出会触发 create_agent 的 tool_choice="any"，须先降级为 auto
         kwargs["response_format"] = response_format
+        model = _patch_tool_choice_safe(model)
     return create_agent(**kwargs)

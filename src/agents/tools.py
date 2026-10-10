@@ -63,11 +63,16 @@ def build_retrieval_result(
     # legacy 池策略结果显式告知，避免模型误判「库里没有」或不知 fallback 来源
     layer_pack = (fused.metadata or {}).get("layer_pack") or {}
     degraded_note = ""
+
+    def safe_int(key: str) -> int:
+        # `or 0` 守卫 None / 缺失键，保持与原默认值一致
+        return int(layer_pack.get(key) or 0)
+
     if layer_pack:
-        dropped = int(layer_pack.get("dropped_legacy") or 0)
-        used_fb = int(layer_pack.get("used_fallback") or 0)
-        n_pack = int(layer_pack.get("n_pack") or 0)
-        keep_n = int(layer_pack.get("keep") or 0)
+        dropped = safe_int("dropped_legacy")
+        used_fb = safe_int("used_fallback")
+        n_pack = safe_int("n_pack")
+        keep_n = safe_int("keep")
         if layer_pack.get("degraded"):
             if dropped:
                 degraded_note = (
