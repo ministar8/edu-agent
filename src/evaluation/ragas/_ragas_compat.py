@@ -84,7 +84,7 @@ def ensure_ragas_importable() -> bool:
             )
 
     stub = types.ModuleType(_MISSING_MODULE)
-    stub.__doc__ = "占位模块，见 evaluation._ragas_compat 的说明。"
+    stub.__doc__ = "占位模块，见 evaluation.ragas._ragas_compat 的说明。"
     stub.ChatVertexAI = ChatVertexAI  # type: ignore[attr-defined]
     sys.modules[_MISSING_MODULE] = stub
     # 让 `from langchain_community.chat_models.vertexai import ChatVertexAI` 生效，

@@ -82,7 +82,7 @@
 
 ## 4. 检索质量门禁基线（156 条全集）
 
-**复现**：`PYTHONPATH=src uv run python -m evaluation.retrieval_gate`
+**复现**：`PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate`
 **归档**：`evals/baselines/retrieval_baseline.json`（fake-embedding 口径）
 
 本轮运行：**门禁通过**。注意 `kp_mrr` 当前 0.6636 略低于基线 0.6698 仍判通过——
@@ -106,7 +106,7 @@
 生成 `dashscope:qwen3.7-flash`；**judge `dashscope:qwen3.8-max-0902`（强制关 thinking）**；
 k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 
-**复现**：`PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/datasets/ragas/ragas_paired20.jsonl --sample-per-type 5 --no-rerank --include-details --tag final`
+**复现**：`PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/ragas/ragas_paired20.jsonl --sample-per-type 5 --no-rerank --include-details --tag final`
 **整理**：`uv run python scripts/ragas_report.py --tag final`
 **归档**：`evals/results/generation/ragas/`（`raw.jsonl` / `metrics.json` / `summary.md`）
 

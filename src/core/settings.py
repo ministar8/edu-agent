@@ -150,7 +150,7 @@ class Settings(BaseSettings):
     # 提到 settings 后调参只改 `.env`，代码保持干净。
     #
     # ⚠️ **改这些值会改变检索质量** —— 改完必须重跑检索质量门禁
-    #    （`python -m evaluation.retrieval_gate`）确认没有退化。
+    #    （`python -m evaluation.gates.retrieval_gate`）确认没有退化。
     RETRIEVAL_SCORE_THRESHOLD: float = 0.06
     """RRF 融合分数阈值。0.06 ≈「至少 1 路前 7」或「2 路前 15」，
     过滤掉排名 #8+ 的单路噪声。注意这是 **RRF 融合分**，不是余弦距离。"""

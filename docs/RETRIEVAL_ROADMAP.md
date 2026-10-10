@@ -89,7 +89,7 @@ backlog #34 的四条路由对照实验：
 |---|---|
 | 改哪里 | `.env`（`RERANK_ENABLED=false` → 跟随生产）；或在评测脚本里显式 `GATE_RERANK_MODE=on` |
 | 前置 | 本机 TEI 需运行：`docker start tei-embedding tei-rerank`（端口 11435 / 11436，**用 `docker start` 不要 `docker run` 重建**），起完等约 50s，**用真实推理请求验证而非只看 `/health`** |
-| 验收 | `GATE_RERANK_MODE=on python -m evaluation.retrieval_gate` 跑通且与 `evals/retrieval_baseline_rerank.json` 对得上；`GATE_RERANK_MODE=disabled`（生产关闭态）与 `retrieval_baseline_fake_disabled.json` 对得上 |
+| 验收 | `GATE_RERANK_MODE=on python -m evaluation.gates.retrieval_gate` 跑通且与 `evals/retrieval_baseline_rerank.json` 对得上；`GATE_RERANK_MODE=disabled`（生产关闭态）与 `retrieval_baseline_fake_disabled.json` 对得上 |
 | 风险 | 低。TEI 未起则检索类请求失败 |
 
 > ★ 在 T0.1 完成前，**本机任何「检索变准了」的结论都不该采信** —— 你验的是另一条链。
@@ -129,7 +129,7 @@ backlog #34 的四条路由对照实验：
 
 | 项 | 内容 |
 |---|---|
-| 命令 | `uv sync --group eval` → `PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 20 --tag baseline` |
+| 命令 | `uv sync --group eval` → `PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 20 --tag baseline` |
 | 产出 | `evals/results/*.json` |
 | 验收 | `faithfulness` / `context_recall` / `context_precision` / `answer_relevancy` 四个数字落盘，并回填到本文件 §5 |
 | 风险 | 需要真实 LLM（**会产生费用**）→ 先用 `--limit 20` |
@@ -214,7 +214,7 @@ backlog #34 的四条路由对照实验：
 | 现状 | `knowledge/` 共 41 文件 = 4 科讲义 + 2019~2024 六套真题 + 1 份学习路线 |
 | 缺什么 | **2025/2026 真题**、**考纲 ↔ 章节映射表**、错题 / 易混点专题、跨科综合题 |
 | 验收 | 入库 chunk 数、覆盖考点数（对比扩容前） |
-| ★ 注意 | 入库后**必须**调 `evaluation.retrieval_gate.wait_for_index_ready()`；生产路径**不要自动重建**（删集合 = 真实数据丢失） |
+| ★ 注意 | 入库后**必须**调 `evaluation.gates.retrieval_gate.wait_for_index_ready()`；生产路径**不要自动重建**（删集合 = 真实数据丢失） |
 
 ### T2.2 small-to-big：用足已有的父子块
 
@@ -367,7 +367,7 @@ merged_qa 占比 65.4% → **79.4%**、grade 17.0% → **46.7%**；但全部门�
 | 只在改动触达处还债 | 改了 `retriever.py` 就顺手拆函数 |
 | 圈复杂度棘轮只收紧不放松 | 改小 `max-complexity`（pyproject 的 ruff C90）后跑 `ruff check src/`；**数值变大 = 回退，应被质疑** |
 | 本地三条命令照跑 | `ruff check src/`、`ruff format --check src/`（**两条单独跑，check 通过 ≠ 格式通过**）、`pyrefly check` |
-| 改了检索链必须跑门禁 | `PYTHONPATH=src uv run python -m evaluation.retrieval_gate` |
+| 改了检索链必须跑门禁 | `PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate` |
 
 ---
 

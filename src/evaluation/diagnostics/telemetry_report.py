@@ -41,7 +41,7 @@
 
 用法::
 
-    PYTHONPATH=src uv run python -m evaluation.telemetry_report
+    PYTHONPATH=src uv run python -m evaluation.diagnostics.telemetry_report
     ... --json                       # 机器可读
     ... --output evals/results/telemetry_2026-09-27/report.json   # 落盘归档
 

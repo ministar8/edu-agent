@@ -31,12 +31,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from evaluation.provenance import build_provenance  # noqa: E402
-from evaluation.retrieval_gate import (  # noqa: E402
+from evaluation.gates.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     chapter_of_source,
     load_golden_queries,
 )
+from evaluation.provenance import build_provenance  # noqa: E402
 
 OUT = ROOT / "evals" / "results" / "retrieval" / "ablation" / "l2_coverage.json"
 COLLECTIONS = [

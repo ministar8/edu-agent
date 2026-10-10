@@ -29,10 +29,10 @@
 
 用法::
 
-    uv run python -m evaluation.candidate_trace                    # 跑默认 probe 表
-    uv run python -m evaluation.candidate_trace --probe evals/datasets/golden/retrieval_probes.jsonl
-    uv run python -m evaluation.candidate_trace --json             # 机器可读
-    uv run python -m evaluation.candidate_trace --limit 2          # 只跑前 N 条
+    uv run python -m evaluation.diagnostics.candidate_trace                    # 跑默认 probe 表
+    uv run python -m evaluation.diagnostics.candidate_trace --probe evals/datasets/golden/retrieval_probes.jsonl
+    uv run python -m evaluation.diagnostics.candidate_trace --json             # 机器可读
+    uv run python -m evaluation.diagnostics.candidate_trace --limit 2          # 只跑前 N 条
 """
 
 from __future__ import annotations

@@ -1415,9 +1415,9 @@ def check_9delivery() -> None:
     #   没传观察 ⇒ **不写该键**（没证据就不造一份「全未知」冒充送达）。
     #   ★ 口径红线：这只锁「自本批起新录基线会带该字段」；历史 9 份基线**没有**这个键，
     #     引用时不得写成「历史工件已补齐」（见 fixbatch 报告与 §20.7.2 B12 的更正登记）。
-    from evaluation.retrieval_gate import RerankObservation as _RO9n
-    from evaluation.retrieval_gate import RetrievalMetrics as _RM9n
-    from evaluation.retrieval_gate import build_baseline_payload as _bbp9n
+    from evaluation.gates.retrieval_gate import RerankObservation as _RO9n
+    from evaluation.gates.retrieval_gate import RetrievalMetrics as _RM9n
+    from evaluation.gates.retrieval_gate import build_baseline_payload as _bbp9n
 
     _m9n = _RM9n(
         n_queries=5,

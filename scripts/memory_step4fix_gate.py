@@ -420,7 +420,7 @@ def check_3() -> None:
     #   ② 用映射到的真实类目自测必须 True（自测 False = 恒不命中，正是 `cn` 的老 bug）。
     import json as _json
 
-    from evaluation.retrieval_gate import SUBJECT_TO_CATEGORY
+    from evaluation.gates.retrieval_gate import SUBJECT_TO_CATEGORY
     from evaluation.task_eval.metrics import _SUBJECT_ALIASES
 
     codes: set[str] = set()

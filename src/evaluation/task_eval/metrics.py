@@ -142,7 +142,7 @@ def category_hit(subject: str, categories: Sequence[str]) -> bool | None:
     """
     if not subject:
         return None
-    from evaluation.retrieval_gate import SUBJECT_TO_CATEGORY
+    from evaluation.gates.retrieval_gate import SUBJECT_TO_CATEGORY
 
     want = SUBJECT_TO_CATEGORY.get(_SUBJECT_ALIASES.get(subject, subject))
     if want is None:

@@ -172,9 +172,9 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 
 | 工具 | 索引 | 退出码 | 用途 |
 |---|---|---|---|
-| `evaluation.retrieval_gate` | **临时索引** | 有（跌破基线即失败） | 回归门禁 |
-| `evaluation.probe_gate` | 临时索引 + 就绪屏障 | 有 | 小节级探针（拦后退、放前进） |
-| `evaluation.candidate_trace` | **生产索引**、无就绪屏障 | **无** | 逐层归因诊断，**不是门禁** |
+| `evaluation.gates.retrieval_gate` | **临时索引** | 有（跌破基线即失败） | 回归门禁 |
+| `evaluation.gates.probe_gate` | 临时索引 + 就绪屏障 | 有 | 小节级探针（拦后退、放前进） |
+| `evaluation.diagnostics.candidate_trace` | **生产索引**、无就绪屏障 | **无** | 逐层归因诊断，**不是门禁** |
 
 ### 6.3 ★ 已知局限（更新 2026-10-10）
 

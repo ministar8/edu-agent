@@ -157,7 +157,7 @@ class VectorStoreManager:
         既可能报出**巨大的假回归**（实测 hit@1 从 0.95 掉到 0.725），
         也可能**掩盖真实退化**。
 
-        调用方（如 `evaluation.retrieval_gate`）应在比对指标**之前**断言它为空。
+        调用方（如 `evaluation.gates.retrieval_gate`）应在比对指标**之前**断言它为空。
         """
         return list(self._query_failures)
 
@@ -190,7 +190,7 @@ class VectorStoreManager:
 
     def reset_query_failures(self) -> None:
         """★ 每个「独立取证单元」开跑前调一次，**只允许**在单元边界（不在单元内部）：
-        ① `evaluation.retrieval_gate` 每条 query 之前（`finally` 里紧接着收割）；
+        ① `evaluation.gates.retrieval_gate` 每条 query 之前（`finally` 里紧接着收割）；
         ② `evaluation.task_eval.runner.run_case` 每次检索探针之前；
         ③ `evaluation.task_eval.cli._reprobe` 每条 record 的 reprobe 之前
            （修复批 Important-1：reprobe 与 ② 同构 —— 一次探针 = 一个单元，

@@ -2463,7 +2463,7 @@ git commit -m "fix(eval,rag): B7 让 error 可达 + 检索层归因只由 tier-0
 **Files:**
 - Modify: `src/rag/pipeline.py:564-593`、`src/rag/reranker.py:200-260`
 - Modify: `src/rag/embeddings.py`、`src/rag/layer_recall.py:30-131`、`src/rag/evidence_policy.py:130-145`
-- Test: `scripts/evidence_chain_gate.py`（`check_9`）+ `evaluation.retrieval_gate` / `probe_gate`
+- Test: `scripts/evidence_chain_gate.py`（`check_9`）+ `evaluation.gates.retrieval_gate` / `probe_gate`
 
 **Interfaces:**
 - Consumes: `Task 8` 已落地的 `reset_query_failures()` / `record_query_failure()`（本 Task 不再碰）
@@ -2589,14 +2589,14 @@ Expected: 四个集合都打印出 space 与换算序列且 `单调不增=True`�
 
 ```bash
 uv run python scripts/tei_ready.py            # 就绪以它为准，/health 200 不算
-PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.retrieval_gate
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate
 ls evals/baselines/                            # 从文件名读出 6 条路由的 (embedding, rerank) 组合
 ```
 逐条按 `evals/baselines/` 文件名对应的 env 组合跑 `--update-baseline`，**每条的 diff 数字
 必须记进 `docs/EXPERIMENTS.md` §20.7**（既有纪律：禁止静默重录）。
 `probe_gate` 也跑一次（拦「后退」放行「前进」，权威路由需 `GATE_USE_REAL_EMBEDDING=1` 等三个开关）。
 
-Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.retrieval_gate`
+Run: `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate`
 Expected: 默认路由**逐位复现**（B2 在 `RERANK_ENABLED=false` 下不改行为）；
 B1 相关路由允许小幅变化，但**必须在 §20.7 留下「变化多少、为什么可接受」**。
 

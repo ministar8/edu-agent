@@ -1,7 +1,7 @@
 """RAGAS 评估 CLI。
 
 uv sync --group eval
-python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 5
+python -m evaluation.ragas.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 5
 """
 
 from __future__ import annotations
@@ -156,8 +156,8 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     from core.settings import settings
-    from evaluation.config import EvaluationConfig
-    from evaluation.ragas_eval import run_rag_evaluation
+    from evaluation.ragas.config import EvaluationConfig
+    from evaluation.ragas.ragas_eval import run_rag_evaluation
 
     cfg = EvaluationConfig(
         dataset_path=args.dataset,
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
     settings.RERANK_ENABLED = cfg.use_rerank
 
     notes = _preflight(cfg)
-    log = logging.getLogger("evaluation.cli")
+    log = logging.getLogger("evaluation.ragas.cli")
     for _is_blocking, msg in notes:
         log.warning("口径提示：%s", msg)
 

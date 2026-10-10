@@ -29,14 +29,14 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from evaluation.provenance import build_provenance  # noqa: E402
-from evaluation.retrieval_gate import (  # noqa: E402
+from evaluation.gates.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     GATE_K,
     QueryOutcome,
     compute_metrics,
     load_golden_queries,
 )
+from evaluation.provenance import build_provenance  # noqa: E402
 
 OUT_DIR = ROOT / "evals" / "results" / "retrieval" / "ablation" / "component_variance"
 
@@ -88,7 +88,7 @@ async def run_one_run(run_id: int) -> dict[str, Any]:
     from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     queries = load_golden_queries(DEFAULT_GOLDEN_PATH, limit=60)
-    from evaluation.retrieval_gate import chapter_of_source
+    from evaluation.gates.retrieval_gate import chapter_of_source
 
     t0 = time.perf_counter()
     detail: list[dict[str, Any]] = []

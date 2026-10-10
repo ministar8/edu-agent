@@ -34,7 +34,7 @@ Chroma「Nothing found on disk」）、没有基线、没有退出码 —— **�
 
     # 权威路由（真实 embedding + 真实 TEI rerank）
     GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 \
-        PYTHONPATH=src python -m evaluation.probe_gate
+        PYTHONPATH=src python -m evaluation.gates.probe_gate
 
     ... --update-baseline     # 重录基线（需说明为什么变化可接受）
     ... --json                # 机器可读
@@ -52,8 +52,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from evaluation import retrieval_gate as RG
-from evaluation.candidate_trace import DROP_REASONS, load_probes, trace_probe
+from evaluation.diagnostics.candidate_trace import DROP_REASONS, load_probes, trace_probe
+from evaluation.gates import retrieval_gate as RG
 
 logger = logging.getLogger(__name__)
 

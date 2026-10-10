@@ -8,7 +8,7 @@ import logging
 from langchain_core.embeddings import Embeddings
 
 from core.llm import get_llm
-from evaluation.dataset import EvalSample
+from evaluation.ragas.dataset import EvalSample
 from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
 logger = logging.getLogger(__name__)

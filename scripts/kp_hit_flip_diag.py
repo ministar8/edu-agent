@@ -89,7 +89,7 @@ def _kp_rank(outcome) -> int | None:
 
 async def collect(mode: str, queries) -> tuple[list, dict]:
     import rag.retrieval.routes as routes
-    from evaluation.retrieval_gate import QueryOutcome, chapter_of_source
+    from evaluation.gates.retrieval_gate import QueryOutcome, chapter_of_source
     from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     routes._raw_search = _make_raw_search(mode)  # type: ignore[assignment]
@@ -130,7 +130,7 @@ async def collect(mode: str, queries) -> tuple[list, dict]:
 
 
 async def main() -> int:
-    from evaluation.retrieval_gate import load_golden_queries
+    from evaluation.gates.retrieval_gate import load_golden_queries
 
     golden = str(ROOT / "evals/datasets/golden/sample_408.jsonl")
     queries = load_golden_queries(golden, limit=LIMIT)

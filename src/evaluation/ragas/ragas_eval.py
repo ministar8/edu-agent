@@ -10,14 +10,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from core.settings import settings
-from evaluation.adapters import (
+from evaluation.provenance import build_provenance
+from evaluation.ragas.adapters import (
     build_embeddings_for_relevancy,
     build_judge_llm,
     fill_sample,
 )
-from evaluation.config import EvaluationConfig
-from evaluation.dataset import EvalSample
-from evaluation.provenance import build_provenance
+from evaluation.ragas.config import EvaluationConfig
+from evaluation.ragas.dataset import EvalSample
 
 if TYPE_CHECKING:
     # 仅类型检查期需要。ragas 属可选 `eval` 依赖组，CI **不装**（故带 import-not-found 忽略）；
@@ -89,8 +89,8 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
     try:
         # ★ 必须在 `import ragas` **之前**：ragas 0.4.3 在 `ragas/llms/base.py` 顶部
         # 无条件 import 一个 `langchain-community>=0.4` 已移除的模块，会让 `import ragas`
-        # 直接 ModuleNotFoundError。原因与安全性论证见 `evaluation._ragas_compat`。
-        from evaluation._ragas_compat import ensure_ragas_importable
+        # 直接 ModuleNotFoundError。原因与安全性论证见 `evaluation.ragas._ragas_compat`。
+        from evaluation.ragas._ragas_compat import ensure_ragas_importable
 
         ensure_ragas_importable()
 
@@ -299,7 +299,7 @@ def _dump_generated_samples(samples: list[EvalSample], cfg: EvaluationConfig) ->
 async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
     """加载数据集 → 检索+生成 → RAGAS → 写 JSON 报告。"""
     from core.settings import settings
-    from evaluation.dataset import load_dataset
+    from evaluation.ragas.dataset import load_dataset
 
     samples = load_dataset(
         cfg.dataset_path,

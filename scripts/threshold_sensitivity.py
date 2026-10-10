@@ -70,13 +70,13 @@ def capture_fallback():
         logging.getLogger("rag.retrieval.pipeline").removeHandler(handler)
 
 
-from evaluation.provenance import build_provenance  # noqa: E402
-from evaluation.retrieval_gate import (  # noqa: E402
+from evaluation.gates.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     QueryOutcome,
     compute_metrics,
     load_golden_queries,
 )
+from evaluation.provenance import build_provenance  # noqa: E402
 
 
 async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
@@ -106,7 +106,7 @@ async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
                 meta = ev.metadata or {}
                 hit_cats.append(str(meta.get("_collection") or ev.collection or ""))
                 src = str(meta.get("source_file") or meta.get("source") or ev.source or "")
-                from evaluation.retrieval_gate import chapter_of_source
+                from evaluation.gates.retrieval_gate import chapter_of_source
 
                 hit_kps.append(chapter_of_source(src))
             outcomes.append(

@@ -67,8 +67,8 @@ edu-agent/
 
 | 入口 | 用途 |
 |---|---|
-| `PYTHONPATH=src uv run python -m evaluation.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
-| `PYTHONPATH=src uv run python -m evaluation.retrieval_gate` | 检索质量门禁：**九项指标**对基线（含章级 `kp_hit@k` / `kp_mrr`），**每条路由各一份基线** |
+| `PYTHONPATH=src uv run python -m evaluation.ragas.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
+| `PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate` | 检索质量门禁：**九项指标**对基线（含章级 `kp_hit@k` / `kp_mrr`），**每条路由各一份基线** |
 | `scripts/tei_deploy.ps1` | 本机 TEI 容器部署（embedding + reranker） |
 
 > 检索门的真实口径按 `(embedding, rerank)` 组合区分：默认（假 embedding / 重排 `off`）、
@@ -141,7 +141,7 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 ```bash
 uv sync --group eval
 # 需 TEI embedding + 知识库 + LLM 配置
-PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 40
+PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 40
 # ↑ 路径已按实仓校正：旧写法 evals/sample_408.jsonl 不存在，真实黄金集 = evals/datasets/golden/sample_408.jsonl（cli.py 的 --dataset 默认值）
 ```
 

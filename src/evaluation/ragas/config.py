@@ -11,7 +11,7 @@ class EvaluationConfig:
     dataset_limit: int | None = None
     # 分层抽样：按 metadata.query_type 每类取 N 条（与 dataset_limit 互斥）。
     # 为什么需要它：黄金集里类型与学科都是**成块排列**的，取前 N 条会系统性偏到
-    # 概念题 + ds/co（详见 evaluation.dataset._stratified_sample）。
+    # 概念题 + ds/co（详见 evaluation.ragas.dataset._stratified_sample）。
     sample_per_type: int | None = None
     ragas_metrics: list[str] = field(
         default_factory=lambda: [

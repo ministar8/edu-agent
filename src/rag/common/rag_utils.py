@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 #
 # ⚠️ 只影响**查询侧**分词（`extract_query_terms` / BM25 `cut_for_search` / topic 判分）；
 #   入库切分（`splitter` / `cleaner`）不依赖 jieba，故**改这里不需要重建索引**。
-#   但会改变召回结果 —— 改动后必须跑 `evaluation.retrieval_gate`。
+#   但会改变召回结果 —— 改动后必须跑 `evaluation.gates.retrieval_gate`。
 _DOMAIN_WORDS: tuple[str, ...] = (
     # 线性表 / 链表
     "单链表",

@@ -229,13 +229,13 @@ RAGAS 报告里会写入 `_meta.warnings` 标注这一点。
 
 ```bash
 # 默认：假 embedding + 重排 off（调用方不要求重排）
-PYTHONPATH=src uv run python -m evaluation.retrieval_gate
+PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate
 # 重排 on（走确定性假打分，无需 TEI）
-PYTHONPATH=src GATE_RERANK_MODE=on uv run python -m evaluation.retrieval_gate
+PYTHONPATH=src GATE_RERANK_MODE=on uv run python -m evaluation.gates.retrieval_gate
 # 生产关闭态：要求重排、但部署关掉（复现 .env 的 RERANK_ENABLED=false）
-PYTHONPATH=src GATE_RERANK_MODE=disabled uv run python -m evaluation.retrieval_gate
+PYTHONPATH=src GATE_RERANK_MODE=disabled uv run python -m evaluation.gates.retrieval_gate
 # 真实 embedding（唯一需要 TEI，用来回答「语义质量」）
-PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.retrieval_gate
+PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retrieval_gate
 ```
 
 路由按 `(embedding, rerank)` 组合区分，**已登记的组合各有一份基线**，
@@ -280,7 +280,7 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.retrieval_g
 | 类型检查 | `pyrefly check` | **必须 0 错误**；可选依赖导入标 `# type: ignore[import-not-found]` |
 | 静态检查 | `ruff check src/` | 含 `S110`（拦静默吞异常）、`C90`（圈复杂度 ≤25） |
 | 格式 | `ruff format --check src/` | ★ **与 check 是两条命令，必须分别跑** |
-| 检索回归 | `evaluation.retrieval_gate` | **九项指标**比基线，容差 0.02；按 `(embedding, rerank)` 组合分路由，各一份基线 |
+| 检索回归 | `evaluation.gates.retrieval_gate` | **九项指标**比基线，容差 0.02；按 `(embedding, rerank)` 组合分路由，各一份基线 |
 
 > ★ **命令范围**：本工作区不含 `tests/`，有效范围是 `src/`（带 `tests/` 会报 `E902`，
 > **不是代码问题**）。结构规模棘轮与覆盖率门槛**已随测试套件移出**，本工作区无自动门禁。

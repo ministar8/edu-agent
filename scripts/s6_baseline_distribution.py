@@ -123,7 +123,7 @@ def main() -> int:
     print(
         "\n############ 检索侧（不进本脚本：由门禁自己判）############\n"
         "  `PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 "
-        "uv run python -m evaluation.retrieval_gate`\n"
+        "uv run python -m evaluation.gates.retrieval_gate`\n"
         "  判据 = 「各指标不低于 V-2026-10-02 基线，容差 0.02」；③ 锚点复现值见 §20.2。"
     )
     return 0

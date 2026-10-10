@@ -51,25 +51,25 @@ RAG 检索链的改动（阈值常数、RRF 路由权重、切分策略、去重
 
 用法::
 
-    python -m evaluation.retrieval_gate                    # 默认：假 embedding + rerank off
-    python -m evaluation.retrieval_gate --update-baseline  # 重录基线（需在 PR 里说明原因）
-    python -m evaluation.retrieval_gate --limit 10         # 快速抽查
+    python -m evaluation.gates.retrieval_gate                    # 默认：假 embedding + rerank off
+    python -m evaluation.gates.retrieval_gate --update-baseline  # 重录基线（需在 PR 里说明原因）
+    python -m evaluation.gates.retrieval_gate --limit 10         # 快速抽查
 
     # 重排路由（用确定性假打分，无需 TEI）
-    GATE_RERANK_MODE=on python -m evaluation.retrieval_gate
-    GATE_RERANK_MODE=on python -m evaluation.retrieval_gate --update-baseline
+    GATE_RERANK_MODE=on python -m evaluation.gates.retrieval_gate
+    GATE_RERANK_MODE=on python -m evaluation.gates.retrieval_gate --update-baseline
     # 兼容旧写法：GATE_USE_RERANK=1 等价于 GATE_RERANK_MODE=on
 
     # 生产关闭态（要求重排但部署关掉；复现 .env 的 RERANK_ENABLED=false）
-    GATE_RERANK_MODE=disabled python -m evaluation.retrieval_gate
+    GATE_RERANK_MODE=disabled python -m evaluation.gates.retrieval_gate
 
     # 真实 embedding 路由（本地手动跑；需要 TEI 在 .env 配的地址上）
-    GATE_USE_REAL_EMBEDDING=1 python -m evaluation.retrieval_gate
-    GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=disabled python -m evaluation.retrieval_gate
+    GATE_USE_REAL_EMBEDDING=1 python -m evaluation.gates.retrieval_gate
+    GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=disabled python -m evaluation.gates.retrieval_gate
 
     # 真实 embedding + 真实 TEI rerank（发布前基线；会调用本地 reranker）
     GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 \
-        python -m evaluation.retrieval_gate --update-baseline
+        python -m evaluation.gates.retrieval_gate --update-baseline
 
 6. **★ 语料已覆盖 L1/L2/L3，但走「通用路径」≠ 生产入库路径（2026-10-10 更新）。**
    ``build_index()`` 调 ``rag.ingest_layers.build_all()`` —— **与 ``scripts/ingest_*.py``
@@ -219,7 +219,7 @@ _MODE_SETTINGS: dict[str, tuple[bool, bool]] = {
 }
 
 # 真实 embedding 路由开关。**默认关闭**，且**只能在本地跑**（需要 TEI，CI 里没有）。
-# 打开：`GATE_USE_REAL_EMBEDDING=1 python -m evaluation.retrieval_gate`
+# 打开：`GATE_USE_REAL_EMBEDDING=1 python -m evaluation.gates.retrieval_gate`
 #
 # ★ 为什么需要它：默认路由跑 `USE_FAKE_EMBEDDING`（字符 bigram 哈希），它**只保留
 # 词汇重叠信号、没有语义泛化能力** —— 门禁因此只能证明「管线没退化」，**证明不了
@@ -611,7 +611,7 @@ def _parse_expected_kps(value: Any) -> tuple[str, ...]:
 
     容忍两种形态：
     - ``list``（门禁直读 JSONL 时的原形）；
-    - 逗号串（``evaluation.dataset`` 会把 list **join 成逗号串**，见其 `:57`）。
+    - 逗号串（``evaluation.ragas.dataset`` 会把 list **join 成逗号串**，见其 `:57`）。
 
     两种都收，是为了让同一份黄金集既能被门禁读、也能被 RAGAS 链路读而不失真。
     """
@@ -1164,7 +1164,7 @@ def build_baseline_payload(
     """
     payload: dict[str, Any] = {
         "_meta": {
-            "note": "由 evaluation.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
+            "note": "由 evaluation.gates.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
             "embedding_mode": embedding_mode(),
             "embedding": (
                 "real TEI bge-m3"

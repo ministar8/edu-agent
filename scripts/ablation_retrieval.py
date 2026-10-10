@@ -28,14 +28,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from evaluation.provenance import build_provenance  # noqa: E402
-from evaluation.retrieval_gate import (  # noqa: E402
+from evaluation.gates.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     GATE_K,
     QueryOutcome,
     compute_metrics,
     load_golden_queries,
 )
+from evaluation.provenance import build_provenance  # noqa: E402
 from rag.retrieval.query_classifier import QueryCategory  # noqa: E402
 
 OUT_DIR = ROOT / "evals" / "results" / "retrieval"
@@ -245,7 +245,7 @@ async def run_one_config(
                 coll = str(meta.get("_collection") or ev.collection or "")
                 hit_cats.append(coll)
                 src = str(meta.get("source_file") or meta.get("source") or ev.source or "")
-                from evaluation.retrieval_gate import chapter_of_source
+                from evaluation.gates.retrieval_gate import chapter_of_source
 
                 hit_kps.append(chapter_of_source(src))
             outcomes.append(

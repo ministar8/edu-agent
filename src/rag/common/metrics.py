@@ -56,7 +56,7 @@ class MetricsTimer(AbstractContextManager):
 
 
 # 遥测日志的默认落盘位置。★ 这里是**唯一**的定义处 ——
-# `evaluation.telemetry_report` 把它当作默认输入。两份各写一遍这个表达式迟早漂移，
+# `evaluation.diagnostics.telemetry_report` 把它当作默认输入。两份各写一遍这个表达式迟早漂移，
 # 而漂移的表现是「报表读到的是另一份日志」，**不报错、只是数字变了**。
 DEFAULT_METRICS_PATH = (
     Path(__file__).resolve().parents[2] / "data" / "metrics" / "rag_metrics.jsonl"

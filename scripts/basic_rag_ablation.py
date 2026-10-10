@@ -33,8 +33,7 @@ from task_layer_ablation import (  # noqa: E402
     run_one,
 )
 
-from evaluation.provenance import build_provenance  # noqa: E402
-from evaluation.retrieval_gate import (  # noqa: E402
+from evaluation.gates.retrieval_gate import (  # noqa: E402
     DEFAULT_GOLDEN_PATH,
     GATE_K,
     QueryOutcome,
@@ -42,6 +41,7 @@ from evaluation.retrieval_gate import (  # noqa: E402
     compute_metrics,
     load_golden_queries,
 )
+from evaluation.provenance import build_provenance  # noqa: E402
 
 OUT_DIR = ROOT / "evals" / "results" / "retrieval" / "ablation"
 

@@ -1,6 +1,6 @@
 """RAGAS 结果整理：把 `ragas_<tag>.json` 转成 results/ 约定的三层产物。
 
-为什么需要它：`evaluation.cli` 只写一份完整报告（含 details）；
+为什么需要它：`evaluation.ragas.cli` 只写一份完整报告（含 details）；
 而 `evals/results/generation/ragas/` 的约定是三层 ——
 `raw.jsonl`（逐样本）/ `metrics.json`（汇总）/ `summary.md`（人工结论）。
 本脚本负责把前两层从报告里派生出来，保证与报告**同源、可重算**。
@@ -85,7 +85,7 @@ def main() -> int:
 
     report_path = RAGAS_DIR / f"ragas_{args.tag}.json"
     if not report_path.exists():
-        print(f"报告不存在: {report_path}（先跑 evaluation.cli）")
+        print(f"报告不存在: {report_path}（先跑 evaluation.ragas.cli）")
         return 2
     report = json.loads(report_path.read_text(encoding="utf-8"))
     meta = report.get("_meta", {})

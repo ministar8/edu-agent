@@ -44,7 +44,7 @@
 ```bash
 uv sync                                  # 安装依赖
 uv sync --group eval                     # RAGAS 评测依赖（可选）
-PYTHONPATH=src uv run python -m evaluation.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 5
+PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/golden/sample_408.jsonl --limit 5
 # ↑ 路径已按实仓校正：旧写法 `evals/sample_408.jsonl` 从来不存在，真实黄金集 = evals/datasets/golden/sample_408.jsonl（= src/evaluation/cli.py 的 --dataset 默认值；核对：git ls-files evals/datasets/golden）
 
 # 任务级评测（论文效果章 · src/evaluation/task_eval）
@@ -106,7 +106,7 @@ docker compose up --build                # 容器化启动
 - ★ **`task_eval` 与三个 Memory Gate 刻意不进 CI**：要真密钥、按 token 计费、且模型输出有随机性。
   ⇒ **论文效果章的数字没有任何自动兜底**，改动批改链 / Memory 写链 / 评测器后，
   **必须本机手动重跑** `scripts/memory_step*_gate.py`（带 `PYTHONIOENCODING=utf-8`）。
-- **保留**的自研门禁：`evaluation.retrieval_gate` / `probe_gate`（检索）+ 上述 Memory Gate（效果）。
+- **保留**的自研门禁：`evaluation.gates.retrieval_gate` / `probe_gate`（检索）+ 上述 Memory Gate（效果）。
 - 检索数字的版本归属见 `docs/EXPERIMENTS.md` §18（`V-2026-10-02`），
   效果数字见 **§20**（`V-2026-10-07`，标签对象 `abc115b` → 落点提交 `0f24891`）；两处都列了「已知偏离」，引用前先核对归属矩阵。
 
@@ -128,12 +128,12 @@ docker compose up --build                # 容器化启动
   「选项行尾 ✅ + **解析**：」。`merged_qa_meta` **专用召回路由已否决**（两轮净负），
   但 merged_qa 仍会经基础路由被大量召回。
 - **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑
-  `PYTHONPATH=src uv run python -m evaluation.retrieval_gate`。
+  `PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate`。
   它用确定性哈希 embedding + 临时索引跑 156 条黄金集 query（`evals/datasets/golden/sample_408.jsonl`），与 `evals/baselines/retrieval_baseline.json`
   对比，任一指标退化即失败。**它衡量的是检索管线是否退化，不是语义质量**（语义质量用
   `evals/cli.py` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，
   但**必须在 PR 里说明为什么这个变化是可接受的**。
-- **探针门禁（细粒度补充）**：`PYTHONPATH=src uv run python -m evaluation.probe_gate`。
+- **探针门禁（细粒度补充）**：`PYTHONPATH=src uv run python -m evaluation.gates.probe_gate`。
   `retrieval_gate` 的 `kp_*` 是**章级**（只看文件名），测不到「**小节级细节是否进了证据**」；
   本门禁用 `evals/datasets/golden/retrieval_probes.jsonl` 的 5 条 probe，记录每条 probe 的**目标 chunk 在
   哪一层丢失**（`dropped_by`），与 `evals/baselines/probe_baseline.json` 比较 ——
@@ -141,7 +141,7 @@ docker compose up --build                # 容器化启动
   跑在**临时索引 + 就绪屏障**上；权威路由为
   `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1`。
   **不要**用 `candidate_trace` 当门禁 —— 它跑生产索引、无就绪屏障、无退出码。
-- **遥测报表（只读，不是门禁）**：`PYTHONPATH=src uv run python -m evaluation.telemetry_report`。
+- **遥测报表（只读，不是门禁）**：`PYTHONPATH=src uv run python -m evaluation.diagnostics.telemetry_report`。
   它给 `data/metrics/rag_metrics.jsonl`（由 `rag.metrics` 写入、此前**无任何读方**）
   补上读方：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、入库交叉校验。
   **无基线、无判定**；`--output <path>` 落盘归档（建议 `evals/results/`）。
@@ -153,7 +153,7 @@ docker compose up --build                # 容器化启动
 - **门禁里的索引就绪屏障**：ChromaDB `add_documents` 之后立即查询会**间歇性**抛
   `Error creating hnsw segment reader: Nothing found on disk` —— 每次命中的集合不同，
   命中后该集合整轮不可查询（检索结果全错但不报错），会被误报成"检索退化"。
-  在临时索引上跑检索前，务必先调 `evaluation.retrieval_gate.wait_for_index_ready()`
+  在临时索引上跑检索前，务必先调 `evaluation.gates.retrieval_gate.wait_for_index_ready()`
   （`repair=True` 会对不可查询的集合只重建它自己后重试）。
 - **这个故障进程内无法恢复**（实测结论，别再试了）：丢弃 `_stores` 缓存句柄无效、
   重开 `chromadb.PersistentClient` 无效，**只有 `delete_collection` + 重新入库有效**。

@@ -44,8 +44,8 @@
 用法::
 
     # 录基线与比对**必须用同一个 --persist-dir**
-    python -m evaluation.stage_trace --record     --limit 12 --persist-dir /tmp/idx
-    python -m evaluation.stage_trace              --limit 12 --persist-dir /tmp/idx
+    python -m evaluation.diagnostics.stage_trace --record     --limit 12 --persist-dir /tmp/idx
+    python -m evaluation.diagnostics.stage_trace              --limit 12 --persist-dir /tmp/idx
 
 **必须固定索引目录（实测结论）**：默认模式下每次运行都会新建临时索引，
 此时约 10 次里有 1 次会因上游 ANN 边界抖动而超出分级断言（recall 层已只报警，
@@ -529,7 +529,7 @@ async def record_all(
     Returns:
         ``(追踪列表, 被排除的 query 列表)``。
     """
-    from evaluation.retrieval_gate import load_golden_queries
+    from evaluation.gates.retrieval_gate import load_golden_queries
 
     # `load_golden_queries` 返回 (query, category, knowledge_points) 三元组；
     # 这里只要 query。
@@ -610,7 +610,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.INFO if args.verbose else logging.WARNING)
 
-    from evaluation.retrieval_gate import (
+    from evaluation.gates.retrieval_gate import (
         build_index,
         configure_for_gate,
         wait_for_index_ready,
@@ -655,7 +655,7 @@ def main(argv: list[str] | None = None) -> int:
 
         payload = {
             "_meta": {
-                "note": "由 evaluation.stage_trace 生成；拆分检索链后必须与本文件逐阶段一致",
+                "note": "由 evaluation.diagnostics.stage_trace 生成；拆分检索链后必须与本文件逐阶段一致",
                 "embedding": "USE_FAKE_EMBEDDING (deterministic hashing)",
                 "rerank_enabled": False,
                 "k": 5,

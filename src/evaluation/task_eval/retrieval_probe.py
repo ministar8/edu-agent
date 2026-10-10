@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # 与 retrieval_gate 同源（那里是学科→类目的单一真源）
 try:  # 延迟导入失败也不致命：退化为不做 category_hit
-    from evaluation.retrieval_gate import SUBJECT_TO_CATEGORY
+    from evaluation.gates.retrieval_gate import SUBJECT_TO_CATEGORY
 except Exception:  # noqa: BLE001
     SUBJECT_TO_CATEGORY = {
         "ds": "data_structure",
