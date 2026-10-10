@@ -380,6 +380,14 @@ SUBJECT_COLLECTIONS = [
     "computer_network",
 ]
 
+# 学科集合 → 代码库集合（`knowledge/code/<科>/`）。代码类查询额外命中它。
+_CODE_COLLECTION = {
+    "data_structure": "code_ds",
+    "computer_organization": "code_co",
+    "operating_system": "code_os",
+    "computer_network": "code_cn",
+}
+
 _COLLECTION_KEYWORDS = {
     "data_structure": (
         "数据结构",
@@ -625,7 +633,7 @@ def resolve_collection_routes(
     collections = _infer_subject_collections(normalized) or list(SUBJECT_COLLECTIONS)
 
     if cat.is_exercise:
-        collections.append("questions")
+        collections.append("exams")
     # ★ 原先这里要求 `cat.is_structured and 含路径类词` —— **条件过严**：
     # 纯学习路径查询（如「408 应该怎么学」）`is_learning_path=True` 但 `is_structured=False`，
     # 于是拿不到 `learning_paths` 集合（24 chunk 对这类查询**完全不可达**）。
@@ -633,6 +641,14 @@ def resolve_collection_routes(
     # 额外保留「路径 / 路线 / 学习计划」三个标记，是为了覆盖规则表未收录的写法（不丢原有覆盖面）。
     if cat.is_learning_path or any(marker in normalized for marker in ("路径", "路线", "学习计划")):
         collections.append("learning_paths")
+
+    # 代码类查询：额外命中代码库（`code_<科>`），与四科讲义并列召回。
+    # （原 `is_code` 曾指向从未创建的 `answers` 集合，见下方注释；现改为指向 code 库。）
+    if getattr(cat, "is_code", False):
+        for col in list(collections):
+            code_col = _CODE_COLLECTION.get(col)
+            if code_col:
+                collections.append(code_col)
 
     # ⚠️ 这里曾有两条对 `answers` 集合的引用（`is_answer` 与 `is_code` 时追加），
     # 但**该集合从未被创建**：`knowledge/` 下无 `answers/` 目录，

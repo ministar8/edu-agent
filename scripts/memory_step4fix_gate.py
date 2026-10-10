@@ -1933,7 +1933,7 @@ def check_16() -> None:
         (
             i["kb_depth"] == "exams"
             or i["doc_role"] in _EXAM_ROLES
-            or i["category"] == "questions"
+            or i["category"] == "exams"
             or "/exams/" in i["source"].replace("\\", "/").lower()
             or i["source"].replace("\\", "/").lower().startswith("exams/")
         )

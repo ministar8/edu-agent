@@ -44,7 +44,7 @@ COLLECTIONS = [
     "computer_organization",
     "operating_system",
     "computer_network",
-    "questions",
+    "exams",
 ]
 
 # method 类查询（来自 task_layer_ablation，标注目标 L2）

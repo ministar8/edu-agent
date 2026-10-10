@@ -154,8 +154,10 @@ def _clean_markdown_text(text: str) -> str:
 
 
 def _is_exam_markdown_source(source: str) -> bool:
+    # L3 真题源目录：`knowledge/exams/YYYY/{items,answer}.md`
+    # （旧 `questions/*_408_exam.md` 已退役，不再作为入库源）
     normalized = source.replace("\\", "/").lower()
-    return "/questions/" in normalized or normalized.endswith("_408_exam.md")
+    return "/exams/" in normalized
 
 
 def _remove_exam_web_noise(text: str) -> tuple[str, int]:

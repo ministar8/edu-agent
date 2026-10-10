@@ -23,7 +23,7 @@ SUBJECT_COLLECTIONS = (
     "computer_organization",
     "operating_system",
     "computer_network",
-    "questions",
+    "exams",
 )
 
 

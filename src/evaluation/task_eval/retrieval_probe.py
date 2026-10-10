@@ -54,7 +54,7 @@ class RetrievedItem:
         """是否 L3 真题资产（用于 `exam_hit@k`）。"""
         if self.kb_depth == "exams" or self.doc_role in _EXAM_ROLES:
             return True
-        if self.category == "questions":
+        if self.category == "exams":
             return True
         src = self.source.replace("\\", "/").lower()
         return "/exams/" in src or src.startswith("exams/")

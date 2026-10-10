@@ -24,8 +24,8 @@ from rag.vectorstore import get_vector_store_manager  # noqa: E402
 EXAMS_DIR = ROOT / "knowledge" / "exams"
 LINKS_PATH = ROOT / "knowledge" / "knowledge_points" / "links.jsonl"
 KP_DIR = ROOT / "knowledge" / "knowledge_points"
-# 迁移期 alias：最终集合名 exams；questions 为现网路径
-COLLECTION = "questions"
+# L3 真题集合名（迁移收口：旧 alias `questions` 已退役）
+COLLECTION = "exams"
 
 ANSWER_IN_BODY_RE = re.compile(r"(^|\n)\s*(答案[:：]|【答案】|\*\*答案)")
 

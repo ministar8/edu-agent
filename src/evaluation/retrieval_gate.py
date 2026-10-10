@@ -112,9 +112,54 @@ SUBJECT_TO_CATEGORY: dict[str, str] = {
     "network": "computer_network",
 }
 
+# 门禁临时索引的语料来源：`(源目录, 目标集合, kb_depth)`。
+# 覆盖新体系 L1(basic) / L2(advanced) / L3(exams) / code + learning_paths。
+# ★ 这是 docstring 预告过的「链路级改动」：门禁从此测分层链路，基线须重录。
+_INDEX_SOURCES = [
+    ("knowledge/basic/data_structure", "data_structure", "basic"),
+    ("knowledge/basic/computer_organization", "computer_organization", "basic"),
+    ("knowledge/basic/operating_system", "operating_system", "basic"),
+    ("knowledge/basic/computer_network", "computer_network", "basic"),
+    ("knowledge/advanced/data_structure", "data_structure", "advanced"),
+    ("knowledge/advanced/computer_organization", "computer_organization", "advanced"),
+    ("knowledge/advanced/operating_system", "operating_system", "advanced"),
+    ("knowledge/advanced/computer_network", "computer_network", "advanced"),
+    ("knowledge/exams", "exams", "exams"),
+    ("knowledge/code/data_structure", "code_ds", "code"),
+    ("knowledge/code/operating_system", "code_os", "code"),
+    ("knowledge/learning_paths", "learning_paths", "learning_path"),
+]
+
+# `code_<科>` 集合 → 对应学科类目（供 `category_hit` 按学科计数）
+_CODE_CATEGORY_TO_SUBJECT = {
+    "code_ds": "data_structure",
+    "code_co": "computer_organization",
+    "code_os": "operating_system",
+    "code_cn": "computer_network",
+}
+
+
+def _effective_category(meta: dict) -> str:
+    """把 `code_<科>` / `exams/<科>.md` 的 chunk 归入对应学科类目。
+
+    新语料含非四科类目（`exams` / `code_*`），但它们是**相关证据**（该科的真题/代码）；
+    原样当 category 会让 `category_hit` 把「相关命中」判成「非学科」。能从类目或 source
+    路径推出学科的即映射；推不出的（如按年整卷 `exams/YYYY/`）保持原样、如实计入。
+    """
+    cat = str(meta.get("category", ""))
+    if cat in _CODE_CATEGORY_TO_SUBJECT:
+        return _CODE_CATEGORY_TO_SUBJECT[cat]
+    if cat == "exams":
+        src = str(meta.get("source", "")).replace("\\", "/").lower()
+        for subj_cat in _CODE_CATEGORY_TO_SUBJECT.values():
+            if src.endswith(f"/{subj_cat}.md"):
+                return subj_cat
+    return cat
+
+
 # 「历年真题」集合的类目名。它**不是学科**，故不在 SUBJECT_TO_CATEGORY 里 ——
 # 但对**出题类**查询它是**合法证据来源**（见 `load_golden_queries`）。
-QUESTIONS_CATEGORY = "questions"
+QUESTIONS_CATEGORY = "exams"
 
 DEFAULT_GOLDEN_PATH = "evals/datasets/golden/sample_408.jsonl"
 DEFAULT_BASELINE_PATH = "evals/baselines/retrieval_baseline.json"
@@ -734,41 +779,34 @@ def build_index(categories: list[str] | None = None) -> dict[str, int]:
     让门禁跑**真实入库路径**，而不是一条评测专用的旁路。
 
     ★★ **但语料范围只有 legacy 段**（2026-10-01 实测，非推断）：本函数按
-    ``rag.ingest.DEFAULT_CATEGORIES``（6 个目录：四科讲义 + ``questions`` + ``learning_paths``）
-    遍历，而 **L1/L2/L3 不走这条链** —— 它们由独立脚本入库
-    （``scripts/ingest_basic_all.py`` / ``ingest_advanced.py`` / ``ingest_exams.py``）。
+    语料来源见 ``_INDEX_SOURCES``：**覆盖新体系 L1(basic) / L2(advanced) / L3(exams)
+    / code + learning_paths**（2026-10-10 起；旧版只遍历 ``rag.ingest.DEFAULT_CATEGORIES``
+    的 legacy 目录，四科目录退役后已失效）。
 
-    实测对照（同一知识库、同一时刻）：
-
-    | 索引 | 总条数 | ``kb_depth`` 分布 |
-    |---|---|---|
-    | 本函数（临时，每次重建） | **2505** | legacy **2505**（**零 L1/L2/L3**） |
-    | 生产 / 实验（``.env`` 的 ``CHROMA_PERSIST_DIR``） | **4085** | legacy 2505 + basic 123 + advanced 98 + exams 1359 |
-
-    **后果**：门禁（含 ``probe_gate``）度量的是 **legacy 链路的回归**；
-    L1/L2/L3 的退化**不会被它捕获**（5 条探针的目标也全落在 legacy 文件上）。
-    引用门禁结论时须写明这条边界。要让门禁覆盖分层，需让本函数也跑分层入库脚本
-    —— 那会改变基线数字，属**链路级**改动，勿顺手做（见 ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3）。
+    ★ 这是**链路级改动**（旧版 docstring 预告过）：门禁从此测**分层链路**，
+    ``evals/baselines/{retrieval_baseline*, probe_baseline}.json`` **须重录**。
+    基线未重录前门禁会因语料变化而红，属预期（见 ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3）。
     """
     from rag import vectorstore as vs
     from rag.cleaner import clean_documents
     from rag.enhancer import enhance_documents
-    from rag.ingest import DEFAULT_CATEGORIES
     from rag.knowledge_tagger import tag_chunks_with_knowledge_points
     from rag.loader import SUPPORTED_EXTENSIONS, load_single_file
     from rag.splitter import split_documents
 
     manager = vs.get_vector_store_manager()
     counts: dict[str, int] = {}
-    knowledge_dir = Path("knowledge")
 
-    for category in categories or DEFAULT_CATEGORIES:
-        dir_path = knowledge_dir / category
+    for src, category, kb_depth in _INDEX_SOURCES:
+        dir_path = Path(src)
         if not dir_path.is_dir():
             continue
-        indexed = 0
+        indexed = counts.get(category, 0)
         for filepath in sorted(p for p in dir_path.rglob("*") if p.is_file()):
             if filepath.suffix.lower() not in SUPPORTED_EXTENSIONS:
+                continue
+            # exams 的 paper.md 仅溯源、不进主 RAG（与 ingest_exams 口径一致）
+            if kb_depth == "exams" and filepath.name == "paper.md":
                 continue
             documents = load_single_file(str(filepath))
             documents = clean_documents(
@@ -778,6 +816,7 @@ def build_index(categories: list[str] | None = None) -> dict[str, int]:
             chunks = enhance_documents(chunks)
             for chunk in chunks:
                 chunk.metadata["category"] = category
+                chunk.metadata["kb_depth"] = kb_depth
             chunks = tag_chunks_with_knowledge_points(chunks, fallback_category=category)
             indexed += len(manager.add_documents(chunks, collection_name=category))
         counts[category] = indexed
@@ -881,7 +920,7 @@ async def run_gate(
         finally:
             run_query_failures.extend(_mgr.query_failures)
 
-        categories = [str(ev.metadata.get("category", "")) for ev in fused.text_evidences]
+        categories = [_effective_category(ev.metadata) for ev in fused.text_evidences]
         # 章级知识点：逐条证据的章（来自 source 文件名），按排名顺序排列。
         kp_labels = [chapter_of_source(ev.source) for ev in fused.text_evidences]
         # 路由贡献：每条证据自报的 `recall_routes`（同一文档可被多条路由命中，逐条计入）
