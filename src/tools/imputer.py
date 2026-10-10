@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 # ── 资源控制配置 ────────────────────────────────────
 
-# 各操作的调用配额与超时
 _QUOTA_CONFIG = {
     "jieba_keyword": {"max_calls": 200, "timeout": 5.0},  # jieba 关键词提取
     "jieba_stopword": {"max_calls": 500, "timeout": 2.0},  # jieba 停用词过滤
@@ -589,9 +588,6 @@ def _looks_like_heading_line(line: str) -> bool:
     """首行是否**像**一个标题（纯形态判断，不验证内容相关性）。
 
     短、不以 Markdown 标记符开头、非纯数字、不像句子（不以终结标点收尾）、非停用词堆。
-
-    ★ 抽出来的理由主要是**可读性**；对复杂度只贡献 **1** —— ruff 的 mccabe **不统计 `and`/`or`**，
-    省下的是原来套在外层 `if` 里的 `if _validate_heading_candidate(...)`。
     """
     return bool(
         line
@@ -650,8 +646,8 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, st
     _conf_level = {"high": 0, "medium": 1, "low": 2}
     min_level = _conf_level.get(min_confidence, 2)
 
-    # 2. 缓存命中。★ 键必须**唯一标识来源文件**（backlog #37）：用完整路径；无路径时退到
-    #    内容前缀 —— 原来只用 `(扩展名, 文件名 stem)`，同名文件跨目录会互相串标题。
+    # 2. 缓存命中。★ 键必须**唯一标识来源文件**（backlog #37）：用完整路径，无路径时退到内容前缀；
+    #    只用文件名会让跨目录同名文件互相串标题。
     cache_key = f"{source_ext}:{source_path or text[:64]}"
     if cache_key in _heading_cache:
         cached_heading, cached_conf = _heading_cache[cache_key]
@@ -723,9 +719,8 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, st
             if candidate and _validate_heading_candidate(candidate, text):
                 heading, method, confidence = candidate, "keyword", _CONFIDENCE_LOW
 
-    # 9. 兜底 [low]。★ 拆成嵌套 `if` 是为了顺带拿到正确语义：`min_confidence` 高于 low 时
-    #    兜底不生效，此时「没推出标题」应返回 `None`（无需填充），而不是把 `None` 拼成
-    #    字符串 `"[推测]None"` 并写进缓存（backlog #38）。
+    # 9. 兜底 [low]。★ min_confidence 高于 low 时兜底不生效，此时「没推出标题」返回 None（无需填充），
+    #    不能把 None 拼成字符串 "[推测]None" 再写进缓存（backlog #38）。
     if heading is None:
         if min_level < 2:
             return None
@@ -905,7 +900,7 @@ def _window_jaccard_distances(
 def _find_split_word_indices(
     distances: list[tuple[int, float]], diff_threshold: float
 ) -> list[int]:
-    """取「距离 ≥ 阈值」且**严格大于**左右邻居的局部峰值（相等时仍算峰值，见表征测试）。"""
+    """取「距离 ≥ 阈值」且**严格大于**左右邻居的局部峰值（与邻居相等时仍算峰值）。"""
     peaks: list[int] = []
     for k, (idx, dist) in enumerate(distances):
         if dist < diff_threshold:
@@ -983,10 +978,7 @@ def _semantic_segment(
 
     策略：一次分词 → 预计算滑窗词袋 → 相邻窗 Jaccard 距离 → 取局部峰值作分割点 →
     映射到字符位置 → 合并过短段、拆分过长段。全文只分词一次（O(N)，而非逐句 O(N×M)），
-    `stride` 控制计算密度（stride=25 时窗口数约 N/25）。
-
-    ★ **本函数是薄编排**：上述六步各抽成独立函数，每步可单独测。直接原因是它原来的
-    mccabe 复杂度是 **30**（全项目最高，钉住 `max-complexity` 棘轮）。
+    `stride` 控制计算密度（stride=25 时窗口数约 N/25）。六步各抽成独立函数，可单独测。
 
     Args:
         text: 正文文本
