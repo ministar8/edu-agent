@@ -138,95 +138,49 @@ def _fake_rerank(query: str, texts: list[str], top_n: int) -> list[dict[str, Any
     return [{"index": index, "score": score} for index, score in scored[:top_n]]
 
 
-def rerank(
-    query: str,
-    documents: list[Document],
-    top_k: int = 5,
-    lightweight: bool = False,
-) -> list[Document]:
-    """对检索结果进行重排序
+def _candidate_score(doc: Document) -> float:
+    """预筛排序键：优先 recall_score，其次 rerank_score，都无效则 0。"""
+    rs = doc.metadata.get("recall_score")
+    if rs is not None and float(rs) > 0:
+        return float(rs)
+    rrs = doc.metadata.get("rerank_score")
+    if rrs is not None and float(rrs) > 0:
+        return float(rrs)
+    return 0.0
 
-    Args:
-        query: 用户查询
-        documents: 候选文档列表
-        top_k: 返回前 top_k 个结果
 
-    Returns:
-        按 relevance_score 降序排列的文档列表（metadata 含 rerank_score）
-    """
-    if not documents:
-        return []
-
-    if not settings.RERANK_ENABLED:
-        # 防御网：调用方（retriever 的 _stage_rerank / HyDE 分支）已按同一个开关短路，
-        # 正常不会走到这里。走到即说明某处绕过了那道检查 —— 属异常，故用 warning。
-        logger.warning(
-            "rerank() 被调用但 settings.RERANK_ENABLED=false —— 调用方未按开关短路，"
-            "已返回原始顺序（不写 rerank_score）。请检查调用路径。"
-        )
-        return documents[:top_k]
-
-    start = time.perf_counter()
-
-    # ★ S4 已移除（2026-09-27）：原实现在此把 query 也做同义词归一，理由是「对齐
-    #   入库时被 `cleaner.normalize_synonyms()` 改写过的文档」。文档侧归一已撤销
-    #   （`settings.INGEST_SYNONYM_NORMALIZE=False`）⇒ 两侧都保持原文，本函数直接
-    #   比较「原始 query × 原文」即可，不需要再归一。
-    #   ⚠️ 若将来恢复入库归一，必须同步恢复这里，否则会重新引入
-    #   「文档被改写、query 未改写」的错配。详见 `docs/RETRIEVAL_PLAN.md`（Step 2）。
-
-    # ── 预筛选：按可用分数保留 top N 候选 ──
-    # lightweight（L2）：候选池 10，省延迟；deep（L3）：候选池 30，高精度
-    _RERANK_MAX_CANDIDATES = 10 if lightweight else 30
+def _prefilter_candidates(documents: list[Document], lightweight: bool) -> list[Document]:
+    """候选池超上限时按可用分数保留 top-N（lightweight=10，deep=30）。"""
+    max_candidates = 10 if lightweight else 30
     original_count = len(documents)
-    if len(documents) > _RERANK_MAX_CANDIDATES:
+    if original_count <= max_candidates:
+        return documents
+    filtered = sorted(documents, key=_candidate_score, reverse=True)[:max_candidates]
+    logger.debug("Rerank pre-filter: %d → %d", original_count, len(filtered))
+    return filtered
 
-        def _sort_score(d: Document) -> float:
-            rs = d.metadata.get("recall_score")
-            if rs is not None and float(rs) > 0:
-                return float(rs)
-            rrs = d.metadata.get("rerank_score")
-            if rrs is not None and float(rrs) > 0:
-                return float(rrs)
-            return 0.0
 
-        documents = sorted(documents, key=_sort_score, reverse=True)[:_RERANK_MAX_CANDIDATES]
-        logger.debug("Rerank pre-filter: %d → %d", original_count, len(documents))
+def _tei_rerank(query: str, texts: list[str], top_n: int) -> list[dict] | None:
+    """调本地 TEI /rerank；网络或 HTTP 失败返回 None（调用方回落原序截断）。"""
+    api_url = f"{settings.RERANK_LOCAL_URL}/rerank"
+    payload = {"query": query, "texts": texts, "top_n": top_n}
+    try:
+        with httpx.Client(timeout=settings.RERANK_TIMEOUT) as client:
+            resp = client.post(api_url, json=payload)
+            resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        logger.error("Rerank HTTP error: %s %s", e.response.status_code, e.response.text[:200])
+        return None
+    except Exception as e:
+        logger.error("Rerank call failed: %s", e, exc_info=True)
+        return None
 
-    cache_key = _rerank_cache_key(query, documents, top_k)
-    cached_docs = _rerank_cache.get(cache_key)
-    if cached_docs is not None:
-        logger.debug("Rerank cache hit q=%s docs=%d top_k=%d", query[:30], len(documents), top_k)
-        return _copy_ranked(cached_docs)
 
-    # ── 构造送进 reranker 的文本 ──
-    # ★ 为什么不再无条件剥 heading 前缀：见 `_rerank_text` 的文档串 —— 那个前缀在
-    #   代码 chunk 上是**语义锚点**，剥掉会让纯代码 chunk 对中文 query 恒低分。
-    texts = [_rerank_text(doc) for doc in documents]
-
-    # ── 打分：默认打本地 TEI /rerank；USE_FAKE_RERANK 时走确定性本地实现 ──
-    top_n = min(top_k, len(documents))
-    if settings.USE_FAKE_RERANK:
-        results = _fake_rerank(query, texts, top_n=top_n)
-    else:
-        api_url = f"{settings.RERANK_LOCAL_URL}/rerank"
-        payload = {"query": query, "texts": texts, "top_n": top_n}
-        try:
-            with httpx.Client(timeout=settings.RERANK_TIMEOUT) as client:
-                resp = client.post(api_url, json=payload)
-                resp.raise_for_status()
-            results = resp.json()
-        except httpx.HTTPStatusError as e:
-            logger.error("Rerank HTTP error: %s %s", e.response.status_code, e.response.text[:200])
-            return documents[:top_k]
-        except Exception as e:
-            logger.error("Rerank call failed: %s", e, exc_info=True)
-            return documents[:top_k]
-
-    if not results:
-        logger.warning("Rerank returned empty results, using original order")
-        return documents[:top_k]
-
+def _apply_rerank_results(
+    documents: list[Document], results: list[dict], top_k: int
+) -> list[Document]:
+    """把 TEI 的 (index, score) 落到 documents，回填未排序者，并截断到 top_k。"""
     # TEI 返回格式: [{"index": 0, "score": 0.98, "text": "..."}, ...]
     result: list[Document] = []
     for item in results:
@@ -248,9 +202,16 @@ def rerank(
                 result.append(doc)
 
     # 补足后仍可能超过 top_k（TEI 不遵守 top_n 时）—— 截断以保证契约成立
-    result = result[:top_k]
+    return result[:top_k]
 
-    elapsed_ms = (time.perf_counter() - start) * 1000
+
+def _log_rerank(
+    query: str,
+    documents: list[Document],
+    result: list[Document],
+    elapsed_ms: float,
+    lightweight: bool,
+) -> None:
     top_score = result[0].metadata.get("rerank_score", 0) if result else 0
     logger.debug(
         "Rerank q=%s in=%d out=%d top=%.4f %.1fms lw=%s",
@@ -262,10 +223,97 @@ def rerank(
         lightweight,
     )
 
-    # 存**副本**再返回：`result` 会原样交给调用方，而下游会往 metadata 里写东西
-    # （窗口展开、噪声降级等）。若把同一对象放进缓存，**第一个调用方的写入会污染
-    # 后续所有命中缓存的调用** —— 那样 `_copy_ranked` 只防住了一半（读时拷贝），
-    # 而污染是从写时进去的。
+
+def _rerank_early_exit(documents: list[Document], top_k: int) -> list[Document] | None:
+    """入口短路：无候选 → 空列表；重排被部署开关关闭 → 原序截断并告警。
+
+    返回 None 表示正常继续重排。
+    """
+    if not documents:
+        return []
+    if not settings.RERANK_ENABLED:
+        # 防御网：调用方（retriever 的 _stage_rerank / HyDE 分支）已按同一个开关短路，
+        # 正常不会走到这里。走到即说明某处绕过了那道检查 —— 属异常，故用 warning。
+        logger.warning(
+            "rerank() 被调用但 settings.RERANK_ENABLED=false —— 调用方未按开关短路，"
+            "已返回原始顺序（不写 rerank_score）。请检查调用路径。"
+        )
+        return documents[:top_k]
+    return None
+
+
+def _score_candidates(query: str, texts: list[str], top_n: int) -> list[dict] | None:
+    """选打分后端：`USE_FAKE_RERANK` 走确定性本地实现，否则调 TEI（失败返回 None）。"""
+    if settings.USE_FAKE_RERANK:
+        return _fake_rerank(query, texts, top_n=top_n)
+    return _tei_rerank(query, texts, top_n)
+
+
+def _store_rerank_cache(cache_key: str, result: list[Document]) -> None:
+    """把本次重排结果存**副本**入缓存。
+
+    `result` 会原样交给调用方，而下游会往 metadata 里写东西（窗口展开、噪声降级等）。
+    若把同一对象放进缓存，**第一个调用方的写入会污染后续所有命中缓存的调用** ——
+    那样 `_copy_ranked` 只防住了一半（读时拷贝），而污染是从写时进去的。
+    """
     _rerank_cache.set(cache_key, _copy_ranked(result))
+
+
+def rerank(
+    query: str,
+    documents: list[Document],
+    top_k: int = 5,
+    lightweight: bool = False,
+) -> list[Document]:
+    """对检索结果进行重排序
+
+    Args:
+        query: 用户查询
+        documents: 候选文档列表
+        top_k: 返回前 top_k 个结果
+
+    Returns:
+        按 relevance_score 降序排列的文档列表（metadata 含 rerank_score）
+    """
+    early = _rerank_early_exit(documents, top_k)
+    if early is not None:
+        return early
+
+    start = time.perf_counter()
+
+    # ★ S4 已移除（2026-09-27）：原实现在此把 query 也做同义词归一，理由是「对齐
+    #   入库时被 `cleaner.normalize_synonyms()` 改写过的文档」。文档侧归一已撤销
+    #   （`settings.INGEST_SYNONYM_NORMALIZE=False`）⇒ 两侧都保持原文，本函数直接
+    #   比较「原始 query × 原文」即可，不需要再归一。
+    #   ⚠️ 若将来恢复入库归一，必须同步恢复这里，否则会重新引入
+    #   「文档被改写、query 未改写」的错配。详见 `docs/RETRIEVAL_PLAN.md`（Step 2）。
+
+    # 预筛选：按可用分数保留 top N 候选（lightweight/L2=10，deep/L3=30）
+    documents = _prefilter_candidates(documents, lightweight)
+
+    cache_key = _rerank_cache_key(query, documents, top_k)
+    cached_docs = _rerank_cache.get(cache_key)
+    if cached_docs is not None:
+        logger.debug("Rerank cache hit q=%s docs=%d top_k=%d", query[:30], len(documents), top_k)
+        return _copy_ranked(cached_docs)
+
+    # ── 构造送进 reranker 的文本 ──
+    # ★ 为什么不再无条件剥 heading 前缀：见 `_rerank_text` 的文档串 —— 那个前缀在
+    #   代码 chunk 上是**语义锚点**，剥掉会让纯代码 chunk 对中文 query 恒低分。
+    texts = [_rerank_text(doc) for doc in documents]
+
+    # ── 打分：默认打本地 TEI /rerank；USE_FAKE_RERANK 时走确定性本地实现 ──
+    top_n = min(top_k, len(documents))
+    results = _score_candidates(query, texts, top_n)
+    if results is None:
+        return documents[:top_k]
+
+    if not results:
+        logger.warning("Rerank returned empty results, using original order")
+        return documents[:top_k]
+
+    result = _apply_rerank_results(documents, results, top_k)
+    _log_rerank(query, documents, result, (time.perf_counter() - start) * 1000, lightweight)
+    _store_rerank_cache(cache_key, result)
 
     return result
