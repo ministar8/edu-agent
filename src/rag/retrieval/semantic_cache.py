@@ -129,6 +129,54 @@ class SemanticCache:
 
     # ── 惰性初始化 ─────────────────────────────────────────
 
+    def _build_collection_sync(self, mgr) -> None:
+        """同步取/建缓存集合 + 触发可读性校验 + 载入 JSONL 元数据（happy path）。"""
+        self._embedding_fn = mgr.embeddings
+
+        # 取或建专用缓存集合
+        self._collection = mgr.client.get_or_create_collection(
+            name=_COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"},
+        )
+        # 触发一次 count() 验证 HNSW 索引可读
+        _count = self._collection.count()
+        logger.info(
+            "Semantic cache collection '%s' initialized, existing entries=%d",
+            _COLLECTION_NAME,
+            _count,
+        )
+
+        # 从 JSONL 加载元数据
+        self._data_dir.mkdir(parents=True, exist_ok=True)
+        self._load_meta_from_jsonl()
+
+    def _recover_corrupt_sync(self, mgr) -> None:
+        """HNSW 损坏的同步恢复：删集合 + 清 JSONL + 清内存索引（调用方随后立即重试）。"""
+        if mgr is None:
+            # manager 都拿不到，删集合无从谈起 —— 如实记录并继续，
+            # 不要在这里再抛一个异常把原始原因盖掉
+            logger.warning(
+                "无法获取 vector store manager，跳过损坏集合删除（原始异常见上一条日志）"
+            )
+        else:
+            try:
+                mgr.client.delete_collection(_COLLECTION_NAME)
+                logger.info(
+                    "Deleted corrupted semantic_cache collection, will recreate on next attempt"
+                )
+            except Exception as del_err:
+                logger.warning("Failed to delete corrupted semantic_cache: %s", del_err)
+        # 清空 JSONL 避免孤儿数据
+        try:
+            if self._jsonl_path.exists():
+                self._jsonl_path.unlink()
+        except Exception as unlink_err:
+            # 删除失败会留下孤儿 JSONL —— 下次启动会加载到本该被清掉的条目。
+            # 同段里"删集合失败"是有 warning 的，这里不该静默。
+            logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
+        self._meta.clear()
+        self._jsonl_offsets.clear()
+
     def _ensure_init(self):
         """惰性初始化 ChromaDB 集合与 JSONL 存储。"""
         if self._collection is not None:
@@ -144,60 +192,17 @@ class SemanticCache:
                 from rag.common.vectorstore import get_vector_store_manager
 
                 mgr = get_vector_store_manager()
-                self._embedding_fn = mgr.embeddings
-
-                # 取或建专用缓存集合
-                self._collection = mgr.client.get_or_create_collection(
-                    name=_COLLECTION_NAME,
-                    metadata={"hnsw:space": "cosine"},
-                )
-                # 触发一次 count() 验证 HNSW 索引可读
-                _count = self._collection.count()
-                logger.info(
-                    "Semantic cache collection '%s' initialized, existing entries=%d",
-                    _COLLECTION_NAME,
-                    _count,
-                )
-
-                # 从 JSONL 加载元数据
-                self._data_dir.mkdir(parents=True, exist_ok=True)
-                self._load_meta_from_jsonl()
+                self._build_collection_sync(mgr)
                 return
 
             except Exception as e:
                 err_msg = str(e).lower()
-                is_hnsw_corrupt = "hnsw" in err_msg or "segment reader" in err_msg
-                if is_hnsw_corrupt:
+                if "hnsw" in err_msg or "segment reader" in err_msg:
                     # HNSW 索引损坏：删除损坏集合并重建（重试无意义）
                     logger.warning(
                         "Semantic cache HNSW index corrupted, deleting and rebuilding: %s", e
                     )
-                    if mgr is None:
-                        # manager 都拿不到，删集合无从谈起 —— 如实记录并继续，
-                        # 不要在这里再抛一个异常把原始原因盖掉
-                        logger.warning(
-                            "无法获取 vector store manager，跳过损坏集合删除"
-                            "（原始异常见上一条日志）"
-                        )
-                    else:
-                        try:
-                            mgr.client.delete_collection(_COLLECTION_NAME)
-                            logger.info(
-                                "Deleted corrupted semantic_cache collection, "
-                                "will recreate on next attempt"
-                            )
-                        except Exception as del_err:
-                            logger.warning("Failed to delete corrupted semantic_cache: %s", del_err)
-                    # 清空 JSONL 避免孤儿数据
-                    try:
-                        if self._jsonl_path.exists():
-                            self._jsonl_path.unlink()
-                    except Exception as unlink_err:
-                        # 删除失败会留下孤儿 JSONL —— 下次启动会加载到本该被清掉的条目。
-                        # 同段里"删集合失败"是有 warning 的，这里不该静默。
-                        logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
-                    self._meta.clear()
-                    self._jsonl_offsets.clear()
+                    self._recover_corrupt_sync(mgr)
                     continue  # 立即重试创建新集合
                 if attempt < 2:
                     logger.warning(
@@ -212,6 +217,45 @@ class SemanticCache:
                     )
                     self._collection = None
 
+    async def _build_collection_async(self, mgr) -> None:
+        """异步取/建缓存集合 + 可读性校验 + 载入 JSONL 元数据（happy path）。"""
+        self._embedding_fn = mgr.embeddings
+        self._collection = await asyncio.to_thread(
+            mgr.client.get_or_create_collection,
+            name=_COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine"},
+        )
+        existing_count = await asyncio.to_thread(self._collection.count)
+        logger.info(
+            "Semantic cache collection '%s' initialized, existing entries=%d",
+            _COLLECTION_NAME,
+            existing_count,
+        )
+        await asyncio.to_thread(self._data_dir.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(self._load_meta_from_jsonl)
+
+    async def _recover_corrupt_async(self, mgr) -> None:
+        """HNSW 损坏的异步恢复：删集合 + 清 JSONL + 清内存索引（调用方随后立即重试）。"""
+        if mgr is None:
+            logger.warning(
+                "无法获取 vector store manager，跳过损坏集合删除（async）（原始异常见上一条日志）"
+            )
+        else:
+            try:
+                await asyncio.to_thread(mgr.client.delete_collection, _COLLECTION_NAME)
+                logger.info("Deleted corrupted semantic_cache collection (async)")
+            except Exception as del_err:
+                logger.warning("Failed to delete corrupted semantic_cache (async): %s", del_err)
+        try:
+            if self._jsonl_path.exists():
+                self._jsonl_path.unlink()
+        except Exception as unlink_err:
+            # 删除失败会留下孤儿 JSONL —— 下次启动会加载到本该被清掉的条目。
+            # 同段里"删集合失败"是有 warning 的，这里不该静默。
+            logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
+        self._meta.clear()
+        self._jsonl_offsets.clear()
+
     async def _aensure_init(self):
         """异步惰性初始化包装：重试等待不阻塞事件循环。"""
         if self._collection is not None:
@@ -224,51 +268,16 @@ class SemanticCache:
                 from rag.common.vectorstore import get_vector_store_manager
 
                 mgr = await asyncio.to_thread(get_vector_store_manager)
-                self._embedding_fn = mgr.embeddings
-                self._collection = await asyncio.to_thread(
-                    mgr.client.get_or_create_collection,
-                    name=_COLLECTION_NAME,
-                    metadata={"hnsw:space": "cosine"},
-                )
-                existing_count = await asyncio.to_thread(self._collection.count)
-                logger.info(
-                    "Semantic cache collection '%s' initialized, existing entries=%d",
-                    _COLLECTION_NAME,
-                    existing_count,
-                )
-                await asyncio.to_thread(self._data_dir.mkdir, parents=True, exist_ok=True)
-                await asyncio.to_thread(self._load_meta_from_jsonl)
+                await self._build_collection_async(mgr)
                 return
             except Exception as e:
                 err_msg = str(e).lower()
-                is_hnsw_corrupt = "hnsw" in err_msg or "segment reader" in err_msg
-                if is_hnsw_corrupt:
+                if "hnsw" in err_msg or "segment reader" in err_msg:
                     logger.warning(
                         "Semantic cache HNSW index corrupted (async), deleting and rebuilding: %s",
                         e,
                     )
-                    if mgr is None:
-                        logger.warning(
-                            "无法获取 vector store manager，跳过损坏集合删除（async）"
-                            "（原始异常见上一条日志）"
-                        )
-                    else:
-                        try:
-                            await asyncio.to_thread(mgr.client.delete_collection, _COLLECTION_NAME)
-                            logger.info("Deleted corrupted semantic_cache collection (async)")
-                        except Exception as del_err:
-                            logger.warning(
-                                "Failed to delete corrupted semantic_cache (async): %s", del_err
-                            )
-                    try:
-                        if self._jsonl_path.exists():
-                            self._jsonl_path.unlink()
-                    except Exception as unlink_err:
-                        # 删除失败会留下孤儿 JSONL —— 下次启动会加载到本该被清掉的条目。
-                        # 同段里"删集合失败"是有 warning 的，这里不该静默。
-                        logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
-                    self._meta.clear()
-                    self._jsonl_offsets.clear()
+                    await self._recover_corrupt_async(mgr)
                     continue
                 if attempt < 2:
                     logger.warning(
@@ -326,6 +335,79 @@ class SemanticCache:
 
     # ── 对外 API ───────────────────────────────────────────
 
+    def _find_match(
+        self, query: str, collection_name: str, filter_sig: str, params_sig: str, started: float
+    ) -> tuple[float, str | None]:
+        """嵌入 query 并找出过阈值、上下文匹配的缓存条目；返回 (similarity, match_id|None)。"""
+        # 对 query 做嵌入
+        query_embedding = self._embedding_fn.embed_query(query)
+
+        # 在 ChromaDB 中检索相近 query
+        results = self._query_collection(query_embedding)
+        if not results or not results["distances"] or not results["distances"][0]:
+            return 0.0, None
+
+        # ★ B1（§1.5 R4）：删除本模块私有的 `1.0 - distance` 第二套实现，
+        #   统一走 `embeddings.similarity_from_distance` 这**唯一**换算点。
+        #   本类恒按 cosine 建集合（见 :154/:233 `metadata={"hnsw:space": "cosine"}`），
+        #   故 `or "cosine"` 是**与本类自身创建口径对齐**，不是跨未知集合的瞎猜；
+        #   cosine 下 `max(0,1-d)` 与旧 `1-d` 对「是否过阈值」的判定完全等价。
+        from rag.common.embeddings import similarity_from_distance
+
+        distance = results["distances"][0][0]
+        _space = (self._collection.metadata or {}).get("hnsw:space") or "cosine"
+        similarity = similarity_from_distance(distance, _space)
+
+        if similarity < self._similarity_threshold:
+            elapsed_ms = (time.perf_counter() - started) * 1000
+            logger.debug(
+                "Semantic cache miss: query='%s' best_sim=%.4f threshold=%.2f %.1fms",
+                query[:50],
+                similarity,
+                self._similarity_threshold,
+                elapsed_ms,
+            )
+            return similarity, None
+
+        # 命中 —— 校验 collection 上下文一致
+        match_meta = (results["metadatas"] or [[]])[0]
+        match_meta = match_meta[0] if match_meta else {}
+        # 校验 collection + filter 上下文匹配（避免跨集合 / 跨 filter 误命中）
+        if (
+            collection_name != match_meta.get("collection_name", "")
+            or filter_sig != match_meta.get("filter_sig", "")
+            or params_sig != match_meta.get("params_sig", "")
+        ):
+            return similarity, None
+        return similarity, results["ids"][0][0]
+
+    def _touch_hit(self, match_id: str) -> dict[str, Any] | None:
+        """校验 TTL 并更新命中计数；缺失/过期返回 None（过期时顺带逐出）。"""
+        with self._lock:
+            meta = self._meta.get(match_id)
+            if meta is None:
+                # 元数据缺失（陈旧），按未命中处理
+                return None
+            if time.monotonic() - meta["timestamp"] > self._ttl:
+                # TTL 过期，逐出
+                self._evict(match_id)
+                return None
+            # 更新访问时间与命中计数
+            meta["timestamp"] = time.monotonic()
+            meta["hit_count"] = meta.get("hit_count", 0) + 1
+            return meta
+
+    def _log_hit(self, query: str, meta: dict[str, Any], similarity: float, started: float) -> None:
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        logger.info(
+            "Semantic cache HIT: query='%s' matched='%s' sim=%.4f hits=%d %.1fms",
+            query[:50],
+            meta["query"][:50],
+            similarity,
+            self._hits,
+            elapsed_ms,
+        )
+
     def lookup(
         self, query: str, collection_name: str = "", filter_sig: str = "", params_sig: str = ""
     ) -> tuple[FusedEvidence | None, float]:
@@ -341,72 +423,18 @@ class SemanticCache:
             return None, 0.0
 
         start = time.perf_counter()
-
         try:
-            # 对 query 做嵌入
-            query_embedding = self._embedding_fn.embed_query(query)
-
-            # 在 ChromaDB 中检索相近 query
-            results = self._query_collection(query_embedding)
-
-            if not results or not results["distances"] or not results["distances"][0]:
-                self._misses += 1
-                return None, 0.0
-
-            # ★ B1（§1.5 R4）：删除本模块私有的 `1.0 - distance` 第二套实现，
-            #   统一走 `embeddings.similarity_from_distance` 这**唯一**换算点。
-            #   本类恒按 cosine 建集合（见 :154/:233 `metadata={"hnsw:space": "cosine"}`），
-            #   故 `or "cosine"` 是**与本类自身创建口径对齐**，不是跨未知集合的瞎猜；
-            #   cosine 下 `max(0,1-d)` 与旧 `1-d` 对「是否过阈值」的判定完全等价。
-            from rag.common.embeddings import similarity_from_distance
-
-            distance = results["distances"][0][0]
-            _space = (self._collection.metadata or {}).get("hnsw:space") or "cosine"
-            similarity = similarity_from_distance(distance, _space)
-
-            if similarity < self._similarity_threshold:
-                self._misses += 1
-                elapsed_ms = (time.perf_counter() - start) * 1000
-                logger.debug(
-                    "Semantic cache miss: query='%s' best_sim=%.4f threshold=%.2f %.1fms",
-                    query[:50],
-                    similarity,
-                    self._similarity_threshold,
-                    elapsed_ms,
-                )
-                return None, similarity
-
-            # 命中 —— 校验 collection 上下文一致
-            match_id = results["ids"][0][0]
-            match_meta = (results["metadatas"] or [[]])[0]
-            match_meta = match_meta[0] if match_meta else {}
-            # 校验 collection + filter 上下文匹配（避免跨集合 / 跨 filter 误命中）
-            match_collection = match_meta.get("collection_name", "")
-            match_filter = match_meta.get("filter_sig", "")
-            match_params = match_meta.get("params_sig", "")
-            if (
-                collection_name != match_collection
-                or filter_sig != match_filter
-                or params_sig != match_params
-            ):
+            similarity, match_id = self._find_match(
+                query, collection_name, filter_sig, params_sig, start
+            )
+            if match_id is None:
                 self._misses += 1
                 return None, similarity
-            with self._lock:
-                meta = self._meta.get(match_id)
-                if meta is None:
-                    # 元数据缺失（陈旧），按未命中处理
-                    self._misses += 1
-                    return None, similarity
 
-                if time.monotonic() - meta["timestamp"] > self._ttl:
-                    # TTL 过期，逐出
-                    self._evict(match_id)
-                    self._misses += 1
-                    return None, similarity
-
-                # 更新访问时间与命中计数
-                meta["timestamp"] = time.monotonic()
-                meta["hit_count"] = meta.get("hit_count", 0) + 1
+            meta = self._touch_hit(match_id)
+            if meta is None:
+                self._misses += 1
+                return None, similarity
 
             # 从 JSONL 加载 FusedEvidence
             fused = self._load_evidence(match_id)
@@ -415,15 +443,7 @@ class SemanticCache:
                 return None, similarity
 
             self._hits += 1
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            logger.info(
-                "Semantic cache HIT: query='%s' matched='%s' sim=%.4f hits=%d %.1fms",
-                query[:50],
-                meta["query"][:50],
-                similarity,
-                self._hits,
-                elapsed_ms,
-            )
+            self._log_hit(query, meta, similarity, start)
             return fused, similarity
 
         except Exception as e:
@@ -577,30 +597,26 @@ class SemanticCache:
         except Exception as e:
             return self._reinit_if_stale(e)
 
-    def _load_evidence(self, key: str) -> FusedEvidence | None:
-        """从 JSONL 文件按键加载 FusedEvidence。
+    def _read_evidence_at_offset(self, key: str, offset: int) -> FusedEvidence | None:
+        """快路径：按偏移读取并解析；失败/不匹配返回 None（调用方退回线性扫描）。"""
+        try:
+            with open(self._jsonl_path, encoding="utf-8") as f:
+                f.seek(offset)
+                line = f.readline().strip()
+                if line:
+                    entry = json.loads(line)
+                    if entry.get("key") == key and "evidence" in entry:
+                        return _deserialize_evidence(entry["evidence"])
+        except Exception:  # noqa: S110 — 有意忽略：读偏移索引失败即退回线性扫描
+            # 必须留痕（§2.2 规范 2：禁止无日志的 pass）。
+            # 偏移索引若**持续**失效，每次 lookup 都会退化成线性扫描 ——
+            # 这是**性能退化、不影响正确性**，所以用 DEBUG 而不是 WARNING；
+            # 但完全不记的话，这个退化在日志里就彻底不可见。
+            logger.debug("偏移索引读取失败，退回线性扫描 key=%s", key, exc_info=True)
+        return None
 
-        用内存里的 key→offset 索引做 O(1) 查找而非线性扫描；索引失效时退回线性扫描。
-        """
-        # 快路径：走偏移索引
-        offset = self._jsonl_offsets.get(key)
-        if offset is not None:
-            try:
-                with open(self._jsonl_path, encoding="utf-8") as f:
-                    f.seek(offset)
-                    line = f.readline().strip()
-                    if line:
-                        entry = json.loads(line)
-                        if entry.get("key") == key and "evidence" in entry:
-                            return _deserialize_evidence(entry["evidence"])
-            except Exception:  # noqa: S110 — 有意忽略：读偏移索引失败即退回线性扫描
-                # 必须留痕（§2.2 规范 2：禁止无日志的 pass）。
-                # 偏移索引若**持续**失效，每次 lookup 都会退化成线性扫描 ——
-                # 这是**性能退化、不影响正确性**，所以用 DEBUG 而不是 WARNING；
-                # 但完全不记的话，这个退化在日志里就彻底不可见。
-                logger.debug("偏移索引读取失败，退回线性扫描 key=%s", key, exc_info=True)
-
-        # 慢路径：线性扫描（并重建偏移索引）
+    def _scan_evidence_jsonl(self, key: str) -> FusedEvidence | None:
+        """慢路径：线性扫描 JSONL（并重建偏移索引），跳过损坏行。"""
         if not self._jsonl_path.exists():
             return None
         found = None
@@ -641,6 +657,20 @@ class SemanticCache:
         if corrupt:
             logger.warning("Semantic cache JSONL 有 %d 行损坏，已跳过", corrupt)
         return found
+
+    def _load_evidence(self, key: str) -> FusedEvidence | None:
+        """从 JSONL 文件按键加载 FusedEvidence。
+
+        用内存里的 key→offset 索引做 O(1) 查找而非线性扫描；索引失效时退回线性扫描。
+        """
+        # 快路径：走偏移索引
+        offset = self._jsonl_offsets.get(key)
+        if offset is not None:
+            found = self._read_evidence_at_offset(key, offset)
+            if found is not None:
+                return found
+        # 慢路径：线性扫描（并重建偏移索引）
+        return self._scan_evidence_jsonl(key)
 
     def _save_evidence(self, key: str, query: str, fused: FusedEvidence) -> None:
         """把证据条目追加到 JSONL 文件。必须在 `_lock` 持有下调用。"""
