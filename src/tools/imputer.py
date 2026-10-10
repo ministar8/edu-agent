@@ -364,8 +364,12 @@ _STOPWORDS = frozenset(
 
 
 # ── Heading 推断缓存 ──
-# key = f"{source_ext}:{source_name}", value = (heading, confidence)
-_heading_cache: dict[str, tuple[str, str]] = {}
+# key = f"{source_ext}:{source_path}"，value = (heading, method, confidence)
+# ★ 必须连 method 一起存：只想缓存 confidence 的话，命中时要靠 confidence 反查 method，
+#   而 low 置信度对应**多个**方法（首行 / 关键词 / 兜底），反查只能取到字典里第一个
+#   ⇒ 报出的方法名被错标（实测首轮的 keyword 在后续调用里被报成 first_line_filtered）。
+#   缓存生命周期见 `impute_documents` 开头：每次调用清空，不跨次复用。
+_heading_cache: dict[str, tuple[str, str, str]] = {}
 
 # ── 置信度分级 ──
 # high: 来源确定性高（原文提取），几乎无幻觉风险
@@ -374,17 +378,6 @@ _heading_cache: dict[str, tuple[str, str]] = {}
 _CONFIDENCE_HIGH = "high"
 _CONFIDENCE_MEDIUM = "medium"
 _CONFIDENCE_LOW = "low"
-
-# 方法 → 置信度映射
-_METHOD_CONFIDENCE = {
-    "md_heading": _CONFIDENCE_HIGH,
-    "chapter_mark": _CONFIDENCE_HIGH,
-    "pdf_feature": _CONFIDENCE_HIGH,
-    "filename": _CONFIDENCE_MEDIUM,
-    "first_line_filtered": _CONFIDENCE_LOW,
-    "keyword": _CONFIDENCE_LOW,
-    "fallback": _CONFIDENCE_LOW,
-}
 
 # 低置信度 heading 的前缀标记
 _LOW_CONFIDENCE_PREFIX = "[推测]"
@@ -650,9 +643,7 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, st
     #    只用文件名会让跨目录同名文件互相串标题。
     cache_key = f"{source_ext}:{source_path or text[:64]}"
     if cache_key in _heading_cache:
-        cached_heading, cached_conf = _heading_cache[cache_key]
-        cached_method = [k for k, v in _METHOD_CONFIDENCE.items() if v == cached_conf]
-        return (cached_heading, cached_method[0] if cached_method else "cache", cached_conf)
+        return _heading_cache[cache_key]
 
     heading = None
     method = "fallback"
@@ -731,8 +722,8 @@ def _impute_heading(doc: Document, min_confidence: str = "low") -> tuple[str, st
         # 低置信度且通过验证 → 添加 [推测] 前缀
         heading = f"{_LOW_CONFIDENCE_PREFIX}{heading}"
 
-    # 写入缓存
-    _heading_cache[cache_key] = (heading, confidence)
+    # 写入缓存（含 method）
+    _heading_cache[cache_key] = (heading, method, confidence)
     return (heading, method, confidence)
 
 
@@ -1252,6 +1243,9 @@ def impute_documents(
     """
     # 重置资源监控器（每次入库开始时重置配额）
     _resource_guard.reset()
+    # ★ 同时清空 heading 缓存：否则跨调用复用旧推断 —— 既让输出依赖「本函数被调用过几次」
+    #   （非幂等），也不会察觉「同路径文件内容已变」（陈旧命中）。清空后本函数无跨调用状态。
+    _heading_cache.clear()
 
     filled_docs: list[Document] = []
     impute_log: list[dict] = []
