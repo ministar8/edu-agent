@@ -10,9 +10,6 @@ from __future__ import annotations
 
 import re
 
-# 中文/英文技术词：长度≥2 的汉字串，或 ≥3 的英文词
-_TOKEN_RE = re.compile(r"[一-鿿]{2,}|[A-Za-z]{3,}")
-
 # 弱词：几乎所有 408 文都会出现
 _STOP = {
     "的",
