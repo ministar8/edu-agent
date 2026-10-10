@@ -1,13 +1,11 @@
-"""Semantic cache for RAG retrieval results (ChromaDB-backed).
+"""语义缓存（基于 ChromaDB）：缓存 RAG 检索结果。
 
-Caches FusedEvidence by query semantic similarity using embedding vectors
-stored in a dedicated ChromaDB collection ``semantic_cache``.
-When a semantically similar query is received, the cached FusedEvidence is
-reused, skipping the entire retrieval pipeline (vector search, BM25,
-fusion, verification).
+按 query 语义相似度缓存 `FusedEvidence`：向量存于专用 ChromaDB 集合
+``semantic_cache``。当收到语义相近的 query 时直接复用缓存的 FusedEvidence，
+跳过整条检索链（向量检索、BM25、融合、验证）。
 
-Only the retrieval layer is cached — LLM generation + governance + reflection
-still run on every request, ensuring answer freshness and user-profile awareness.
+只缓存**检索层** —— LLM 生成、治理与反思仍在每次请求时执行，
+保证答案新鲜度与用户画像感知。
 """
 
 from __future__ import annotations
@@ -26,16 +24,16 @@ from rag.retrieval.evidence import FusedEvidence
 
 logger = logging.getLogger(__name__)
 
-# ── Defaults (overridden by settings) ──────────────────────
+# ── 默认值（可被 settings 覆盖）──────────────────────────────
 _COLLECTION_NAME = "semantic_cache"
 _DATA_DIR = Path(settings.CHROMA_PERSIST_DIR) / "semantic_cache"
 _JSONL_FILE = _DATA_DIR / "evidence.jsonl"
-_TTL = 1800  # 30 minutes
+_TTL = 1800  # 30 分钟
 _MAX_ENTRIES = 500
 _SIMILARITY_THRESHOLD = 0.88
 
 
-# ── Helpers ────────────────────────────────────────────────
+# ── 辅助函数 ────────────────────────────────────────────────
 
 
 def _cache_key(
@@ -44,7 +42,7 @@ def _cache_key(
     filter_sig: str = "",
     params_sig: str = "",
 ) -> str:
-    """Deterministic key from normalized query + collection + filter + retrieval params.
+    """由归一化 query + collection + filter + 检索参数生成确定性 key。
 
     Different collections、filters 或检索参数（use_rerank / RERANK_ENABLED /
     k / score_threshold / depth / max_tokens）不得共享缓存条目，
@@ -80,12 +78,12 @@ def _cache_key(
 
 
 def _serialize_evidence(fused: FusedEvidence) -> str:
-    """Serialize FusedEvidence to JSON string for disk storage."""
+    """把 FusedEvidence 序列化为 JSON 字符串，用于落盘存储。"""
     return fused.model_dump_json()
 
 
 def _deserialize_evidence(data: str) -> FusedEvidence:
-    """Deserialize FusedEvidence from JSON string."""
+    """从 JSON 字符串反序列化 FusedEvidence。"""
     return FusedEvidence.model_validate_json(data)
 
 
@@ -93,11 +91,11 @@ def _deserialize_evidence(data: str) -> FusedEvidence:
 
 
 class SemanticCache:
-    """ChromaDB-backed semantic cache for FusedEvidence.
+    """基于 ChromaDB 的 FusedEvidence 语义缓存。
 
-    - Vector index: ChromaDB collection ``semantic_cache`` (cosine similarity)
-    - Evidence data: JSONL file ``semantic_cache/evidence.jsonl``
-    - In-memory metadata: dict for TTL / LRU / hit tracking
+    - 向量索引：ChromaDB 集合 ``semantic_cache``（余弦相似度）
+    - 证据数据：JSONL 文件 ``semantic_cache/evidence.jsonl``
+    - 内存元数据：dict，用于 TTL / LRU / 命中统计
     """
 
     def __init__(
@@ -111,28 +109,28 @@ class SemanticCache:
         self._max_entries = max_entries
         self._lock = threading.Lock()
 
-        # In-memory metadata: key → {timestamp, hit_count, query}
+        # 内存元数据：key → {timestamp, hit_count, query}
         self._meta: dict[str, dict[str, Any]] = {}
 
-        # JSONL offset index: key → file byte offset for O(1) lookup
+        # JSONL 偏移索引：key → 文件字节偏移，用于 O(1) 查找
         self._jsonl_offsets: dict[str, int] = {}
 
-        # ChromaDB collection (lazy init)
+        # ChromaDB 集合（惰性初始化）
         self._collection = None
         self._embedding_fn = None
 
-        # JSONL storage
+        # JSONL 存储
         self._jsonl_path = _JSONL_FILE
         self._data_dir = _DATA_DIR
 
-        # Stats
+        # 统计
         self._hits = 0
         self._misses = 0
 
-    # ── Lazy initialization ────────────────────────────────
+    # ── 惰性初始化 ─────────────────────────────────────────
 
     def _ensure_init(self):
-        """Lazily initialize ChromaDB collection and JSONL storage."""
+        """惰性初始化 ChromaDB 集合与 JSONL 存储。"""
         if self._collection is not None:
             return
 
@@ -148,7 +146,7 @@ class SemanticCache:
                 mgr = get_vector_store_manager()
                 self._embedding_fn = mgr.embeddings
 
-                # Get or create a dedicated cache collection
+                # 取或建专用缓存集合
                 self._collection = mgr.client.get_or_create_collection(
                     name=_COLLECTION_NAME,
                     metadata={"hnsw:space": "cosine"},
@@ -161,7 +159,7 @@ class SemanticCache:
                     _count,
                 )
 
-                # Load metadata from JSONL
+                # 从 JSONL 加载元数据
                 self._data_dir.mkdir(parents=True, exist_ok=True)
                 self._load_meta_from_jsonl()
                 return
@@ -215,7 +213,7 @@ class SemanticCache:
                     self._collection = None
 
     async def _aensure_init(self):
-        """Async lazy initialization wrapper; avoids blocking the event loop on retry waits."""
+        """异步惰性初始化包装：重试等待不阻塞事件循环。"""
         if self._collection is not None:
             return
 
@@ -288,11 +286,10 @@ class SemanticCache:
                     self._collection = None
 
     def _load_meta_from_jsonl(self):
-        """Load metadata entries from JSONL file on startup.
+        """启动时从 JSONL 文件加载元数据条目。
 
-        Since time.monotonic() resets on restart, we cannot trust stored
-        monotonic timestamps. Instead, we use wall-clock `stored_at` from
-        ChromaDB metadata to decide if entries are still valid.
+        `time.monotonic()` 重启后会归零，故**不可信**存储的单调时间戳；
+        改用 ChromaDB 元数据里的 wall-clock `stored_at` 判断条目是否仍有效。
         """
         if not self._jsonl_path.exists():
             return
@@ -313,12 +310,12 @@ class SemanticCache:
                     query = entry.get("query", "")
                     if not key:
                         continue
-                    # Use wall-clock stored_at if available, else treat as expired
+                    # 有 wall-clock stored_at 则用其判定，否则视为已过期
                     stored_at = entry.get("stored_at", 0)
                     if stored_at and (now_wall - stored_at) < self._ttl:
                         self._meta[key] = {
                             "query": query,
-                            "timestamp": time.monotonic(),  # Reset to current monotonic
+                            "timestamp": time.monotonic(),  # 重置为当前单调时钟
                             "hit_count": entry.get("hit_count", 0),
                         }
                         self._jsonl_offsets[key] = pos
@@ -327,15 +324,14 @@ class SemanticCache:
         except Exception as e:
             logger.warning("Failed to load semantic cache JSONL: %s", e)
 
-    # ── Public API ─────────────────────────────────────────
+    # ── 对外 API ───────────────────────────────────────────
 
     def lookup(
         self, query: str, collection_name: str = "", filter_sig: str = "", params_sig: str = ""
     ) -> tuple[FusedEvidence | None, float]:
-        """Look up a semantically similar cached result.
+        """查找语义相近的缓存结果。
 
-        Returns (fused_evidence, similarity_score).
-        If no match above threshold, returns (None, 0.0).
+        返回 (fused_evidence, similarity_score)；无超过阈值者返回 (None, 0.0)。
         """
         if not settings.SEMANTIC_CACHE_ENABLED:
             return None, 0.0
@@ -347,10 +343,10 @@ class SemanticCache:
         start = time.perf_counter()
 
         try:
-            # Embed the query
+            # 对 query 做嵌入
             query_embedding = self._embedding_fn.embed_query(query)
 
-            # Search ChromaDB for similar queries
+            # 在 ChromaDB 中检索相近 query
             results = self._query_collection(query_embedding)
 
             if not results or not results["distances"] or not results["distances"][0]:
@@ -380,11 +376,11 @@ class SemanticCache:
                 )
                 return None, similarity
 
-            # Found a match — verify same collection context
+            # 命中 —— 校验 collection 上下文一致
             match_id = results["ids"][0][0]
             match_meta = (results["metadatas"] or [[]])[0]
             match_meta = match_meta[0] if match_meta else {}
-            # Verify collection + filter context matches (avoid cross-collection / cross-filter hits)
+            # 校验 collection + filter 上下文匹配（避免跨集合 / 跨 filter 误命中）
             match_collection = match_meta.get("collection_name", "")
             match_filter = match_meta.get("filter_sig", "")
             match_params = match_meta.get("params_sig", "")
@@ -398,21 +394,21 @@ class SemanticCache:
             with self._lock:
                 meta = self._meta.get(match_id)
                 if meta is None:
-                    # Metadata missing (stale), treat as miss
+                    # 元数据缺失（陈旧），按未命中处理
                     self._misses += 1
                     return None, similarity
 
                 if time.monotonic() - meta["timestamp"] > self._ttl:
-                    # TTL expired, evict
+                    # TTL 过期，逐出
                     self._evict(match_id)
                     self._misses += 1
                     return None, similarity
 
-                # Update access time and hit count
+                # 更新访问时间与命中计数
                 meta["timestamp"] = time.monotonic()
                 meta["hit_count"] = meta.get("hit_count", 0) + 1
 
-            # Load FusedEvidence from JSONL
+            # 从 JSONL 加载 FusedEvidence
             fused = self._load_evidence(match_id)
             if fused is None:
                 self._misses += 1
@@ -438,7 +434,7 @@ class SemanticCache:
     async def alookup(
         self, query: str, collection_name: str = "", filter_sig: str = "", params_sig: str = ""
     ) -> tuple[FusedEvidence | None, float]:
-        """Async lookup wrapper that avoids blocking initialization on the event loop."""
+        """异步 lookup 包装：初始化不阻塞事件循环。"""
         if not settings.SEMANTIC_CACHE_ENABLED:
             return None, 0.0
         await self._aensure_init()
@@ -454,7 +450,7 @@ class SemanticCache:
         filter_sig: str = "",
         params_sig: str = "",
     ) -> None:
-        """Store a retrieval result in the semantic cache."""
+        """把一次检索结果写入语义缓存。"""
         if not settings.SEMANTIC_CACHE_ENABLED:
             return
 
@@ -467,16 +463,16 @@ class SemanticCache:
             wall_now = time.time()
             query_embedding = self._embedding_fn.embed_query(query)
 
-            # Check collection validity before upsert
+            # upsert 前校验集合有效
             if not self._check_collection_alive():
                 return
 
             with self._lock:
-                # Evict if at capacity
+                # 满容量时先逐出
                 if len(self._meta) >= self._max_entries and key not in self._meta:
                     self._evict_oldest()
 
-                # Store metadata
+                # 存元数据
                 self._meta[key] = {
                     "query": query,
                     "timestamp": time.monotonic(),
@@ -484,7 +480,7 @@ class SemanticCache:
                     "stored_at": wall_now,
                 }
 
-                # Upsert into ChromaDB
+                # 写入 ChromaDB
                 self._collection.upsert(
                     ids=[key],
                     embeddings=[query_embedding],
@@ -499,7 +495,7 @@ class SemanticCache:
                     ],
                 )
 
-                # Write evidence to JSONL (append)
+                # 把证据写入 JSONL（追加）
                 self._save_evidence(key, query, fused)
 
             logger.debug("Semantic cache STORE: query='%s' key=%s", query[:50], key)
@@ -515,7 +511,7 @@ class SemanticCache:
         filter_sig: str = "",
         params_sig: str = "",
     ) -> None:
-        """Async store wrapper that avoids blocking initialization on the event loop."""
+        """异步 store 包装：初始化不阻塞事件循环。"""
         if not settings.SEMANTIC_CACHE_ENABLED:
             return
         await self._aensure_init()
@@ -524,7 +520,7 @@ class SemanticCache:
         await asyncio.to_thread(self.store, query, fused, collection_name, filter_sig, params_sig)
 
     def stats(self) -> dict[str, Any]:
-        """Return cache statistics."""
+        """返回缓存统计。"""
         total = self._hits + self._misses
         return {
             "hits": self._hits,
@@ -534,18 +530,17 @@ class SemanticCache:
             "max_entries": self._max_entries,
         }
 
-    # ── Internal ───────────────────────────────────────────
+    # ── 内部实现 ───────────────────────────────────────────
 
     def _is_stale_error(self, err: Exception) -> bool:
-        """Check if an error indicates the collection was deleted/corrupted externally."""
+        """判断错误是否表示集合被外部删除 / 损坏。"""
         msg = str(err).lower()
         return "does not exist" in msg or "nothing found on disk" in msg
 
     def _reinit_if_stale(self, err: Exception) -> bool:
-        """Attempt to reinitialize collection after a stale-reference error.
+        """陈旧引用报错后尝试重建集合。
 
-        Returns True if reinit succeeded (self._collection is now valid),
-        False if cache remains disabled.
+        重建成功（self._collection 现有效）返回 True；缓存仍禁用返回 False。
         """
         if not self._is_stale_error(err):
             return False
@@ -555,7 +550,7 @@ class SemanticCache:
         return self._collection is not None
 
     def _query_collection(self, query_embedding: list[float]) -> dict:
-        """Query the cache collection, auto-reinitializing if stale."""
+        """查询缓存集合；陈旧时自动重建。"""
         try:
             return self._collection.query(
                 query_embeddings=[query_embedding],
@@ -572,9 +567,9 @@ class SemanticCache:
             raise
 
     def _check_collection_alive(self) -> bool:
-        """Verify the collection is still accessible; reinit if stale.
+        """校验集合仍可访问；陈旧时重建。
 
-        Returns True if collection is alive, False if cache is now disabled.
+        集合存活返回 True；缓存已禁用返回 False。
         """
         try:
             _ = self._collection.count()
@@ -583,12 +578,11 @@ class SemanticCache:
             return self._reinit_if_stale(e)
 
     def _load_evidence(self, key: str) -> FusedEvidence | None:
-        """Load FusedEvidence for a given key from JSONL file.
+        """从 JSONL 文件按键加载 FusedEvidence。
 
-        Uses an in-memory key→offset index for O(1) lookup instead of
-        linear scan. Falls back to linear scan if index is stale.
+        用内存里的 key→offset 索引做 O(1) 查找而非线性扫描；索引失效时退回线性扫描。
         """
-        # Fast path: use offset index
+        # 快路径：走偏移索引
         offset = self._jsonl_offsets.get(key)
         if offset is not None:
             try:
@@ -606,7 +600,7 @@ class SemanticCache:
                 # 但完全不记的话，这个退化在日志里就彻底不可见。
                 logger.debug("偏移索引读取失败，退回线性扫描 key=%s", key, exc_info=True)
 
-        # Slow path: linear scan (and rebuild offset index)
+        # 慢路径：线性扫描（并重建偏移索引）
         if not self._jsonl_path.exists():
             return None
         found = None
@@ -633,7 +627,7 @@ class SemanticCache:
                         corrupt += 1
                         continue
                     entry_key = entry.get("key", "")
-                    # Track all offsets while scanning
+                    # 扫描时顺带登记偏移
                     if entry_key not in self._jsonl_offsets:
                         self._jsonl_offsets[entry_key] = pos
                     if entry_key == key and "evidence" in entry:
@@ -649,7 +643,7 @@ class SemanticCache:
         return found
 
     def _save_evidence(self, key: str, query: str, fused: FusedEvidence) -> None:
-        """Append evidence entry to JSONL file. Must be called under _lock."""
+        """把证据条目追加到 JSONL 文件。必须在 `_lock` 持有下调用。"""
         try:
             meta = self._meta.get(key, {})
             entry = {
@@ -666,19 +660,18 @@ class SemanticCache:
             logger.warning("Failed to save evidence for key=%s: %s", key, e)
 
     def _evict(self, key: str) -> None:
-        """Evict a single entry from cache."""
+        """从缓存中逐出单条。"""
         self._meta.pop(key, None)
         try:
             if self._collection is not None:
                 self._collection.delete(ids=[key])
         except Exception as e:
             logger.debug("Failed to delete cache entry from ChromaDB: %s", e)
-        # Note: JSONL entries are not deleted (append-only); stale entries
-        # are filtered by TTL at lookup time. Periodic compaction can be
-        # added later if needed.
+        # 注：JSONL 条目不删除（只追加）；陈旧条目在 lookup 时按 TTL 过滤。
+        # 需要时后续再加定期压缩。
 
     def _evict_oldest(self) -> None:
-        """Evict the oldest (least recently accessed) entry."""
+        """逐出最旧（最久未访问）的条目。"""
         if not self._meta:
             return
         oldest_key = min(self._meta, key=lambda k: self._meta[k]["timestamp"])
@@ -707,13 +700,13 @@ class SemanticCache:
                 logger.warning("Failed to unlink semantic_cache JSONL: %s", unlink_err)
 
 
-# ── Module-level singleton ────────────────────────────────
+# ── 模块级单例 ──────────────────────────────────────────────
 
 _semantic_cache: SemanticCache | None = None
 
 
 def get_semantic_cache() -> SemanticCache:
-    """Get or create the global SemanticCache singleton."""
+    """获取或创建全局 SemanticCache 单例。"""
     global _semantic_cache
     if _semantic_cache is None:
         threshold = settings.SEMANTIC_CACHE_SIMILARITY_THRESHOLD
