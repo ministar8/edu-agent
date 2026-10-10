@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import math
+
 from langchain_core.documents import Document
 
 from rag.retrieval.postprocess._log import logger
@@ -18,8 +21,6 @@ def _dynamic_rrf_k(route_count: int) -> int:
     路由少时 k 更小（增强区分度，让 top-1 信号更强）。
     经验值：k ≈ 10 × sqrt(route_count)
     """
-    import math
-
     return max(10, min(60, int(_RRF_K_BASE * math.sqrt(route_count) / math.sqrt(4))))
 
 
@@ -90,12 +91,10 @@ def _base_route_name(route_name: str) -> str:
 
 
 def _dedup_key(doc: Document) -> str:
-    """Build a dedup key from collection + content_hash for cross-collection dedup."""
+    """去重键 = `集合 + content_hash`（跨集合去重，防同名文档被误合并）。"""
     collection = doc.metadata.get("_collection", "")
     content_hash = doc.metadata.get("content_hash")
     if not content_hash:
-        import hashlib
-
         content_hash = hashlib.sha256(doc.page_content[:200].encode()).hexdigest()[:16]
     else:
         content_hash = str(content_hash)
