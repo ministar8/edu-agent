@@ -316,25 +316,29 @@ gap inventory → 补原始资料 → 只解析缺口字段
 ```text
 knowledge/
 ├── knowledge_points/     KP + links
-├── basic/                L1
+├── basic/                L1（+ 补编的公式/术语）
 ├── advanced/             L2
+├── code/                 code（代码实现，独立库）
 ├── exams/                L3（2009–2025）
-│   ├── YYYY/{items,answer,paper}.md
+│   ├── YYYY/{items,answer,paper}.md    （★ paper 仅溯源、不入库）
+│   ├── <科>.md                         章节例题集
 │   └── gap_inventory.jsonl
-├── learning_paths/       规划（独立，后续）
+├── learning_paths/
 └── rules/ + schema/      契约
 ```
 
 ### 8.2 向量集合
 
-| 集合 | 内容 | 状态 |
+| 集合 | 内容 | 说明 |
 |---|---|---|
-| `data_structure` 等四科 | L1（+旧讲义残留） | 在用 |
-| `questions` | L3 exams（**迁移期 alias**） | 在用 |
-| `exams` | 最终名 | 未建；门禁稳后收口 |
-| `learning_paths` | 路径 | 在用 |
+| `data_structure` 等四科 | L1 `basic` + L2 `advanced` | 靠 `kb_depth` 区分 |
+| `exams` | L3 真题（按年 + 章节例题集） | 2026-10-10 收口（旧 `questions` alias 已删） |
+| `code_ds` / `code_os` / `code_co` / `code_cn` | `code` 代码库 | 独立层，不进融合池 |
+| `learning_paths` | 路径 | 主链 `rag.ingest` 唯一入库目录 |
 
-**红线**：未过门禁不删旧集合；`questions` 不永久保留。
+★ **2026-10-10 迁移**：顶层四科讲义退役（概念/公式精编进 `basic`、代码进 `code`、例题进 `exams`）；
+`questions` 集合已删；`ingest.DEFAULT_CATEGORIES` 收窄为 `["learning_paths"]`；
+门禁临时索引（`retrieval_gate.build_index`）已切到新体系语料（`_INDEX_SOURCES`）。
 
 ---
 
