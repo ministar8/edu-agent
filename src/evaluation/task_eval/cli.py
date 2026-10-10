@@ -33,25 +33,8 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logger = logging.getLogger("task_eval")
 
 
-async def _run(args: argparse.Namespace) -> int:
-    cases = load_demo(args.task, limit=args.limit, demo_dir=getattr(args, "demo_dir", None))
-    if not cases:
-        logger.error("没有加载到 case —— 先建 evals/datasets/demo/（见 README.md）")
-        return 2
-    logger.info("加载 %d 条 case（tasks=%s, limit=%s）", len(cases), args.task or "all", args.limit)
-
-    # ★ 运行前预检：外部服务挂了就别开跑（实测：TEI 停了会烧满 12 分钟且产出假数据）
-    problems = preflight_check()
-    if problems:
-        for p in problems:
-            logger.error("预检失败：%s", p)
-        print(
-            "\n> ⛔ **运行前预检失败，已中止（未消耗任何 LLM 调用）**：\n"
-            + "\n".join(f">   - {p}" for p in problems)
-            + "\n> 请先恢复依赖服务（如 `docker compose up -d tei`），再重跑。\n"
-        )
-        return 3
-
+async def _run_cases(args: argparse.Namespace, cases) -> tuple[list, int, int]:
+    """跑全部 case（含 judge），逐条落盘；返回 ``(records, env_blocked, 已跳过条数)``。"""
     records = []
     env_blocked = 0
     done = load_done_ids(args.out) if (args.out and args.resume) else set()
@@ -84,24 +67,49 @@ async def _run(args: argparse.Namespace) -> int:
         # ★ 逐条落盘：被中止也不丢已完成数据（见 runner.append_record 的教训注释）
         if args.out:
             append_record(rec, args.out)
+    return records, env_blocked, len(done)
 
+
+def _emit_results(all_records: list[dict], out: str) -> None:
+    """打印报告；给了 `out` 就落盘归档 + 报告 JSON。"""
+    report = build_report(all_records)
+    print("\n" + render_markdown(report))
+    if out:
+        report_path = Path(out).with_suffix(".report.json")
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info("归档 → %s / %s（累计 %d 条）", out, report_path, len(all_records))
+    else:
+        logger.info("未指定 --out，本次不落盘（只打印）")
+
+
+async def _run(args: argparse.Namespace) -> int:
+    cases = load_demo(args.task, limit=args.limit, demo_dir=getattr(args, "demo_dir", None))
+    if not cases:
+        logger.error("没有加载到 case —— 先建 evals/datasets/demo/（见 README.md）")
+        return 2
+    logger.info("加载 %d 条 case（tasks=%s, limit=%s）", len(cases), args.task or "all", args.limit)
+
+    # ★ 运行前预检：外部服务挂了就别开跑（实测：TEI 停了会烧满 12 分钟且产出假数据）
+    problems = preflight_check()
+    if problems:
+        for p in problems:
+            logger.error("预检失败：%s", p)
+        print(
+            "\n> ⛔ **运行前预检失败，已中止（未消耗任何 LLM 调用）**：\n"
+            + "\n".join(f">   - {p}" for p in problems)
+            + "\n> 请先恢复依赖服务（如 `docker compose up -d tei`），再重跑。\n"
+        )
+        return 3
+
+    records, env_blocked, done_n = await _run_cases(args, cases)
     if env_blocked:
         print(
             f"\n> ⚠️ **本轮因环境错误中止**：本轮新增 {len(records)} 条，"
-            f"{len(cases) - len(records) - len(done)} 条未跑。这不是 case 失败，**不得计入失败率**。\n"
+            f"{len(cases) - len(records) - done_n} 条未跑。这不是 case 失败，**不得计入失败率**。\n"
         )
 
     all_records = _load_all_records(args.out) if args.out else [r.to_dict() for r in records]
-    report = build_report(all_records)
-    markdown = render_markdown(report)
-    print("\n" + markdown)
-
-    if args.out:
-        report_path = Path(args.out).with_suffix(".report.json")
-        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-        logger.info("归档 → %s / %s（累计 %d 条）", args.out, report_path, len(all_records))
-    else:
-        logger.info("未指定 --out，本次不落盘（只打印）")
+    _emit_results(all_records, args.out)
     return 0
 
 
@@ -215,6 +223,52 @@ async def _rejudge(args: argparse.Namespace) -> int:
     return 0 if failed == 0 else 1
 
 
+def _reprobe_cfg(args: argparse.Namespace) -> dict:
+    """本次 reprobe 的 ``retrieval_cfg``（与 runner 落盘同形状，`k` 来自 ``--k``）。
+
+    ★ provenance 与新读数同源：`retrieval_cfg` 用 runner 落盘的同一形状（runner.py 的
+      `record.retrieval_cfg`），`k` 来自 `--k`（不再硬编码 5）。
+    """
+    from core.settings import settings as _prov
+
+    return {
+        "k": args.k,
+        "use_rerank_requested": not args.no_rerank,
+        "rerank_effective": bool(_prov.RERANK_ENABLED) and not args.no_rerank,
+        "use_fake_embedding": bool(_prov.USE_FAKE_EMBEDDING),
+        "semantic_cache_enabled": bool(_prov.SEMANTIC_CACHE_ENABLED),
+    }
+
+
+async def _reprobe_one(rec: dict, case, args: argparse.Namespace, cfg: dict, mgr) -> None:
+    """对一条 record 重跑检索探针并就地更新其检索侧字段。"""
+    from evaluation.task_eval.retrieval_probe import probe_retrieval
+    from evaluation.task_eval.runner import map_route_failures
+
+    # ★★ B7 消费侧（修复批 Important-1）：每条 record 的 reprobe = 一个**独立取证单元**，
+    #   与 `runner.run_case`（runner.py:696）和 `retrieval_gate` 的既有边界同构 ——
+    #   探针**之前** reset、探针返回后**立即**消费，两句必须成对（cf. 判据 `8m`/回归锁 `8k`）。
+    #   为什么这里也必须有：异常收敛发生在 `routes._safe_to_thread`（按路由逐个），
+    #   探针收不到异常、只会自报 `ok`/`empty` ⇒ 直接写 `probe.status` 会
+    #   ① 吞掉本次 reprobe 期间的路由故障，② 把原 run 合法升上来的 `error` **降回**
+    #   ok/empty。规则**只复用** `runner.map_route_failures`（只升不降的纯函数），
+    #   不在此另写一份 —— 第二份真源正是本项目要消灭的东西。
+    mgr.reset_query_failures()
+    probe = await probe_retrieval(
+        case.query, task_mode=case.task_mode, k=args.k, use_rerank=not args.no_rerank
+    )
+    effective_status, route_failure_notes = map_route_failures(mgr.query_failures, probe.status)
+    _update_retrieval_fields(
+        rec,
+        case,
+        probe,
+        k=args.k,
+        cfg=cfg,
+        effective_status=effective_status,
+        route_failure_notes=route_failure_notes,
+    )
+
+
 async def _reprobe(args: argparse.Namespace) -> int:
     """**只重跑检索探针**，更新 record 的检索侧指标（**零 LLM 成本**）。
 
@@ -222,8 +276,6 @@ async def _reprobe(args: argparse.Namespace) -> int:
     而 agent/judge 的产物（reply、final_quality）仍然有效。
     重跑探针只打 TEI embedding，不调用任何 LLM ⇒ 可放心重算。
     """
-    from evaluation.task_eval.retrieval_probe import probe_retrieval
-    from evaluation.task_eval.runner import map_route_failures
     from rag.common.vectorstore import get_vector_store_manager
 
     records = _load_all_records(args.records)
@@ -233,18 +285,7 @@ async def _reprobe(args: argparse.Namespace) -> int:
     cases = {c.case_id: c for c in load_demo()}
     logger.info("重跑检索探针 %d 条（零 LLM 调用）", len(records))
 
-    # ★ provenance 与新读数同源：`retrieval_cfg` 用 runner 落盘的同一形状（runner.py 的
-    #   `record.retrieval_cfg`），`k` 来自 `--k`（不再硬编码 5）。
-    from core.settings import settings as _prov
-
-    cfg = {
-        "k": args.k,
-        "use_rerank_requested": not args.no_rerank,
-        "rerank_effective": bool(_prov.RERANK_ENABLED) and not args.no_rerank,
-        "use_fake_embedding": bool(_prov.USE_FAKE_EMBEDDING),
-        "semantic_cache_enabled": bool(_prov.SEMANTIC_CACHE_ENABLED),
-    }
-
+    cfg = _reprobe_cfg(args)
     out: list[dict] = []
     _mgr = get_vector_store_manager()
     for i, rec in enumerate(records, 1):
@@ -253,30 +294,7 @@ async def _reprobe(args: argparse.Namespace) -> int:
             out.append(rec)
             continue
         logger.info("[%d/%d] %s", i, len(records), case.case_id)
-        # ★★ B7 消费侧（修复批 Important-1）：每条 record 的 reprobe = 一个**独立取证单元**，
-        #   与 `runner.run_case`（runner.py:696）和 `retrieval_gate` 的既有边界同构 ——
-        #   探针**之前** reset、探针返回后**立即**消费，两句必须成对（cf. 判据 `8m`/回归锁 `8k`）。
-        #   为什么这里也必须有：异常收敛发生在 `routes._safe_to_thread`（按路由逐个），
-        #   探针收不到异常、只会自报 `ok`/`empty` ⇒ 直接写 `probe.status` 会
-        #   ① 吞掉本次 reprobe 期间的路由故障，② 把原 run 合法升上来的 `error` **降回**
-        #   ok/empty。规则**只复用** `runner.map_route_failures`（只升不降的纯函数），
-        #   不在此另写一份 —— 第二份真源正是本项目要消灭的东西。
-        _mgr.reset_query_failures()
-        probe = await probe_retrieval(
-            case.query, task_mode=case.task_mode, k=args.k, use_rerank=not args.no_rerank
-        )
-        effective_status, route_failure_notes = map_route_failures(
-            _mgr.query_failures, probe.status
-        )
-        _update_retrieval_fields(
-            rec,
-            case,
-            probe,
-            k=args.k,
-            cfg=cfg,
-            effective_status=effective_status,
-            route_failure_notes=route_failure_notes,
-        )
+        await _reprobe_one(rec, case, args, cfg, _mgr)
         out.append(rec)
 
     if args.out:
@@ -391,10 +409,8 @@ def _backfill(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="evaluation.task_eval", description="Phase 0 任务级评测")
-    sub = parser.add_subparsers(dest="cmd", required=True)
-
+def _add_run_parser(sub) -> None:
+    """``run`` 子命令的解析器（参数最多，单列）。"""
     p_run = sub.add_parser("run", help="跑 demo 集并出报告")
     p_run.add_argument("--task", choices=list(TASKS), default=None, help="只跑单个任务")
     p_run.add_argument("--limit", type=int, default=None, help="每个 task 各取前 N 条（0A 用 3）")
@@ -428,6 +444,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_run.set_defaults(func=lambda a: asyncio.run(_run(a)))
 
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="evaluation.task_eval", description="Phase 0 任务级评测")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    _add_run_parser(sub)
+
     p_cal = sub.add_parser("calibrate", help="LLM judge vs 人工 一致性校准")
     p_cal.add_argument("--input", required=True, help="jsonl：{case_id, llm_score, human_score}")
     p_cal.set_defaults(func=_calibrate)
@@ -453,7 +476,11 @@ def main(argv: list[str] | None = None) -> int:
     p_bf.add_argument("--out", default="")
     p_bf.set_defaults(func=_backfill)
 
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
     return int(args.func(args))
 
 
