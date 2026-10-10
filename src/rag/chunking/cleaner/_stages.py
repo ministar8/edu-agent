@@ -202,12 +202,45 @@ def clean_documents(
         cleaned, content_anomaly_records
     )
 
+    _emit_clean_metrics(
+        documents=documents,
+        cleaned=cleaned,
+        original_total_chars=original_total_chars,
+        started_at=start,
+        dropped_docs=dropped_docs,
+        norm_log=norm_log,
+        impute_log=impute_log,
+        content_anomaly_count=content_anomaly_count,
+        stat_anomaly_count=stat_anomaly_count,
+        dup_records=dup_records,
+    )
+    return cleaned
+
+
+def _emit_clean_metrics(
+    *,
+    documents: list[Document],
+    cleaned: list[Document],
+    original_total_chars: int,
+    started_at: float,
+    dropped_docs: int,
+    norm_log: list[dict],
+    impute_log: list[dict],
+    content_anomaly_count: int,
+    stat_anomaly_count: int,
+    dup_records: list[dict],
+) -> None:
+    """写出清洗阶段摘要指标（各阶段计数 + 字符留存率）。
+
+    `original_total_chars` 必须由调用方在**清洗前**算好传入 —— 文档是就地改写的，
+    此处再算已是清洗后的长度。
+    """
     cleaned_total_chars = sum(len(doc.page_content or "") for doc in cleaned)
     retention_ratio = cleaned_total_chars / original_total_chars if original_total_chars else 0.0
     metrics.emit(
         event="clean_documents",
         stage="cleaner",
-        duration_ms=round((time.perf_counter() - start) * 1000, 3),
+        duration_ms=round((time.perf_counter() - started_at) * 1000, 3),
         values={
             "input_docs": len(documents),
             "output_docs": len(cleaned),
@@ -222,4 +255,3 @@ def clean_documents(
             "cleaned_total_chars": cleaned_total_chars,
         },
     )
-    return cleaned
