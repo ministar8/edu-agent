@@ -305,6 +305,30 @@ def fuzzy_dedup(
     return unique_docs, duplicates
 
 
+def _record_fuzzy_duplicate(
+    i: int,
+    j: int,
+    sim: float,
+    documents: list[Document],
+    duplicate_indices: set[int],
+    duplicates: list[dict],
+) -> None:
+    """标记 j 为 i 的模糊重复并记录一条 duplicate（三个 batch 路径命中后的共同动作）。
+
+    调用方各自的守卫条件（j<=i / j<batch_start / compare_start）与 `sim >= threshold`
+    判断都在调用点，本函数只封装命中后的记录，不改变判定顺序。
+    """
+    duplicate_indices.add(j)
+    duplicates.append(
+        {
+            "source": _doc_source(documents[j]),
+            "duplicate_of": _doc_source(documents[i]),
+            "similarity": round(sim, 4),
+            "type": "fuzzy",
+        }
+    )
+
+
 def _lsh_batch(
     documents: list[Document],
     minhashes: list[object],
@@ -337,17 +361,7 @@ def _lsh_batch(
             sim = minhashes[i].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
 
             if sim >= threshold:
-                duplicate_indices.add(j)
-                source_j = _doc_source(documents[j])
-                source_i = _doc_source(documents[i])
-                duplicates.append(
-                    {
-                        "source": source_j,
-                        "duplicate_of": source_i,
-                        "similarity": round(sim, 4),
-                        "type": "fuzzy",
-                    }
-                )
+                _record_fuzzy_duplicate(i, j, sim, documents, duplicate_indices, duplicates)
 
 
 def _lsh_batched(
@@ -396,17 +410,7 @@ def _lsh_batched(
 
                 sim = minhashes[i].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
                 if sim >= threshold:
-                    duplicate_indices.add(j)
-                    source_j = _doc_source(documents[j])
-                    source_i = _doc_source(documents[i])
-                    duplicates.append(
-                        {
-                            "source": source_j,
-                            "duplicate_of": source_i,
-                            "similarity": round(sim, 4),
-                            "type": "fuzzy",
-                        }
-                    )
+                    _record_fuzzy_duplicate(i, j, sim, documents, duplicate_indices, duplicates)
 
         # 跨批比对：用之前批的 MinHash 查询当前批的 LSH
         if batch_start > 0:
@@ -423,17 +427,7 @@ def _lsh_batched(
 
                     sim = minhashes[i].jaccard(minhashes[j]) if minhashes[j] is not None else 0.0
                     if sim >= threshold:
-                        duplicate_indices.add(j)
-                        source_j = _doc_source(documents[j])
-                        source_i = _doc_source(documents[i])
-                        duplicates.append(
-                            {
-                                "source": source_j,
-                                "duplicate_of": source_i,
-                                "similarity": round(sim, 4),
-                                "type": "fuzzy",
-                            }
-                        )
+                        _record_fuzzy_duplicate(i, j, sim, documents, duplicate_indices, duplicates)
 
         # 释放 LSH 对象
         del lsh
@@ -474,17 +468,7 @@ def _brute_force_batched(
 
                 sim = minhashes[i].jaccard(minhashes[j])
                 if sim >= threshold:
-                    duplicate_indices.add(j)
-                    source_j = _doc_source(documents[j])
-                    source_i = _doc_source(documents[i])
-                    duplicates.append(
-                        {
-                            "source": source_j,
-                            "duplicate_of": source_i,
-                            "similarity": round(sim, 4),
-                            "type": "fuzzy",
-                        }
-                    )
+                    _record_fuzzy_duplicate(i, j, sim, documents, duplicate_indices, duplicates)
 
 
 # ── 组合去重 ────────────────────────────────────────
