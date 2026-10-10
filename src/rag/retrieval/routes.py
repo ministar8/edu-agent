@@ -82,12 +82,18 @@ def _summarize_document(doc: Document) -> str:
 
 def _log_route_diagnostics(
     query: str,
+    collection_routes: list[str],
     route_specs: list[tuple[str, str, dict | None]],
     route_results: list[tuple[str, list[tuple[Document, float]]]],
 ) -> None:
+    full_specs = [
+        (f"{target_collection}:{route_name}", route_query, route_filter)
+        for target_collection in collection_routes
+        for route_name, route_query, route_filter in route_specs
+    ]
     spec_map = {
         route_name: (route_query, route_filter)
-        for route_name, route_query, route_filter in route_specs
+        for route_name, route_query, route_filter in full_specs
     }
     for route_name, results in route_results:
         route_query, route_filter = spec_map.get(route_name, ("", None))
@@ -295,6 +301,124 @@ async def _safe_to_thread(
         return default
 
 
+def _build_route_specs(
+    query: str,
+    collection_routes: list[str],
+    route_queries: list[tuple[str, str]],
+    *,
+    filter: dict | None,
+    cat: QueryCategory | None,
+    terms: list[str] | None,
+    depth: RetrievalDepth | None,
+    route_allowlist: set[str] | None,
+) -> tuple[list[tuple[str, str, dict | None]], list[tuple[str, str, str, dict | None]]]:
+    """构建 (per-route 规格, 集合×路由展开的全规格)。
+
+    含 metadata 路由追加与 route_allowlist 过滤；过滤后为空时兜底 semantic 一条。
+    """
+    route_specs: list[tuple[str, str, dict | None]] = [
+        (route_name, route_query, filter) for route_name, route_query in route_queries
+    ]
+    if not (depth and depth.skip_metadata_routes):
+        meta_routes = build_metadata_routes(query, base_filter=filter, cat=cat, terms=terms)
+        if depth and depth.max_metadata_routes < len(meta_routes):
+            meta_routes = meta_routes[: depth.max_metadata_routes]
+        route_specs.extend(meta_routes)
+    if route_allowlist is not None:
+        route_specs = [spec for spec in route_specs if spec[0] in route_allowlist]
+        if not route_specs:
+            route_specs = [("semantic", query, filter)]
+
+    all_specs = [
+        (target_collection, route_name, route_query, route_filter)
+        for target_collection in collection_routes
+        for route_name, route_query, route_filter in route_specs
+    ]
+    return route_specs, all_specs
+
+
+async def _search_one_route(
+    spec: tuple[str, str, str, dict | None],
+    *,
+    k: int,
+    use_rerank: bool,
+    sem: asyncio.Semaphore,
+) -> tuple[str, list[tuple[Document, float]]]:
+    """执行单条路由：向量路由走 async API，其余（BM25）走线程池。"""
+    target_collection, route_name, route_query, route_filter = spec
+    route_id = f"{target_collection}:{route_name}"
+
+    def _run():
+        route_k = _route_adaptive_k(k, use_rerank, route_name)
+        result = _raw_search(
+            route_query,
+            target_collection,
+            route_k,
+            filter=route_filter,
+            route_name=route_name,
+        )
+        return route_id, result
+
+    async with sem:
+        if route_name != "keyword_bm25":
+            try:
+                from rag.common.vectorstore import get_vector_store_manager
+
+                route_k = _route_adaptive_k(k, use_rerank, route_name)
+                result = await get_vector_store_manager().asimilarity_search_with_score(
+                    target_collection,
+                    route_query,
+                    route_k,
+                    filter=route_filter,
+                    timeout=_route_timeout_seconds(route_name),
+                )
+                for doc, _score in result:
+                    doc.metadata["_collection"] = target_collection
+                return route_id, result
+            except Exception as e:
+                logger.warning("Async vector route failed: %s: %s", route_id, e)
+                # ★ B7：只 `logger.warning` 不记失败 ⇒ 这条路由坏了在
+                #   `unexpected_query_failures` 里是隐形的（BM25 半边已由
+                #   `rag.retrieval.bm25.bm25_search` 记录）。返回 `[]` 保留（单路失败可容忍），
+                #   但必须**留下证据**，否则「坏了」与「没查到」不可区分。
+                #   ★ 局部 import：`try` 里那次 import 若本身失败，except 里就不能
+                #   依赖那个还没绑定的名字（否则 UnboundLocalError 会把证据一起吞掉）。
+                from rag.common.vectorstore import get_vector_store_manager as _mgr
+
+                _mgr().record_query_failure(
+                    f"{target_collection}: vector_route {e.__class__.__name__}", exc=e
+                )
+                return route_id, []
+        return await _safe_to_thread(
+            route_id,
+            _run,
+            timeout=_route_timeout_seconds(route_name),
+            default=(route_id, []),
+        )
+
+
+async def _gather_route_results(
+    all_specs: list[tuple[str, str, str, dict | None]],
+    *,
+    k: int,
+    use_rerank: bool,
+    sem: asyncio.Semaphore,
+) -> list[tuple[str, list[tuple[Document, float]]]]:
+    """并发跑全部路由并收集结果；单路异常只 warning 不中断。"""
+    gathered = await asyncio.gather(
+        *(_search_one_route(spec, k=k, use_rerank=use_rerank, sem=sem) for spec in all_specs),
+        return_exceptions=True,
+    )
+    route_results: list[tuple[str, list[tuple[Document, float]]]] = []
+    for item in gathered:
+        if isinstance(item, Exception):
+            logger.warning("Async route gather failed: %s", item)
+            continue
+        if item is not None:
+            route_results.append(item)
+    return route_results
+
+
 async def _amulti_route_search(
     query: str,
     collection_name: str,
@@ -320,92 +444,21 @@ async def _amulti_route_search(
     if depth and depth.skip_bm25:
         route_queries = [(name, rq) for name, rq in route_queries if name != "keyword_bm25"]
 
-    route_specs: list[tuple[str, str, dict | None]] = [
-        (route_name, route_query, filter) for route_name, route_query in route_queries
-    ]
-    if not (depth and depth.skip_metadata_routes):
-        meta_routes = build_metadata_routes(query, base_filter=filter, cat=cat, terms=terms)
-        if depth and depth.max_metadata_routes < len(meta_routes):
-            meta_routes = meta_routes[: depth.max_metadata_routes]
-        route_specs.extend(meta_routes)
-    if route_allowlist is not None:
-        route_specs = [spec for spec in route_specs if spec[0] in route_allowlist]
-        if not route_specs:
-            route_specs = [("semantic", query, filter)]
-
-    all_specs: list[tuple[str, str, str, dict | None]] = [
-        (target_collection, route_name, route_query, route_filter)
-        for target_collection in collection_routes
-        for route_name, route_query, route_filter in route_specs
-    ]
+    route_specs, all_specs = _build_route_specs(
+        query,
+        collection_routes,
+        route_queries,
+        filter=filter,
+        cat=cat,
+        terms=terms,
+        depth=depth,
+        route_allowlist=route_allowlist,
+    )
     if not all_specs:
         return []
 
     sem = asyncio.Semaphore(min(len(all_specs), 4))
-
-    async def _search_one(spec: tuple[str, str, str, dict | None]):
-        target_collection, route_name, route_query, route_filter = spec
-        route_id = f"{target_collection}:{route_name}"
-
-        def _run():
-            route_k = _route_adaptive_k(k, use_rerank, route_name)
-            result = _raw_search(
-                route_query,
-                target_collection,
-                route_k,
-                filter=route_filter,
-                route_name=route_name,
-            )
-            return route_id, result
-
-        async with sem:
-            if route_name != "keyword_bm25":
-                try:
-                    from rag.common.vectorstore import get_vector_store_manager
-
-                    route_k = _route_adaptive_k(k, use_rerank, route_name)
-                    result = await get_vector_store_manager().asimilarity_search_with_score(
-                        target_collection,
-                        route_query,
-                        route_k,
-                        filter=route_filter,
-                        timeout=_route_timeout_seconds(route_name),
-                    )
-                    for doc, _score in result:
-                        doc.metadata["_collection"] = target_collection
-                    return route_id, result
-                except Exception as e:
-                    logger.warning("Async vector route failed: %s: %s", route_id, e)
-                    # ★ B7：只 `logger.warning` 不记失败 ⇒ 这条路由坏了在
-                    #   `unexpected_query_failures` 里是隐形的（BM25 半边已由
-                    #   `rag.retrieval.bm25.bm25_search` 记录）。返回 `[]` 保留（单路失败可容忍），
-                    #   但必须**留下证据**，否则「坏了」与「没查到」不可区分。
-                    #   ★ 局部 import：`try` 里那次 import 若本身失败，except 里就不能
-                    #   依赖那个还没绑定的名字（否则 UnboundLocalError 会把证据一起吞掉）。
-                    from rag.common.vectorstore import get_vector_store_manager as _mgr
-
-                    _mgr().record_query_failure(
-                        f"{target_collection}: vector_route {e.__class__.__name__}", exc=e
-                    )
-                    return route_id, []
-            return await _safe_to_thread(
-                route_id,
-                _run,
-                timeout=_route_timeout_seconds(route_name),
-                default=(route_id, []),
-            )
-
-    gathered = await asyncio.gather(
-        *(_search_one(spec) for spec in all_specs),
-        return_exceptions=True,
-    )
-    route_results: list[tuple[str, list[tuple[Document, float]]]] = []
-    for item in gathered:
-        if isinstance(item, Exception):
-            logger.warning("Async route gather failed: %s", item)
-            continue
-        if item is not None:
-            route_results.append(item)
+    route_results = await _gather_route_results(all_specs, k=k, use_rerank=use_rerank, sem=sem)
 
     logger.info(
         "Async multi-route retrieval query=%s collections=%s routes=%s",
@@ -413,15 +466,7 @@ async def _amulti_route_search(
         collection_routes,
         [route_name for route_name, _, _ in route_specs],
     )
-    _log_route_diagnostics(
-        query,
-        route_specs=[
-            (f"{target_collection}:{route_name}", route_query, route_filter)
-            for target_collection in collection_routes
-            for route_name, route_query, route_filter in route_specs
-        ],
-        route_results=route_results,
-    )
+    _log_route_diagnostics(query, collection_routes, route_specs, route_results)
     merged = await _safe_to_thread(
         "async_route_merge",
         merge_route_results,
