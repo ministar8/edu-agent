@@ -21,7 +21,7 @@ Chroma「Nothing found on disk」）、没有基线、没有退出码 —— **�
 
 判据为什么是「管线序」而不是「是否 survived」
 --------------------------------------------
-`dropped_by` 的取值**有序**（见 `candidate_trace.DROP_REASONS`）：
+`dropped_by` 的取值**有序**（见 `probe_tracing.DROP_REASONS`）：
 
     not_recalled < section_dedup < rrf_threshold < rerank_topn
                  < rel_threshold < window_expand < survived
@@ -52,8 +52,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from evaluation.diagnostics.candidate_trace import DROP_REASONS, load_probes, trace_probe
 from evaluation.gates import retrieval_gate as RG
+from evaluation.probe_tracing import DROP_REASONS, load_probes, trace_probe
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ DEFAULT_PROBE_PATH = "evals/datasets/golden/retrieval_probes.jsonl"
 DEFAULT_BASELINE_PATH = "evals/baselines/probe_baseline.json"
 
 # 存活层级排序：**下标越大 = 目标存活得越久 = 越好**。
-# 直接复用 `candidate_trace.DROP_REASONS` —— 它已经是管线顺序，**不要另建一份**
+# 直接复用 `probe_tracing.DROP_REASONS` —— 它已经是管线顺序，**不要另建一份**
 # （两份顺序迟早漂移，而漂移后门禁会静默给出反向判定）。
 _STAGE_INDEX: dict[str, int] = {reason: i for i, reason in enumerate(DROP_REASONS)}
 
@@ -70,9 +70,7 @@ def _stage_index(dropped_by: str) -> int:
     """把 `dropped_by` 映射成可比较的进度值；未知取值按最差处理并告警。"""
     idx = _STAGE_INDEX.get(dropped_by)
     if idx is None:
-        logger.warning(
-            "未知的 dropped_by=%r —— 按最差（0）处理，请检查 candidate_trace", dropped_by
-        )
+        logger.warning("未知的 dropped_by=%r —— 按最差（0）处理，请检查 probe_tracing", dropped_by)
         return -1
     return idx
 
