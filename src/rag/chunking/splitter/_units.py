@@ -12,6 +12,68 @@ from rag.chunking.splitter._qa import (
 )
 
 _FENCED_CODE_BLOCK_RE = re.compile(r"(?ms)^[ \t]{0,3}(```+|~~~+)[^\n]*\n.*?^[ \t]{0,3}\1[ \t]*$")
+_MD_TABLE_RE = re.compile(r"(?m)(?:^\|.+\|$\n?)+")
+_LATEX_BLOCK_RE = re.compile(r"(?ms)\$\$.+?\$\$")
+
+
+def _unit(
+    text: str,
+    *,
+    code: bool = False,
+    qa: bool = False,
+    table: bool = False,
+    formula: bool = False,
+) -> dict:
+    """构造语义单元 dict（键顺序与拆分前逐字一致）。"""
+    return {"text": text, "is_code": code, "is_qa": qa, "is_table": table, "is_formula": formula}
+
+
+def _stash_blocks(pattern: re.Pattern, text: str, tag: str) -> tuple[str, list[str]]:
+    """把 pattern 命中的块抽成占位符 `__<tag>_BLOCK_N__`，返回 (替换后文本, 块列表)。"""
+    blocks: list[str] = []
+
+    def _repl(m: re.Match) -> str:
+        blocks.append(m.group(0).strip())
+        return f"\n__{tag}_BLOCK_{len(blocks) - 1}__\n"
+
+    return pattern.sub(_repl, text), blocks
+
+
+def _restore_placeholder_unit(block: str, prefix: str, blocks: list[str], flag: str) -> dict | None:
+    """block 为 `<prefix>N__` 且下标可解析 → 还原为标 `flag` 的原子 unit；否则 None。"""
+    if not (block.startswith(prefix) and block.endswith("__")):
+        return None
+    m = re.search(re.escape(prefix) + r"(\d+)__", block)
+    if not m:
+        return None
+    return {
+        "text": blocks[int(m.group(1))],
+        "is_code": flag == "code",
+        "is_qa": flag == "qa",
+        "is_table": flag == "table",
+        "is_formula": flag == "formula",
+    }
+
+
+def _add_line_group_units(units: list[dict], block: str) -> None:
+    """列表项组：连续列表行合并为一个 unit；散文行交给 `_add_prose_unit`。"""
+    list_lines: list[str] = []
+    prose_lines: list[str] = []
+    for line in block.splitlines():
+        if _LIST_ITEM_RE.match(line):
+            if prose_lines:
+                _add_prose_unit(units, "\n".join(prose_lines))
+                prose_lines = []
+            list_lines.append(line)
+        else:
+            if list_lines:
+                units.append(_unit("\n".join(list_lines)))
+                list_lines = []
+            prose_lines.append(line)
+    if list_lines:
+        units.append(_unit("\n".join(list_lines)))
+    if prose_lines:
+        _add_prose_unit(units, "\n".join(prose_lines))
 
 
 def _parse_semantic_units(text: str) -> list[dict]:
@@ -23,146 +85,34 @@ def _parse_semantic_units(text: str) -> list[dict]:
     Returns:
         [{"text": str, "is_code": bool, "is_qa": bool, "is_table": bool, "is_formula": bool}, ...]
     """
-    units: list[dict] = []
-
-    # 1. 提取代码块，替换为占位符
-    code_blocks: list[str] = []
-
-    def _code_placeholder(m: re.Match) -> str:
-        code_blocks.append(m.group(0).strip())
-        return f"\n__CODE_BLOCK_{len(code_blocks) - 1}__\n"
-
-    text_no_code = _FENCED_CODE_BLOCK_RE.sub(_code_placeholder, text)
-
-    # 2. 提取 Markdown 表格，替换为占位符
-    _MD_TABLE_RE = re.compile(r"(?m)(?:^\|.+\|$\n?)+")
-    table_blocks: list[str] = []
-
-    def _table_placeholder(m: re.Match) -> str:
-        table_blocks.append(m.group(0).strip())
-        return f"\n__TABLE_BLOCK_{len(table_blocks) - 1}__\n"
-
-    text_no_table = _MD_TABLE_RE.sub(_table_placeholder, text_no_code)
-
-    # 3. 提取 LaTeX 公式块，替换为占位符
-    _LATEX_BLOCK_RE = re.compile(r"(?ms)\$\$.+?\$\$")
-    formula_blocks: list[str] = []
-
-    def _formula_placeholder(m: re.Match) -> str:
-        formula_blocks.append(m.group(0).strip())
-        return f"\n__FORMULA_BLOCK_{len(formula_blocks) - 1}__\n"
-
-    text_no_formula = _LATEX_BLOCK_RE.sub(_formula_placeholder, text_no_table)
+    # 1-3. 提取代码块 / 表格 / 公式为占位符（原子单元，逐块整块还原）
+    text_no_code, code_blocks = _stash_blocks(_FENCED_CODE_BLOCK_RE, text, "CODE")
+    text_no_table, table_blocks = _stash_blocks(_MD_TABLE_RE, text_no_code, "TABLE")
+    text_no_formula, formula_blocks = _stash_blocks(_LATEX_BLOCK_RE, text_no_table, "FORMULA")
 
     # 4. 预扫描：把 Q&A 合并为原子块
     text_with_qa = _merge_qa_blockquotes(text_no_formula)
 
-    # 5. 按空行切分为文本块
-    blocks = re.split(r"\n{2,}", text_with_qa.strip())
-
-    for block in blocks:
+    # 5. 按空行切分为文本块，逐块还原
+    units: list[dict] = []
+    for block in re.split(r"\n{2,}", text_with_qa.strip()):
         block = block.strip()
         if not block:
             continue
 
-        # 代码块占位符还原
-        if block.startswith("__CODE_BLOCK_") and block.endswith("__"):
-            idx_match = re.search(r"__CODE_BLOCK_(\d+)__", block)
-            if idx_match:
-                units.append(
-                    {
-                        "text": code_blocks[int(idx_match.group(1))],
-                        "is_code": True,
-                        "is_qa": False,
-                        "is_table": False,
-                        "is_formula": False,
-                    }
-                )
-                continue
-
-        # 表格占位符还原
-        if block.startswith("__TABLE_BLOCK_") and block.endswith("__"):
-            idx_match = re.search(r"__TABLE_BLOCK_(\d+)__", block)
-            if idx_match:
-                units.append(
-                    {
-                        "text": table_blocks[int(idx_match.group(1))],
-                        "is_code": False,
-                        "is_qa": False,
-                        "is_table": True,
-                        "is_formula": False,
-                    }
-                )
-                continue
-
-        # 公式块占位符还原
-        if block.startswith("__FORMULA_BLOCK_") and block.endswith("__"):
-            idx_match = re.search(r"__FORMULA_BLOCK_(\d+)__", block)
-            if idx_match:
-                units.append(
-                    {
-                        "text": formula_blocks[int(idx_match.group(1))],
-                        "is_code": False,
-                        "is_qa": False,
-                        "is_table": False,
-                        "is_formula": True,
-                    }
-                )
-                continue
-
-        # Q&A 原子单元（已被 _merge_qa_blockquotes 标记）
-        if block.startswith("__QA_PAIR_START__"):
+        restored = (
+            _restore_placeholder_unit(block, "__CODE_BLOCK_", code_blocks, "code")
+            or _restore_placeholder_unit(block, "__TABLE_BLOCK_", table_blocks, "table")
+            or _restore_placeholder_unit(block, "__FORMULA_BLOCK_", formula_blocks, "formula")
+        )
+        if restored is not None:
+            units.append(restored)
+        elif block.startswith("__QA_PAIR_START__"):
+            # Q&A 原子单元（已被 _merge_qa_blockquotes 标记）
             inner = block[len("__QA_PAIR_START__") :].strip()
-            inner = _restore_code_placeholders(inner, code_blocks)
-            units.append(
-                {
-                    "text": inner,
-                    "is_code": False,
-                    "is_qa": True,
-                    "is_table": False,
-                    "is_formula": False,
-                }
-            )
-            continue
-
-        # 列表项组：连续的列表行合并为一个单元
-        lines = block.splitlines()
-        list_lines: list[str] = []
-        prose_lines: list[str] = []
-
-        for line in lines:
-            if _LIST_ITEM_RE.match(line):
-                if prose_lines:
-                    _add_prose_unit(units, "\n".join(prose_lines))
-                    prose_lines = []
-                list_lines.append(line)
-            else:
-                if list_lines:
-                    units.append(
-                        {
-                            "text": "\n".join(list_lines),
-                            "is_code": False,
-                            "is_qa": False,
-                            "is_table": False,
-                            "is_formula": False,
-                        }
-                    )
-                    list_lines = []
-                prose_lines.append(line)
-
-        # 收尾：把缓冲区里剩下的行落进 units
-        if list_lines:
-            units.append(
-                {
-                    "text": "\n".join(list_lines),
-                    "is_code": False,
-                    "is_qa": False,
-                    "is_table": False,
-                    "is_formula": False,
-                }
-            )
-        if prose_lines:
-            _add_prose_unit(units, "\n".join(prose_lines))
+            units.append(_unit(_restore_code_placeholders(inner, code_blocks), qa=True))
+        else:
+            _add_line_group_units(units, block)
 
     return units
 
