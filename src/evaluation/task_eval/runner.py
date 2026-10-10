@@ -463,6 +463,48 @@ def mechanical_failures(
 # ── 执行 ──────────────────────────────────────────────────
 
 
+def _assemble_agent(saver, store):
+    """装配 agent：挂 checkpointer + store（与 `service.lifespan` 逐字对齐）。"""
+    from agents.agents import DEFAULT_AGENT, get_agent
+    from memory.runtime import set_store
+
+    set_store(store)
+    agent = get_agent(DEFAULT_AGENT)
+    agent.checkpointer = saver
+    agent.store = store
+    return agent
+
+
+async def _run_with_agent(
+    agent,
+    turns: list[str],
+    *,
+    task: str,
+    case_id: str,
+    sessions: list[list[str]] | None,
+    store_enabled: bool,
+):
+    """按 task 分派：``memory`` 走跨会话的 `run_sessions`，其余走会话内的 `run_turns`。"""
+    from agent_behavior_smoke import (  # type: ignore[import-not-found]
+        make_user_id,
+        run_sessions,
+        run_turns,
+    )
+
+    if task == "memory":
+        # ★ 跨会话：每段会话独立 thread、共享 user_id、跑前跑后自动清理。
+        #   分组以传入的 sessions 为准；未标注时退化为「每轮一段」。
+        eff_sessions = sessions if sessions else ([[t] for t in turns] if turns else [])
+        return await run_sessions(
+            agent,
+            eff_sessions,
+            user_id=make_user_id(case_id or "memory"),
+            cleanup_first=True,
+            store_enabled=store_enabled,
+        )
+    return await run_turns(agent, turns)
+
+
 async def _run_agent(
     turns: list[str],
     *,
@@ -505,35 +547,20 @@ async def _run_agent(
     if str(ROOT / "src") not in sys.path:
         sys.path.insert(0, str(ROOT / "src"))
 
-    from agent_behavior_smoke import (  # type: ignore[import-not-found]
-        make_user_id,
-        run_sessions,
-        run_turns,
-    )
-
-    from agents.agents import DEFAULT_AGENT, get_agent
     from memory import initialize_database, initialize_store
-    from memory.runtime import set_store
 
     async with initialize_database() as saver, initialize_store() as store:
         if hasattr(saver, "setup"):
             await saver.setup()
-        set_store(store)
-        agent = get_agent(DEFAULT_AGENT)
-        agent.checkpointer = saver
-        agent.store = store
-        if task == "memory":
-            # ★ 跨会话：每段会话独立 thread、共享 user_id、跑前跑后自动清理。
-            #   分组以传入的 sessions 为准；未标注时退化为「每轮一段」。
-            eff_sessions = sessions if sessions else ([[t] for t in turns] if turns else [])
-            return await run_sessions(
-                agent,
-                eff_sessions,
-                user_id=make_user_id(case_id or "memory"),
-                cleanup_first=True,
-                store_enabled=store_enabled,
-            )
-        return await run_turns(agent, turns)
+        agent = _assemble_agent(saver, store)
+        return await _run_with_agent(
+            agent,
+            turns,
+            task=task,
+            case_id=case_id,
+            sessions=sessions,
+            store_enabled=store_enabled,
+        )
 
 
 def _tool_call_summaries(payloads: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -620,45 +647,33 @@ def _apply_memory_judgement(
     return extra
 
 
-async def run_case(
-    case: TaskCase,
-    *,
-    k: int = 5,
-    use_rerank: bool = True,
-    run_agent: bool = True,
-    store_enabled: bool = True,
-) -> CaseRecord:
-    """执行一条 case。`run_agent=False` 时只跑检索探针（离线/无 LLM 时可用）。
+async def _execute_agent_case(
+    case: TaskCase, *, run_agent: bool, store_enabled: bool
+) -> dict[str, Any]:
+    """跑 agent 并收集产物，外加本轮的读链状态明细。
 
-    `store_enabled`：**paired control**（2026-10-06 Step 5）——仅对 memory 生效。
-      `False` ⇒ 临时摘除 agent.store，B 段不应有任何记忆卡 ⇒ `recalled_actual=False`。
-      与 `True` 组配对，可把「召回确实来自 Store」从推断变成**机械对照**。
+    返回 ``reply / hard_fails / payloads / memory_cards / grade_scores / turn_log /
+    episodes / episodes_read_failed / read_status_detail``。
+
+    ★ B4 取证单元 ②的「清空」半边：本 case 的读链状态从这里开始收集（`load_memory` 每轮往
+      `agents.teaching_graph` 的模块级通道追加一条）。不 reset 就是「上一条 case 的 Store
+      故障一路跟着这一条」—— 与 `_query_failures` 同一个失效模式，见
+      `vectorstore.reset_query_failures` 的**两个单元边界**。
     """
-    started = time.perf_counter()
-    record = CaseRecord(
-        case_id=case.case_id,
-        task=case.task,
-        task_mode=case.task_mode,
-        query=case.query,
-        turns=case.all_turns,
-        gold_status=case.gold_status,
-    )
-
-    reply = ""
-    hard_fails: list[str] = []
-    payloads: list[dict[str, Any]] = []
-    memory_cards: list[str] = []
-    grade_scores: list[dict[str, Any]] = []
-    turn_log: list[dict[str, Any]] = []
-    episodes: list[dict[str, Any]] = []
-    episodes_read_failed = False
-    # ★ B4 取证单元 ②的「清空」半边：本 case 的读链状态从这里开始收集
-    #   （`load_memory` 每轮往 `agents.teaching_graph` 的模块级通道追加一条）。
-    #   不 reset 就是「上一条 case 的 Store 故障一路跟着这一条」—— 与 `_query_failures`
-    #   同一个失效模式，见 `vectorstore.reset_query_failures` 的**两个单元边界**。
     from agents.teaching_graph import memory_read_statuses, reset_memory_read_statuses
 
     reset_memory_read_statuses()
+    out: dict[str, Any] = {
+        "reply": "",
+        "hard_fails": [],
+        "payloads": [],
+        "memory_cards": [],
+        "grade_scores": [],
+        "turn_log": [],
+        "episodes": [],
+        "episodes_read_failed": False,
+        "read_status_detail": [],
+    }
     if run_agent:
         try:
             result = await _run_agent(
@@ -668,32 +683,46 @@ async def run_case(
                 sessions=case.all_sessions if case.task == "memory" else None,
                 store_enabled=store_enabled,
             )
-            reply = result.reply
-            hard_fails = list(result.hard_fails)
-            payloads = list(result.tool_payloads)
-            memory_cards = list(getattr(result, "memory_cards", []) or [])
-            grade_scores = list(getattr(result, "grade_scores", []) or [])
-            turn_log = list(getattr(result, "turn_log", []) or [])
-            episodes = list(getattr(result, "episodes", []) or [])
-            episodes_read_failed = bool(getattr(result, "episodes_read_failed", False))
+            out["reply"] = result.reply
+            out["hard_fails"] = list(result.hard_fails)
+            out["payloads"] = list(result.tool_payloads)
+            out["memory_cards"] = list(getattr(result, "memory_cards", []) or [])
+            out["grade_scores"] = list(getattr(result, "grade_scores", []) or [])
+            out["turn_log"] = list(getattr(result, "turn_log", []) or [])
+            out["episodes"] = list(getattr(result, "episodes", []) or [])
+            out["episodes_read_failed"] = bool(getattr(result, "episodes_read_failed", False))
         except Exception as e:  # noqa: BLE001
             logger.warning("case %s agent 执行失败: %s", case.case_id, e)
-            hard_fails.append(f"invoke 抛错: {type(e).__name__}: {e}")
+            out["hard_fails"].append(f"invoke 抛错: {type(e).__name__}: {e}")
+    out["read_status_detail"] = memory_read_statuses() if run_agent else []
+    return out
 
+
+def _write_agent_fields(record: CaseRecord, case: TaskCase, agent_out: dict[str, Any]) -> None:
+    """落盘 agent 侧字段 + B4/F5 读链状态（逐轮明细 + 聚合值）。"""
+    record.reply = agent_out["reply"]
+    record.hard_fails = agent_out["hard_fails"]
+    record.gold = asdict(case.gold)
+    record.tool_calls = _tool_call_summaries(agent_out["payloads"])
     # ★ B4：把本轮捕获到的读链状态聚合成**一个** `memory_read_status` 落盘（四态无损）。
     # ★ F5：聚合**之前**的逐轮明细先原样落盘（`memory_read_statuses`）—— 聚合规则第 1 条
     #   「有卡 ⇒ success」压掉的 `failed` 只有在这份明细里才还看得见。明细只作凭据、不进公式。
-    _read_status_detail = memory_read_statuses() if run_agent else []
-    record.memory_read_statuses = list(_read_status_detail)
-    record.memory_read_status = aggregate_memory_read_status(_read_status_detail, memory_cards)
+    record.memory_read_statuses = list(agent_out["read_status_detail"])
+    record.memory_read_status = aggregate_memory_read_status(
+        agent_out["read_status_detail"], agent_out["memory_cards"]
+    )
+
+
+async def _run_probe(case: TaskCase, *, k: int, use_rerank: bool):
+    """B7：reset → 跑检索探针 → 读回路由失败并归状态（只升不降）。"""
+    from rag.common.vectorstore import get_vector_store_manager
 
     # ★ B7 的 reset 调用点 ②（两个独立取证单元边界之一）：每次检索探针之前清空
     #   ⇒ 探针期间记录的查询故障**只属于这次探针**，紧接着在下面被消费。
     #   顺序不可颠倒（reset 早于消费）也不许在单元内部再加清点（v1.3 撤销了第三点，
     #   见 `rag/routes._amulti_route_search` 的注释与回归锁 `8k`）。
-    from rag.common.vectorstore import get_vector_store_manager
-
-    get_vector_store_manager().reset_query_failures()
+    mgr = get_vector_store_manager()
+    mgr.reset_query_failures()
     probe = await probe_retrieval(
         case.query, task_mode=case.task_mode or None, k=k, use_rerank=use_rerank
     )
@@ -702,14 +731,21 @@ async def run_case(
     #   BM25 全线故障：`status='ok' pack_len=755`）⇒ 只看探针会把「路由坏了」写成「没查到」。
     #   非空清单 ⇒ 升为 `error`（只升不降，纯函数 `map_route_failures`），清单落 `route_failure_notes`
     #   作凭据；归因门复用 `judge.retrieval_layer_gate_open`（`error` ⇒ 关门，不另写一份规则）。
-    effective_status, route_failure_notes = map_route_failures(
-        get_vector_store_manager().query_failures, probe.status
-    )
+    effective_status, route_failure_notes = map_route_failures(mgr.query_failures, probe.status)
+    return probe, effective_status, route_failure_notes
 
-    record.reply = reply
-    record.hard_fails = hard_fails
-    record.gold = asdict(case.gold)
-    record.tool_calls = _tool_call_summaries(payloads)
+
+def _write_retrieval_fields(
+    record: CaseRecord,
+    probe,
+    top,
+    *,
+    k: int,
+    use_rerank: bool,
+    effective_status: str,
+    route_failure_notes: list[str],
+) -> None:
+    """落盘检索探针侧字段 + `retrieval_cfg` + `top_items`。"""
     record.pack_nonempty = probe.ok
     record.pack_len = probe.pack_len
     record.evidence_count = probe.evidence_count
@@ -721,8 +757,6 @@ async def run_case(
     #   `rerank_used` 不在这里存布尔 —— 它由 CaseRecord 的派生 property（status=="success"）给出。
     #   缺字段（替身/老链路探针）⇒ ""（未知），与「不回填」纪律一致。
     record.rerank_status = getattr(probe, "rerank_status", "")
-
-    top = probe.top_k(k)
     # ★ 落盘「配置 + top-k 输入」，让检索侧指标可离线重算（字段说明见 CaseRecord）
     from core.settings import settings as _prov
 
@@ -744,24 +778,30 @@ async def run_case(
         }
         for i in top
     ]
-    # ★ 2026-10-06 修：**检索到的 chunk 没有任何 KP 元数据时，`kp_hit` 记 N/A 而非 False** ——
-    #   此时「覆盖与否」不可判定，记 False 会变成**系统性假阴性**（把 0.714 压成 0.333，
-    #   直接误导 Phase 1 的投入方向）。`metrics.rate` 排除 None，故 N/A 不进分母。
-    #   ★ 2026-10-07 全量扫描更正缺口的**范围**（原注释说「`basic/`、`advanced/` 集合缺标签」，
-    #     方向对但说大了）：真正无 `knowledge_points` 的是 **`doc_role=textbook`（basic 讲义）的
-    #     `detail` 块**，且当前只剩 **10 条**（`data_structure` 8 / `computer_organization` 2）——
-    #     四个学科集合的覆盖率为 **99.0% / 99.6% / 100% / 100%**。
-    #     另有 `questions` 集合 692 条无标签块（`exam-*-answer` 真题答案），但 **practice 模式的
-    #     可用层是 `["advanced","basic"]`**（`schema/task_policy.py` 还强制 practice 的
-    #     `exam_resources` 全 forbidden）⇒ 那些块不进证据包，与本判据无关。
-    #   ⇒ 归档里 Generate 那 **8 条 N/A** 曾有两条候选解释，都**不能定论**（记录没存
-    #     `evidence_id` ⇒ 分不清某块走的是哪条路径）：
-    #       ① 旧说「当时索引未打完标签」—— 现索引下裸向量重查 15/15 的 top-5 均带 KP；
-    #       ② 新说 **#27**：`rag/layer_recall.py` 的 top-up 路径把 `knowledge_points`
-    #          **写死成 `[]`**（主路径 `rag/evidence.py` 是用解析器读的）⇒ 某题 top-5
-    #          若全走 top-up，`_all_kp(top)` 就是空 ⇒ 判 N/A，与索引有没有标签无关。
-    #     ② 有按构造的实证，且能解释 Step 9 探针归档里 13 条「索引明明有标、`kp` 却为空」
-    #     的 method 块 ⇒ 比 ① 更可能。处置见 `docs/EXPERIMENTS.md` §20.5 #27 / D12。
+
+
+def _write_retrieval_metrics(record: CaseRecord, case: TaskCase, top, k: int) -> None:
+    """落盘检索侧指标（kp / category / exam）。
+
+    ★ 2026-10-06 修：**检索到的 chunk 没有任何 KP 元数据时，`kp_hit` 记 N/A 而非 False** ——
+      此时「覆盖与否」不可判定，记 False 会变成**系统性假阴性**（把 0.714 压成 0.333，
+      直接误导 Phase 1 的投入方向）。`metrics.rate` 排除 None，故 N/A 不进分母。
+    ★ 2026-10-07 全量扫描更正缺口的**范围**（原注释说「`basic/`、`advanced/` 集合缺标签」，
+      方向对但说大了）：真正无 `knowledge_points` 的是 **`doc_role=textbook`（basic 讲义）的
+      `detail` 块**，且当前只剩 **10 条**（`data_structure` 8 / `computer_organization` 2）——
+      四个学科集合的覆盖率为 **99.0% / 99.6% / 100% / 100%**。
+      另有 `questions` 集合 692 条无标签块（`exam-*-answer` 真题答案），但 **practice 模式的
+      可用层是 `["advanced","basic"]`**（`schema/task_policy.py` 还强制 practice 的
+      `exam_resources` 全 forbidden）⇒ 那些块不进证据包，与本判据无关。
+    ⇒ 归档里 Generate 那 **8 条 N/A** 曾有两条候选解释，都**不能定论**（记录没存
+      `evidence_id` ⇒ 分不清某块走的是哪条路径）：
+        ① 旧说「当时索引未打完标签」—— 现索引下裸向量重查 15/15 的 top-5 均带 KP；
+        ② 新说 **#27**：`rag/layer_recall.py` 的 top-up 路径把 `knowledge_points`
+           **写死成 `[]`**（主路径 `rag/evidence.py` 是用解析器读的）⇒ 某题 top-5
+           若全走 top-up，`_all_kp(top)` 就是空 ⇒ 判 N/A，与索引有没有标签无关。
+      ② 有按构造的实证，且能解释 Step 9 探针归档里 13 条「索引明明有标、`kp` 却为空」
+      的 method 块 ⇒ 比 ① 更可能。处置见 `docs/EXPERIMENTS.md` §20.5 #27 / D12。
+    """
     _retrieved_kp = _all_kp(top)
     record.kp_hit = (
         metrics.kp_coverage(case.gold.expected_kp, _retrieved_kp) if _retrieved_kp else None
@@ -770,6 +810,17 @@ async def run_case(
     record.category_hit = metrics.category_hit(case.subject, [i.category for i in top])
     record.exam_hit = metrics.exam_hit_at_k([i.is_exam for i in top], k)
 
+
+def _write_scoring_fields(
+    record: CaseRecord,
+    case: TaskCase,
+    probe,
+    *,
+    reply: str,
+    hard_fails: list[str],
+    effective_status: str,
+) -> None:
+    """落盘 `generation_ok` + Generate 交付项 + `failure_reason` + Verify 行为层三判据。"""
     record.generation_ok = generation_ok(case.task, reply, hard_fails)
     # ── Generate 交付五项（机械判据 + 既有 judge 质量分，**不需额外 LLM 调用**）──
     if case.task == "generate":
@@ -794,64 +845,101 @@ async def run_case(
         record.ver_fabricated = metrics.verify_fabricated(reply)
         record.ver_exam_item_cited = metrics.verify_exam_item_cited(reply)
         record.ver_exam_year_only = metrics.verify_exam_year_only(reply)
-    # ── Memory：**先验 case validity，再判三维**（2026-10-06 Step 5）────────
-    #   ★ 顺序不可颠倒：若 A 段没凑成前置条件（如要求两次高分、实际 100/52），
-    #     则 B 段「没召回」是**前置条件没成立**的结果，不是产品失败。
-    #     先判 validity 才能把这类样本从分母里剔掉 —— 否则 grading LLM 的随机性
-    #     会污染 Memory 指标（把「case 没凑成」记成「产品不召回」）。
-    if case.task == "memory":
-        _validity = memory_scorer.check_case_validity(
-            setup=case.gold.setup_conditions,
-            grade_scores=grade_scores,
-            session_scope=0,  # 前置条件归 A 段
-        )
-        record.validity_valid = _validity.valid
-        record.validity_reason = _validity.reason
-        record.grade_scores = grade_scores
-        record.turn_log = turn_log
-        record.episodes = episodes
-        record.episodes_read_failed = episodes_read_failed
-        record.store_enabled = store_enabled
 
-        # ★ 写入证据缺失（2026-10-07 事故驱动；2026-10-08 review 修正**位置**与**归因**）
-        #   ① 位置：必须在 `case.task == "memory"` **之内**。非 memory 任务走 `run_turns`，
-        #      它照抓 `grade_scores`、却从不读 Store ⇒ `episodes` 恒空；放外面等于宣布
-        #      「所有批改类 case 天生写链断裂」⇒ grade/verify/qa 的实跑会在**第一条**就
-        #      被 `cli._run` 中止（且 `break` 在 `append_record` 之前，那条记录连盘都不落）。
-        #   ② 归因：**只说「证据缺失」，不指认环境。** 「没落库」既可能是 TEI 挂（环境），
-        #      也可能是缺陷 C 那种 `record_grade` 接线断（产品）—— 两者症状相同，而
-        #      `memory/safe.py` 只留一行 WARNING。环境类另有两道真判据：`preflight_check()`
-        #      与 `is_env_error()`（看真实报错文本）。
-        #   ③ 读链自己抛过错时（`episodes_read_failed`）不做任何写入推断。
-        record.memory_write_missing = memory_write_missing(
-            store_enabled=store_enabled,
-            grade_calls=sum(1 for g in grade_scores if g.get("score") is not None),
-            episodes=episodes,
-            read_failed=episodes_read_failed,
-        )
-        _valid = _validity.valid
-        if record.memory_write_missing and _valid is not False:
-            _valid = False
-            record.validity_reason = (
-                (f"{_validity.reason}；" if _validity.reason else "")
-                + "A 段有批改、Store 开着却没读到 episode ⇒ 记忆写入证据缺失（**未归因**），本条不进 Memory 分母"
-            )
-        record.validity_valid = _valid
 
-        if _valid is False:
-            # 前置条件不成立（或写入证据缺失）⇒ Memory 三项**保持 None**（N/A，不进分母），
-            #   并标 `case_invalid`（**不**标 memory_miss —— 那会被读成「产品没召回」）。
-            record.memory_cards = memory_cards
-            if "case_invalid" not in record.failure_reason:
-                record.failure_reason = [*record.failure_reason, "case_invalid"]
-        else:
-            record.failure_reason = [
-                *record.failure_reason,
-                *_apply_memory_judgement(record, case, memory_cards, reply),
-            ]
+def _apply_write_missing_gate(
+    record: CaseRecord,
+    validity,
+    grade_scores: list[dict[str, Any]],
+    episodes: list[dict[str, Any]],
+    episodes_read_failed: bool,
+    store_enabled: bool,
+) -> bool:
+    """写入证据缺失 ⇒ 把 validity 降为 False（**未归因**）；返回最终 validity 值。
+
+    ★ 写入证据缺失（2026-10-07 事故驱动；2026-10-08 review 修正**位置**与**归因**）
+      ① 位置：必须在 `case.task == "memory"` **之内**。非 memory 任务走 `run_turns`，
+         它照抓 `grade_scores`、却从不读 Store ⇒ `episodes` 恒空；放外面等于宣布
+         「所有批改类 case 天生写链断裂」⇒ grade/verify/qa 的实跑会在**第一条**就
+         被 `cli._run` 中止（且 `break` 在 `append_record` 之前，那条记录连盘都不落）。
+      ② 归因：**只说「证据缺失」，不指认环境。** 「没落库」既可能是 TEI 挂（环境），
+         也可能是缺陷 C 那种 `record_grade` 接线断（产品）—— 两者症状相同，而
+         `memory/safe.py` 只留一行 WARNING。环境类另有两道真判据：`preflight_check()`
+         与 `is_env_error()`（看真实报错文本）。
+      ③ 读链自己抛过错时（`episodes_read_failed`）不做任何写入推断。
+    """
+    record.memory_write_missing = memory_write_missing(
+        store_enabled=store_enabled,
+        grade_calls=sum(1 for g in grade_scores if g.get("score") is not None),
+        episodes=episodes,
+        read_failed=episodes_read_failed,
+    )
+    _valid = validity.valid
+    if record.memory_write_missing and _valid is not False:
+        _valid = False
+        record.validity_reason = (
+            (f"{validity.reason}；" if validity.reason else "")
+            + "A 段有批改、Store 开着却没读到 episode ⇒ 记忆写入证据缺失（**未归因**），本条不进 Memory 分母"
+        )
+    record.validity_valid = _valid
+    return _valid
+
+
+def _write_memory_fields(
+    record: CaseRecord,
+    case: TaskCase,
+    agent_out: dict[str, Any],
+    *,
+    store_enabled: bool,
+    reply: str,
+) -> None:
+    """Memory 专有：**先验 case validity，再判三维**（2026-10-06 Step 5）。
+
+    ★ 顺序不可颠倒：若 A 段没凑成前置条件（如要求两次高分、实际 100/52），
+      则 B 段「没召回」是**前置条件没成立**的结果，不是产品失败。
+      先判 validity 才能把这类样本从分母里剔掉 —— 否则 grading LLM 的随机性
+      会污染 Memory 指标（把「case 没凑成」记成「产品不召回」）。
+    """
+    memory_cards = agent_out["memory_cards"]
+    grade_scores = agent_out["grade_scores"]
+    episodes = agent_out["episodes"]
+    episodes_read_failed = agent_out["episodes_read_failed"]
+
+    _validity = memory_scorer.check_case_validity(
+        setup=case.gold.setup_conditions,
+        grade_scores=grade_scores,
+        session_scope=0,  # 前置条件归 A 段
+    )
+    record.validity_valid = _validity.valid
+    record.validity_reason = _validity.reason
+    record.grade_scores = grade_scores
+    record.turn_log = agent_out["turn_log"]
+    record.episodes = episodes
+    record.episodes_read_failed = episodes_read_failed
+    record.store_enabled = store_enabled
+
+    _valid = _apply_write_missing_gate(
+        record, _validity, grade_scores, episodes, episodes_read_failed, store_enabled
+    )
+
+    if _valid is False:
+        # 前置条件不成立（或写入证据缺失）⇒ Memory 三项**保持 None**（N/A，不进分母），
+        #   并标 `case_invalid`（**不**标 memory_miss —— 那会被读成「产品没召回」）。
+        record.memory_cards = memory_cards
+        if "case_invalid" not in record.failure_reason:
+            record.failure_reason = [*record.failure_reason, "case_invalid"]
+    else:
+        record.failure_reason = [
+            *record.failure_reason,
+            *_apply_memory_judgement(record, case, memory_cards, reply),
+        ]
+
+
+def _write_env_and_provenance(record: CaseRecord, probe, started: float) -> None:
+    """环境类错误判定 + `primary_failure` + provenance / 模型 / 延迟落盘。"""
     # ★ 环境类错误优先判定：命中则**不**把它计入 case 级 failure_reason，
     #   由调用方中止整轮（见 cli._run），避免「账号没额度」被记成「工具报错」。
-    record.env_error = is_env_error(" ".join(hard_fails) + " " + probe.error)
+    record.env_error = is_env_error(" ".join(record.hard_fails) + " " + probe.error)
     if record.env_error and not (record.hard_fails or record.retrieval_error):
         # 中止日志从 `hard_fails[0]` / `retrieval_error` 取文案；两者都空时那行会打成**空串**
         # （review C1 的姊妹问题：运维看到的是一句没有原因的「中止」）。兜一句可操作的话。
@@ -887,6 +975,62 @@ async def run_case(
     record.date = str(prov.get("recorded_at") or "")
     record.agent_model = str(getattr(_settings, "DEFAULT_MODEL", "") or "")
     record.latency_ms = round((time.perf_counter() - started) * 1000, 3)
+
+
+async def run_case(
+    case: TaskCase,
+    *,
+    k: int = 5,
+    use_rerank: bool = True,
+    run_agent: bool = True,
+    store_enabled: bool = True,
+) -> CaseRecord:
+    """执行一条 case。`run_agent=False` 时只跑检索探针（离线/无 LLM 时可用）。
+
+    `store_enabled`：**paired control**（2026-10-06 Step 5）——仅对 memory 生效。
+      `False` ⇒ 临时摘除 agent.store，B 段不应有任何记忆卡 ⇒ `recalled_actual=False`。
+      与 `True` 组配对，可把「召回确实来自 Store」从推断变成**机械对照**。
+    """
+    started = time.perf_counter()
+    record = CaseRecord(
+        case_id=case.case_id,
+        task=case.task,
+        task_mode=case.task_mode,
+        query=case.query,
+        turns=case.all_turns,
+        gold_status=case.gold_status,
+    )
+
+    agent_out = await _execute_agent_case(case, run_agent=run_agent, store_enabled=store_enabled)
+    _write_agent_fields(record, case, agent_out)
+
+    probe, effective_status, route_failure_notes = await _run_probe(
+        case, k=k, use_rerank=use_rerank
+    )
+    top = probe.top_k(k)
+    _write_retrieval_fields(
+        record,
+        probe,
+        top,
+        k=k,
+        use_rerank=use_rerank,
+        effective_status=effective_status,
+        route_failure_notes=route_failure_notes,
+    )
+    _write_retrieval_metrics(record, case, top, k)
+    _write_scoring_fields(
+        record,
+        case,
+        probe,
+        reply=agent_out["reply"],
+        hard_fails=agent_out["hard_fails"],
+        effective_status=effective_status,
+    )
+    if case.task == "memory":
+        _write_memory_fields(
+            record, case, agent_out, store_enabled=store_enabled, reply=agent_out["reply"]
+        )
+    _write_env_and_provenance(record, probe, started)
     return record
 
 
