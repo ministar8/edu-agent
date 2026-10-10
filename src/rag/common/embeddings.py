@@ -58,6 +58,41 @@ def _embedding_api_key() -> str:
     return settings.EMBEDDING_API_KEY.get_secret_value() if settings.EMBEDDING_API_KEY else ""
 
 
+def _truncate_texts(texts: list[str]) -> tuple[list[str], int, list[int]]:
+    """截断超长文本 + 空文本占位；返回 (截断后文本, 超长条数, 原始长度)。
+
+    同步 `_embed_batch` 与异步 `_aembed_batch` 共用（此前是两段逐字重复）。
+    """
+    truncated: list[str] = []
+    truncated_count = 0
+    original_lengths: list[int] = []
+    for t in texts:
+        s = str(t).strip()
+        if not s:
+            s = " "  # 空文本用空格占位，避免 API 拒绝
+        original_lengths.append(len(s))
+        if len(s) > MAX_TEXT_LENGTH:
+            truncated_count += 1
+        truncated.append(s[:MAX_TEXT_LENGTH])
+    return truncated, truncated_count, original_lengths
+
+
+def _update_batch_metrics(
+    mt, texts: list[str], original_lengths: list[int], truncated_count: int
+) -> None:
+    """写入批次规模 / 平均长度 / 最大长度 / 截断数（同步与异步共用）。"""
+    mt.update(
+        {
+            "batch_size": len(texts),
+            "avg_text_chars": round(sum(original_lengths) / len(original_lengths), 3)
+            if original_lengths
+            else 0.0,
+            "max_text_chars": max(original_lengths) if original_lengths else 0,
+            "truncated_count": truncated_count,
+        }
+    )
+
+
 class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
     """OpenAI 兼容 Embedding（支持 TEI / DashScope / 任何 OpenAI 格式 API，自动分批）"""
 
@@ -102,31 +137,12 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         当批量请求失败或返回 NaN 时，自动逐条回退重试。
         """
         # 截断超长文本 + 过滤空文本，防止 400 错误
-        truncated = []
-        truncated_count = 0
-        original_lengths: list[int] = []
-        for t in texts:
-            s = str(t).strip()
-            if not s:
-                s = " "  # 空文本用空格占位，避免 API 拒绝
-            original_lengths.append(len(s))
-            if len(s) > MAX_TEXT_LENGTH:
-                truncated_count += 1
-            truncated.append(s[:MAX_TEXT_LENGTH])
+        truncated, truncated_count, original_lengths = _truncate_texts(texts)
 
         with metrics.timer(
             "embedding_batch", stage="embeddings", tags={"model": self.model, "mode": "sync"}
         ) as mt:
-            mt.update(
-                {
-                    "batch_size": len(texts),
-                    "avg_text_chars": round(sum(original_lengths) / len(original_lengths), 3)
-                    if original_lengths
-                    else 0.0,
-                    "max_text_chars": max(original_lengths) if original_lengths else 0,
-                    "truncated_count": truncated_count,
-                }
-            )
+            _update_batch_metrics(mt, texts, original_lengths, truncated_count)
             try:
                 resp = httpx.post(
                     f"{self.base_url}/embeddings",
@@ -193,31 +209,12 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 timeout=_embedding_timeout(), limits=_embedding_limits()
             ) as scoped_client:
                 return await self._aembed_batch(texts, client=scoped_client)
-        truncated = []
-        truncated_count = 0
-        original_lengths: list[int] = []
-        for t in texts:
-            s = str(t).strip()
-            if not s:
-                s = " "
-            original_lengths.append(len(s))
-            if len(s) > MAX_TEXT_LENGTH:
-                truncated_count += 1
-            truncated.append(s[:MAX_TEXT_LENGTH])
+        truncated, truncated_count, original_lengths = _truncate_texts(texts)
 
         with metrics.timer(
             "embedding_batch", stage="embeddings", tags={"model": self.model, "mode": "async"}
         ) as mt:
-            mt.update(
-                {
-                    "batch_size": len(texts),
-                    "avg_text_chars": round(sum(original_lengths) / len(original_lengths), 3)
-                    if original_lengths
-                    else 0.0,
-                    "max_text_chars": max(original_lengths) if original_lengths else 0,
-                    "truncated_count": truncated_count,
-                }
-            )
+            _update_batch_metrics(mt, texts, original_lengths, truncated_count)
             try:
                 resp = await client.post(
                     f"{self.base_url}/embeddings",
