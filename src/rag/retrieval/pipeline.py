@@ -96,8 +96,6 @@ def _apply_rerank_threshold(
     return fallback
 
 
-logger = logging.getLogger(__name__)
-
 # RRF 融合分数阈值（基于采样校准，非余弦距离）
 # RRF(k=20): 排名1≈0.048, 排名5≈0.040（权重 1.0 时）
 # 权重 1.5 的路由第 10 名 = 1.5/(20+10) = 0.05 → 刚好过旧阈值
@@ -105,30 +103,6 @@ logger = logging.getLogger(__name__)
 # 数值来自 `settings.RETRIEVAL_SCORE_THRESHOLD`（可经 .env 覆盖，backlog #14）。
 # 保留模块级别名是为了不动下面 4 处函数签名的默认值。
 SCORE_THRESHOLD = settings.RETRIEVAL_SCORE_THRESHOLD
-
-# 语义检索的过采样倍数。
-#
-# Chroma 是**近似**索引，top-k 边界会抖：实测同一查询、同一索引，
-# 偶尔少返回一个本该进 top-k 的候选（约 10 次 1 次），而且会**传导到最终结果** ——
-# 表现为"同一个问题返回不同证据"。
-#
-# 多取几倍候选、再按 (分数, 内容键) 确定性排序取前 k，让边界抖动不再影响最终集合，
-# 顺带把被漏掉的候选捞回来。HNSW 检索是 ~O(log n)，多取 3 倍的代价可忽略。
-_SEMANTIC_OVERSAMPLE = 3
-
-# 去掉 pipeline 里的缓存定义（已挪到 routes.py，供 raw_search 与门面共用）
-
-
-def _copy_results(results: list[tuple[Document, float]]) -> list[tuple[Document, float]]:
-    """缓存命中时返回浅拷贝：新 list + 每篇 Document 复制一份 metadata。
-
-    下游会往 Document.metadata 写东西（`_collection`、窗口展开、噪声降级等），
-    直接返回缓存里的原对象会让这些写入污染缓存。
-    """
-    return [
-        (Document(page_content=d.page_content, metadata=dict(d.metadata)), s) for d, s in results
-    ]
-
 
 # ── 检索策略 ──────────────────────────────────────────
 
