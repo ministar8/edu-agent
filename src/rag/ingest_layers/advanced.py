@@ -146,6 +146,66 @@ def validate_section(sec: dict, doc: dict, kp_ids: set[str]) -> list[str]:
     return fails
 
 
+def _section_metadata(parsed: dict, sec: dict, subject: str, rel: str) -> dict:
+    """section → 文档级 metadata（含可选 difficulty）。"""
+    meta = {
+        "kb_depth": "advanced",
+        "doc_role": "method",
+        "subject": subject,
+        "document_id": parsed["document_id"],
+        "section_id": sec["section_id"],
+        "domain_kp": parsed["domain_kp"],
+        "knowledge_points": json.dumps(sec["kp_ids"], ensure_ascii=False),
+        "primary_kp": sec["primary_kp"] or (sec["kp_ids"][0] if sec["kp_ids"] else ""),
+        "heading": sec["title"],
+        "topic_tags": json.dumps(sec["topic_tags"], ensure_ascii=False),
+        "scope": sec["scope"],
+        "related_exams": json.dumps(sec["related_exams"], ensure_ascii=False),
+        "source": rel,
+    }
+    if sec.get("difficulty") is not None:
+        meta["difficulty"] = int(sec["difficulty"])
+    return meta
+
+
+def _chunk_extra(sec: dict, subject: str) -> dict:
+    """逐 chunk 附加 metadata（供 `_shared.split_section`）。"""
+    extra = {
+        "kb_depth": "advanced",
+        "doc_role": "method",
+        "subject": subject,
+        "knowledge_points": json.dumps(sec["kp_ids"], ensure_ascii=False),
+        "topic_tags": json.dumps(sec["topic_tags"], ensure_ascii=False),
+        "scope": sec["scope"],
+        "related_exams": json.dumps(sec["related_exams"], ensure_ascii=False),
+    }
+    if sec.get("difficulty") is not None:
+        extra["difficulty"] = int(sec["difficulty"])
+    return extra
+
+
+def _section_chunks(
+    parsed: dict, sec: dict, subject: str, rel: str, kp_ids: set[str]
+) -> tuple[list[tuple[Document, str, dict]], list[dict]]:
+    """单个 section → (待切分的 (doc, sid, extra) 列表, `trains` 边列表)。
+
+    sid / body 缺失时两者都为空（与拆分前 `continue` 等价）。
+    """
+    sid = sec["section_id"]
+    if not sid or not sec["body"]:
+        return [], []
+    edges = [
+        {"from": f"advanced:{sid}", "to": kp, "type": "trains"}
+        for kp in sec["kp_ids"]
+        if kp in kp_ids
+    ]
+    doc = Document(
+        page_content=f"## {sec['title']}\n\n{sec['body']}",
+        metadata=_section_metadata(parsed, sec, subject, rel),
+    )
+    return [(doc, sid, _chunk_extra(sec, subject))], edges
+
+
 def build(
     kp_ids: set[str], paths: list[Path] | None = None
 ) -> tuple[dict[str, list[Document]], list[dict], dict]:
@@ -174,46 +234,11 @@ def build(
 
         for sec in parsed["sections"]:
             parse_fails.extend(validate_section(sec, parsed, kp_ids))
-            sid = sec["section_id"]
-            if not sid or not sec["body"]:
-                continue
-            for kp in sec["kp_ids"]:
-                if kp not in kp_ids:
-                    continue
-                trains.append({"from": f"advanced:{sid}", "to": kp, "type": "trains"})
-            doc = Document(
-                page_content=f"## {sec['title']}\n\n{sec['body']}",
-                metadata={
-                    "kb_depth": "advanced",
-                    "doc_role": "method",
-                    "subject": subject,
-                    "document_id": parsed["document_id"],
-                    "section_id": sid,
-                    "domain_kp": parsed["domain_kp"],
-                    "knowledge_points": json.dumps(sec["kp_ids"], ensure_ascii=False),
-                    "primary_kp": sec["primary_kp"] or (sec["kp_ids"][0] if sec["kp_ids"] else ""),
-                    "heading": sec["title"],
-                    "topic_tags": json.dumps(sec["topic_tags"], ensure_ascii=False),
-                    "scope": sec["scope"],
-                    "related_exams": json.dumps(sec["related_exams"], ensure_ascii=False),
-                    "source": rel,
-                },
-            )
-            if sec.get("difficulty") is not None:
-                doc.metadata["difficulty"] = int(sec["difficulty"])
-            extra = {
-                "kb_depth": "advanced",
-                "doc_role": "method",
-                "subject": subject,
-                "knowledge_points": json.dumps(sec["kp_ids"], ensure_ascii=False),
-                "topic_tags": json.dumps(sec["topic_tags"], ensure_ascii=False),
-                "scope": sec["scope"],
-                "related_exams": json.dumps(sec["related_exams"], ensure_ascii=False),
-            }
-            if sec.get("difficulty") is not None:
-                extra["difficulty"] = int(sec["difficulty"])
-            by_col[collection].extend(_shared.split_section(doc, sid, extra, keep_short=True))
-            stats["sections"] += 1
+            items, edges = _section_chunks(parsed, sec, subject, rel, kp_ids)
+            trains.extend(edges)
+            for doc, sid, extra in items:
+                by_col[collection].extend(_shared.split_section(doc, sid, extra, keep_short=True))
+                stats["sections"] += 1
     stats["chunks"] = sum(len(v) for v in by_col.values())
     return by_col, trains, stats
 
