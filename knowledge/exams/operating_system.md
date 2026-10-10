@@ -1,10 +1,9 @@
----
-
-subject: 操作系统
-chapter: 07 常考题型与例题
----
-
 # 常考题型与例题
+
+> document_id: exam-practice-os
+> kb_depth: exams
+> doc_role: exam_item
+> subject: os
 
 > 408考研操作系统高频题型汇总，按章节分类。对比表和知识点已融入各章节，本文件仅收录例题和常考结论。
 
@@ -16,9 +15,16 @@ chapter: 07 常考题型与例题
 
 ### 2.1 哲学家进餐问题
 
+> section_id: exam-practice-os-dining_philosophers
+> kp_ids: [os.process.classic_sync]
+> primary_kp: os.process.classic_sync
+
 > 【2019年408真题】有n(n ≥ 3)名哲学家围坐在一张圆桌边，每名哲学家交替地就餐和思考。再圆桌中心有m(m ≥ 1)个碗，每两名哲学家之间有一根筷子。每名哲学家必须取到一个碗和两侧的筷子后，才能就餐，进餐完毕，将碗和筷子放回原位，并继续思考。为使尽可能多的哲学家同时就餐，且防止出现死锁现象，请使用信号量的P、V操作[wait()，signal()操作]描述上述过程中的互斥与同步，并说明所用信号量及初始值的含义。
 
 ### 2.2 408常考结论
+
+> section_id: exam-practice-os-process_conclusions
+> kp_ids: []
 
 > 【2010年408真题】进程时间片用完是**降低进程优先级**的合理时机。
 
@@ -35,9 +41,17 @@ chapter: 07 常考题型与例题
 
 ### 3.1 多级页表计算
 
+> section_id: exam-practice-os-multilevel_page_table
+> kp_ids: [os.memory.paging]
+> primary_kp: os.memory.paging
+
 > 例：某系统按字节编址，采用40位逻辑地址，页面大小为4KB，页表项大小为4B，假设采用纯页式存储，则要采用(3)级页表，页内偏移量为(12)位？
 
 ### 3.2 虚拟存储器容量计算
+
+> section_id: exam-practice-os-virtual_capacity
+> kp_ids: [os.memory.virtual]
+> primary_kp: os.memory.virtual
 
 > 例：32位计算机，按字节编址，内存大小为512MB，外存2G.
 >
@@ -46,6 +60,9 @@ chapter: 07 常考题型与例题
 > 实际容量 = min(2^32^B, 512MB+2GB) = 512MB+2GB
 
 ### 3.3 408常考结论
+
+> section_id: exam-practice-os-memory_conclusions
+> kp_ids: []
 
 > 【2019年408真题】最佳适应算法最容易产生内部碎片。
 
@@ -65,6 +82,9 @@ chapter: 07 常考题型与例题
 ## 4. 文件管理
 
 ### 4.1 408常考结论
+
+> section_id: exam-practice-os-file_conclusions
+> kp_ids: []
 
 > 【2013年408真题】连续结构是最**快**的。
 

@@ -8,8 +8,8 @@ KB 元数据与 links 契约。
 
 | 字段 | 说明 |
 |---|---|
-| `kb_depth` | `basic` / `advanced` / `exams` / `learning_path` |
-| `doc_role` | `textbook` / `method`（L2） / `tactic` / `exam_paper` / `exam_item` / `exam_answer` / `plan` |
+| `kb_depth` | `basic` / `advanced` / `exams` / `code` / `learning_path`；`code` 为独立库（`code_<科>` 集合，不进 L1/L2/L3 融合池），供代码类查询定向召回 |
+| `doc_role` | `textbook` / `method`（L2） / `tactic` / `exam_paper` / `exam_item` / `exam_answer` / `code` / `plan` |
 | `subject` | `ds` / `co` / `os` / `cn` / `mixed` |
 | `document_id` / `section_id` / `chunk_id` | 见 chunking.md |
 | `knowledge_points` | JSON 数组字符串（section.kp_ids） |
@@ -48,13 +48,15 @@ KB 元数据与 links 契约。
 
 | type | from 侧 | 语义 |
 |---|---|---|
-| `teaches` | `basic` | 讲解 |
-| **`trains`** | `advanced` | L2 针对 KP 的题型/方法/应用训练（**名称冻结**，不用 practices） |
+| `teaches` | `basic` / `code` | 讲解（code 层 = 代码实现演示该考点） |
+| **`trains`** | `advanced` / `practice` | L2 针对 KP 的题型/方法/应用训练；`practice` 含例题集 Section（**名称冻结**，不用 practices） |
 | `assesses` | `question` | 考查 |
 
 ```text
 basic section     ──teaches──→  KP
+code section      ──teaches──→  KP
 advanced section  ──trains──→   KP
+practice section  ──trains──→   KP
 question          ──assesses──→ KP
 ```
 
@@ -72,7 +74,8 @@ question          ──assesses──→ KP
 | `paper` | `2019` |
 | `question` | `2019-Q11` |
 | `basic` / `advanced` | `basic-ds-tree-traversal` 或 `relpath#section` |
-| `practice` | `wangdao-os-023` |
+| `practice` | `exam-practice-ds-time_complexity`（例题集 Section）或 `wangdao-os-023`（稳定题号） |
+| `code` | `code-ds-preorder_rec`（代码实现 Section） |
 | `learning_path` | `path.l2.os.memory` |
 
 ---

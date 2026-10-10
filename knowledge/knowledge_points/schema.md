@@ -136,21 +136,23 @@ choice | fill | calculation | comprehensive | code | design
 | `question` | `YYYY-QN` | `question:2019-Q11` |
 | `basic` | `relpath#section` | `basic:os/file.md#磁盘空闲` |
 | `advanced` | `relpath#section` | `advanced:os/文件大题.md#位示图` |
-| `practice` | 稳定题号 | `practice:wangdao-os-023` |
+| `practice` | 稳定题号 或 例题集 Section | `practice:wangdao-os-023`、`practice:exam-practice-ds-time_complexity` |
+| `code` | 代码实现 Section | `code:code-ds-preorder_rec` |
 | `learning_path` | 路径节点 id | `learning_path:path.l2.os.memory` |
 
 ### 2.2 边类型
 
 | type | 语义 | 允许 from |
 |---|---|---|
-| `teaches` | 讲解该考点 | `basic` / `advanced` |
+| `teaches` | 讲解该考点 | `basic` / `code` |
 | `assesses` | 考查该考点 | `question` |
-| `trains` | 强化/训练该考点 | `practice` |
+| `trains` | 强化/训练该考点 | `advanced` / `practice` |
 
 ```text
 基础教材  ──teaches──→  KP
+代码实现  ──teaches──→  KP
 真题题   ──assesses──→ KP
-王道/专项 ──trains──→   KP
+L2 方法文/专项 ──trains──→ KP
 ```
 
 学习路径 **不进** teaches/assesses/trains；路径用 `kp_ids[]`。

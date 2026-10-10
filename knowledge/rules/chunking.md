@@ -29,6 +29,7 @@ Chunk     →  检索载体（向量、RAG top-k）
 | 层 | 格式 | 例 |
 |---|---|---|
 | document_id | `basic-<subject>-<domain_slug>` | `basic-ds-tree` |
+| document_id | `exam-practice-<subject>`（例题集） / `code-<subject>`（代码汇编） | `exam-practice-ds` / `code-ds` |
 | section_id | `<document_id>-<section_slug>` | `basic-ds-tree-traversal` |
 | chunk_id | `<section_id>-<NNN>` | `basic-ds-tree-traversal-001` |
 

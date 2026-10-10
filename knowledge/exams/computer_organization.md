@@ -1,16 +1,19 @@
----
-
-subject: 计算机组成原理
-chapter: 08 常考题型与例题
----
-
 # 常考题型与例题
+
+> document_id: exam-practice-co
+> kb_depth: exams
+> doc_role: exam_item
+> subject: co
 
 > 408考研计算机组成原理高频题型汇总，按章节分类。
 
 ## 1. 计算机系统概述
 
 ### 1.1 冯诺依曼机基本概念
+
+> section_id: exam-practice-co-von_neumann
+> kp_ids: [co.overview.von_neumann]
+> primary_kp: co.overview.von_neumann
 
 > 例题：冯诺依曼机的基本工作方式是：
 > 	A.控制流驱动方式  B.多指令多数据流方式
@@ -33,6 +36,9 @@ chapter: 08 常考题型与例题
 > 答案：C；程序的功能都通过中央处理器(运算器和控制器)执行指令实现。指令按地址访问，数据由指令的地址码指出，除立即寻址外，数据均存放在存储器内。
 
 ### 1.2 运算器与寄存器
+
+> section_id: exam-practice-co-alu_registers
+> kp_ids: []
 
 > 例题：在运算器中，不包含()
 > 	A.状态寄存器  B.数据总线  C.ALU  D.地址寄存器
@@ -64,6 +70,9 @@ chapter: 08 常考题型与例题
 
 ### 1.3 编译与解释程序
 
+> section_id: exam-practice-co-compile_interpret
+> kp_ids: []
+
 > 例题:只有当程序执行时才将源程序翻译成机器语言，并且一次只能翻译一行语句，边翻译边执行的是( )程序，把汇编语言源程序转变为机器语言程序的过程是( )
 > 	1.编译  2.目标  3.汇编  4.解释
 >
@@ -85,6 +94,10 @@ chapter: 08 常考题型与例题
 
 ### 1.4 CPU性能指标
 
+> section_id: exam-practice-co-cpu_perf
+> kp_ids: [co.overview.performance]
+> primary_kp: co.overview.performance
+
 > 【2012年408真题】假定基准程序A在某计算机上的运行时间为100s，其中90s为CPU时间，其余为I/O时间。若CPU速度提高50%，I/O速度不变，则运行基准程序A所耗费的时间为()。
 >
 > A.55s   B.60s   C.65s   D.70s
@@ -92,6 +105,10 @@ chapter: 08 常考题型与例题
 > 答案：D; **CPU速度提高50%，CPU速度是原来的1.5倍**而不是2倍，90/1.5+10。
 
 ### 1.5 CPI与运算速度
+
+> section_id: exam-practice-co-cpi_speed
+> kp_ids: [co.overview.performance]
+> primary_kp: co.overview.performance
 
 > 例题:CPU的CPI与下列()因素无关
 >   A.时钟频率   B.系统结构   C.指令集   D.计算机组织
@@ -123,6 +140,9 @@ chapter: 08 常考题型与例题
 
 ### 2.1 CRC循环冗余校验
 
+> section_id: exam-practice-co-crc
+> kp_ids: []
+
 > 例题：在CRC中，接收端检测出某一位数据错误后，纠正的方法是()
 >   A.请求重发   B.删除数据   C.通过余数值自行纠正   D.以上均可
 >
@@ -135,6 +155,10 @@ chapter: 08 常考题型与例题
 > 1100的循环校验码为1100 010
 
 ### 2.2 补码与移码
+
+> section_id: exam-practice-co-complement_excess
+> kp_ids: [co.representation.complement]
+> primary_kp: co.representation.complement
 
 > 例题：对真值0表示形式唯一的机器数是()
 >
@@ -226,6 +250,10 @@ chapter: 08 常考题型与例题
 
 ### 2.3 补码运算与溢出
 
+> section_id: exam-practice-co-complement_overflow
+> kp_ids: [co.representation.integer_op, co.representation.overflow]
+> primary_kp: co.representation.integer_op
+
 > 【2013年408真题】某字长为8 位的计算机中，已知整型变量 x、 y 的机器数分别为[x]补=1 1110100， [y]补=10110000。若整型变量 z=2*x+y/2，则 z 的机器数为(A)。
 >
 > A. 1 1000000			B. 0 0100100			C. 1 0101010			D. 溢出
@@ -235,6 +263,10 @@ chapter: 08 常考题型与例题
 > **⚠ 注意**：并不是向前进位了就是溢出，要**最后的结果不在位数能表示的范围内**，才是溢出
 
 ### 2.4 移位运算
+
+> section_id: exam-practice-co-shift_ops
+> kp_ids: [co.representation.integer_op]
+> primary_kp: co.representation.integer_op
 
 > 例题：一个8位寄存器内的数值为1100 1010，进位标志寄存器CF为0，若将此8位寄存器循环左移(不带进位位)1位，则该8位寄存器和标志寄存器内的数值分别为()
 >
@@ -263,6 +295,10 @@ chapter: 08 常考题型与例题
 
 ### 2.5 补码加减运算
 
+> section_id: exam-practice-co-complement_addsub
+> kp_ids: [co.representation.integer_op]
+> primary_kp: co.representation.integer_op
+
 > 例：机器字长为8位(含一位符号位)，A=15，B=24，求[A+B]补和[A-B]补。
 >
 > [A]补=00001111，[B]补=00011000，**[-B]补=11101000**，
@@ -275,12 +311,20 @@ chapter: 08 常考题型与例题
 
 ### 2.6 原码一位乘法
 
+> section_id: exam-practice-co-sign_mag_mult
+> kp_ids: [co.representation.integer_op]
+> primary_kp: co.representation.integer_op
+
 > 例：设机器字长为8位，x = - 0.1101，y = 0.1011，采用原码一位乘法求p=[x*y]原。
 >
 > 符号p_f是符号位异或1⊕0是1，就是负。
 > |x|=00.1101，|y|=00.1011
 
 ### 2.7 Booth补码乘法
+
+> section_id: exam-practice-co-booth
+> kp_ids: [co.representation.integer_op]
+> primary_kp: co.representation.integer_op
 
 > 例：设机器字长为5位(含一位符号位，n=4)，x = - 0.1101，y = 0.1011，采用Booth算法求x*y。
 >
@@ -295,11 +339,19 @@ chapter: 08 常考题型与例题
 
 ### 2.8 原码加减交替除法
 
+> section_id: exam-practice-co-sign_mag_div
+> kp_ids: [co.representation.integer_op]
+> primary_kp: co.representation.integer_op
+
 > 例：设机器字长为5位(含一位符号位，**n=4**)，x=0.1011，y=0.1101,采用原码加减交替除法求x/y。
 >
 > |x|=0.1011，|y|=0.1101，[|y|]补=0.1101，[-|y|]补=1.0011
 
 ### 2.9 补码加减交替除法
+
+> section_id: exam-practice-co-complement_div
+> kp_ids: [co.representation.integer_op]
+> primary_kp: co.representation.integer_op
 
 > 例：设机器字长为5位(含一位符号位，n=4)，x=0.1000，y=-0.1011,采用补码加减交替除法求x/y。
 >
@@ -307,6 +359,10 @@ chapter: 08 常考题型与例题
 > [y]补=11.0101，[-y]补=00.1011
 
 ### 2.10 浮点数表示与运算
+
+> section_id: exam-practice-co-float_repr
+> kp_ids: [co.representation.ieee754]
+> primary_kp: co.representation.ieee754
 
 > 例题：采用规格化的浮点数最主要是为了()
 >   A.增加数据的表示范围  B.方便浮点运算
@@ -345,6 +401,10 @@ chapter: 08 常考题型与例题
 
 ### 2.11 IEEE754浮点数
 
+> section_id: exam-practice-co-ieee754
+> kp_ids: [co.representation.ieee754]
+> primary_kp: co.representation.ieee754
+
 > 例题：按照IEEE754标准规定的32位浮点数(41A4C000)16对应的10进制数是()
 >    A.4.59375  B.-20.59375  C.-4.59375  D.20.59375
 >
@@ -381,6 +441,10 @@ chapter: 08 常考题型与例题
 
 ### 2.12 浮点数对阶与舍入
 
+> section_id: exam-practice-co-float_align_round
+> kp_ids: [co.representation.ieee754]
+> primary_kp: co.representation.ieee754
+
 >   例题：下列关于对阶操作说法正确的是()
 >   A.在浮点加减运算的对阶操作中，若阶码减小，则尾数左移
 >   B.在浮点加减运算的对阶操作中，若阶码增大，则尾数右移；若阶码减小，则尾数左移
@@ -400,6 +464,10 @@ chapter: 08 常考题型与例题
 
 ### 2.13 加法器与运算器
 
+> section_id: exam-practice-co-adder_alu
+> kp_ids: [co.representation.integer_op]
+> primary_kp: co.representation.integer_op
+
 > 例题：在串行进位的并行加法器中，影响加法器运算速度的关键因素是()
 >  A.门电路的级延迟 B.元器件速度
 > 	C.进位传递延迟  D.各位加法器速度的不同
@@ -416,12 +484,20 @@ chapter: 08 常考题型与例题
 
 ### 3.1 DRAM芯片地址引脚
 
+> section_id: exam-practice-co-dram_pins
+> kp_ids: [co.storage.main_memory]
+> primary_kp: co.storage.main_memory
+
 > 【2018年408真题】假定 DRAM 芯片中存储阵列的行数为 r、列数为 c，对于一个 2K×1 位的 DRAM 芯片， 为保证其地址引脚数最少，并尽量减小刷新开销，则 r、c 的取值分别是(C)
 > A.2048、1			B.64、32			C.32、64 			D.1、2048
 >
 > 解：根据 DRAM的结构和原理可知，在分时复用的情况下，芯片引脚个数取决于行地址线和列地址线中的较大值。对于一个2K×1位的DRAM芯片，总共需要11条地址线，只有当一个取5，一个取6时可使管脚数最小，而DRAM的刷新开销取决于行数，因此行地址线应该为5、列地址线为6，即行数2^5^=32，列数为2^6^=64。
 
 ### 3.2 多体交叉存储器
+
+> section_id: exam-practice-co-multi_bank
+> kp_ids: [co.storage.main_memory]
+> primary_kp: co.storage.main_memory
 
 > 例题：双端口RAM在()情况下会发生读/写冲突
 >   A.左端口和右端口的地址码不同
@@ -466,6 +542,10 @@ chapter: 08 常考题型与例题
 >   (4)多端口存储器是对同一个存储体使用多套读写电路实现的，扩大存储容量的难度显然比多体结构的存储器要大，而且不能对多端口存储器的同一个存储单元同时执行多个写入操作，而多体结构的存储器则允许在同一个存储周期对几个存储体执行写入操作
 
 ### 3.3 RAM芯片引脚与刷新
+
+> section_id: exam-practice-co-ram_refresh
+> kp_ids: [co.storage.main_memory]
+> primary_kp: co.storage.main_memory
 
 > 例题：某一SRAM芯片，其容量为1024x8位，除电源和接地端外，该芯片的引脚的最小数目为：
 >   A.21   B.22   C.23  D.24
@@ -518,6 +598,10 @@ chapter: 08 常考题型与例题
 
 ### 3.4 存储器扩展(408真题)
 
+> section_id: exam-practice-co-mem_expansion
+> kp_ids: [co.storage.main_memory]
+> primary_kp: co.storage.main_memory
+
 > 【2014年408真题】某容量为256M的存储器，由若干4M*8位的DRAM芯片构成，该**DRAM芯片**的地址引脚和数据引脚总数是 (A)
 >
 > A.19			B.22			C.30			D.36
@@ -537,12 +621,20 @@ chapter: 08 常考题型与例题
 
 ### 3.5 存储器设计(408真题)
 
+> section_id: exam-practice-co-mem_design
+> kp_ids: [co.storage.main_memory]
+> primary_kp: co.storage.main_memory
+
 > 【2016年408真题】某存储器容量为 64KB，按字节编址，地址 4000H~5FFFH 位 ROM 区，其余为 RAM 区。若采用 8K×4 位的 SRAM 芯片进行设计，则需要该芯片的数量是(C)。
 > A.7			B.8			C.14			D.16
 >
 > 解： 4000H~5FFFH 位 ROM 区，计算大小：5FFFH - 4000H + 0001H = 2000H，也就是8KB。所以RAM的大小是 64-8 = 56KB。所以求 用 8K×4 位 组成 **56KB×8位**，需要14个。
 
 ### 3.6 字扩展与位扩展
+
+> section_id: exam-practice-co-word_bit_expansion
+> kp_ids: [co.storage.main_memory]
+> primary_kp: co.storage.main_memory
 
 >   例题：80386DX是32位系统，以4B为编址单位，当在该系统中用8KB(8K x 8位)的存储芯片构造32KB的存储体时，应完成存储器的()设计
 >   A.位扩展  B.字扩展  C.字位扩展  D.字位均不扩展
@@ -554,6 +646,9 @@ chapter: 08 常考题型与例题
 >   答案：A；
 
 ### 3.7 磁盘访问时间
+
+> section_id: exam-practice-co-disk_access
+> kp_ids: []
 
 > 【2013年408真题】某磁盘的转速为10 000转/分，平均寻道时间是6 ms，磁盘传输速率是20 MB/s，磁盘控 制器延迟为0.2 ms，读取一个4 KB的扇区所需的平均时间约为B
 > A.9 ms			B.9.4 ms			C.12 ms			D.12.4 ms
@@ -572,6 +667,9 @@ chapter: 08 常考题型与例题
 
 ### 3.8 RAID可靠性
 
+> section_id: exam-practice-co-raid
+> kp_ids: []
+
 > 【2013年408真题】下列选项中，用于提高 RAID 可靠性的措施有( )
 >
 > I．**磁盘镜像**
@@ -582,6 +680,10 @@ chapter: 08 常考题型与例题
 > 答案：I. III．
 
 ### 3.9 局部性原理
+
+> section_id: exam-practice-co-locality
+> kp_ids: [co.storage.hierarchy]
+> primary_kp: co.storage.hierarchy
 
 > 例：假定数组元素按行优先方式存储，对于下面的两个函数：
 >
@@ -613,6 +715,10 @@ chapter: 08 常考题型与例题
 >    (2)对于for循环体，程序A和程序B中的访问局部性是一样的。因为循环体内指令按序连续存放，所以空间局部性好；内循环体被连续重复执行，因此时间局部性也好。
 
 ### 3.10 Cache映射方式
+
+> section_id: exam-practice-co-cache_mapping
+> kp_ids: [co.storage.cache_mapping]
+> primary_kp: co.storage.cache_mapping
 
 > 【2009年408真题】某计算机的 Cache 共有 16 块，采用 **2 路组相联映射**方式，每个**主存块大小**为 **32 字节**，按字节编址。主存 129 号单元所在主存块应装入到 Cache 的组号是：
 >
@@ -646,6 +752,10 @@ chapter: 08 常考题型与例题
 
 ### 3.11 Cache与虚拟存储器
 
+> section_id: exam-practice-co-cache_vm
+> kp_ids: [co.storage.cache_mapping, co.storage.virtual_memory]
+> primary_kp: co.storage.cache_mapping
+
 > 【2011年408真题】某计算机存储器按字节编址，虚拟(逻辑)地址**空间大小**为16 MB，主存(物理)**地址空间**大小为1 MB，**页面大小**为4 KB；Cache采用直接映射方式，共8行；主存与Cache之间交换的块大小为32 B。系统运行到某一时刻时，页表的部分内容和Cache的部分内容分别如题44-a图、题44-b图所示，图中页框号及标记字段的内容为十六进制形式。
 >
 > |虚页号|有效位|页框号||行号|有效位|标记|
@@ -665,6 +775,10 @@ chapter: 08 常考题型与例题
 ## 4. 指令系统
 
 ### 4.1 指令字长计算
+
+> section_id: exam-practice-co-instr_length
+> kp_ids: [co.instruction.format]
+> primary_kp: co.instruction.format
 
 > 【2017年408真题】某计算机按字节编址，指令字长固定且只有两种指令格式，其中三地址指令 29 条，二地址指令 107 条，每个地址字段为 6 位，则指令字长至少应该是
 > A.24 位			B.26 位			C.28 位			D.32 位
@@ -710,6 +824,10 @@ chapter: 08 常考题型与例题
 
 ### 5.1 指令执行过程
 
+> section_id: exam-practice-co-instr_exec
+> kp_ids: [co.instruction.addressing]
+> primary_kp: co.instruction.addressing
+
 > 例题：
 >
 > ```assembly
@@ -725,6 +843,10 @@ chapter: 08 常考题型与例题
 >
 
 ### 5.2 数据通路
+
+> section_id: exam-practice-co-datapath
+> kp_ids: [co.cpu.datapath]
+> primary_kp: co.cpu.datapath
 
 > 例题：
 >
@@ -778,6 +900,10 @@ chapter: 08 常考题型与例题
 
 ### 5.3 指令流水线(408真题)
 
+> section_id: exam-practice-co-pipeline
+> kp_ids: [co.cpu.pipeline]
+> primary_kp: co.cpu.pipeline
+
 > 【2014年408真题】
 >
 >
@@ -785,6 +911,10 @@ chapter: 08 常考题型与例题
 ## 6. 总线
 
 ### 6.1 总线带宽计算
+
+> section_id: exam-practice-co-bus_bandwidth
+> kp_ids: [co.bus.bandwidth]
+> primary_kp: co.bus.bandwidth
 
 > 例：某同步总线采用**数据线和地址线复用方式**，其中地址/数据线有**32根**，总线时钟频率为**66MHz**，**每个时钟周期传送两次数据**(上升沿和下降沿各传送一次数据)。
 > 1)该总线的最大数据传输率(总线带宽)是多少?
@@ -809,6 +939,10 @@ chapter: 08 常考题型与例题
 ## 7. 输入输出系统
 
 ### 7.1 I/O方式与中断
+
+> section_id: exam-practice-co-io_interrupt
+> kp_ids: [co.io.interrupt_io, co.io.dma]
+> primary_kp: co.io.interrupt_io
 
 > 以下为408真题中关于I/O系统的常考结论：
 

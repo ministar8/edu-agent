@@ -21,7 +21,7 @@
 > credibility: high
 > explanation_status: scan
 > subject: ds
-> kp_ids: []
+> kp_ids: [ds.analysis.time_complexity]
 > answer_key: C
 > reference_answer: null
 > has_figure: false

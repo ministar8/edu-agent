@@ -1,16 +1,19 @@
----
-
-subject: 数据结构
-chapter: 10 常考题型与例题
----
-
 # 常考题型与例题
+
+> document_id: exam-practice-ds
+> kb_depth: exams
+> doc_role: exam_item
+> subject: ds
 
 > 408考研数据结构高频题型汇总，按章节分类。对比表和知识点已融入各章节，本文件仅收录例题。
 
 ## 1. 绪论
 
 ### 1.1 时间复杂度分析
+
+> section_id: exam-practice-ds-time_complexity
+> kp_ids: [ds.analysis.time_complexity]
+> primary_kp: ds.analysis.time_complexity
 
 > 例题：求整数n(n≥0)的阶乘的算法如下，其时间复杂度是()。
 >
@@ -27,6 +30,10 @@ chapter: 10 常考题型与例题
 
 ### 1.2 时间复杂度影响因素
 
+> section_id: exam-practice-ds-time_complexity_factors
+> kp_ids: [ds.analysis.time_complexity]
+> primary_kp: ds.analysis.time_complexity
+
 > 例题：算法的时间复杂度取决于()。
 >   A．问题的规模  B．待处理数据的初态  C．计算机的配置  D．A和B
 >
@@ -35,6 +42,10 @@ chapter: 10 常考题型与例题
 ## 2. 线性表
 
 ### 2.1 链表操作
+
+> section_id: exam-practice-ds-linked_list_ops
+> kp_ids: [ds.linear.linked_list]
+> primary_kp: ds.linear.linked_list
 
 > 例题：【2021年408真题】删除链表第一个元素q。(h是头指针，p为指针)
 >
@@ -46,6 +57,10 @@ chapter: 10 常考题型与例题
 
 ### 3.1 栈的应用（表达式求值）
 
+> section_id: exam-practice-ds-stack_expression
+> kp_ids: [ds.stack_queue.stack]
+> primary_kp: ds.stack_queue.stack
+
 > 例题：要注意下面这个例题：A+B可以在不干扰 * / 运算的情况下先运算，所有算是左边能先运算的运算符。
 >
 > 解答：中缀表达式求值中，左边的运算符如果优先级不低于右边，可以先计算。这是算符优先法的核心规则。
@@ -54,12 +69,20 @@ chapter: 10 常考题型与例题
 
 ### 4.1 上三角矩阵按列优先存储
 
+> section_id: exam-practice-ds-triangular_col_major
+> kp_ids: [ds.array.triangular]
+> primary_kp: ds.array.triangular
+
 > 例题：若将 n 阶上三角矩阵 A 按列优先级压缩存放在一维数组 B[1..n(n+1)/2+1] 中，则存放到B[k] 中的非零元素 $a_{i,j}$ (1 ≤ i, j ≤ n) 的下标 i, j 与 k 的对应关系是()。
 >   A. i(i+1)/2+j  B. i(i-1)/2+j-1  C. j(j-1)/2+i  D. j(j-1)/2+i-1
 >
 > 答案:C;按列优先存储，元素 $a_{i,j}$ 前面有 j-1 列，共有 1+2+3+...+(j-1) = j(j-1)/2 个元素，元素 $a_{i,j}$ 在第 j 列上是第 i 个元素，数组 B 下标从 1 开始，因此 k = j(j-1)/2 + i。
 
 ### 4.2 下三角矩阵按列优先存储
+
+> section_id: exam-practice-ds-triangular_lower_col_major
+> kp_ids: [ds.array.triangular]
+> primary_kp: ds.array.triangular
 
 > 例题：若将 n 阶下三角矩阵 A 按列优先顺序压缩存放在一维数组 B[1..n(n+1)/2+1] 中，则存放到 B[k] 中的非零元素 $a_{i,j}$ (1 ≤ i, j ≤ n) 的下标 i, j 与 k 的对应关系是()。
 >   A. (j-1)(2n-j+1)/2+i-j  B. (j-1)(2n-j+2)/2+i-j+1  C. (j-1)(2n-j+2)/2+i-j  D. (j-1)(2n-j+1)/2+i-j+1
@@ -68,12 +91,20 @@ chapter: 10 常考题型与例题
 
 ### 4.3 对称矩阵行优先存储（C语言下标从0）
 
+> section_id: exam-practice-ds-symmetric_row_major
+> kp_ids: [ds.array.symmetric]
+> primary_kp: ds.array.symmetric
+
 > 例题：【2018年408真题】设有一个 12×12 对称矩阵 M 的上三角部分的元素 $m_{i,j}$ (1 ≤ i ≤ j ≤ 12) 按行优先存入 C 语言的一维数组 N 中，元素 $m_{6,6}$ 在 N 中的下标是()。
 >   A. 50  B. 51  C. 55  D. 66
 >
 > 答案:A;C语言数组下标从0开始。第一行12个，第二行11个，第三行10个，第四行9个，第五行8个，$m_{6,6}$ 是第51个元素，下标为50。
 
 ### 4.4 对称矩阵列优先存储
+
+> section_id: exam-practice-ds-symmetric_col_major
+> kp_ids: [ds.array.symmetric]
+> primary_kp: ds.array.symmetric
 
 > 例题：【2020年408真题】将一个10×10对称矩阵 M 的上三角部分的元素 $m_{i,j}$ (1 ≤ i ≤ j ≤ 10) 按列优先存入 C 语言的一维数组 N 中，元素 $m_{7,2}$ 在 N 中的下标是()。
 >   A. 15  B. 16  C. 22  D. 23
@@ -82,6 +113,10 @@ chapter: 10 常考题型与例题
 
 ### 4.5 三对角矩阵存储
 
+> section_id: exam-practice-ds-tridiagonal
+> kp_ids: [ds.array.compressed]
+> primary_kp: ds.array.compressed
+
 > 例题：【2016统考真题】有一个 100 阶的三对角矩阵 M，其元素 $m_{i,j}$(1 ≤ i, j ≤ 100)按行优先依次压缩存入下标从 0 开始的一维数组 N 中。元素 $m_{30,30}$ 在 N 中的下标是()。
 >   A. 86  B. 87  C. 88  D. 89
 >
@@ -89,12 +124,20 @@ chapter: 10 常考题型与例题
 
 ### 4.6 三对角矩阵已知k求i,j
 
+> section_id: exam-practice-ds-tridiagonal_index
+> kp_ids: [ds.array.compressed]
+> primary_kp: ds.array.compressed
+
 > 例题：将三对角矩阵 A[1..100] 按行优先存入一维数组 B[1..298] 中，A 中元素 A[66][65] 在数组B 中的位置 k 为()
 >   A. 198  B. 195  C. 197  D. 196
 >
 > 答案:B;由公式 k = 2i + j - 2，得 k = 2×66 + 65 - 2 = 195。反过来已知k求i,j：i = ⌊(k+1)/3⌋+1，j = k - 2i + 2。
 
 ### 4.7 稀疏矩阵存储
+
+> section_id: exam-practice-ds-sparse
+> kp_ids: [ds.array.sparse]
+> primary_kp: ds.array.sparse
 
 > 例题：【2017统考真题】适用于压缩存储稀疏矩阵的两种存储结构是()。
 >   A. 三元组表和十字链表  B. 三元组表和邻接矩阵  C. 十字链表和二叉链表  D. 邻接矩阵和十字链表
@@ -104,6 +147,10 @@ chapter: 10 常考题型与例题
 ## 5. 串
 
 ### 5.1 KMP的next数组求解
+
+> section_id: exam-practice-ds-kmp_next
+> kp_ids: [ds.string.kmp]
+> primary_kp: ds.string.kmp
 
 > 例题：模式串 S='abcac' 的next数组。
 >
@@ -115,6 +162,10 @@ chapter: 10 常考题型与例题
 > 解答：next[j] = 前j-1个字符的最长相等前后缀长度+1。j=1时next[1]=0。
 
 ### 5.2 KMP的nextval数组优化
+
+> section_id: exam-practice-ds-kmp_nextval
+> kp_ids: [ds.string.kmp]
+> primary_kp: ds.string.kmp
 
 > 例题：模式串 S='ababaa' 的nextval数组。
 >
@@ -130,17 +181,29 @@ chapter: 10 常考题型与例题
 
 ### 6.1 叶结点个数计算
 
+> section_id: exam-practice-ds-leaf_count
+> kp_ids: [ds.tree.binary_tree]
+> primary_kp: ds.tree.binary_tree
+
 > 例题：【2009年408真题】当问到叶结点的个数最多最少，当提到某一层有 m 个叶结点。要考虑什么？
 >
 > 解答：叶结点最多时，该层就是最底层（所有叶都在同一层），结点最少。叶结点最少时，该层不是最底层，下方还有叶结点。需结合完全二叉树性质分析。
 
 ### 6.2 前序与后序判断祖先
 
+> section_id: exam-practice-ds-pre_post_ancestor
+> kp_ids: [ds.tree.traversal]
+> primary_kp: ds.tree.traversal
+
 > 例题：【2012年408真题】通过前序与后序判断祖先关系。
 >
 > 解答：在前序序列中，祖先在后代之前；在后序序列中，祖先在后代之后。若结点A在前序中先于B出现，且在后序中后于B出现，则A是B的祖先。
 
 ### 6.3 森林与二叉树转换
+
+> section_id: exam-practice-ds-forest_convert
+> kp_ids: [ds.tree.forest_convert]
+> primary_kp: ds.tree.forest_convert
 
 > 例题：【2014年408真题】森林T与对应二叉树B的关系：
 >   - T中的叶子结点数 = B中没有左孩子的结点数
@@ -151,6 +214,10 @@ chapter: 10 常考题型与例题
 
 ### 6.4 平衡二叉树结点数
 
+> section_id: exam-practice-ds-avl_node_count
+> kp_ids: [ds.tree.avl]
+> primary_kp: ds.tree.avl
+
 > 例题：【2012统考真题】若平衡二叉树的高度为 6，且所有非叶子结点的平衡因子均为1，则该平衡二叉树的结点总数为()。
 >   A. 12  B. 20  C. 32  D. 33
 >
@@ -160,6 +227,9 @@ chapter: 10 常考题型与例题
 
 ### 7.1 有向无环图描述表达式
 
+> section_id: exam-practice-ds-dag_expression
+> kp_ids: []
+
 > 例题：【2019年408真题】用有向无环图描述表达式(x+y)((x+y)/x)，需要的顶点个数至少是()。
 >   A. 5  B. 6  C. 8  D. 9
 >
@@ -167,17 +237,29 @@ chapter: 10 常考题型与例题
 
 ### 7.2 拓扑序列判断
 
+> section_id: exam-practice-ds-topo_order
+> kp_ids: [ds.graph.topo]
+> primary_kp: ds.graph.topo
+
 > 例题：【2012年408真题】有向图能排成拓扑序列的条件：邻接矩阵主对角线下面的元素都是0。
 >
 > 解答：邻接矩阵下三角全0意味着所有边都从小编号指向大编号，即存在拓扑序。反之，有向图不能排成拓扑序列当且仅当存在顶点数大于1的强连通分量。
 
 ### 7.3 关键路径时间余量
 
+> section_id: exam-practice-ds-aoe_slack
+> kp_ids: [ds.graph.aoe]
+> primary_kp: ds.graph.aoe
+
 > 例题：【2022年408真题】时间余量：一个活动a的最迟开始时间l(i)和其最早开始时间e(i)的差额d(i)=l(i)-e(i)，即在不增加总时间的情况下活动可以拖延的时间。
 >
 > 解答：d(i)=0的活动为关键活动，关键活动组成的路径为关键路径。关键活动不能拖延，否则整个工程延期。
 
 ### 7.4 最小生成树唯一性
+
+> section_id: exam-practice-ds-mst_uniqueness
+> kp_ids: [ds.graph.mst]
+> primary_kp: ds.graph.mst
 
 > 例题：【2017年408大题】只要无向连通图中的边权值都不一样，那么最小生成树唯一。
 >
@@ -187,6 +269,10 @@ chapter: 10 常考题型与例题
 
 ### 8.1 折半查找比较序列
 
+> section_id: exam-practice-ds-bisect_sequence
+> kp_ids: [ds.search.binary_search]
+> primary_kp: ds.search.binary_search
+
 > 例题：【2015年408真题】下列选项中，不能构成折半查找中关键字比较序列的是()。
 >   A. 500,200,450,180  B. 500,450,200,180  C. 180,500,200,450  D. 180,200,500,450
 >
@@ -194,11 +280,19 @@ chapter: 10 常考题型与例题
 
 ### 8.2 折半查找判定树
 
+> section_id: exam-practice-ds-bisect_tree
+> kp_ids: [ds.search.binary_search]
+> primary_kp: ds.search.binary_search
+
 > 例题：【2017年408真题】下列二叉树中，可能成为折半查找判定树(不含外部结点)的是()。
 >
 > 答案:A;折半查找判定树必须是平衡BST，且中序遍历有序。判定树的形态由有序表的折半划分方式决定。
 
 ### 8.3 平衡二叉树查找
+
+> section_id: exam-practice-ds-avl_search
+> kp_ids: [ds.tree.avl]
+> primary_kp: ds.tree.avl
 
 > 例题：【2012统考真题】若平衡二叉树的高度为 6，且所有非叶子结点的平衡因子均为1，则该平衡二叉树的结点总数为()。
 >   A. 12  B. 20  C. 32  D. 33
@@ -206,6 +300,10 @@ chapter: 10 常考题型与例题
 > 答案:B;同6.4题，$n_6=20$。含n个结点的平衡二叉树最大深度为O(log₂n)，平均查找长度为O(log₂n)。
 
 ### 8.4 散列表线性探测——查找成功ASL
+
+> section_id: exam-practice-ds-hash_asl_success
+> kp_ids: [ds.search.hash]
+> primary_kp: ds.search.hash
 
 > 例题：【2018年408真题】现有长度为7、初始为空的散列表HT，散列函数H(k)=k%7，用线性探测再散列法解决冲突。将关键字22,43,15依次插入HT后，查找成功的平均查找长度是()。
 >
@@ -217,11 +315,19 @@ chapter: 10 常考题型与例题
 
 ### 8.5 散列表线性探测——查找失败ASL
 
+> section_id: exam-practice-ds-hash_asl_fail
+> kp_ids: [ds.search.hash]
+> primary_kp: ds.search.hash
+
 > 例题：【2019年408真题】现有长度为11且初始为空的散列表HT，散列函数H(key)=key%7，采用线性探测法解决冲突。将关键字序列87,40,30,6,11,22,98,20依次插入HT后，查找失败的平均查找长度是()。
 >
 > 解答：查找失败ASL需对每个散列地址(0~6)计算探测到空位的次数，再求平均。分母为散列函数能映射的地址数(7)。
 
 ### 8.6 散列表删除后查找失败ASL
+
+> section_id: exam-practice-ds-hash_delete_asl
+> kp_ids: [ds.search.hash]
+> primary_kp: ds.search.hash
 
 > 例题：【2012年408真题】现有长度为5、初始为空的散列表HT，散列函数H(k)=(k+4)%5，用线性探测法解决冲突。将关键字2022,12,25依次插入HT中，然后删除关键字25，查找失败的平均查找长度为()。
 >
@@ -229,17 +335,29 @@ chapter: 10 常考题型与例题
 
 ### 8.7 散列表堆积现象
 
+> section_id: exam-practice-ds-hash_clustering
+> kp_ids: [ds.search.hash]
+> primary_kp: ds.search.hash
+
 > 例题：【2014年408真题】堆积现象只会影响平均查找长度。
 >
 > 解答：堆积（聚集）是指非同义词争夺同一地址的现象，会降低查找效率、增加ASL，但不影响查找的正确性。
 
 ### 8.8 B树查找特点
 
+> section_id: exam-practice-ds-b_tree_search
+> kp_ids: [ds.search.b_tree]
+> primary_kp: ds.search.b_tree
+
 > 例题：【2023年408真题】查找某个关键字，不一定会查到叶节点，因为可能在分支结点就找到了。
 >
 > 解答：B树的分支结点也存储关键字，查找时若在分支结点命中则直接返回，不必到达叶节点。这与B+树不同（B+树必须查到叶节点）。
 
 ### 8.9 线性探测探测次数
+
+> section_id: exam-practice-ds-hash_probe_count
+> kp_ids: [ds.search.hash]
+> primary_kp: ds.search.hash
 
 > 例题：有k个同义词，用线性探测法把它们填入散列表，要进行多少次探测？
 >
@@ -249,11 +367,19 @@ chapter: 10 常考题型与例题
 
 ### 9.1 排序算法适用存储结构
 
+> section_id: exam-practice-ds-sort_storage
+> kp_ids: [ds.sort]
+> primary_kp: ds.sort
+
 > 例题：【2011年408真题】对于绝大部分内部排序而言，只适用于顺序存储结构。
 >
 > 解答：插入排序、交换排序、选择排序等内部排序通常需要随机访问，链式存储不支持O(1)随机访问。少数排序（如归并排序）可用于链表。
 
 ### 9.2 快速排序趟数与元素归位
+
+> section_id: exam-practice-ds-quick_sort_pass
+> kp_ids: [ds.sort.quick_sort]
+> primary_kp: ds.sort.quick_sort
 
 > 例题：【2014/2019年408真题】快速排序每一趟都会确定一个元素在最终位置上，第几趟就有几个元素在最终位置上，且一般要有一个在首段、尾端。
 >
@@ -261,17 +387,26 @@ chapter: 10 常考题型与例题
 
 ### 9.3 外部排序——最佳归并树
 
+> section_id: exam-practice-ds-external_merge_tree
+> kp_ids: []
+
 > 例题：【2019年408真题】设外存上有120个初始归并段，进行12路归并时，为实现最佳归并，需要补充的虚段个数是()。
 >
 > 解答：虚段数 = (k-1) - (初始归并段数-1) % (k-1) = (12-1) - (120-1)%(12-1) = 11 - 10%11 = 11 - 10 = 1... 修正：120-1=119, 119%11=9, 虚段=11-9=2。
 
 ### 9.4 外部排序适用场景
 
+> section_id: exam-practice-ds-external_use_case
+> kp_ids: []
+
 > 例题：【2016年408真题】可以用于大文件(TB)的排序。
 >
 > 解答：外部排序（归并排序）适用于数据量远大于内存容量的场景。将数据分批读入内存排序，再归并。
 
 ### 9.5 置换选择排序初始归并段
+
+> section_id: exam-practice-ds-replacement_selection
+> kp_ids: []
 
 > 例题：【2023年408真题】对于含有n(n>0)个元素的记录文件，工作区可以容纳m个元素，对于任意m(n>>m>0)，生成的第一个初始归并段长度()。
 >

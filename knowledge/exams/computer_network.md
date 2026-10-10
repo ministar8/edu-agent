@@ -1,16 +1,19 @@
----
-
-subject: 计算机网络
-chapter: 07 常考题型与例题
----
-
 # 常考题型与例题
+
+> document_id: exam-practice-cn
+> kb_depth: exams
+> doc_role: exam_item
+> subject: cn
 
 > 408考研计算机网络高频题型汇总，按章节分类。对比表和知识点已融入各章节，本文件仅收录例题。
 
 ## 1. 体系结构
 
 ### 1.1 性能指标计算
+
+> section_id: exam-practice-cn-perf_metrics
+> kp_ids: [cn.arch.performance]
+> primary_kp: cn.arch.performance
 
 > 例题：一个100MB的文件通过1Gbps链路传输，分组大小1KB，首部20B。求发送时延和总时延（忽略排队和处理时延，传播时延10ms）。
 >
@@ -22,6 +25,10 @@ chapter: 07 常考题型与例题
 
 ### 1.2 协议栈与分层
 
+> section_id: exam-practice-cn-protocol_stack
+> kp_ids: [cn.arch.model]
+> primary_kp: cn.arch.model
+
 > 例题：在OSI参考模型中，自下而上第一个提供端到端服务的层次是()
 >   A.数据链路层  B.网络层  C.传输层  D.应用层
 >
@@ -30,6 +37,10 @@ chapter: 07 常考题型与例题
 ## 2. 物理层
 
 ### 2.1 奈氏/香农定理
+
+> section_id: exam-practice-cn-nyquist_shannon
+> kp_ids: [cn.physical.bandwidth]
+> primary_kp: cn.physical.bandwidth
 
 > 例题：信道带宽4kHz，采用16种不同信号波形，信噪比30dB，求最大数据传输速率。
 >
@@ -40,6 +51,10 @@ chapter: 07 常考题型与例题
 
 ### 2.2 接口特性
 
+> section_id: exam-practice-cn-interface_traits
+> kp_ids: [cn.physical]
+> primary_kp: cn.physical
+
 > 例题：规定线路上信号电压范围属于接口的哪个特性？
 >   A.机械特性  B.电气特性  C.功能特性  D.过程特性
 >
@@ -48,6 +63,10 @@ chapter: 07 常考题型与例题
 ## 3. 数据链路层
 
 ### 3.1 CSMA/CD最小帧长
+
+> section_id: exam-practice-cn-csma_cd_min_frame
+> kp_ids: [cn.datalink.mac]
+> primary_kp: cn.datalink.mac
 
 > 例题：10Mbps以太网，最大段长2.5km，传播速率2×10⁸m/s，求最小帧长。
 >
@@ -58,6 +77,10 @@ chapter: 07 常考题型与例题
 
 ### 3.2 CRC校验
 
+> section_id: exam-practice-cn-crc
+> kp_ids: [cn.datalink.error_control]
+> primary_kp: cn.datalink.error_control
+
 > 例题：数据1101011，生成多项式G(x)=x⁴+x+1（即10011），求FCS。
 >
 > 解答：在数据后补4个0得11010110000，用10011做模2除，余数即为FCS。
@@ -65,6 +88,10 @@ chapter: 07 常考题型与例题
 ## 4. 网络层
 
 ### 4.1 IP地址与MAC地址
+
+> section_id: exam-practice-cn-ip_vs_mac
+> kp_ids: [cn.network.ip_address]
+> primary_kp: cn.network.ip_address
 
 > 例题：以下关于IP地址和MAC地址的说法，正确的是()
 >   A.IP地址是数据链路层使用的地址
@@ -84,6 +111,10 @@ chapter: 07 常考题型与例题
 > 答案:B,C;详见04_网络层 §2.2
 
 ### 4.2 子网划分
+
+> section_id: exam-practice-cn-subnetting
+> kp_ids: [cn.network.ip_address]
+> primary_kp: cn.network.ip_address
 
 > 例题：IP地址192.168.1.130，子网掩码255.255.255.192，求网络地址、广播地址、可用主机数。
 >
@@ -111,6 +142,10 @@ chapter: 07 常考题型与例题
 
 ### 4.3 路由协议
 
+> section_id: exam-practice-cn-routing_protocols
+> kp_ids: [cn.network.routing]
+> primary_kp: cn.network.routing
+
 > 例题：RIP协议的最大跳数是多少？超过该值表示什么？
 >
 > 答案:最大15跳，16跳表示不可达。RIP使用距离向量算法，存在"坏消息传播得慢"的问题。
@@ -122,6 +157,10 @@ chapter: 07 常考题型与例题
 ## 5. 传输层
 
 ### 5.1 TCP与UDP对比
+
+> section_id: exam-practice-cn-tcp_vs_udp
+> kp_ids: [cn.transport.tcp, cn.transport.udp]
+> primary_kp: cn.transport.tcp
 
 > 例题：TCP和UDP协议的说法中，正确的是()
 >   A.TCP和UDP都支持全双工通信
@@ -139,11 +178,19 @@ chapter: 07 常考题型与例题
 
 ### 5.2 传输效率计算
 
+> section_id: exam-practice-cn-transmission_efficiency
+> kp_ids: [cn.transport.tcp, cn.transport.udp]
+> primary_kp: cn.transport.tcp
+
 > 例题：【2021年408】有一个应用层数据12B，问TCP、UDP传输的效率。
 >
 > 答案:TCP效率12/32=37.5%，UDP效率12/20=60%;详见05_传输层 §3.7
 
 ### 5.3 拥塞控制
+
+> section_id: exam-practice-cn-congestion
+> kp_ids: [cn.transport.tcp_congestion]
+> primary_kp: cn.transport.tcp_congestion
 
 > 例题：TCP连接建立时，cwnd=1，ssthresh=16。画出cwnd的变化过程。
 >
@@ -165,11 +212,19 @@ chapter: 07 常考题型与例题
 
 ### 5.4 流量控制与拥塞控制
 
+> section_id: exam-practice-cn-flow_congestion
+> kp_ids: [cn.transport.tcp_flow, cn.transport.tcp_congestion]
+> primary_kp: cn.transport.tcp_flow
+
 > 例题：TCP的流量控制和拥塞控制的区别是什么？
 >
 > 答案:流量控制端到端(rwnd)，拥塞控制全局(cwnd)，详见05_传输层 §3.3
 
 ### 5.5 三次握手/四次挥手
+
+> section_id: exam-practice-cn-handshake_teardown
+> kp_ids: [cn.transport.tcp_handshake]
+> primary_kp: cn.transport.tcp_handshake
 
 > 例题：TCP三次握手中，第二次握手报文的标志位是()
 >   A.SYN=1  B.ACK=1  C.SYN=1,ACK=1  D.FIN=1,ACK=1
@@ -184,17 +239,28 @@ chapter: 07 常考题型与例题
 
 ### 6.1 DNS查询
 
+> section_id: exam-practice-cn-dns_query
+> kp_ids: [cn.application.dns]
+> primary_kp: cn.application.dns
+
 > 例题：域名www.abc.xyz.com的DNS查询，最少和最多需要多少次查询？TCP连接总时长？
 >
 > 答案:最少0次（本地缓存命中），最多4次（4部分逐级迭代）。连接时长最少2个RTT，最多6个RTT;详见06_应用层 DNS查询次数计算技巧
 
 ### 6.2 DHCP
 
+> section_id: exam-practice-cn-dhcp
+> kp_ids: []
+
 > 例题：DHCP四步交互中，哪些报文是广播发送的？
 >
 > 答案:全部四步都是广播（目的地址255.255.255.255），因为客户端尚未获得IP地址;详见06_应用层 §3
 
 ### 6.3 HTTP
+
+> section_id: exam-practice-cn-http
+> kp_ids: [cn.application.http]
+> primary_kp: cn.application.http
 
 > 例题：HTTP/1.1默认的连接方式是什么？与HTTP/1.0的区别？
 >
