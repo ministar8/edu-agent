@@ -37,7 +37,7 @@
 | `static/` | 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
 | `src/evaluation/` | 评测。**三套彼此独立的尺子**：① **`task_eval/`** —— **论文效果章的产出器**（5 任务 `qa/generate/grade/verify/memory` × 66 条 demo case；子命令 `run/sanity/calibrate/rejudge/reprobe/backfill`）；② RAGAS Layer-1（`dataset/adapters/ragas_eval/cli`，组件指标，**不是任务指标**）；③ 检索质量门禁（`retrieval_gate` / `probe_gate` / `telemetry_report`）。★ 版本锚点见 `docs/EXPERIMENTS.md` **§20**（效果）与 §18（检索） |
-| `docs/` | **工程文档**（见 `docs/README.md` 索引）。现行：**`ARCHITECTURE_RETRIEVAL.md` 检索架构总览（as-built + 术语表）** / `ARCHITECTURE.md` 系统架构 / `KB_MASTER_DESIGN.md` 知识库总册 / `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md` 层设计与策略契约 / `DOCKER.md` 容器 + TEI 端点契约 / **`RETRIEVAL_PLAN.md` 执行方案** / `RETRIEVAL_ROADMAP.md` 路线与**「不做清单」** / `L1L2L3_RETRIEVAL_REVIEW.md` 分级评审 / `RERANK_SWITCH_ANALYSIS.md` 重排开关分析 / **`EXPERIMENTS.md` 实验总册** |
+| `docs/` | **工程文档**（见 `docs/README.md` 索引）。现行：**`ARCHITECTURE_RETRIEVAL.md` 检索架构总览（as-built + 术语表）** / `ARCHITECTURE.md` 系统架构 / `KB_MASTER_DESIGN.md` 知识库总册 / `RETRIEVAL_LAYER_DESIGN.md` + `RETRIEVAL_POLICY.md` 层设计与策略契约 / `DOCKER.md` 容器 + TEI 端点契约 / **`RETRIEVAL_PLAN.md` 执行方案** / `RETRIEVAL_ROADMAP.md` 路线与**「不做清单」** / `RERANK_SWITCH_ANALYSIS.md` 重排开关分析 / **`EXPERIMENTS.md` 实验总册** |
 
 ## 常用命令
 

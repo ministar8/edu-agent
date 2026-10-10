@@ -176,24 +176,45 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 | `evaluation.probe_gate` | 临时索引 + 就绪屏障 | 有 | 小节级探针（拦后退、放前进） |
 | `evaluation.candidate_trace` | **生产索引**、无就绪屏障 | **无** | 逐层归因诊断，**不是门禁** |
 
-### 6.3 ★ 已知局限（V-2026-10-02 实测）
+### 6.3 ★ 已知局限（更新 2026-10-10）
 
-**门禁的语料不含 L1/L2/L3。** `retrieval_gate.build_index()` 只遍历
-`rag.ingest.DEFAULT_CATEGORIES` 的 6 个目录（四科讲义 + `questions` + `learning_paths`），
-而 L1/L2/L3 由**独立脚本**入库（`scripts/ingest_basic_all.py` / `ingest_advanced.py` / `ingest_exams.py`）。
+**(a) 门禁语料已含 L1/L2/L3，但走的是「通用路径」而非「生产入库脚本」。**
 
-实测对比：
+`retrieval_gate.build_index()` 自 2026-10-10 起遍历 `_INDEX_SOURCES`（basic / advanced /
+exams / code + learning_paths），**已覆盖 L1/L2/L3** —— 本节此前记录的「门禁零 L1/L2/L3」
+（只走 `rag.ingest.DEFAULT_CATEGORIES`）**已作废**。
 
-| 索引 | 总条数 | kb_depth 分布 |
+但它复用的是**通用** `load_single_file → clean → split → enhance → tag` 链路，
+**不调任何 `scripts/ingest_*.py`**；而生产四个科 / exams / code 集合恰恰由那些脚本入。
+两边的解析与切分不同 ⇒ chunk 数**逐集合不等**：
+
+| 集合 | 生产（`./chroma_db`） | 门禁（临时索引） |
 |---|---|---|
-| 门禁（临时，每次重建） | **2505** | legacy **2505**（**零 L1/L2/L3**） |
-| 生产/实验（`./chroma_db`） | **4085** | legacy 2505 + basic 123 + advanced 98 + exams 1359 |
+| data_structure | 134 | 163 |
+| computer_organization | 129 | 144 |
+| operating_system | 105 | 121 |
+| computer_network | 126 | 145 |
+| exams | 1482 | 1619 |
+| code_ds / code_os | 14 / 12 | 23 / 18 |
+| learning_paths | 24 | 24（**唯一相等** —— `rag.ingest` 唯一真正入库的层） |
 
-**含义**：`retrieval_gate` / `probe_gate` 度量的是 **legacy 链路的回归**；
-L1/L2/L3 的退化**不会被门禁捕获**。5 条探针的目标也全在 legacy 文件上。
-→ 论文中引用门禁时须写明这一边界；若要覆盖 L1/L2/L3，需让门禁的入库路径包含分层目录。
+**含义**：门禁度量的是**通用链路**的回归，**不等于生产入库路径** ⇒ **改 `ingest_*.py`
+（或任何只影响生产解析/切分）的改动，门禁测不到**。
+→ ★ **2026-10-10 已修**：门禁改用 `rag.ingest_layers.build_all()`（与 `scripts/ingest_*.py`
+**同源**），索引与生产**逐位相等**（134/129/105/126/1482/14/12）。上面这张对照表保留作背景。
 
-> 该边界已同步写进代码注释（`retrieval_gate` 模块 docstring 第 6 条 · `build_index` docstring ·
+**(b) 门禁不可复现：kp_mrr 噪声地板 ≈ ±0.003。**
+
+同码同命令、跨进程重跑，`kp_mrr` 在 0.7591–0.7644 间抖动（`category_hit@*` 已稳）。
+实测排除：chunk 内容确定、HNSW 图确定、同进程内确定；`PYTHONHASHSEED=0` 只减不消。
+**收敛到 1 条 query**（`请出一道考查 TCP 序号与确认号的题。`）的 top-2 chunk 互换
+（kp 排名 1↔2，折算 `0.5/156≈0.0032`）。性质是**并列打破**：RRF 主排序
+（`postprocess.py:178`）已用 `_dedup_key` 做次级键、修好了 `cat@1`，但**下游仍有按
+「分数」单键排序处**（如 `dedup_same_section`），其并列时依赖受**并发路由完成次序**
+影响的输入顺序。⇒ **低于 ±0.003 的 `kp_mrr` 退化，门禁测不出**（① 的 cat@1 −0.0128
+等**大**结论不受影响）。
+
+> 该边界已同步写进代码注释（`retrieval_gate` 模块 docstring · `build_index` docstring ·
 > `probe_gate` 模块 docstring），避免「门禁全绿 = 系统没退化」被误读。
 
 ---
@@ -209,4 +230,4 @@ L1/L2/L3 的退化**不会被门禁捕获**。5 条探针的目标也全在 lega
 | **pack sufficiency 兜底** | 包内无合规项时从合规候选取前 k 回填 | §15.7 |
 
 **未修（如实记录）**：L2 跨学科污染 40.0% · RRF 阈值高于可达上限 · rerank 收益符号不稳 ·
-decompose/HyDE 零增益 · 门禁不含 L1/L2/L3（本节 6.3）。
+decompose/HyDE 零增益 · **门禁走通用路径 ≠ 生产入库 · 门禁 kp_mrr 噪声 ±0.003（本节 6.3）**。
