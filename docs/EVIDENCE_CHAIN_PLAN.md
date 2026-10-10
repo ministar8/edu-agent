@@ -1808,7 +1808,7 @@ git commit -m "feat(eval): falsify —— mutation 覆盖 contract_inputs（R1-A
   - `claims.artifact_status(path: str, *, superseded_by: str = "", reason: str = "") -> dict`
   - `scripts/build_claim_ledger.py --check` → 退出码 0/1（红灯 = 有孤立结论 或 ledger 与重算不一致）
 
-- [x] **Step 1: 写红的判据（含「已证明」四条件缺一不可）**（完成于 `e47377d前`）
+- [x] **Step 1: 写红的判据（含「已证明」四条件缺一不可）**（完成于 `35abcb6`）
 
 ```python
 def check_6() -> None:
@@ -1833,7 +1833,7 @@ def check_6() -> None:
 
 `_EXPECTED_ITEMS = 35`（Task 5 结束时为 26，本步 +9：6a/6b×5/6c/6d/6e）。
 
-- [x] **Step 2: `claims.py` 实现**（完成于 `e47377d前`）
+- [x] **Step 2: `claims.py` 实现**（完成于 `35abcb6`）
 
 ```python
 """主张状态推导（EVIDENCE_CHAIN.md §1.1）。状态是算出来的，不是写出来的。"""
@@ -1873,7 +1873,7 @@ def artifact_status(path: str, *, superseded_by: str = "", reason: str = "") -> 
     }
 ```
 
-- [x] **Step 3: `tier_ok` 的两个前置怎么算（§1.3）**（完成于 `e47377d前`）
+- [x] **Step 3: `tier_ok` 的两个前置怎么算（§1.3）**（完成于 `35abcb6`）
 
 `derive_status(..., tier_ok=?)` 不能靠人写「抖动已量化」。`claims.py` 补两个纯函数：
 
@@ -1929,7 +1929,7 @@ def repeat_jitter(by_run: list[dict[str, float]], *, case_ids: list[str]) -> dic
 `_EXPECTED_ITEMS` 从 35 升到 36（本步 +1）。**若**将来补齐了边界标注、此判据变 True，
 就把这条判据改成断言 True 并在 commit message 里引用 §7.2 —— 判据跟着事实走，不是跟着愿望走。
 
-- [x] **Step 4: `build_claim_ledger.py` 生成 `evals/claims/ledger.md`**（完成于 `e47377d前`）
+- [x] **Step 4: `build_claim_ledger.py` 生成 `evals/claims/ledger.md`**（完成于 `35abcb6`）
 
 必需内容（按 §6 门槛行逐条）：`维度 | 主指标 | 数值或 N/A | 状态词 | 证据锚点 | 复现命令 | R1-B 签署`。
 ★ 数值一律从归档经 `predicates` 重算，**代码里不允许出现任何手写的百分数字面量**。
@@ -1942,7 +1942,7 @@ def repeat_jitter(by_run: list[dict[str, float]], *, case_ids: list[str]) -> dic
     ap.add_argument("--check", action="store_true", help="只校验：文档引用与重算是否一致")
 ```
 
-- [x] **Step 5: R3「孤立结论」检查器（禁止的是无来源的可验证断言，不是结论句）**（完成于 `e47377d前`）
+- [x] **Step 5: R3「孤立结论」检查器（禁止的是无来源的可验证断言，不是结论句）**（完成于 `35abcb6`）
 
 ```python
 _ORPHAN_RE = re.compile(
@@ -1965,7 +1965,7 @@ def orphan_lines(md_path: Path) -> list[int]:
 输出行号清单并**返回 1**（本 Task 只报警不阻塞：历史文档大量既有结论句需要逐条补锚点，
 那是 Task 10 的收尾工作，不该在此处把 CI 式红灯提前点亮）。
 
-- [x] **Step 6: 转绿 + 生成一次 ledger 试跑（零 LLM）**（完成于 `e47377d前`）
+- [x] **Step 6: 转绿 + 生成一次 ledger 试跑（零 LLM）**（完成于 `35abcb6`）
 
 ```bash
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py
@@ -1975,7 +1975,7 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.p
 Expected: `全绿`；`ledger_draft.md` 里 Generate/Grade 行状态为 **未测量**（gold 未填），
 其余行按 §6 逐条有状态词。
 
-- [x] **Step 7: 提交**（完成于 `e47377d前`）
+- [x] **Step 7: 提交**（完成于 `35abcb6`）
 
 ```bash
 git add src/evaluation/task_eval/claims.py scripts/build_claim_ledger.py evals/claims/
