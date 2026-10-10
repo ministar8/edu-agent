@@ -35,6 +35,105 @@ def _candidate_limit(k: int) -> int:
     return max(k * settings.BM25_CANDIDATE_FACTOR, settings.BM25_CANDIDATE_FLOOR)
 
 
+def _open_collection(collection_name: str):
+    """取 Chroma collection；整条词法路由坏掉时记录失败并 raise（不伪装成空结果）。"""
+    try:
+        from rag.common.vectorstore import get_vector_store_manager
+
+        return get_vector_store_manager().client.get_collection(collection_name)
+    except Exception as e:
+        # 词法路由整条坏掉时，旧实现返回 [] 且不记失败 ⇒ retrieval_gate 的
+        # unexpected_query_failures 看不见它，所有指标照常「健康」；更糟的是探针会把
+        # 「坏了」写成 status="empty"，于是归因层永远没有 `error` 这个证据可用。
+        from rag.common.vectorstore import get_vector_store_manager
+
+        get_vector_store_manager().record_query_failure(
+            f"{collection_name}: bm25 {e.__class__.__name__}", exc=e
+        )
+        raise  # 交给调用方收敛为 status="error"；不再伪装成空结果
+
+
+def _sample_avgdl(collection, total_docs: int) -> float:
+    """采样 ≤500 篇估计平均文档长度（无样本时回退 100.0）。"""
+    sample_size = min(total_docs, 500)
+    sample_result = collection.get(limit=sample_size, include=["documents"])
+    sample_docs = sample_result.get("documents") or []
+    return sum(len(d) for d in sample_docs) / len(sample_docs) if sample_docs else 100.0
+
+
+def _score_term(
+    collection,
+    term: str,
+    k: int,
+    filter: dict | None,
+    *,
+    total_docs: int,
+    avgdl: float,
+    b: float = 0.75,
+    k1: float = 1.5,
+) -> dict[str, tuple[Document, float]]:
+    """单个词项的 BM25 打分：`$contains` 取候选 → TF·IDF·长度归一 → {doc_id: (doc, score)}。"""
+    try:
+        query_kwargs: dict = {
+            "where_document": {"$contains": term},
+            "limit": _candidate_limit(k),
+            "include": ["documents", "metadatas"],
+        }
+        if filter:
+            query_kwargs["where"] = filter
+        result = collection.get(**query_kwargs)
+    except Exception:
+        logger.debug("BM25 $contains failed for term '%s'", term, exc_info=True)
+        return {}
+
+    ids = result.get("ids") or []
+    documents = result.get("documents") or []
+    metadatas = result.get("metadatas") or []
+
+    df = len(ids)
+    idf = math.log((total_docs - df + 0.5) / (df + 0.5) + 1) if df > 0 else 0.0
+
+    out: dict[str, tuple[Document, float]] = {}
+    for i, doc_id in enumerate(ids):
+        doc_text = documents[i] or ""
+        doc_meta = metadatas[i] or {}
+        tf = doc_text.count(term)
+        dl = len(doc_text)
+        tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / avgdl))
+        out[doc_id] = (Document(page_content=doc_text, metadata=doc_meta), idf * tf_norm)
+    return out
+
+
+def _sort_and_truncate(
+    scored_docs: dict[str, tuple[Document, float]], k: int
+) -> list[tuple[Document, float]]:
+    """按 (分数降序, `chunk_id`/内容次级键) 排序取前 k。
+
+    并列次级键的理由：原实现只按分数排，并列项顺序取决于 `scored_docs` 的**插入顺序** ——
+    而插入顺序又取决于 Chroma `get()` 返回候选的先后。实测该顺序在当前实现下稳定（5/5 一致），
+    但 **API 并未承诺这一点**，一旦变化，并列项名次就会无声改变（backlog #31）。
+    """
+    return sorted(
+        scored_docs.values(),
+        key=lambda x: (
+            -x[1],
+            str(x[0].metadata.get("section.chunk_id") or x[0].page_content[:80]),
+        ),
+    )[:k]
+
+
+def _normalize_scores(
+    results: list[tuple[Document, float]],
+) -> list[tuple[Document, float]]:
+    """分数归一化到 [0, 1]（除以最高分；最高分 ≤0 时不改）。"""
+    if not results:
+        return results
+    max_score = results[0][1]
+    if max_score > 0:
+        return [(doc, score / max_score) for doc, score in results]
+    return results
+
+
 def bm25_search(
     query_terms: list[str],
     collection_name: str,
@@ -51,96 +150,28 @@ def bm25_search(
     if not query_terms:
         return []
 
-    try:
-        from rag.common.vectorstore import get_vector_store_manager
-
-        collection = get_vector_store_manager().client.get_collection(collection_name)
-    except Exception as e:
-        # 词法路由整条坏掉时，旧实现返回 [] 且不记失败 ⇒ retrieval_gate 的
-        # unexpected_query_failures 看不见它，所有指标照常「健康」；更糟的是探针会把
-        # 「坏了」写成 status="empty"，于是归因层永远没有 `error` 这个证据可用。
-        from rag.common.vectorstore import get_vector_store_manager
-
-        get_vector_store_manager().record_query_failure(
-            f"{collection_name}: bm25 {e.__class__.__name__}", exc=e
-        )
-        raise  # 交给调用方收敛为 status="error"；不再伪装成空结果
-
-    scored_docs: dict[str, tuple[Document, float]] = {}
+    collection = _open_collection(collection_name)
     total_docs = collection.count()
     if total_docs == 0:
         return []
 
-    # 平均文档长度（缓存 5min，避免每次查询采样 500 篇文档）
-    def _compute_avgdl() -> float:
-        sample_size = min(total_docs, 500)
-        sample_result = collection.get(limit=sample_size, include=["documents"])
-        sample_docs = sample_result.get("documents") or []
-        return sum(len(d) for d in sample_docs) / len(sample_docs) if sample_docs else 100.0
-
     # 带 IO（collection.get），用 get_or_compute：允许竞态重复采样，但不持锁等待
-    avgdl = _avgdl_cache.get_or_compute(collection_name, _compute_avgdl)
+    avgdl = _avgdl_cache.get_or_compute(
+        collection_name, lambda: _sample_avgdl(collection, total_docs)
+    )
 
-    # BM25 参数
-    b = 0.75
-    k1 = 1.5
-
+    scored_docs: dict[str, tuple[Document, float]] = {}
     for term in query_terms:
-        try:
-            query_kwargs: dict = {
-                "where_document": {"$contains": term},
-                "limit": _candidate_limit(k),
-                "include": ["documents", "metadatas"],
-            }
-            if filter:
-                query_kwargs["where"] = filter
-            result = collection.get(**query_kwargs)
-        except Exception:
-            logger.debug("BM25 $contains failed for term '%s'", term, exc_info=True)
-            continue
-
-        ids = result.get("ids") or []
-        documents = result.get("documents") or []
-        metadatas = result.get("metadatas") or []
-
-        df = len(ids)
-        idf = math.log((total_docs - df + 0.5) / (df + 0.5) + 1) if df > 0 else 0.0
-
-        for i, doc_id in enumerate(ids):
-            doc_text = documents[i] or ""
-            doc_meta = metadatas[i] or {}
-
-            tf = doc_text.count(term)
-            dl = len(doc_text)
-
-            tf_norm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * dl / avgdl))
-            score = idf * tf_norm
-
+        for doc_id, (doc, score) in _score_term(
+            collection, term, k, filter, total_docs=total_docs, avgdl=avgdl
+        ).items():
             if doc_id in scored_docs:
                 existing_doc, existing_score = scored_docs[doc_id]
                 scored_docs[doc_id] = (existing_doc, existing_score + score)
             else:
-                doc = Document(page_content=doc_text, metadata=doc_meta)
                 scored_docs[doc_id] = (doc, score)
 
-    # 并列次级键：分数相同时按 `chunk_id`（缺失时退到内容哈希）排序。
-    # 原实现只按分数排，并列项的顺序取决于 `scored_docs` 的**插入顺序** ——
-    # 而插入顺序又取决于 Chroma `get()` 返回候选的先后。实测该顺序在当前
-    # 实现下是稳定的（5/5 一致），但**API 并未承诺这一点**，一旦变化，
-    # 并列项的名次就会无声改变（backlog #31）。
-    results = sorted(
-        scored_docs.values(),
-        key=lambda x: (
-            -x[1],
-            str(x[0].metadata.get("section.chunk_id") or x[0].page_content[:80]),
-        ),
-    )[:k]
-
-    # 归一化到 [0, 1]
-    if results:
-        max_score = results[0][1]
-        if max_score > 0:
-            results = [(doc, score / max_score) for doc, score in results]
+    results = _normalize_scores(_sort_and_truncate(scored_docs, k))
 
     if results:
         logger.debug(
