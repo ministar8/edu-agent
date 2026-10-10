@@ -31,7 +31,7 @@ Chunk 级字段（section.* 续）：
 ## 双写：扁平名与 section.* 并存
 
 `section.*` 与扁平名（`heading` / `heading_path` / `chunk_id` …）是**双写**关系 ——
-`rag.splitter._append_chunk_metadata()` 会**同时**写入两套；扁平名保留以兼容既有索引
+`rag.chunking.splitter._append_chunk_metadata()` 会**同时**写入两套；扁平名保留以兼容既有索引
 与既有消费方（那个函数的 docstring 也写着「新规范 + 旧字段兼容」）。
 
 ★ **本模块不再维护字段映射表**：曾有一份 `LEGACY_FIELD_MAP` + `migrate_metadata()`，

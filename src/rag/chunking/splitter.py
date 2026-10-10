@@ -11,8 +11,12 @@ logger = logging.getLogger(__name__)
 MIN_CHUNK_LENGTH = 80
 
 # 无围栏代码碎片的行首特征（讲义里大量 C/C++ 实例不写 ``` 围栏）
+# ★ 刻意**不含**裸 `^\*`：C 块注释续行 `* ...` 与 Markdown 加粗 `**x**` / 无序列表 `* x`
+#   行首同形，纯靠行首无法区分。408 讲义满是 `**识别信号**` 这类加粗标签，若保留该分支
+#   会把整篇正文误判成代码（实测四科 ~90% chunk 被误加语义锚点）。块注释另有 `/*` 起点、
+#   类型关键字等信号兜底，去掉 `^\*` 不损真实代码检出。
 _CODE_FRAGMENT_START_RE = re.compile(
-    r"^(?://|/\*|\*|#include\b|#define\b|using\s+namespace\b"
+    r"^(?://|/\*|#include\b|#define\b|using\s+namespace\b"
     r"|void\s+\w+\s*\(|int\s+\w+\s*\(|bool\s+\w+\s*\(|char\s+\w+"
     r"|float\s+\w+|double\s+\w+|struct\s+\w+|class\s+\w+|template\s*<"
     r"|public:|private:|printf\s*\(|cout\s*<<|for\s*\(|while\s*\(|if\s*\()",
@@ -248,47 +252,39 @@ _LIST_ITEM_RE = re.compile(r"^(?:[-*+]|\d+[.．])\s+", re.MULTILINE)
 # ── Q&A 单元识别正则 ──────────────────────────────────
 # 例题模式：> 例题 / > 例N / > 例1：
 _EXAMPLE_Q_RE = re.compile(r"^>\s*(?:例[题\d]|例\d+[：:])", re.MULTILINE)
-# ── 答案标记 ──────────────────────────────────────────
-# 两种书写形态都要认，否则真题永远产不出 merged_qa：
-#   1. 讲义形态 `解答：` / `答案：` / `正确答案：`；
-#   2. 真题形态 `**参考解答**：` / `**解析**：` —— 加粗标记夹在词与冒号之间；
-#      以及根本不写「答案：」、只用行尾 `✅` 标出正确选项的题。
-# 真题里 `所以答案选择 D。` 这类无冒号叙述不单独加规则 —— 其所在 section 必含 `✅`。
-# ⚠️ `✅` 只出现在 knowledge/exams/**（讲义 0 处）⇒ 这条扩展对讲义的
-#    `has_answer_marker` 是零影响。
+# ── 答案标记（仅「词 + 冒号」形态）────────────────────
+# 认 `解答：` / `答案：` / `正确答案：` / `**解析**：`（加粗夹在词与冒号之间）。
+# ★ 2026-10 语料重建后**移除两处旧真题格式支持**（实测 knowledge/ 全库 0 命中）：
+#   · 行尾 `✅` 标正确选项 —— 新格式把答案改存 metadata 的 `answer_key`；
+#   · `##### N` / `### 第N题` 真题标题 —— 新格式改用 `## YYYY-QN`，且 ingest 直接
+#     按题构造 Document，不再需要 splitter 猜。二者皆成死代码；且「真题模式」若生效
+#     会把题+答合并成一个 chunk，与 L3「items/answer 分开」的设计直接冲突。
 _ANSWER_RE = re.compile(
-    r"(?:解答|答案|正确答案|解析)[ \t]*\**[ \t]*[：:；;]"
-    r"|✅",
+    r"(?:解答|答案|正确答案|解析)[ \t]*\**[ \t]*[：:；;]",
     re.MULTILINE,
 )
-# 答案字母提取，两种形态：讲义 `正确答案：D` / `答案：B`；真题的正确选项行尾 `✅`
-# （`- **A. xxx** ✅`）。真题不写「答案：」，若不认它 `qa.answer_key` 会全为空，
-# 而选择题的自动批改正是靠这个字母。
+# 答案字母提取：`正确答案：D` / `答案：B`。
 _ANSWER_KEY_RE = re.compile(
-    r"(?:正确答案|答案)[：:；;]\s*([A-E](?:,[A-E])*)"
-    r"|^[ \t]*[-*+][ \t]*\*{0,2}([A-E])[.、)．][^\n]*✅",
+    r"(?:正确答案|答案)[：:；;]\s*([A-E](?:,[A-E])*)",
     re.MULTILINE,
 )
 # 非选择题的 answer_key：取「答案:/解答:」之后到 ; 或行尾的内容
 _NON_LETTER_KEY_RE = re.compile(r"(?:答案|解答)[：:；;]\s*(.+?)(?:[；;]|$)", re.MULTILINE)
-# 真题模式：##### N (纯数字标题) 或 ### 第N题（学科·题型）(新格式)
-_EXAM_Q_HEADING_RE = re.compile(r"^(?:#{4,5}\s*\d+\s*$|#{2,4}\s*第\d+题)", re.MULTILINE)
 
 
 def _merge_qa_blockquotes(text: str) -> str:
-    """预扫描文本，将 Q&A 模式合并为原子块
+    """预扫描文本，把「例题」blockquote 区域合并为原子块。
 
-    识别两种模式：
-    1. 例题模式：> 例题/例N 开头，到 答案：/解答：/正确答案： 结束的 blockquote 区域
-    2. 真题模式：##### N 或 ### 第N题 标题行 + 题干 + 答案 + 解析，到下一个标题或文件结束
+    例题模式：`> 例题` / `> 例N` 开头，到 `答案：`/`解答：`/`正确答案：` 结束。
+    合并后的块以 `__QA_PAIR_START__` 标记，后续 `_parse_semantic_units` 识别为原子单元。
 
-    合并后的块以 __QA_PAIR_START__ 标记，后续 _parse_semantic_units 会将其识别为原子单元。
+    ★ 2026-10 移除「真题模式」分支（`##### N` / `### 第N题`）：新语料 0 命中，
+    且 L3 由 ingest 按题构造 Document（items / answer 各自成 chunk），不走此合并。
     """
     lines = text.splitlines()
     result_lines: list[str] = []
     qa_buffer: list[str] = []
     in_qa = False
-    qa_source = ""  # "example" or "exam"
 
     for line in lines:
         stripped = line.strip()
@@ -299,36 +295,18 @@ def _merge_qa_blockquotes(text: str) -> str:
                 result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
                 qa_buffer = []
             in_qa = True
-            qa_source = "example"
-            qa_buffer.append(line)
-            continue
-
-        # ── 检测真题开头（##### N 或 ### 第N题） ──
-        if _EXAM_Q_HEADING_RE.match(stripped):
-            if in_qa and qa_buffer:
-                result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
-                qa_buffer = []
-            in_qa = True
-            qa_source = "exam"
             qa_buffer.append(line)
             continue
 
         if in_qa:
-            if qa_source == "example":
-                if stripped.startswith(">") or _ANSWER_RE.search(stripped):
-                    qa_buffer.append(line)
-                    continue
-                else:
-                    # 非引用行出现，关闭当前 QA 块
-                    result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
-                    qa_buffer = []
-                    in_qa = False
-                    result_lines.append(line)
-                    continue
-            elif qa_source == "exam":
-                # 真题模式：整块持续收集，只在下一个真题标题或输入结束时关闭
+            if stripped.startswith(">") or _ANSWER_RE.search(stripped):
                 qa_buffer.append(line)
-
+            else:
+                # 非引用行出现，关闭当前 QA 块
+                result_lines.append("__QA_PAIR_START__" + "\n".join(qa_buffer))
+                qa_buffer = []
+                in_qa = False
+                result_lines.append(line)
         else:
             result_lines.append(line)
 
@@ -364,8 +342,7 @@ def _extract_qa_fields(text: str) -> dict:
     # 提取答案标识：先尝试字母(A-E)，失败则提取答案:后到分号/行尾的内容
     key_match = _ANSWER_KEY_RE.search(text)
     if key_match:
-        # 两个分支各有一个捕获组，取非空的那个
-        answer_key = key_match.group(1) or key_match.group(2)
+        answer_key = key_match.group(1)
     else:
         # 非选择题：提取 答案:XXX 或 解答:XXX 中到 ; 或行尾的部分
         nl_match = _NON_LETTER_KEY_RE.search(text)
@@ -383,7 +360,6 @@ def _extract_qa_fields(text: str) -> dict:
 
     question = re.sub(r"^>\s*", "", question, flags=re.MULTILINE)
     question = re.sub(r"^例[题\d]+[：:]?\s*", "", question, count=1)
-    question = re.sub(r"^#{4,5}\s*\d+\s*\n?", "", question, count=1)
     question = question.strip()
 
     answer = re.sub(r"^(?:正确)?(?:答案|解答)[：:；;]\s*", "", answer, count=1)
@@ -1033,17 +1009,16 @@ def split_documents(documents: list[Document]) -> list[Document]:
             sample_text = section["text"][:200]
             content_type = _detect_content_type(sample_text, {"heading_title": section["heading"]})
 
-            # ── 真题/练习题 Q&A 检测 ──
-            # 若 section 内含 "正确答案" 或 "答案：" 标记，且 heading 是纯数字（真题模式）
-            # 或 heading 含 "题"/"例题"，则整个 section 视为 merged_qa
+            # ── 练习题 Q&A 检测 ──
+            # section 内含「答案：」类标记，且 heading 含 "题"/"例题"（或 content_type 已是
+            # exercise/answer），则整个 section 视为 merged_qa。
             section_text = section["text"]
             has_answer_marker = bool(_ANSWER_RE.search(section_text))
-            heading_is_exam = bool(_EXAM_Q_HEADING_RE.match(section["heading"]))
             heading_is_exercise = any(
                 kw in section["heading"] for kw in ("题", "例题", "习题", "练习")
             )
             if has_answer_marker and (
-                heading_is_exam or heading_is_exercise or content_type in ("exercise", "answer")
+                heading_is_exercise or content_type in ("exercise", "answer")
             ):
                 content_type = "merged_qa"
 
@@ -1154,7 +1129,7 @@ def split_documents(documents: list[Document]) -> list[Document]:
                 # 不复用 content_type：它是**单值形状分类器**，一个 chunk 可以既是「列表」（形状）
                 # 又是「习题」（语义），挤在一个字段里会互相挤掉；且 content_type 还经
                 # `_resolve_chunk_params` 决定切分尺寸，改它的判定顺序会连带**重切索引**。
-                chunk.metadata["is_exercise_content"] = heading_is_exercise or heading_is_exam
+                chunk.metadata["is_exercise_content"] = heading_is_exercise
                 chunk.metadata["has_answer_marker"] = has_answer_marker
                 chunk.metadata["section.parent_id_index"] = sid
                 chunk.metadata["section.parent_text"] = parent_windows[ci]

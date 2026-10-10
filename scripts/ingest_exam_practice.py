@@ -1,10 +1,6 @@
-"""L3 章节题型入库：`knowledge/exams/<科>.md`（常考题型与例题）→ `exams` 集合。
+"""L3 章节题型入库：``knowledge/exams/<科>.md``（常考题型与例题）→ ``exams`` 集合。
 
-与 `ingest_exams.py`（按年入库 `exams/YYYY/items+answer`）互补：本脚本入 exams/ 根下的
-「按章节的例题集」，同样进 L3 `exams` 集合，`doc_role=exam_item`。
-Section 级 KP 锚定：解析 H3 下的 `> section_id/kp_ids/primary_kp` 头，
-chunk 继承节级元数据，并写 `practice:<section_id> ──trains──→ KP` 边
-（混标真题结论节 `kp_ids: []`，不入边——真题侧已由 assesses 承载）。
+构建逻辑已下沉到 ``rag.ingest_layers.exam_practice``；本脚本只做 CLI + 验收。
 
 用法：
     PYTHONPATH=src uv run python scripts/ingest_exam_practice.py
@@ -20,77 +16,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from ingest_code import load_kp_ids, merge_edges, parse_sections  # noqa: E402
-from langchain_core.documents import Document  # noqa: E402
+from rag.ingest_layers import _shared  # noqa: E402
+from rag.ingest_layers import exam_practice as practice_layer  # noqa: E402
 
-from rag.splitter import split_documents  # noqa: E402
-from rag.vectorstore import get_vector_store_manager  # noqa: E402
-
-EXAMS_DIR = ROOT / "knowledge" / "exams"
-COLLECTION = "exams"
-
-# 文件名（stem）→ subject 短码
-SUBJECT_CODE = {
-    "data_structure": "ds",
-    "computer_organization": "co",
-    "operating_system": "os",
-    "computer_network": "cn",
-}
-
-
-def ingest_all(kp_ids: set[str]) -> int:
-    mgr = get_vector_store_manager()
-    chunks: list[Document] = []
-    edges: list[dict] = []
-    for path in sorted(EXAMS_DIR.glob("*.md")):
-        code = SUBJECT_CODE.get(path.stem)
-        if code is None:
-            continue
-        rel = str(path.relative_to(ROOT)).replace("\\", "/")
-        document_id, sections = parse_sections(path.read_text(encoding="utf-8"))
-        for sec in sections:
-            sid = sec["section_id"]
-            if not sec["body"]:
-                print(f"WARN empty body {sid}")
-                continue
-            for kp in sec["kp_ids"]:
-                if kp not in kp_ids:
-                    print(f"WARN unknown KP {kp} {sid}")
-                    continue
-                edges.append({"from": f"practice:{sid}", "to": kp, "type": "trains"})
-            doc = Document(
-                page_content=f"### {sec['title']}\n\n{sec['body']}",
-                metadata={
-                    "kb_depth": "exams",
-                    "doc_role": "exam_item",
-                    "subject": code,
-                    "document_id": document_id or f"exam-practice-{code}",
-                    "section_id": sid,
-                    "knowledge_points": json.dumps(sec["kp_ids"], ensure_ascii=False),
-                    "primary_kp": sec.get("primary_kp", ""),
-                    "heading": sec["title"],
-                    "source": rel,
-                    "category": COLLECTION,
-                },
-            )
-            for i, ch in enumerate(split_documents([doc]), 1):
-                ch.metadata.update(
-                    chunk_id=f"{sid}-{i:03d}",
-                    kb_depth="exams",
-                    doc_role="exam_item",
-                    subject=code,
-                    document_id=document_id or f"exam-practice-{code}",
-                    section_id=sid,
-                    knowledge_points=doc.metadata["knowledge_points"],
-                )
-                chunks.append(ch)
-        print(f"{rel}: {len(chunks)} chunks so far")
-
-    ids = mgr.add_documents(chunks, collection_name=COLLECTION)
-    mgr.wait_until_ready(COLLECTION)
-    added = merge_edges(edges)
-    print({"collection": COLLECTION, "chunks": len(chunks), "new": len(ids), "trains_added": added})
-    return 0
+COLLECTION = practice_layer.COLLECTION
+SUBJECT_CODE = practice_layer.SUBJECT_CODE
+LINKS_PATH = _shared.LINKS_PATH
+load_kp_ids = _shared.load_kp_ids
 
 
 def verify(kp_ids: set[str]) -> list[str]:
@@ -99,11 +31,7 @@ def verify(kp_ids: set[str]) -> list[str]:
 
     fails: list[str] = []
     links = [
-        json.loads(x)
-        for x in (ROOT / "knowledge" / "knowledge_points" / "links.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
-        if x.strip()
+        json.loads(x) for x in LINKS_PATH.read_text(encoding="utf-8").splitlines() if x.strip()
     ]
     trains_pairs = {(e["from"], e["to"]) for e in links if e.get("type") == "trains"}
     client = chromadb.PersistentClient(path=str(ROOT / "chroma_db"))
@@ -140,7 +68,7 @@ def main() -> int:
     verify_only = "--verify-only" in sys.argv
     kp_ids = load_kp_ids()
     if not verify_only:
-        ingest_all(kp_ids)
+        practice_layer.ingest(kp_ids)
     fails = verify(kp_ids)
     if fails:
         print("FAIL", len(fails))

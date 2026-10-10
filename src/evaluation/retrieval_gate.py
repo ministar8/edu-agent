@@ -71,15 +71,13 @@ RAG 检索链的改动（阈值常数、RRF 路由权重、切分策略、去重
     GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 \
         python -m evaluation.retrieval_gate --update-baseline
 
-6. **★ 语料只覆盖 legacy 段（2026-10-01 实测）。**
-   ``build_index()`` 按 ``rag.ingest.DEFAULT_CATEGORIES`` 入库，而 **L1/L2/L3 由独立脚本
-   入库、不在该清单里** ⇒ 门禁索引 **2505 条全是 legacy**，而生产索引 **4085 条**
-   （legacy 2505 + basic 123 + advanced 98 + exams 1359）。
-
-   **推论：L1/L2/L3 的退化不会被本门禁（及 ``probe_gate``）捕获。**
-   引用门禁结论时必须写明这条边界 —— 「门禁全绿」只代表 legacy 链路没退化。
-   细节与实测命令见 ``build_index`` 的 docstring 与
-   ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3。
+6. **★ 语料已覆盖 L1/L2/L3，但走「通用路径」≠ 生产入库路径（2026-10-10 更新）。**
+   ``build_index()`` 调 ``rag.ingest_layers.build_all()`` —— **与 ``scripts/ingest_*.py``
+   同源的生产构建逻辑**（2026-10-10 起），覆盖 basic / advanced / exams / code +
+   learning_paths，且 chunk 数与生产**逐位相等**（此前「走通用路径、chunk 数与生产不等」
+   的问题已修）。
+   ★ 另有 ``kp_mrr`` 约 ±0.003 的噪声（并列打破，收敛到 1 条 query），见 §6.3。
+   细节见 ``build_index`` docstring 与 ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3。
 """
 
 from __future__ import annotations
@@ -115,20 +113,9 @@ SUBJECT_TO_CATEGORY: dict[str, str] = {
 # 门禁临时索引的语料来源：`(源目录, 目标集合, kb_depth)`。
 # 覆盖新体系 L1(basic) / L2(advanced) / L3(exams) / code + learning_paths。
 # ★ 这是 docstring 预告过的「链路级改动」：门禁从此测分层链路，基线须重录。
-_INDEX_SOURCES = [
-    ("knowledge/basic/data_structure", "data_structure", "basic"),
-    ("knowledge/basic/computer_organization", "computer_organization", "basic"),
-    ("knowledge/basic/operating_system", "operating_system", "basic"),
-    ("knowledge/basic/computer_network", "computer_network", "basic"),
-    ("knowledge/advanced/data_structure", "data_structure", "advanced"),
-    ("knowledge/advanced/computer_organization", "computer_organization", "advanced"),
-    ("knowledge/advanced/operating_system", "operating_system", "advanced"),
-    ("knowledge/advanced/computer_network", "computer_network", "advanced"),
-    ("knowledge/exams", "exams", "exams"),
-    ("knowledge/code/data_structure", "code_ds", "code"),
-    ("knowledge/code/operating_system", "code_os", "code"),
-    ("knowledge/learning_paths", "learning_paths", "learning_path"),
-]
+# ★ 语料由 ``rag.ingest_layers.build_all()`` 决定（生产同源）：覆盖
+#   L1(basic) / L2(advanced) / L3(exams 年 + 章节例题) / code / learning_paths。
+#   （此前的 `_INDEX_SOURCES` 硬编码目录清单已删除 —— 切分逻辑现与 `scripts/ingest_*.py` 同源。）
 
 # `code_<科>` 集合 → 对应学科类目（供 `category_hit` 按学科计数）
 _CODE_CATEGORY_TO_SUBJECT = {
@@ -773,53 +760,32 @@ def wait_for_index_ready(
 
 
 def build_index(categories: list[str] | None = None) -> dict[str, int]:
-    """用与 ``rag.ingest`` 相同的管线把知识库索引进当前（临时）向量库。
+    """用**生产同源**的 ``rag.ingest_layers.build_all()`` 把知识库索引进当前（临时）向量库。
 
-    刻意复用 ``ingest`` 的同一条链路（load → clean → split → enhance → tag → add），
-    让门禁跑**真实入库路径**，而不是一条评测专用的旁路。
-
-    ★★ **但语料范围只有 legacy 段**（2026-10-01 实测，非推断）：本函数按
-    语料来源见 ``_INDEX_SOURCES``：**覆盖新体系 L1(basic) / L2(advanced) / L3(exams)
-    / code + learning_paths**（2026-10-10 起；旧版只遍历 ``rag.ingest.DEFAULT_CATEGORIES``
-    的 legacy 目录，四科目录退役后已失效）。
-
-    ★ 这是**链路级改动**（旧版 docstring 预告过）：门禁从此测**分层链路**，
-    ``evals/baselines/{retrieval_baseline*, probe_baseline}.json`` **须重录**。
-    基线未重录前门禁会因语料变化而红，属预期（见 ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3）。
+    覆盖 L1(basic) / L2(advanced) / L3(exams 年 + 章节例题) / code / learning_paths。
+    ★ 2026-10-10 起改为调用 ``scripts/ingest_*.py`` **同源**的构建逻辑 ⇒ chunk 数**与生产
+    逐位相等**（此前走通用 ``load → clean → split`` 链路、chunk 数与生产不等，见
+    ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3）。
     """
     from rag import vectorstore as vs
-    from rag.cleaner import clean_documents
-    from rag.enhancer import enhance_documents
-    from rag.knowledge_tagger import tag_chunks_with_knowledge_points
-    from rag.loader import SUPPORTED_EXTENSIONS, load_single_file
-    from rag.splitter import split_documents
+    from rag.ingest_layers import build_all
+    from rag.ingest_layers import code as code_layer
 
     manager = vs.get_vector_store_manager()
     counts: dict[str, int] = {}
 
-    for src, category, kb_depth in _INDEX_SOURCES:
-        dir_path = Path(src)
-        if not dir_path.is_dir():
-            continue
-        indexed = counts.get(category, 0)
-        for filepath in sorted(p for p in dir_path.rglob("*") if p.is_file()):
-            if filepath.suffix.lower() not in SUPPORTED_EXTENSIONS:
-                continue
-            # exams 的 paper.md 仅溯源、不进主 RAG（与 ingest_exams 口径一致）
-            if kb_depth == "exams" and filepath.name == "paper.md":
-                continue
-            documents = load_single_file(str(filepath))
-            documents = clean_documents(
-                documents, dedup=True, fuzzy_dedup=False, fuzzy_threshold=0.9
-            )
-            chunks = split_documents(documents)
-            chunks = enhance_documents(chunks)
-            for chunk in chunks:
-                chunk.metadata["category"] = category
-                chunk.metadata["kb_depth"] = kb_depth
-            chunks = tag_chunks_with_knowledge_points(chunks, fallback_category=category)
-            indexed += len(manager.add_documents(chunks, collection_name=category))
-        counts[category] = indexed
+    for category, chunks in build_all().items():
+        for chunk in chunks:
+            # `category` 是**门禁侧**的类目归属（生产脚本不写该字段，由本门禁补）——
+            # category_hit 指标依赖它。
+            chunk.metadata["category"] = category
+        counts[category] = len(manager.add_documents(chunks, collection_name=category))
+
+    # 无代码文件的科也建空集合（与生产 `ingest_code` 一致，避免召回侧刷 "does not exist"）
+    for collection in code_layer.SUBJECT_TO_COLLECTION.values():
+        if collection not in counts:
+            manager.get_store(collection)
+            counts[collection] = 0
     return counts
 
 

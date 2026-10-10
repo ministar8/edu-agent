@@ -14,12 +14,12 @@ import os
 import time
 
 from core.settings import settings
-from rag.cleaner import clean_documents
-from rag.enhancer import enhance_documents
+from rag.chunking.cleaner import clean_documents
+from rag.chunking.enhancer import enhance_documents
+from rag.chunking.loader import SUPPORTED_EXTENSIONS, load_single_file
+from rag.chunking.splitter import split_documents
 from rag.knowledge_tagger import tag_chunks_with_knowledge_points
-from rag.loader import SUPPORTED_EXTENSIONS, load_single_file
 from rag.metrics import metrics
-from rag.splitter import split_documents
 from rag.vectorstore import get_vector_store_manager
 
 logger = logging.getLogger(__name__)
