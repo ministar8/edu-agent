@@ -490,36 +490,3 @@ def _compute_verification(
     reasons = [f"{c.name}: {c.detail}" for c in checks if not c.passed]
     retry_hints = _compute_retry_hints(fused, checks, verdict) if verdict != Verdict.PASS else {}
     return overall_score, verdict, reasons, retry_hints
-
-
-def verify_evidence(
-    fused: FusedEvidence,
-    query: str = "",
-    use_llm: bool = False,
-) -> VerificationResult:
-    """同步校验 FusedEvidence 质量（LEGACY：LLM 校验请使用 await averify_evidence()）
-
-    注意：同步版本不支持 LLM 相关性检查，use_llm 参数被忽略。
-    如需 LLM 校验，请使用 await averify_evidence()。
-
-    Args:
-        fused: aretrieve_evidence 返回的 FusedEvidence
-        query: 原始查询（LLM 层需要）
-        use_llm: 在同步版本中被忽略，始终仅使用规则层
-
-    Returns:
-        VerificationResult 含 verdict / checks / retry_hints
-    """
-    # 1. 规则层（同步版本不支持 LLM 层）
-    checks = _run_rule_checks(fused)
-
-    # 2. 计算综合分数
-    overall_score, verdict, reasons, retry_hints = _compute_verification(fused, checks)
-
-    return VerificationResult(
-        verdict=verdict,
-        overall_score=round(overall_score, 4),
-        checks=checks,
-        reasons=reasons,
-        retry_hints=retry_hints,
-    )
