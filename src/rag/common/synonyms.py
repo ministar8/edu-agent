@@ -376,7 +376,6 @@ SYNONYM_MAP_CASEFOLD: dict[str, str] = {k.casefold(): v for k, v in SYNONYM_MAP.
 
 # recall / kg 用：正向映射（不含自映射）
 SYNONYM_FORWARD: dict[str, str] = {k: v for k, v in _SYNONYM_RAW.items() if k != v}
-SYNONYM_FORWARD_CASEFOLD: dict[str, str] = {k.casefold(): v for k, v in SYNONYM_FORWARD.items()}
 
 # recall 用：反向映射（标准词 → 所有变体列表）
 SYNONYM_REVERSE: dict[str, list[str]] = {}
