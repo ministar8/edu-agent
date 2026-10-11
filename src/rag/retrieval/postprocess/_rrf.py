@@ -104,34 +104,19 @@ def _dedup_key(doc: Document) -> str:
 # ── RRF 合并 ──────────────────────────────────────────
 
 
-def merge_route_results(
+def _accumulate_route_merge(
     route_results: list[tuple[str, list[tuple[Document, float]]]],
-    cat: QueryCategory | None = None,
-) -> list[tuple[Document, float]]:
-    """RRF (Reciprocal Rank Fusion) 合并多路检索结果
-
-    加权 RRF：不同路由按查询类型赋予不同权重。
-    公式：score(d) = Σ w(route, cat) / (k + rank_i(d)) × scale
-    其中 `scale` 只在**阈值高于可达上限**的类别上取 `_rrf_scale(k)`，否则为 1.0
-    —— 判定与理由见 `_rrf_scale_needed` 的文档串。
-    优点：
-    - 对异常高分不敏感（排名 1 和 2 的差距是 1/(k+1)-1/(k+2)）
-    - 跨路由重复文档自然获得更高分数
-    - 精准路由（metadata 过滤）权重高于宽泛路由（semantic）
-    """
+    k: int,
+    scale: float,
+    cat: QueryCategory | None,
+) -> dict[str, tuple[Document, float, set[str], dict[str, float]]]:
+    """按路由把文档累加进 `merged`（键 = 集合 + 内容哈希，防跨集合同名误合并）。"""
     from rag.retrieval.recall import get_route_weight
 
-    # 动态 k：路由多时 k 更大，让多路融合更平滑
-    k = _dynamic_rrf_k(len(route_results))
-    scale = _rrf_scale(k) if _rrf_scale_needed(cat, k) else 1.0
     merged: dict[str, tuple[Document, float, set[str], dict[str, float]]] = {}
-    raw_count = sum(len(results) for _, results in route_results)
-
     for route_name, results in route_results:
         w = get_route_weight(_base_route_name(route_name), cat)
         for rank, (doc, original_score) in enumerate(results, 1):
-            # 去重 key 加入集合来源，防止跨集合同名文档被误合并
-            # 例如 "栈的定义" 在 data_structure 和 computer_organization 都出现
             key = _dedup_key(doc)
             rrf_contribution = w / (k + rank) * scale
 
@@ -147,7 +132,20 @@ def merge_route_results(
                     routes | {route_name},
                     {**route_scores, route_name: original_score},
                 )
+    return merged
 
+
+def _finalize_route_merge(
+    merged: dict[str, tuple[Document, float, set[str], dict[str, float]]],
+) -> list[tuple[Document, float]]:
+    """写回 `recall_*` 元数据，并按确定序排序。
+
+    排序必须**完全确定**：RRF 分数并列时若沿用插入顺序，而插入顺序又来自
+    ThreadPoolExecutor.as_completed 的完成次序，同一 query 每次运行都会得到
+    不同的证据排列（实测 category_hit@1 在 0.900~0.925 间抖动）。
+    这既让检索结果不可复现，也让质量门禁的噪声高于它能识别的退化幅度。
+    用 _dedup_key 作次级键：merged 就是以它为键，故唯一且确定。
+    """
     ranked: list[tuple[Document, float]] = []
     for doc, rrf_score, routes, route_scores in merged.values():
         doc.metadata["recall_score"] = round(rrf_score, 6)
@@ -156,18 +154,36 @@ def merge_route_results(
         for rn, rs in route_scores.items():
             doc.metadata[f"recall_{rn}_score"] = round(float(rs), 6)
         ranked.append((doc, rrf_score))
-
-    # 排序必须**完全确定**：RRF 分数并列时若沿用插入顺序，而插入顺序又来自
-    # ThreadPoolExecutor.as_completed 的完成次序，同一 query 每次运行都会得到
-    # 不同的证据排列（实测 category_hit@1 在 0.900~0.925 间抖动）。
-    # 这既让检索结果不可复现，也让质量门禁的噪声高于它能识别的退化幅度。
-    # 用 _dedup_key 作次级键：merged 就是以它为键，故唯一且确定。
     ranked.sort(key=lambda item: (-item[1], _dedup_key(item[0])))
+    return ranked
+
+
+def merge_route_results(
+    route_results: list[tuple[str, list[tuple[Document, float]]]],
+    cat: QueryCategory | None = None,
+) -> list[tuple[Document, float]]:
+    """RRF (Reciprocal Rank Fusion) 合并多路检索结果
+
+    加权 RRF：不同路由按查询类型赋予不同权重。
+    公式：score(d) = Σ w(route, cat) / (k + rank_i(d)) × scale
+    其中 `scale` 只在**阈值高于可达上限**的类别上取 `_rrf_scale(k)`，否则为 1.0
+    —— 判定与理由见 `_rrf_scale_needed` 的文档串。
+    优点：
+    - 对异常高分不敏感（排名 1 和 2 的差距是 1/(k+1)-1/(k+2)）
+    - 跨路由重复文档自然获得更高分数
+    - 精准路由（metadata 过滤）权重高于宽泛路由（semantic）
+    """
+    # 动态 k：路由多时 k 更大，让多路融合更平滑
+    k = _dynamic_rrf_k(len(route_results))
+    scale = _rrf_scale(k) if _rrf_scale_needed(cat, k) else 1.0
+    merged = _accumulate_route_merge(route_results, k, scale, cat)
+    ranked = _finalize_route_merge(merged)
+
     logger.debug(
         "RRF k=%d routes=%d raw=%d merged=%d top=%.4f multi=%d",
         k,
         len(route_results),
-        raw_count,
+        sum(len(results) for _, results in route_results),
         len(ranked),
         ranked[0][1] if ranked else 0,
         sum(1 for _, _, routes, _ in merged.values() if len(routes) >= 2),
@@ -178,33 +194,17 @@ def merge_route_results(
 # ── 加权 RRF 合并（查询分解用） ──────────────────────────────
 
 
-def weighted_rrf_merge(
+def _accumulate_weighted_merge(
     grouped_results: list[tuple[str, list[tuple[Document, float]]]],
     weights: dict[str, float],
-    k: int = 0,
-    cat: QueryCategory | None = None,
-) -> list[tuple[Document, float]]:
-    """加权 RRF 合并：不同来源（原始查询/子查询）可赋予不同权重
-
-    标准 RRF: score(d) = Σ 1/(k + rank_i(d)) × scale
-    加权 RRF: score(d) = Σ w_source × w_route / (k + rank_i(d)) × scale
-    （`scale` 的取值见 `_rrf_scale_needed`）
-
-    w_source: 原始查询 1.5，子查询 1.0，确保原始语境信号更强。
-    w_route: 从 recall_routes metadata 提取路由名，按 get_route_weight 加权，
-             使分解路径与非分解路径的 RRF 分数分布归一化到同一尺度。
-    去重 key 使用 content_hash + collection（与 merge_route_results 一致，避免同前缀误合并）。
-    """
+    k: int,
+    scale: float,
+    cat: QueryCategory | None,
+) -> dict[str, tuple[Document, float, set[str]]]:
+    """按来源把文档累加进 `merged`，含 route 级加权（从 recall_routes 元数据提取）。"""
     from rag.retrieval.recall import get_route_weight
 
-    # 动态 k：k=0 时按路由数自动计算
-    if k <= 0:
-        total_routes = sum(len(results) for _, results in grouped_results)
-        k = _dynamic_rrf_k(max(1, total_routes // max(1, len(grouped_results))))
-    scale = _rrf_scale(k) if _rrf_scale_needed(cat, k) else 1.0
     merged: dict[str, tuple[Document, float, set[str]]] = {}
-    raw_count = sum(len(results) for _, results in grouped_results)
-
     for label, results in grouped_results:
         w_source = weights.get(label, 1.0)
         for rank, (doc, _original_score) in enumerate(results, 1):
@@ -227,19 +227,52 @@ def weighted_rrf_merge(
             else:
                 doc_obj, prev_score, labels = existing
                 merged[key] = (doc_obj, prev_score + rrf_contribution, labels | {label})
+    return merged
 
+
+def _finalize_weighted_merge(
+    merged: dict[str, tuple[Document, float, set[str]]],
+) -> list[tuple[Document, float]]:
+    """写回 `recall_score` / `_decompose_labels`，并按确定性次序排序。"""
     ranked: list[tuple[Document, float]] = []
     for doc, rrf_score, labels in merged.values():
         doc.metadata["recall_score"] = round(rrf_score, 6)
         doc.metadata["_decompose_labels"] = ", ".join(sorted(labels))
         ranked.append((doc, rrf_score))
-
     # 同 merge_route_results：并列分数必须用确定性的次级键，否则结果不可复现
     ranked.sort(key=lambda item: (-item[1], _dedup_key(item[0])))
+    return ranked
+
+
+def weighted_rrf_merge(
+    grouped_results: list[tuple[str, list[tuple[Document, float]]]],
+    weights: dict[str, float],
+    k: int = 0,
+    cat: QueryCategory | None = None,
+) -> list[tuple[Document, float]]:
+    """加权 RRF 合并：不同来源（原始查询/子查询）可赋予不同权重
+
+    标准 RRF: score(d) = Σ 1/(k + rank_i(d)) × scale
+    加权 RRF: score(d) = Σ w_source × w_route / (k + rank_i(d)) × scale
+    （`scale` 的取值见 `_rrf_scale_needed`）
+
+    w_source: 原始查询 1.5，子查询 1.0，确保原始语境信号更强。
+    w_route: 从 recall_routes metadata 提取路由名，按 get_route_weight 加权，
+             使分解路径与非分解路径的 RRF 分数分布归一化到同一尺度。
+    去重 key 使用 content_hash + collection（与 merge_route_results 一致，避免同前缀误合并）。
+    """
+    # 动态 k：k=0 时按路由数自动计算
+    if k <= 0:
+        total_routes = sum(len(results) for _, results in grouped_results)
+        k = _dynamic_rrf_k(max(1, total_routes // max(1, len(grouped_results))))
+    scale = _rrf_scale(k) if _rrf_scale_needed(cat, k) else 1.0
+    merged = _accumulate_weighted_merge(grouped_results, weights, k, scale, cat)
+    ranked = _finalize_weighted_merge(merged)
+
     logger.debug(
         "Weighted RRF k=%d raw=%d merged=%d top=%.4f",
         k,
-        raw_count,
+        sum(len(results) for _, results in grouped_results),
         len(ranked),
         ranked[0][1] if ranked else 0,
     )

@@ -120,6 +120,69 @@ def _bind_structured(llm, schema: type):
         return llm.with_structured_output(schema)
 
 
+async def _await_structured(llm, prompt: PromptInput, schema: type, timeout: float, stage: str):
+    """单次结构化调用：成功返回 ``(result, None)``，异常返回 ``(None, exc)``。"""
+    try:
+        structured = _bind_structured(llm, schema)
+        result = await asyncio.wait_for(
+            structured.ainvoke(prompt, config=_trace_config(stage)), timeout=timeout
+        )
+        return result, None
+    except Exception as exc:
+        return None, exc
+
+
+async def _structured_attempts[T: BaseModel](
+    llm,
+    prompt: PromptInput,
+    schema: type[T],
+    timeout: float,
+    stage: str,
+    attempts: int,
+) -> tuple[T | None, BaseException | None, str]:
+    """重试循环：成功即返回 ``(result, None, last_raw)``，耗尽则 ``(None, last_exc, last_raw)``。
+
+    ★ 超时**不重试**（重试只会再等一个 timeout，成倍放大延迟而不提升成功率）。
+    ★ ``last_raw`` 是最后一次拿到、可能含工具标记污染的原始文本，供兜底清洗。
+    """
+    last_exc: BaseException | None = None
+    last_raw: str = ""
+    for attempt in range(attempts):
+        result, exc = await _await_structured(llm, prompt, schema, timeout, stage)
+        if exc is not None:
+            last_exc = exc
+            # 格式飘移时异常里带的是「原始文本」，取回留作兜底素材。
+            raw_text = _raw_from_validation_error(exc)
+            if raw_text:
+                last_raw = raw_text
+            if isinstance(exc, TimeoutError):
+                break
+            if attempt + 1 < attempts:
+                logger.info(
+                    "结构化输出失败 [%s]，重试 %s/%s：%s: %s",
+                    stage,
+                    attempt + 1,
+                    attempts - 1,
+                    type(exc).__name__,
+                    exc,
+                )
+        elif isinstance(result, schema):
+            if attempt:
+                logger.info("结构化输出重试成功 [%s]（第 %s 次尝试）", stage, attempt + 1)
+            return result, None, last_raw
+        else:
+            last_exc = None  # 未抛错但类型不符，同样值得重试
+            if attempt + 1 < attempts:
+                logger.info(
+                    "结构化输出类型不符 [%s]（%s），重试 %s/%s",
+                    stage,
+                    type(result).__name__,
+                    attempt + 1,
+                    attempts - 1,
+                )
+    return None, last_exc, last_raw
+
+
 async def call_structured[T: BaseModel](
     prompt: PromptInput,
     schema: type[T],
@@ -153,48 +216,11 @@ async def call_structured[T: BaseModel](
     """
     llm = get_llm(streaming=False, temperature=temperature)
     attempts = max(1, 1 + int(settings.STRUCTURED_OUTPUT_RETRIES))
-    last_exc: BaseException | None = None
-    last_raw: str = ""
-    for attempt in range(attempts):
-        try:
-            structured = _bind_structured(llm, schema)
-            result = await asyncio.wait_for(
-                structured.ainvoke(prompt, config=_trace_config(stage)), timeout=timeout
-            )
-        except Exception as exc:
-            last_exc = exc
-            # 格式飘移时异常里带的是「原始文本」，取回留作兜底素材。
-            raw_text = _raw_from_validation_error(exc)
-            if raw_text:
-                last_raw = raw_text
-            # 超时不可重试：重试只会再等一个 timeout，成倍放大延迟而不提升成功率。
-            if isinstance(exc, TimeoutError):
-                break
-            if attempt + 1 < attempts:
-                logger.info(
-                    "结构化输出失败 [%s]，重试 %s/%s：%s: %s",
-                    stage,
-                    attempt + 1,
-                    attempts - 1,
-                    type(exc).__name__,
-                    exc,
-                )
-                continue
-        else:
-            if isinstance(result, schema):
-                if attempt:
-                    logger.info("结构化输出重试成功 [%s]（第 %s 次尝试）", stage, attempt + 1)
-                return result
-            last_exc = None  # 未抛错但类型不符，同样值得重试
-            if attempt + 1 < attempts:
-                logger.info(
-                    "结构化输出类型不符 [%s]（%s），重试 %s/%s",
-                    stage,
-                    type(result).__name__,
-                    attempt + 1,
-                    attempts - 1,
-                )
-                continue
+    result, last_exc, last_raw = await _structured_attempts(
+        llm, prompt, schema, timeout, stage, attempts
+    )
+    if result is not None:
+        return result
 
     # ── 兜底：清洗工具标记后重新解析 ──────────────────────────────
     if last_raw:
@@ -274,6 +300,61 @@ def _extract_json_object(text: str) -> str | None:
     return text[start : end + 1]
 
 
+def _scan_kv_fields(text: str) -> dict[str, str]:
+    """规则 ①②：逐行扫描定位起点，并按字段分类决定是否并入续行。
+
+    遇到第一个合法字段 key 才开始解析；进入解析后的非 key 行，**仅**多行字段
+    （`_KV_MULTILINE_FIELDS`）允许续行，其余（score / is_wrong / knowledge_points）丢弃。
+    """
+    kv_re = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:：]\s*(.*)$")
+    fields: dict[str, str] = {}
+    current: str | None = None
+    started = False  # 是否已遇到第一个合法 key
+    for line in text.splitlines():
+        m = kv_re.match(line)
+        if m and m.group(1) in _KV_ALL_FIELDS:
+            # ① 进入解析（首个合法 key）
+            started = True
+            current = m.group(1)
+            fields[current] = m.group(2).strip()
+        elif not started:
+            # ① 尚未进入解析：忽略前言/空行/解释文字
+            continue
+        elif current is not None and current in _KV_MULTILINE_FIELDS:
+            # ② 仅多行字段允许续行
+            #   ★ `current is not None` 是**显式收窄**，不是行为变化：`None` 本就不属于
+            #     `_KV_MULTILINE_FIELDS`（`frozenset[str]`），旧写法在运行时同义，
+            #     但成员测试无法让 pyrefly 把 `current` 从 `str | None` 收成 `str`。
+            fields[current] = (fields[current] + "\n" + line).strip()
+        else:
+            # ② 其余字段（score / is_wrong / knowledge_points）：丢弃该行
+            continue
+    return fields
+
+
+def _parse_kv_fields(fields: dict[str, str]) -> dict[str, object]:
+    """规则 ③：按字段分类解析 —— scalar 按标量语义，list 按分隔符切分。"""
+    out: dict[str, object] = {}
+    for key, val in fields.items():
+        if key == "score":
+            num = re.search(r"-?\d+(?:\.\d+)?", val)
+            if num:
+                # 整数值给 int（`GradingResult.score` 是 int，浮点会被 pydantic 拒；
+                # 而 40.0 这类无小数部分的 float 虽被接受，仍以 int 表达更贴 schema）。
+                f = float(num.group())
+                out[key] = int(f) if f.is_integer() else f
+        elif key == "is_wrong":
+            out[key] = val.strip().lower() in {"true", "1", "yes", "是"}
+        elif key in _KV_LIST_FIELDS:
+            # ③ list 字段：按分隔符切分（顿号 / 逗号 / 分号 / 换行），并去空去重保序
+            items = [p.strip().strip("[]\"'") for p in re.split(r"[、,，;；\n]", val)]
+            out[key] = [p for p in (i for i in items) if p]
+        else:
+            if val:
+                out[key] = val
+    return out
+
+
 def _try_kv_dict(text: str) -> dict | None:
     """解析裸文本形态 ``score: 40`` / ``feedback: ...`` 为 dict。
 
@@ -305,53 +386,13 @@ def _try_kv_dict(text: str) -> dict | None:
        scalar（score / is_wrong / feedback / error_analysis）按标量语义解析；
        list（knowledge_points）按**分隔符切分**为 ``list[str]`` ——
        绝不把整个字符串硬塞进一个 list 字段。
-    """
-    kv_re = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:：]\s*(.*)$")
-    fields: dict[str, str] = {}
-    current: str | None = None
-    started = False  # 是否已遇到第一个合法 key
-    for line in text.splitlines():
-        m = kv_re.match(line)
-        if m and m.group(1) in _KV_ALL_FIELDS:
-            # ① 进入解析（首个合法 key）
-            started = True
-            current = m.group(1)
-            fields[current] = m.group(2).strip()
-        elif not started:
-            # ① 尚未进入解析：忽略前言/空行/解释文字
-            continue
-        elif current is not None and current in _KV_MULTILINE_FIELDS:
-            # ② 仅多行字段允许续行
-            #   ★ `current is not None` 是**显式收窄**，不是行为变化：`None` 本就不属于
-            #     `_KV_MULTILINE_FIELDS`（`frozenset[str]`），旧写法在运行时同义，
-            #     但成员测试无法让 pyrefly 把 `current` 从 `str | None` 收成 `str`。
-            fields[current] = (fields[current] + "\n" + line).strip()
-        else:
-            # ② 其余字段（score / is_wrong / knowledge_points）：丢弃该行
-            continue
 
+    规则 ①② 见 `_scan_kv_fields`，③ 见 `_parse_kv_fields`。
+    """
+    fields = _scan_kv_fields(text)
     if not fields:
         return None
-
-    out: dict[str, object] = {}
-    for key, val in fields.items():
-        if key == "score":
-            num = re.search(r"-?\d+(?:\.\d+)?", val)
-            if num:
-                # 整数值给 int（`GradingResult.score` 是 int，浮点会被 pydantic 拒；
-                # 而 40.0 这类无小数部分的 float 虽被接受，仍以 int 表达更贴 schema）。
-                f = float(num.group())
-                out[key] = int(f) if f.is_integer() else f
-        elif key == "is_wrong":
-            out[key] = val.strip().lower() in {"true", "1", "yes", "是"}
-        elif key in _KV_LIST_FIELDS:
-            # ③ list 字段：按分隔符切分（顿号 / 逗号 / 分号 / 换行），并去空去重保序
-            items = [p.strip().strip("[]\"'") for p in re.split(r"[、,，;；\n]", val)]
-            out[key] = [p for p in (i for i in items) if p]
-        else:
-            if val:
-                out[key] = val
-    return out
+    return _parse_kv_fields(fields)
 
 
 # ③ 字段分类（协议与 `GradingResult` 对齐；由 gate `⑨g` 断言**覆盖 schema 全部字段**）

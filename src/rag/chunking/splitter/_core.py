@@ -187,13 +187,14 @@ def _build_detail_chunks(
     return out
 
 
-def _build_section_chunks(
-    doc: Document, section: dict, i: int, h: _Hierarchy, base_index: int
-) -> list[Document]:
-    """切分单个 section → 该 section 的 chunk 列表（已补全全部元数据）。"""
-    sid = h.ids[i]
-    section_text = section["text"]
-    content_type, has_answer_marker, heading_is_exercise = _resolve_content_type(section)
+def _select_section_detail_chunks(
+    doc: Document, section: dict, section_text: str, content_type: str
+) -> tuple[list[tuple[Document, str]], int, int]:
+    """决定该 section 的 detail 块来源：通用切分 或 merged_qa 兜底。
+
+    Returns:
+        ``(detail_chunks, adaptive_size, adaptive_overlap)``。
+    """
     adaptive_size, adaptive_overlap = _resolve_chunk_params(content_type)
 
     # adaptive_size=0 表示原子结构不在通用切分器中拆分；真题整卷的拆分由 merged_qa fallback 处理
@@ -212,6 +213,19 @@ def _build_section_chunks(
         detail_chunks = _build_merged_qa_chunks(doc, section_text)
     else:
         detail_chunks = _build_detail_chunks(doc, section, section_text, section_chunks)
+    return detail_chunks, adaptive_size, adaptive_overlap
+
+
+def _build_section_chunks(
+    doc: Document, section: dict, i: int, h: _Hierarchy, base_index: int
+) -> list[Document]:
+    """切分单个 section → 该 section 的 chunk 列表（已补全全部元数据）。"""
+    sid = h.ids[i]
+    section_text = section["text"]
+    content_type, has_answer_marker, heading_is_exercise = _resolve_content_type(section)
+    detail_chunks, adaptive_size, adaptive_overlap = _select_section_detail_chunks(
+        doc, section, section_text, content_type
+    )
 
     chunk_count = len(detail_chunks)
     parent_windows = [_build_parent_window_text(detail_chunks, ci) for ci in range(chunk_count)]

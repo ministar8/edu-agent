@@ -33,6 +33,11 @@ _COMPACT_SUBQUERY_ROUTES = {"keyword_bm25", "concept_meta", "structured_meta", "
 # 语义检索过采样倍数：Chroma 近似索引 top-k 边界会抖，多取再确定性截断
 _SEMANTIC_OVERSAMPLE = 3
 
+# BM25 分词允许保留的单字词（其余单字默认被过滤，避免噪声；这些是 408 高频单字考点）
+_BM25_SINGLE_CHAR_ALLOW = frozenset(
+    {"栈", "堆", "树", "图", "串", "队", "链", "表", "网", "库", "锁", "页", "段", "核", "集"}
+)
+
 
 # 查询缓存（有界 + TTL，线程安全；命中计数由缓存自带）——
 # 供 `_raw_search` 与门面 `cache_stats` 共用。
@@ -133,6 +138,65 @@ def _log_final_retrieval_summary(stage: str, query: str, docs: list[Document]) -
 # ── 底层检索 ──────────────────────────────────────────
 
 
+def _bm25_raw_search(
+    query: str, collection_name: str, k: int, filter: dict | None
+) -> list[tuple[Document, float]]:
+    """BM25 路由：分词（保留复合词与高频单字）后走 `bm25_search`。"""
+    import jieba
+
+    from rag.retrieval.recall import _BM25_STOP_WORDS
+
+    # cut_for_search 同时保留全词和子词：
+    # "进程同步机制" → "进程"、"同步"、"机制"、"进程同步"、"同步机制"
+    terms = [
+        w
+        for w in jieba.cut_for_search(query)
+        if w.strip() and w not in _BM25_STOP_WORDS and (len(w) >= 2 or w in _BM25_SINGLE_CHAR_ALLOW)
+    ]
+    # 限制最多 6 个 term，优先保留复合词（长词更精准）
+    if len(terms) > 6:
+        terms = sorted(terms, key=len, reverse=True)[:6]
+    # 过滤后若为空（jieba 把短 query 分成停用词），回退用原始 query
+    if not terms:
+        terms = [query.strip()]
+    return bm25_search(terms, collection_name, k, filter=filter)
+
+
+def _vector_raw_search(
+    collection_name: str, query: str, k: int, filter: dict | None
+) -> list[tuple[Document, float]]:
+    """向量路由：过采样 + 确定性截断（理由见下注释）。"""
+    from rag.common.vectorstore import get_vector_store_manager
+
+    # 走 manager 的检索方法而**不是**直接调 store —— 前者持有 `_rw_lock` 读锁。
+    # 直接调 store 会绕过读锁，与 `add_documents` 的写锁形不成互斥：
+    # Chroma 的 Rust 后端在 add 返回后可能仍在落盘 HNSW 段，
+    # 此时并发的查询会打开一个半成品段，抛
+    # `Error creating hnsw segment reader: Nothing found on disk`。
+    # 症状是间歇性的（取决于查询是否与写入重叠）、命中的集合随机、
+    # 且**就绪探测能过而首个真实查询失败**（探测走的是加锁路径）。
+    #
+    # **过采样 + 确定性截断**：Chroma 是近似索引，top-k 边界会抖 ——
+    # 实测同一查询偶尔少返回一个本该进 top-k 的候选（约 10 次 1 次），
+    # 且会传导到最终结果，表现为"同一个问题返回不同证据"。
+    # 多取 `_SEMANTIC_OVERSAMPLE` 倍候选、再按 (分数, 内容键) 确定性排序取前 k，
+    # 让边界抖动不再影响最终集合 —— 顺带把被漏掉的候选捞回来（提升召回）。
+    # 次级键用内容键而非原始顺序：后者依赖 Chroma 的返回次序，本身就不确定。
+    #
+    # ★★ 排序方向（2026-10-01 修正）：Chroma 的 score 是**距离**（越小越相似），
+    #    故必须**升序**取前 k。此处原为 `key=lambda pair: -pair[1]`（降序距离），
+    #    等于**返回最不相似的 k 条** —— 实测同一 query：
+    #      Chroma 原始 top-5 = [0.3318(目标), 0.3579, 0.3733, 0.3757, 0.3764]
+    #      本函数返回      = [0.4212, 0.4208, 0.4198, 0.4196, 0.4152]  ← 取的是 15 条里最差的
+    #    后果：语义/ focus / expanded 三条**向量路由全部返回最不相关候选**，
+    #    目标 chunk（如 L2「逆置：三指针」）虽为最近邻却进不了包；L2 跨学科污染亦源于此。
+    #    BM25 路由不受影响（`bm25_search` 返回相似度、天然降序，且不经此处重排）。
+    oversampled = get_vector_store_manager().similarity_search_with_score(
+        collection_name, query, k=k * _SEMANTIC_OVERSAMPLE, filter=filter
+    )
+    return sorted(oversampled, key=lambda pair: (pair[1], content_key(pair[0])))[:k]
+
+
 def _raw_search(
     query: str,
     collection_name: str,
@@ -157,73 +221,9 @@ def _raw_search(
         return _copy_results(cached_results)
 
     if route_name == "keyword_bm25":
-        import jieba
-
-        from rag.retrieval.recall import _BM25_STOP_WORDS
-
-        # cut_for_search 同时保留全词和子词：
-        # "进程同步机制" → "进程"、"同步"、"机制"、"进程同步"、"同步机制"
-        _BM25_SINGLE_CHAR_ALLOW = {
-            "栈",
-            "堆",
-            "树",
-            "图",
-            "串",
-            "队",
-            "链",
-            "表",
-            "网",
-            "库",
-            "锁",
-            "页",
-            "段",
-            "核",
-            "集",
-        }
-        terms = [
-            w
-            for w in jieba.cut_for_search(query)
-            if w.strip()
-            and w not in _BM25_STOP_WORDS
-            and (len(w) >= 2 or w in _BM25_SINGLE_CHAR_ALLOW)
-        ]
-        # 限制最多 6 个 term，优先保留复合词（长词更精准）
-        if len(terms) > 6:
-            terms = sorted(terms, key=len, reverse=True)[:6]
-        # 过滤后若为空（jieba 把短 query 分成停用词），回退用原始 query
-        if not terms:
-            terms = [query.strip()]
-        results = bm25_search(terms, collection_name, k, filter=filter)
+        results = _bm25_raw_search(query, collection_name, k, filter)
     else:
-        from rag.common.vectorstore import get_vector_store_manager
-
-        # 走 manager 的检索方法而**不是**直接调 store —— 前者持有 `_rw_lock` 读锁。
-        # 直接调 store 会绕过读锁，与 `add_documents` 的写锁形不成互斥：
-        # Chroma 的 Rust 后端在 add 返回后可能仍在落盘 HNSW 段，
-        # 此时并发的查询会打开一个半成品段，抛
-        # `Error creating hnsw segment reader: Nothing found on disk`。
-        # 症状是间歇性的（取决于查询是否与写入重叠）、命中的集合随机、
-        # 且**就绪探测能过而首个真实查询失败**（探测走的是加锁路径）。
-        #
-        # **过采样 + 确定性截断**：Chroma 是近似索引，top-k 边界会抖 ——
-        # 实测同一查询偶尔少返回一个本该进 top-k 的候选（约 10 次 1 次），
-        # 且会传导到最终结果，表现为"同一个问题返回不同证据"。
-        # 多取 `_SEMANTIC_OVERSAMPLE` 倍候选、再按 (分数, 内容键) 确定性排序取前 k，
-        # 让边界抖动不再影响最终集合 —— 顺带把被漏掉的候选捞回来（提升召回）。
-        # 次级键用内容键而非原始顺序：后者依赖 Chroma 的返回次序，本身就不确定。
-        #
-        # ★★ 排序方向（2026-10-01 修正）：Chroma 的 score 是**距离**（越小越相似），
-        #    故必须**升序**取前 k。此处原为 `key=lambda pair: -pair[1]`（降序距离），
-        #    等于**返回最不相似的 k 条** —— 实测同一 query：
-        #      Chroma 原始 top-5 = [0.3318(目标), 0.3579, 0.3733, 0.3757, 0.3764]
-        #      本函数返回      = [0.4212, 0.4208, 0.4198, 0.4196, 0.4152]  ← 取的是 15 条里最差的
-        #    后果：语义/ focus / expanded 三条**向量路由全部返回最不相关候选**，
-        #    目标 chunk（如 L2「逆置：三指针」）虽为最近邻却进不了包；L2 跨学科污染亦源于此。
-        #    BM25 路由不受影响（`bm25_search` 返回相似度、天然降序，且不经此处重排）。
-        oversampled = get_vector_store_manager().similarity_search_with_score(
-            collection_name, query, k=k * _SEMANTIC_OVERSAMPLE, filter=filter
-        )
-        results = sorted(oversampled, key=lambda pair: (pair[1], content_key(pair[0])))[:k]
+        results = _vector_raw_search(collection_name, query, k, filter)
 
     # 注入集合来源，供 RRF 合并区分跨集合的同名文档
     for doc, _score in results:

@@ -144,6 +144,179 @@ def build_recall_queries(
     return deduped
 
 
+# ── `merged_qa_meta` 路由：两轮实测均为净负 → 不加（2026-09-24 定案）──
+# 这条路由曾被删除（backlog #8），理由是「`content_type=merged_qa` 恒不存在 → 路由永远
+# 返回空」：splitter 的 Q&A 检测链断在 `_ANSWER_RE` 认不出真题写法（选项行尾 ✅ +
+# `**解析**：`），于是 `questions/` 一个 merged_qa chunk 都产不出来，旧路由带着一个
+# **从未被校准过的 2.0**。当时留的恢复条件：**先修好生产端，再用门禁重新校准权重**。
+#
+# 【第一轮（问题 4 修复前）】按约定重新引入，触发 exercise/answer、权重 1.5，
+# 用**真实 embedding 路由**校准。路由确实按预期工作（generate 的 merged_qa 占比
+# 65.4% → 79.4%、grade 17.0% → 46.7%），但全部门禁指标退化：
+#   `cat@k` 0.8590 → 0.8205、`kp@k` 0.7821 → **0.7179（−0.064，超容差 3 倍）**、
+#   `kp_mrr` 0.6107 → 0.5661。
+# 当时判定根因是度量口径：真题来自 `questions/`，它不是学科类目 → 「返回真题」被判
+# 「学科未命中」。于是先去修了那个口径（见 `retrieval_gate.load_golden_queries`）。
+#
+# 【第二轮（问题 4 修复后）——**这次纠正了上一轮的诊断**】
+#   `cat@k` 0.8205 → **0.9359**、`cat@1` 0.6731 → **0.8782**  ← 退化大幅缓解，
+#     符合「上一轮 cat@* 的退化是度量口径导致」的预期（generate 的 `cat@1` 已达 1.0000）。
+#   但 `kp@k` **0.7179 → 0.7179 纹丝不动**，仍退化 −0.0642。
+#
+# ★ **这说明 `kp@*` 的退化不是度量口径导致的，而是真实损失**：推高 merged_qa 占比，
+# 就是把**与考点直接对应的讲义章节挤出 top-5**（`grade` 的 `kp@k` 0.7812 → 0.5938，
+# 降幅最大）。而这与 `questions` 类目那种「合法替代来源」**性质不同** ——
+# `20XX_408_exam` 作为「知识点」说不出是哪个考点，若放宽它等于让任意真题命中任意考点，
+# 指标会失去意义。**故不能靠再放宽一次指标来让这条路由"好看"。**
+#
+# 结论：**不加**。收益本就边际（不加时 generate 已有 65.4% 是 merged_qa），
+# 代价是真实的考点覆盖损失。
+#
+# ★ 另一个必须记住的事实：**不加这条路由，merged_qa 也已经被大量召回了** ——
+# generate 类的 top-5 里本就有 65.4% 是 merged_qa（经 `semantic`/`keyword_bm25`/`focus`
+# 等基础路由）。所以「merged_qa 无路由使用」这个描述在 1.2 之后**已不准确**。
+
+
+def _content_metadata_routes(
+    cat: QueryCategory,
+    base_filter: dict | None,
+    normalized: str,
+    focus_query: str,
+) -> list[tuple[str, str, dict | None]]:
+    """内容类路由：code / exercise（含考点 section 补充）/ answer。"""
+    routes: list[tuple[str, str, dict | None]] = []
+    if cat.is_code:
+        routes.append(
+            ("code_meta", focus_query, combine_filters(base_filter, {"content_type": "code_mixed"}))
+        )
+
+    # ★ 这两条曾按 `content_type` 过滤，但那个字段**从不产出 exercise / answer**：
+    # `detect_content_type` 把这两条规则排在通用形状规则（# 标题 / 列表）之后，
+    # 被提前返回吃掉 —— 实测 406 个「题」候选全部落到 list/text/section，路由恒返回空。
+    # 现改用 splitter 写入的**语义标志**（`is_exercise_content` / `has_answer_marker`）：
+    # 与形状解耦，且**不改 content_type 的判定顺序** → chunk 尺寸与 chunk_id 都不变。
+    if cat.is_exercise:
+        routes.append(
+            (
+                "exercise_meta",
+                normalized,
+                combine_filters(base_filter, {"is_exercise_content": True}),
+            )
+        )
+        # 出题类 query（「考查 X 的题」）提取考点短语，补一条指向考点正文的 section 路由，
+        # 否则考点内容只能靠带指令噪声的整句去撞 semantic/bm25。
+        topic = _extract_focus_topic(normalized, cat)
+        if topic:
+            routes.append(
+                ("section_meta", topic, combine_filters(base_filter, {"content_type": "section"}))
+            )
+
+    if cat.is_answer:
+        routes.append(
+            ("answer_meta", normalized, combine_filters(base_filter, {"has_answer_marker": True}))
+        )
+    return routes
+
+
+def _concept_metadata_routes(
+    cat: QueryCategory,
+    base_filter: dict | None,
+    normalized: str,
+    focus_query: str,
+) -> list[tuple[str, str, dict | None]]:
+    """概念/对比/结构化路由（concept 走 section；comparison 额外走 table）。"""
+    routes: list[tuple[str, str, dict | None]] = []
+    if cat.is_concept:
+        # 「X 的适用条件」类 query 提取完整专名（如「折半查找」）替换被拆散的 focus_query，
+        # 否则通用词「查找」主导，召回同族其他算法而非「折半查找」本体。
+        topic = _extract_focus_topic(normalized, cat)
+        concept_query = topic or focus_query
+        routes.append(
+            (
+                "concept_meta",
+                concept_query,
+                combine_filters(base_filter, {"content_type": "section"}),
+            )
+        )
+    if cat.is_comparison:
+        routes.append(
+            ("concept_meta", focus_query, combine_filters(base_filter, {"content_type": "section"}))
+        )
+        # 对比查询的核心内容多为对比表，补充 table 路由
+        routes.append(
+            (
+                "comparison_meta",
+                focus_query,
+                combine_filters(base_filter, {"content_type": "table"}),
+            )
+        )
+    if cat.is_structured:
+        routes.append(
+            ("structured_meta", focus_query, combine_filters(base_filter, {"is_structured": True}))
+        )
+    return routes
+
+
+def _generic_section_routes(
+    cat: QueryCategory,
+    terms: list[str] | None,
+    base_filter: dict | None,
+    focus_query: str,
+) -> list[tuple[str, str, dict | None]]:
+    """通用 section 路由：仅当 concept/comparison 未覆盖时添加。"""
+    if (
+        terms
+        and not cat.is_exercise
+        and not cat.is_answer
+        and not cat.is_concept
+        and not cat.is_comparison
+    ):
+        return [
+            ("section_meta", focus_query, combine_filters(base_filter, {"content_type": "section"}))
+        ]
+    return []
+
+
+def _granularity_metadata_routes(
+    cat: QueryCategory,
+    base_filter: dict | None,
+    focus_query: str,
+) -> list[tuple[str, str, dict | None]]:
+    """粒度补充：formula / table。
+
+    结构化/概念查询可能涉及公式或表格；短查询跳过（命中率极低，浪费 Chroma 调用）；
+    对比查询已通过 comparison_meta 覆盖 table，此处不再重复。
+    """
+    if (cat.is_structured or cat.is_concept) and not cat.is_short and not cat.is_comparison:
+        return [
+            (
+                "formula_meta",
+                focus_query,
+                combine_filters(base_filter, {"content_type": "formula"}),
+            ),
+            ("table_meta", focus_query, combine_filters(base_filter, {"content_type": "table"})),
+        ]
+    return []
+
+
+def _dedup_metadata_routes(
+    metadata_routes: list[tuple[str, str, dict | None]],
+) -> list[tuple[str, str, dict | None]]:
+    """去重：同 query + 同 filter 只保留一条（保序，取首次出现）。"""
+    deduped: list[tuple[str, str, dict | None]] = []
+    seen_specs: set[str] = set()
+    for route_name, route_query, route_filter in metadata_routes:
+        filter_key = (
+            json.dumps(route_filter, sort_keys=True, ensure_ascii=False) if route_filter else ""
+        )
+        spec_key = f"{route_query.lower()}::{filter_key}"
+        if not route_query or spec_key in seen_specs:
+            continue
+        seen_specs.add(spec_key)
+        deduped.append((route_name, route_query, route_filter))
+    return deduped
+
+
 def build_metadata_routes(
     query: str,
     base_filter: dict | None = None,
@@ -155,6 +328,7 @@ def build_metadata_routes(
     去重原则：同 query + 同 filter 只搜一次，避免浪费 Chroma 调用。
     粒度补充：formula/table 类型有独立检索价值。
     剪枝：短查询跳过 formula/table 粒度路由（大概率空结果）。
+    关于 `merged_qa_meta` 路由为何**不加**：见本文件上方 `build_metadata_routes` 前的说明。
     """
     normalized = normalize_query_text(query)
     if terms is None:
@@ -164,145 +338,17 @@ def build_metadata_routes(
     focus_query = (
         " ".join(ranked[:2]) if len(ranked) >= 2 else (ranked[0] if ranked else normalized)
     )
-    metadata_routes: list[tuple[str, str, dict | None]] = []
 
     if cat is None:
         cat = classify_query(query, terms)
 
-    # ── 按查询类型生成不重复的 metadata 路由 ──
-
-    if cat.is_code:
-        metadata_routes.append(
-            ("code_meta", focus_query, combine_filters(base_filter, {"content_type": "code_mixed"}))
-        )
-
-    # ★ 这两条曾按 `content_type` 过滤，但那个字段**从不产出 exercise / answer**：
-    # `detect_content_type` 把这两条规则排在通用形状规则（# 标题 / 列表）之后，
-    # 被提前返回吃掉 —— 实测 406 个「题」候选全部落到 list/text/section，路由恒返回空。
-    # 现改用 splitter 写入的**语义标志**（`is_exercise_content` / `has_answer_marker`）：
-    # 与形状解耦，且**不改 content_type 的判定顺序** → chunk 尺寸与 chunk_id 都不变。
-    if cat.is_exercise:
-        metadata_routes.append(
-            (
-                "exercise_meta",
-                normalized,
-                combine_filters(base_filter, {"is_exercise_content": True}),
-            )
-        )
-        # 出题类 query（「考查 X 的题」）提取考点短语，补一条指向考点正文的 section 路由，
-        # 否则考点内容只能靠带指令噪声的整句去撞 semantic/bm25。
-        topic = _extract_focus_topic(normalized, cat)
-        if topic:
-            metadata_routes.append(
-                ("section_meta", topic, combine_filters(base_filter, {"content_type": "section"}))
-            )
-
-    if cat.is_answer:
-        metadata_routes.append(
-            ("answer_meta", normalized, combine_filters(base_filter, {"has_answer_marker": True}))
-        )
-
-    # concept 查询走 section 路由；comparison 查询额外走 table 路由（对比表多为 table 类型）
-    if cat.is_concept:
-        # 「X 的适用条件」类 query 提取完整专名（如「折半查找」）替换被拆散的 focus_query，
-        # 否则通用词「查找」主导，召回同族其他算法而非「折半查找」本体。
-        topic = _extract_focus_topic(normalized, cat)
-        concept_query = topic or focus_query
-        metadata_routes.append(
-            (
-                "concept_meta",
-                concept_query,
-                combine_filters(base_filter, {"content_type": "section"}),
-            )
-        )
-    if cat.is_comparison:
-        metadata_routes.append(
-            ("concept_meta", focus_query, combine_filters(base_filter, {"content_type": "section"}))
-        )
-        # 对比查询的核心内容多为对比表，补充 table 路由
-        metadata_routes.append(
-            (
-                "comparison_meta",
-                focus_query,
-                combine_filters(base_filter, {"content_type": "table"}),
-            )
-        )
-
-    if cat.is_structured:
-        metadata_routes.append(
-            ("structured_meta", focus_query, combine_filters(base_filter, {"is_structured": True}))
-        )
-
-    # 通用 section 路由：仅当 concept/comparison 未覆盖时添加
-    if (
-        terms
-        and not cat.is_exercise
-        and not cat.is_answer
-        and not cat.is_concept
-        and not cat.is_comparison
-    ):
-        metadata_routes.append(
-            ("section_meta", focus_query, combine_filters(base_filter, {"content_type": "section"}))
-        )
-
-    # ── 粒度补充：formula / table / merged_qa ──
-    # 结构化/概念查询可能涉及公式或表格，补充精准路由
-    # 短查询跳过 formula/table（命中率极低，浪费 Chroma 调用）
-    # 对比查询已通过 comparison_meta 覆盖 table，此处不再重复
-    if (cat.is_structured or cat.is_concept) and not cat.is_short and not cat.is_comparison:
-        metadata_routes.append(
-            ("formula_meta", focus_query, combine_filters(base_filter, {"content_type": "formula"}))
-        )
-        metadata_routes.append(
-            ("table_meta", focus_query, combine_filters(base_filter, {"content_type": "table"}))
-        )
-
-    # ── `merged_qa_meta` 路由：两轮实测均为净负 → 不加（2026-09-24 定案）──
-    # 这条路由曾被删除（backlog #8），理由是「`content_type=merged_qa` 恒不存在 → 路由永远
-    # 返回空」：splitter 的 Q&A 检测链断在 `_ANSWER_RE` 认不出真题写法（选项行尾 ✅ +
-    # `**解析**：`），于是 `questions/` 一个 merged_qa chunk 都产不出来，旧路由带着一个
-    # **从未被校准过的 2.0**。当时留的恢复条件：**先修好生产端，再用门禁重新校准权重**。
-    #
-    # 【第一轮（问题 4 修复前）】按约定重新引入，触发 exercise/answer、权重 1.5，
-    # 用**真实 embedding 路由**校准。路由确实按预期工作（generate 的 merged_qa 占比
-    # 65.4% → 79.4%、grade 17.0% → 46.7%），但全部门禁指标退化：
-    #   `cat@k` 0.8590 → 0.8205、`kp@k` 0.7821 → **0.7179（−0.064，超容差 3 倍）**、
-    #   `kp_mrr` 0.6107 → 0.5661。
-    # 当时判定根因是度量口径：真题来自 `questions/`，它不是学科类目 → 「返回真题」被判
-    # 「学科未命中」。于是先去修了那个口径（见 `retrieval_gate.load_golden_queries`）。
-    #
-    # 【第二轮（问题 4 修复后）——**这次纠正了上一轮的诊断**】
-    #   `cat@k` 0.8205 → **0.9359**、`cat@1` 0.6731 → **0.8782**  ← 退化大幅缓解，
-    #     符合「上一轮 cat@* 的退化是度量口径导致」的预期（generate 的 `cat@1` 已达 1.0000）。
-    #   但 `kp@k` **0.7179 → 0.7179 纹丝不动**，仍退化 −0.0642。
-    #
-    # ★ **这说明 `kp@*` 的退化不是度量口径导致的，而是真实损失**：推高 merged_qa 占比，
-    # 就是把**与考点直接对应的讲义章节挤出 top-5**（`grade` 的 `kp@k` 0.7812 → 0.5938，
-    # 降幅最大）。而这与 `questions` 类目那种「合法替代来源」**性质不同** ——
-    # `20XX_408_exam` 作为「知识点」说不出是哪个考点，若放宽它等于让任意真题命中任意考点，
-    # 指标会失去意义。**故不能靠再放宽一次指标来让这条路由"好看"。**
-    #
-    # 结论：**不加**。收益本就边际（不加时 generate 已有 65.4% 是 merged_qa），
-    # 代价是真实的考点覆盖损失。
-    #
-    # ★ 另一个必须记住的事实：**不加这条路由，merged_qa 也已经被大量召回了** ——
-    # generate 类的 top-5 里本就有 65.4% 是 merged_qa（经 `semantic`/`keyword_bm25`/`focus`
-    # 等基础路由）。所以「merged_qa 无路由使用」这个描述在 1.2 之后**已不准确**。
-
-    # 去重：同 query + 同 filter 只保留一条
-    deduped: list[tuple[str, str, dict | None]] = []
-    seen_specs: set[str] = set()
-
-    for route_name, route_query, route_filter in metadata_routes:
-        filter_key = (
-            json.dumps(route_filter, sort_keys=True, ensure_ascii=False) if route_filter else ""
-        )
-        spec_key = f"{route_query.lower()}::{filter_key}"
-        if not route_query or spec_key in seen_specs:
-            continue
-        seen_specs.add(spec_key)
-        deduped.append((route_name, route_query, route_filter))
-    return deduped
+    # ── 按查询类型生成不重复的 metadata 路由（顺序即优先级，勿调换）──
+    metadata_routes: list[tuple[str, str, dict | None]] = []
+    metadata_routes += _content_metadata_routes(cat, base_filter, normalized, focus_query)
+    metadata_routes += _concept_metadata_routes(cat, base_filter, normalized, focus_query)
+    metadata_routes += _generic_section_routes(cat, terms, base_filter, focus_query)
+    metadata_routes += _granularity_metadata_routes(cat, base_filter, focus_query)
+    return _dedup_metadata_routes(metadata_routes)
 
 
 # ── 路由权重表（加权 RRF） ──────────────────────────────────

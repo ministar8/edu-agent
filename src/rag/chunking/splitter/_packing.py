@@ -15,6 +15,57 @@ from rag.chunking.splitter._units import (
 )
 
 
+def _consume_unit(
+    unit: dict,
+    chunks: list[dict],
+    current_units: list[dict],
+    chunk_size: int,
+    chunk_overlap: int,
+) -> list[dict]:
+    """处理单个语义单元：把已完成的 chunk 写入 `chunks`，返回更新后的累积单元列表。
+
+    原子单元（Q&A/表格/公式）与超长单元各自单独输出；否则贪心累积，超限时先冲掉当前
+    chunk 再做 overlap 回溯。
+    """
+    unit_text = unit["text"].strip()
+    if not unit_text:
+        return current_units
+
+    is_qa = unit.get("is_qa", False)
+    is_atomic = is_qa or unit.get("is_table", False) or unit.get("is_formula", False)
+
+    # 原子单元：始终单独输出，不与其它单元合并
+    if is_atomic:
+        if current_units:  # 先输出当前累积的非原子单元
+            _flush_chunk(chunks, current_units, chunk_size)
+        if is_qa:
+            qa_fields = _extract_qa_fields(unit_text)
+            chunks.append({"text": unit_text, "is_qa": True, "qa_fields": qa_fields})
+        else:
+            chunks.append({"text": unit_text, "is_qa": False, "qa_fields": None})
+        return []
+
+    if len(unit_text) > _CHUNK_HARD_LIMIT:
+        if current_units:
+            _flush_chunk(chunks, current_units, chunk_size)
+        for sub in _split_oversized(unit_text, _CHUNK_HARD_LIMIT):
+            chunks.append({"text": sub, "is_qa": False, "qa_fields": None})
+        return []
+
+    candidate_text = _render_units([*current_units, unit])
+    if len(candidate_text) <= chunk_size:
+        return [*current_units, unit]
+
+    # 超出：先输出当前 chunk，再用它的尾部单元做 overlap 回溯
+    # _flush_chunk / _build_overlap_units 都不改动传入的列表，故无需先拷贝一份
+    if current_units:
+        _flush_chunk(chunks, current_units, chunk_size)
+    overlap_units = _build_overlap_units(current_units, chunk_overlap)
+    if overlap_units and len(_render_units([*overlap_units, unit])) > chunk_size:
+        overlap_units = []
+    return [*overlap_units, unit]
+
+
 def _split_section_text(
     text: str,
     chunk_size: int = 800,
@@ -35,61 +86,13 @@ def _split_section_text(
 
     chunks: list[dict] = []
     current_units: list[dict] = []
-
     for unit in units:
-        unit_text = unit["text"].strip()
-        if not unit_text:
-            continue
-
-        is_qa = unit.get("is_qa", False)
-        is_table = unit.get("is_table", False)
-        is_formula = unit.get("is_formula", False)
-        is_atomic = is_qa or is_table or is_formula
-
-        # 原子单元：始终单独输出，不与其它单元合并
-        if is_atomic:
-            # 先输出当前累积的非原子单元
-            if current_units:
-                _flush_chunk(chunks, current_units, chunk_size)
-                current_units = []
-            if is_qa:
-                qa_fields = _extract_qa_fields(unit_text)
-                chunks.append({"text": unit_text, "is_qa": True, "qa_fields": qa_fields})
-            else:
-                chunks.append({"text": unit_text, "is_qa": False, "qa_fields": None})
-            continue
-
-        if len(unit_text) > _CHUNK_HARD_LIMIT:
-            if current_units:
-                _flush_chunk(chunks, current_units, chunk_size)
-                current_units = []
-            for sub in _split_oversized(unit_text, _CHUNK_HARD_LIMIT):
-                chunks.append({"text": sub, "is_qa": False, "qa_fields": None})
-            continue
-
-        candidate = [*current_units, unit]
-        candidate_text = _render_units(candidate)
-
-        if len(candidate_text) <= chunk_size:
-            current_units.append(unit)
-            continue
-
-        # 超出：先输出当前 chunk，再用它的尾部单元做 overlap 回溯
-        # _flush_chunk / _build_overlap_units 都不改动传入的列表，故无需先拷贝一份
-        if current_units:
-            _flush_chunk(chunks, current_units, chunk_size)
-        overlap_units = _build_overlap_units(current_units, chunk_overlap)
-        if overlap_units and len(_render_units([*overlap_units, unit])) > chunk_size:
-            overlap_units = []
-
-        current_units = [*overlap_units, unit]
+        current_units = _consume_unit(unit, chunks, current_units, chunk_size, chunk_overlap)
 
     if current_units:
         _flush_chunk(chunks, current_units, chunk_size)
 
-    chunks = _merge_short_chunks(chunks, _CHUNK_MIN_EFFECTIVE, chunk_size)
-
-    return chunks
+    return _merge_short_chunks(chunks, _CHUNK_MIN_EFFECTIVE, chunk_size)
 
 
 def _flush_chunk(chunks: list[dict], units: list[dict], chunk_size: int) -> None:

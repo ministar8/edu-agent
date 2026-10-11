@@ -88,6 +88,91 @@ def _compute_section_depth(heading_level: int) -> int:
     return 3
 
 
+def _write_section_level_metadata(
+    chunk: Document,
+    section: dict,
+    section_id: str,
+    parent_section_id: str | None,
+    child_section_ids: list[str],
+    *,
+    ancestor_ids: list[str] | None,
+    sibling_index: int,
+    sibling_count: int,
+    is_leaf: bool,
+    doc_id: str,
+    depth: int,
+    heading_level: int,
+) -> None:
+    """写入文档级 + section 级元数据。"""
+    # ── 文档级 ──
+    chunk.metadata["section.doc_id"] = doc_id
+
+    # ── section 级 ──
+    chunk.metadata["section.id"] = section_id
+    chunk.metadata["section.parent_id"] = parent_section_id
+    chunk.metadata["section.child_ids"] = json.dumps(child_section_ids)
+    chunk.metadata["section.ancestor_ids"] = json.dumps(ancestor_ids or [])
+    chunk.metadata["section.depth"] = depth
+    chunk.metadata["section.path"] = section["heading_path"]
+    chunk.metadata["section.title"] = section["heading"]
+    chunk.metadata["section.heading_level"] = heading_level
+    chunk.metadata["section.index"] = section["section_index"]
+    chunk.metadata["section.sibling_index"] = sibling_index
+    chunk.metadata["section.sibling_count"] = sibling_count
+    chunk.metadata["section.is_leaf"] = is_leaf
+    chunk.metadata["section.char_count"] = len(section["text"])
+
+
+def _write_chunk_level_metadata(
+    chunk: Document,
+    chunk_id: str,
+    section_id: str,
+    local_index: int,
+    chunk_role: str,
+    *,
+    child_chunk_ids: list[str] | None,
+    parent_chunk_id: str | None,
+) -> None:
+    """写入 chunk 级元数据 + chunk 间层级关系。"""
+    # ── chunk 级 ──
+    chunk.metadata["section.chunk_id"] = chunk_id
+    chunk.metadata["section.chunk_parent_id"] = section_id
+    chunk.metadata["section.chunk_index"] = local_index
+    chunk.metadata["section.chunk_role"] = chunk_role
+
+    # ── chunk 间层级关系 ──
+    if chunk_role in ("summary", "qa", "merged_qa") and child_chunk_ids is not None:
+        chunk.metadata["section.child_chunk_ids"] = json.dumps(child_chunk_ids)
+    if parent_chunk_id is not None:
+        chunk.metadata["section.parent_chunk_id"] = parent_chunk_id
+
+
+def _write_legacy_metadata(
+    chunk: Document, chunk_id: str, section: dict, global_index: int, local_index: int
+) -> None:
+    """写入旧字段（不删除，保证下游代码不 break）。"""
+    chunk.metadata["chunk_id"] = chunk_id
+    chunk.metadata["heading"] = section["heading_path"]
+    chunk.metadata["heading_title"] = section["heading"]
+    chunk.metadata["heading_level"] = section["heading_level"]
+    chunk.metadata["heading_path"] = section["heading_path"]
+    chunk.metadata["section_index"] = section["section_index"]
+    chunk.metadata["chunk_index"] = global_index
+    chunk.metadata["chunk_index_in_section"] = local_index
+    chunk.metadata["char_count"] = len(chunk.page_content)
+
+
+def _write_qa_fields(chunk: Document, chunk_role: str) -> None:
+    """merged_qa 角色：把临时 `_qa_fields` 展开成 `qa.*` 字段（存储合并、检索分离）。"""
+    if chunk_role != "merged_qa":
+        return
+    qa_fields = chunk.metadata.pop("_qa_fields", None)
+    if qa_fields:
+        chunk.metadata["qa.question"] = qa_fields.get("question", "")
+        chunk.metadata["qa.answer"] = qa_fields.get("answer", "")
+        chunk.metadata["qa.answer_key"] = qa_fields.get("answer_key", "")
+
+
 def _append_chunk_metadata(
     chunk: Document,
     section: dict,
@@ -120,53 +205,28 @@ def _append_chunk_metadata(
     source = chunk.metadata.get("source_file") or chunk.metadata.get("source", "unknown")
     chunk_id = _make_chunk_id(source, section["section_index"], local_index)
     heading_level = section["heading_level"]
-    depth = _compute_section_depth(heading_level)
-
-    # ── 文档级 ──
-    chunk.metadata["section.doc_id"] = doc_id
-
-    # ── section 级 ──
-    chunk.metadata["section.id"] = section_id
-    chunk.metadata["section.parent_id"] = parent_section_id
-    chunk.metadata["section.child_ids"] = json.dumps(child_section_ids)
-    chunk.metadata["section.ancestor_ids"] = json.dumps(ancestor_ids or [])
-    chunk.metadata["section.depth"] = depth
-    chunk.metadata["section.path"] = section["heading_path"]
-    chunk.metadata["section.title"] = section["heading"]
-    chunk.metadata["section.heading_level"] = heading_level
-    chunk.metadata["section.index"] = section["section_index"]
-    chunk.metadata["section.sibling_index"] = sibling_index
-    chunk.metadata["section.sibling_count"] = sibling_count
-    chunk.metadata["section.is_leaf"] = is_leaf
-    chunk.metadata["section.char_count"] = len(section["text"])
-
-    # ── chunk 级 ──
-    chunk.metadata["section.chunk_id"] = chunk_id
-    chunk.metadata["section.chunk_parent_id"] = section_id
-    chunk.metadata["section.chunk_index"] = local_index
-    chunk.metadata["section.chunk_role"] = chunk_role
-
-    # ── chunk 间层级关系 ──
-    if chunk_role in ("summary", "qa", "merged_qa") and child_chunk_ids is not None:
-        chunk.metadata["section.child_chunk_ids"] = json.dumps(child_chunk_ids)
-    if parent_chunk_id is not None:
-        chunk.metadata["section.parent_chunk_id"] = parent_chunk_id
-
-    # ── Q&A 字段（merged_qa 角色专用，存储合并检索分离） ──
-    if chunk_role == "merged_qa":
-        qa_fields = chunk.metadata.pop("_qa_fields", None)
-        if qa_fields:
-            chunk.metadata["qa.question"] = qa_fields.get("question", "")
-            chunk.metadata["qa.answer"] = qa_fields.get("answer", "")
-            chunk.metadata["qa.answer_key"] = qa_fields.get("answer_key", "")
-
-    # ── 旧字段兼容（不删除，保证下游代码不 break） ──
-    chunk.metadata["chunk_id"] = chunk_id
-    chunk.metadata["heading"] = section["heading_path"]
-    chunk.metadata["heading_title"] = section["heading"]
-    chunk.metadata["heading_level"] = heading_level
-    chunk.metadata["heading_path"] = section["heading_path"]
-    chunk.metadata["section_index"] = section["section_index"]
-    chunk.metadata["chunk_index"] = global_index
-    chunk.metadata["chunk_index_in_section"] = local_index
-    chunk.metadata["char_count"] = len(chunk.page_content)
+    _write_section_level_metadata(
+        chunk,
+        section,
+        section_id,
+        parent_section_id,
+        child_section_ids,
+        ancestor_ids=ancestor_ids,
+        sibling_index=sibling_index,
+        sibling_count=sibling_count,
+        is_leaf=is_leaf,
+        doc_id=doc_id,
+        depth=_compute_section_depth(heading_level),
+        heading_level=heading_level,
+    )
+    _write_chunk_level_metadata(
+        chunk,
+        chunk_id,
+        section_id,
+        local_index,
+        chunk_role,
+        child_chunk_ids=child_chunk_ids,
+        parent_chunk_id=parent_chunk_id,
+    )
+    _write_qa_fields(chunk, chunk_role)
+    _write_legacy_metadata(chunk, chunk_id, section, global_index, local_index)
