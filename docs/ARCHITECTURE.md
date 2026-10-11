@@ -321,10 +321,10 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 | **产品外壳** | `service` + `memory` + `core` + `db` | 3,598 | 10.9% |
 | **数据处理工具** | `tools` | 2,823 | 8.6% |
 | **评测设施** | `evaluation` | 11,256 | 34.2% |
-| 顶层入口 | `src/__init__.py` + `run_service.py` | 30 | 0.1% |
+| 顶层入口 | `src/run_service.py` | 30 | 0.1% |
 | | **合计** | **32,887** | 100% |
 
-> `src/tools/` 被 `evaluation/retrieval_gate.py` 与 `rag/ingest.py` 依赖（`clean_documents`），
+> `src/tools/` 被 `evaluation/gates/retrieval_gate/` 与 `rag/ingest.py` 依赖（`clean_documents`），
 > **不能单独归档** —— 删它会让门禁与入库链一起崩。
 
 **已移出的工程化设施**：测试套件 17,540 行 / CI（`.github/`）/ codecov /

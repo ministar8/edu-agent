@@ -140,10 +140,10 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 | 概念 | 代码文件 | 行数 | 关联文档 |
 |---|---|---|---|
 | 检索门面（对外入口） | `rag/retrieval/retriever.py` | 465 | 本文 §3 |
-| 阶段编排 | `rag/retrieval/pipeline.py` | 1139 | 本文 §1 |
+| 阶段编排 | `rag/retrieval/pipeline/` | 1479 | 本文 §1 |
 | 多路召回 / 单路由 | `rag/retrieval/routes.py` | 393 | §3 |
 | 路由构建 / 权重 / 学科推断 | `rag/retrieval/recall.py` | 654 | §3 |
-| 融合（RRF）/ 去重 / 窗口 | `rag/retrieval/postprocess.py` | 688 | §4 |
+| 融合（RRF）/ 去重 / 窗口 | `rag/retrieval/postprocess/` | 782 | §4 |
 | 重排 | `rag/retrieval/reranker.py` | 271 | `RERANK_SWITCH_ANALYSIS.md` |
 | 查询分类 / depth | `rag/retrieval/query_classifier.py` | 457 | `RETRIEVAL_POLICY.md` §4 |
 | 查询分解 | `rag/retrieval/query_decomposer.py` | 195 | §4（零增益） |

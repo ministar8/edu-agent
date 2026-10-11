@@ -6,8 +6,7 @@
 > 本方案的每一条都基于 **TEI 恢复后的实测数据**；本轮被实测**证伪/否决**的项
 > 单列于 §5，避免重复劳动。
 >
-> 配套：`docs/L1L2L3_RETRIEVAL_REVIEW.md`（分级设计评审）、
-> `docs/DOCKER.md`（TEI 端点契约）、`docs/RETRIEVAL_ROADMAP.md`（效果路线图与「不做清单」）。
+> 配套：`docs/DOCKER.md`（TEI 端点契约）、`docs/RETRIEVAL_ROADMAP.md`（效果路线图与「不做清单」）。
 
 ---
 
@@ -261,7 +260,7 @@ L1 短概念返回 3 条、L3 长结构化返回 5 条。**该现象在 Steps 2~
 
 **★ 决策：采纳（2026-09-27）**
 
-用户明确接受该权衡 ⇒ **采纳收窄变体**（改动 `src/rag/retrieval/postprocess.py`，+72/−5）：
+用户明确接受该权衡 ⇒ **采纳收窄变体**（改动 `src/rag/retrieval/postprocess/`，+72/−5）：
 
 - 新增 `_rrf_scale` / `_rrf_scale_needed`；在 `merge_route_results` 与 `weighted_rrf_merge`
   两处乘上 scale。**只在「阈值高于可达上限」的类别上启用**（实测：练习/批改；

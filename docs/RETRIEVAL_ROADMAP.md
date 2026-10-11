@@ -22,7 +22,7 @@
 >
 > - **#1 度量口径**：章级 `kp_hit@k` / `kp_mrr` 不仅已建，且**已实际驱动了 4 个 Step 的取舍**
 >   （Step 1 的判定、Step 2 的净效果表、Step 3/4 的门禁全部以它们为准）。
->   当前值见 `evals/retrieval_baseline*.json`（2026-09-27 重录，未归一口径）。
+>   当前值见 `evals/baselines/retrieval_baseline*.json`（2026-09-27 重录，未归一口径）。
 >   **答案级 RAGAS 全量仍未跑**（T0.4 未动，会产生费用）。
 > - **#2 本机 ≠ 生产**：门禁三态路由（`GATE_RERANK_MODE` = off/on/disabled）已就位并被反复使用；
 >   `.env` 的 `RERANK_ENABLED=false` 仍是**未动的产品决策**。
@@ -39,7 +39,7 @@
 
 ### 1.1 现有门禁测不出「答案更准」
 
-`src/evaluation/retrieval_gate.py` 的设计取舍第 1 条**自己写着**：
+`src/evaluation/gates/retrieval_gate/` 的设计取舍第 1 条**自己写着**：
 
 > 指标锚定在「学科类目」而不是「具体 chunk_id」
 
@@ -72,7 +72,7 @@ backlog #34 的四条路由对照实验：
 - `evals/results/` ★ **状态已更新（09-23 22:00）**：目录已建立，含 `ragas_probe.json` 与
   `ragas_smoke.json` 两份冒烟产物；**全量（40 条）仍未跑**
 - 本工作区无 CI（`.github/` 已归档），原 `test.yml` 里也没有 RAGAS job
-- `src/evaluation/cli.py` 需要 `uv sync --group eval` + 真实 LLM，纯手工
+- `src/evaluation/ragas/cli.py` 需要 `uv sync --group eval` + 真实 LLM，纯手工
 
 **所以「让检索出来的答案更准确」目前没有可操作的定义。**
 
@@ -89,7 +89,7 @@ backlog #34 的四条路由对照实验：
 |---|---|
 | 改哪里 | `.env`（`RERANK_ENABLED=false` → 跟随生产）；或在评测脚本里显式 `GATE_RERANK_MODE=on` |
 | 前置 | 本机 TEI 需运行：`docker start tei-embedding tei-rerank`（端口 11435 / 11436，**用 `docker start` 不要 `docker run` 重建**），起完等约 50s，**用真实推理请求验证而非只看 `/health`** |
-| 验收 | `GATE_RERANK_MODE=on python -m evaluation.gates.retrieval_gate` 跑通且与 `evals/retrieval_baseline_rerank.json` 对得上；`GATE_RERANK_MODE=disabled`（生产关闭态）与 `retrieval_baseline_fake_disabled.json` 对得上 |
+| 验收 | `GATE_RERANK_MODE=on python -m evaluation.gates.retrieval_gate` 跑通且与 `evals/baselines/retrieval_baseline_rerank.json` 对得上；`GATE_RERANK_MODE=disabled`（生产关闭态）与 `retrieval_baseline_fake_disabled.json` 对得上 |
 | 风险 | 低。TEI 未起则检索类请求失败 |
 
 > ★ 在 T0.1 完成前，**本机任何「检索变准了」的结论都不该采信** —— 你验的是另一条链。
@@ -158,8 +158,8 @@ backlog #34 的四条路由对照实验：
 |---|---|
 | 为什么不做 chunk_id 级 | `retrieval_gate.py` 的取舍理由成立：chunk 级期望会在任何切分变更后大面积失效。**用「知识点标签」做中间层** —— 既不随切分失效，又比学科细一档 |
 | 改哪里 ① | `evals/datasets/golden/sample_408.jsonl` 每条 `metadata` 加 `knowledge_points: [...]` —— **已完成 40 条**（跨章条目给双标注，如 ARP → 网络层 + 数据链路层） |
-| 改哪里 ② | `src/evaluation/retrieval_gate.py` 加 `kp_hit@k` / `kp_mrr` 指标 —— **已完成**（另加 `kp_annotated` 守标注不被误删） |
-| ★ 陷阱 | `src/evaluation/dataset.py:57` 会把 list 值 **join 成逗号串** → 读取端必须按逗号切分。（门禁直读 JSONL 故不受影响；`_parse_expected_kps` 已**同时兼容两种形态**，RAGAS 侧要读也不会失真） |
+| 改哪里 ② | `src/evaluation/gates/retrieval_gate/` 加 `kp_hit@k` / `kp_mrr` 指标 —— **已完成**（另加 `kp_annotated` 守标注不被误删） |
+| ★ 陷阱 | `src/evaluation/ragas/dataset.py` 会把 list 值 **join 成逗号串** → 读取端必须按逗号切分。（门禁直读 JSONL 故不受影响；`_parse_expected_kps` 已**同时兼容两种形态**，RAGAS 侧要读也不会失真） |
 | 验收 | `kp_hit@k` 基线 **< 1.0**（必须有下降空间，否则说明标注粒度还是太粗）→ **0.9250 / 0.9000，达成** |
 | 依赖 | 需要 408 领域标注。**先 40 条跑通，再扩到 150~200 条** → 40 条已跑通，扩量待办 |
 
@@ -249,7 +249,7 @@ backlog #34 的四条路由对照实验：
 | 病例 | `虚拟内存` 查询：单集合内 OS 的 top-1（0.1843）**高于** CO（0.1824），但**跨集合 RRF 融合后 CO 反超** |
 | 根因 | `all_specs` 是「集合 × 路由」的**笛卡尔积**（26 条列表）全部丢进**同一个 RRF 池**，而 **RRF 奖励「出现在更多列表里」的文档，不奖励「分数更高」的文档** |
 | 佐证 | CO 的知识文件**自己写着**「详见 操作系统 3.内存管理 七、虚拟内存管理」—— 连它都把权威解释指向 OS |
-| 改哪里 | `src/rag/retrieval/postprocess.py` 的 RRF 融合 |
+| 改哪里 | `src/rag/retrieval/postprocess/` 的 RRF 融合 |
 | 方案二选一 | ① 按集合归一化后再融合；② 给「推断出的集合」加权 |
 | 验收 | **各路由全跑**；`虚拟内存` 与 `段页式` 不再错排；其余 query 不退化 |
 | 风险 | **高** —— 动核心排序算法。本仓库在该区域已有 3 次「看起来该修、实测有害」的先例（#13 / #25 / #34） |
@@ -280,7 +280,7 @@ backlog #34 的四条路由对照实验：
 | **新增 `merged_qa_meta` 路由** | **两轮真实路由实测均净负**：一轮（问题 4 修复前）`cat@k` −0.039、`kp@k` **−0.064**；二轮（问题 4 修复后）`cat@k` 退化消失，但 **`kp@k` 仍 −0.0642 纹丝不动** —— 证明 `kp@*` 的损失是**真实的考点覆盖损失**，不是度量口径问题 |
 | 清理知识文件标题（1.1） | **2026-09-24 真实路由实测**：中性偏略负（`cat@1` −0.006、`kp_mrr` −0.004、空结果 3→4）；同类改动有 #13 负收益先例；且作用路径与门禁判据不重叠 |
 | **用启发式自动修复真题选项** | **2026-09-24 勘察后否决**：182 个含占位符的块里 **44 块源文件本身就缺选项**；「取末 N 行」这类启发式会在这些块上**静默错配**（已抓到反例 `2019_408_exam.md:146`），而**错配比显式占位符更危险** —— 批改会判错且看不出来。**需重新采集真题原文，不能靠猜** |
-| **完整标题链拼进 chunk 正文**（所有非 QA chunk 拼完整 `heading_path`，含文件级标题） | **2026-10-10 双路由 A/B 实测均净负**（同路由只切开关，chunk 数恒 2257）：**real（bge-m3）** `cat@1` −0.0128（丢 2 赚 0）、`cat_mrr` −0.0066、`cat_precision` −0.0106、`kp_mrr` −0.0037；**fake** `kp@k` −0.0192、`cat@1` −0.0064。★ **反面验证了 splitter 的既有设计**：`heading_path 不拼入 page_content`（`src/rag/chunking/splitter.py` 的注释）是对的 —— 标题（尤其文件级泛词）进正文是**稀释**而非增益，唯独纯代码 chunk 例外（无中文语义），现行「只拼考点级父标题」即该例外的最优解。同类有 #13「清理知识文件标题」负收益先例 |
+| **完整标题链拼进 chunk 正文**（所有非 QA chunk 拼完整 `heading_path`，含文件级标题） | **2026-10-10 双路由 A/B 实测均净负**（同路由只切开关，chunk 数恒 2257）：**real（bge-m3）** `cat@1` −0.0128（丢 2 赚 0）、`cat_mrr` −0.0066、`cat_precision` −0.0106、`kp_mrr` −0.0037；**fake** `kp@k` −0.0192、`cat@1` −0.0064。★ **反面验证了 splitter 的既有设计**：`heading_path 不拼入 page_content`（`src/rag/chunking/splitter/` 的注释）是对的 —— 标题（尤其文件级泛词）进正文是**稀释**而非增益，唯独纯代码 chunk 例外（无中文语义），现行「只拼考点级父标题」即该例外的最优解。同类有 #13「清理知识文件标题」负收益先例 |
 
 **理由**：三次实证，真实口径零收益或有害；且假 embedding 会给出**真实环境里不存在**的假信号。
 

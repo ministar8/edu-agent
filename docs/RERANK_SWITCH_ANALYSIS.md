@@ -266,7 +266,7 @@ C 的运行时行为与 A **完全一致**，唯一收益是消除 `use_rerank` 
 - `SUPPORTED_ROUTES`：`(embed, mode)` → 基线路径，**未登记组合直接拒绝**
 - `_meta` 升三态 `rerank_mode`；旧基线的布尔 `rerank_enabled` 做兼容映射
 - `RerankObservation` 收集 `rerank_used`；`_assert_route_preconditions` 三分支 + 交叉验证
-- 新基线：`evals/retrieval_baseline_fake_disabled.json`
+- 新基线：`evals/baselines/retrieval_baseline_fake_disabled.json`
 
 ### 实测：四条路由全部通过
 
@@ -313,7 +313,7 @@ C 的运行时行为与 A **完全一致**，唯一收益是消除 `use_rerank` 
 | `src/rag/retrieval/retriever.py` | 370-388 / 421 | `use_rerank` 控制候选池（职责 ②） |
 | `src/rag/retrieval/retriever.py` | 1202 | HyDE 内二次 rerank（已加 `RERANK_ENABLED`） |
 | `src/rag/retrieval/reranker.py` | 133 | 闸 3（`.env` 开关，现为防御网 + warning） |
-| `src/evaluation/retrieval_gate.py` | 134 / 177 | `_resolve_rerank_mode()` / `SUPPORTED_ROUTES` |
-| `src/evaluation/retrieval_gate.py` | 463 / 600 | mode → settings 覆盖 / 传 `use_rerank=rerank_requested()` |
+| `src/evaluation/gates/retrieval_gate/` | 134 / 177 | `_resolve_rerank_mode()` / `SUPPORTED_ROUTES` |
+| `src/evaluation/gates/retrieval_gate/` | 463 / 600 | mode → settings 覆盖 / 传 `use_rerank=rerank_requested()` |
 
 > 行号为 2026-09-24 A/B 组改动**之后**的位置。
