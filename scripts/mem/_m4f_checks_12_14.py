@@ -78,9 +78,61 @@ def check_12() -> None:
       ⑫h ★ **反向验证**：探测器对篡改文本必须报红（证明 ⑫b/⑫c 不是恒绿）
     """
     section("⑫ GRADE_PROMPT 词表与 kp_index 同源（缺陷 E · 方案 A）")
+    system_text, injected, subject_roots, expected = _c12_sync()
+    _c12_alias(injected)
+    _c12_fallback(system_text)
+    _c12_detect(system_text)
+    _c12_roots(injected, subject_roots)
+
+
+def check_13() -> None:
+    """⑬ B 组四条 review 结论的落地（2026-10-07，全部零 LLM）。
+
+    先说清楚**验真伪**的结果，再锁修复：
+      B1 **确认** —— 重判（`--rejudge`）走 `mechanical_reasons_from_record`，
+         它照抄 `runner.mechanical_failures`，而 `case_invalid` / `memory_miss`
+         是 runner 另两处分头写的 ⇒ 重判把它们**整个清掉**。实测归档里 4 条
+         `case_invalid` 的 reasons 恰为 `["case_invalid"]` ⇒ 重判后变 `[]`、
+         `primary_failure` 翻成 `none`（看起来像通过）。
+      B2 **确认（潜伏）** —— `cli.py` 三处 `write_text("\\n".join(...))` 不留尾换行，
+         与 `append_record` 的 `"a"` 模式相遇会把两条粘成一条坏行（实测 3 条只剩 1 条可读）。
+         全盘扫过现存 12 份归档：末字节**都是** `\\n` ⇒ 尚未真的烧到过数据，属潜伏。
+      B3 **一半被推翻** —— 「显式 config 只写一半会丢 `user_id`」成立，但仓内无此类调用方
+         （`service.py` 两把键一起给）⇒ 不改行为，只把契约写进 docstring；
+         「并发下回落会算到别人头上」**被实测推翻**：`get_config()` 读 contextvar，
+         asyncio 每个 Task 各持副本，4 个交错任务仍各自取到自己的 uid（见 ⑩e）。
+      B4 **大部分被推翻，剩一条真的** —— `forbidden_values` 是**回复文本里的自由词**，
+         不是 KP 名，要求它 canonical 是错的规则（且 gold_sanity 已在查 `None` 与
+         「与期望值重叠」）；`min_grade_calls` 改成 0 也**没放松** mem-001 的约束
+         （真正兜底的是 `grade_score_bands`）。但 **mem-005 的前置条件确实是空标**：
+         它只声明 `min_grade_calls: 0`，而 `len(calls) < 0` 永不成立 ⇒ 这条负样本对照
+         从来没校验过「A 段真的没写入」。⇒ 新增 `max_grade_calls` 上限把它变成真约束。
+    """
+    section("⑬ 重判归因 / jsonl 落盘 / 负样本前置条件（B 组修复）")
+    _c13_b1()
+    tmp, legacy = _c13_jsonl()
+    cases = _c13_m5()
+    _c13_scan(cases, tmp, legacy)
+
+
+def check_14() -> None:
+    """⑭ Generate 主指标（Task 4 registry 化后）：主指标 = registry 逐题复合（四态）。
+
+    背景：`EFFECT_PLAN §3.1` 冻结的是**逐题 AND**；§4.2 事故 —— 旧布尔合取把
+    None 剔出分母，0.733 被读成 1.000。Task 4 起布尔合取/池化的本地副本已删
+    （`metrics.every_item_passes` / `metrics.delivery_rate`），判据只在
+    `predicates.registry` 一处，复合走 `pc.composite`：fail 优先 → required 项
+    missing_premise 毒化（rate=None，**不冒充通过率**）→ not_applicable 有权缺席。
+    checkpoint 5 裁定 A：老归档缺 `top_items` 键（证据不存在）⇒ `missing_premise`，
+    **不得**记成 fail；键存在但列表为空 ⇒ 仍是 fail（查了且没覆盖 ≠ 没证据）。
+    """
+    section("⑭ Generate 主指标：registry 逐题复合（四态，Task 4 起）")
+    _c14_archive(_c14_registry())
+
+
+def _c12_sync() -> None:
     from core.kp_vocab import canonical_names
     from prompts import GRADE_PROMPT
-    from prompts.service import _knowledge_points_block
 
     system_text = GRADE_PROMPT.messages[0].prompt.template
     canonical = set(canonical_names())
@@ -99,6 +151,10 @@ def check_12() -> None:
     check("⑫b 无遗漏（应提供的考点全部可选）", not missing, f"缺失 {len(missing)}: {missing[:3]}")
     extra = sorted(injected - canonical)
     check("⑫c 无多余（prompt 内全部 ∈ canonical）", not extra, f"多余 {len(extra)}: {extra[:3]}")
+    return system_text, injected, subject_roots, expected
+
+
+def _c12_alias(injected) -> None:
 
     # ⑫d 别名不得出现在取值表里。别名表的键是「非 canonical 的同义写法」，
     #   一旦出现就说明词表注入了 aliases 而不是 canonical。
@@ -110,6 +166,13 @@ def check_12() -> None:
         not aliased,
         f"混入别名: {aliased}" if aliased else f"别名表 {len(_TOPIC_ALIASES)} 条均未出现",
     )
+
+
+def _c12_fallback(system_text) -> None:
+    from core.kp_vocab import canonical_names
+    from prompts.service import _knowledge_points_block
+
+    canonical = set(canonical_names())
 
     # ⑫e 降级分支
     import re as _re
@@ -138,6 +201,12 @@ def check_12() -> None:
         f"{len(system_text)} 字符",
     )
 
+
+def _c12_detect(system_text) -> None:
+    from core.kp_vocab import canonical_names
+
+    canonical = set(canonical_names())
+    direct_names, _ = _independent_scan()
     # ⑫h 反向验证：探测器必须能抓到「删一个 + 造一个」的篡改。
     #   篡改样例取自缺陷 E 的**真实产出**（`图的基本性质`），不是随手编的串。
     tampered = system_text.replace("【数据结构】", "【数据结构】图的基本性质、", 1)
@@ -164,6 +233,9 @@ def check_12() -> None:
         f"差异 {sorted(direct_names ^ canonical)[:3]}",
     )
 
+
+def _c12_roots(injected, subject_roots) -> None:
+
     # ⑫k 缺陷 #8：课程根节点**不得被提供给模型**，但**不得过滤过头**。
     #   规则尾自己写着「不是学科名（如「数据结构」太粗）」—— 若把它列进可选取值，
     #   模型选它就能轻易凑满 `MIN_HITS=2`，聚成「整门课 = 一个薄弱点」的桶，
@@ -184,218 +256,9 @@ def check_12() -> None:
     )
 
 
-def check_13() -> None:
-    """⑬ B 组四条 review 结论的落地（2026-10-07，全部零 LLM）。
-
-    先说清楚**验真伪**的结果，再锁修复：
-      B1 **确认** —— 重判（`--rejudge`）走 `mechanical_reasons_from_record`，
-         它照抄 `runner.mechanical_failures`，而 `case_invalid` / `memory_miss`
-         是 runner 另两处分头写的 ⇒ 重判把它们**整个清掉**。实测归档里 4 条
-         `case_invalid` 的 reasons 恰为 `["case_invalid"]` ⇒ 重判后变 `[]`、
-         `primary_failure` 翻成 `none`（看起来像通过）。
-      B2 **确认（潜伏）** —— `cli.py` 三处 `write_text("\\n".join(...))` 不留尾换行，
-         与 `append_record` 的 `"a"` 模式相遇会把两条粘成一条坏行（实测 3 条只剩 1 条可读）。
-         全盘扫过现存 12 份归档：末字节**都是** `\\n` ⇒ 尚未真的烧到过数据，属潜伏。
-      B3 **一半被推翻** —— 「显式 config 只写一半会丢 `user_id`」成立，但仓内无此类调用方
-         （`service.py` 两把键一起给）⇒ 不改行为，只把契约写进 docstring；
-         「并发下回落会算到别人头上」**被实测推翻**：`get_config()` 读 contextvar，
-         asyncio 每个 Task 各持副本，4 个交错任务仍各自取到自己的 uid（见 ⑩e）。
-      B4 **大部分被推翻，剩一条真的** —— `forbidden_values` 是**回复文本里的自由词**，
-         不是 KP 名，要求它 canonical 是错的规则（且 gold_sanity 已在查 `None` 与
-         「与期望值重叠」）；`min_grade_calls` 改成 0 也**没放松** mem-001 的约束
-         （真正兜底的是 `grade_score_bands`）。但 **mem-005 的前置条件确实是空标**：
-         它只声明 `min_grade_calls: 0`，而 `len(calls) < 0` 永不成立 ⇒ 这条负样本对照
-         从来没校验过「A 段真的没写入」。⇒ 新增 `max_grade_calls` 上限把它变成真约束。
-    """
-    section("⑬ 重判归因 / jsonl 落盘 / 负样本前置条件（B 组修复）")
-
-    import tempfile
-    from pathlib import Path as _P
-
-    from evaluation.task_eval import memory_scorer as _ms
-    from evaluation.task_eval.cases import SetupConditions, load_cases
-    from evaluation.task_eval.gold_sanity import run_sanity
-    from evaluation.task_eval.judge import mechanical_reasons_from_record
-    from evaluation.task_eval.runner import CaseRecord, append_record, write_jsonl
-
-    # —— B1：重判保留 runner 写的归因 ——
-    rec_ci = {
-        "case_id": "mem-001",
-        "task": "memory",
-        "validity_valid": False,
-        "failure_reason": ["case_invalid"],
-        "reply": "参考答案：略",
-        "hard_fails": [],
-    }
-    got = mechanical_reasons_from_record(rec_ci)
-    check("⑬a 重判保留 `case_invalid`（不再洗成『通过』）", got == ["case_invalid"], str(got))
-
-    rec_mm = {
-        "case_id": "mem-009",
-        "task": "memory",
-        "failure_reason": ["memory_miss"],
-        "reply": "x",
-    }
-    got = mechanical_reasons_from_record(rec_mm)
-    check(
-        "⑬b 重判保留 `memory_miss`（标注缺口记号，非 judge 意见）", got == ["memory_miss"], str(got)
-    )
-
-    # 兜底路径：上一轮已被误清（reasons=[]）但 `validity_valid=False` 仍在 ⇒ 能恢复
-    rec_wiped = {"case_id": "mem-002", "task": "memory", "validity_valid": False, "reply": "x"}
-    got = mechanical_reasons_from_record(rec_wiped)
-    check("⑬c reasons 已被洗空时按 `validity_valid` 重建", got == ["case_invalid"], str(got))
-
-    # ★ 反向：保留面不能过宽 —— judge -only 的 reason 必须被清掉（否则新旧 judge 混在一起）
-    rec_judge = {
-        "case_id": "qa-001",
-        "task": "qa",
-        "pack_nonempty": True,
-        "reply": "答案",
-        "failure_reason": ["generation_wrong", "hallucination"],
-    }
-    got = mechanical_reasons_from_record(rec_judge)
-    check(
-        "⑬d 反向：judge-only reasons 仍被清除（保留面只有两项）",
-        got == [],
-        str(got),
-    )
-
-    # —— B2：行写出格式 ——
-    tmp = _P(tempfile.mkdtemp()) / "b13.jsonl"
-    rows = [{"case_id": f"a-{i}", "task": "qa"} for i in (1, 2)]
-    write_jsonl(tmp, rows)
-    raw = tmp.read_bytes()
-    check(
-        "⑬e write_jsonl 末行带换行（append 前置条件成立）",
-        raw.endswith(b"\n") and len(raw.splitlines()) == 2,
-        f"末字节={raw[-1:]} 行数={len(raw.splitlines())}",
-    )
-    append_record(CaseRecord(case_id="a-3", task="qa", task_mode="learn", query="q"), tmp)
-    append_record(CaseRecord(case_id="a-4", task="qa", task_mode="learn", query="q"), tmp)
-    ids = []
-    bad = 0
-    for ln in tmp.read_text(encoding="utf-8").splitlines():
-        try:
-            ids.append(json.loads(ln)["case_id"])
-        except Exception:
-            bad += 1
-    check(
-        "⑬f 追加到 write_jsonl 产物后 4 条全可解析",
-        ids == ["a-1", "a-2", "a-3", "a-4"] and bad == 0,
-        f"可解析={ids} 坏行={bad}",
-    )
-
-    # ★ 自愈路径：手写一份**没有**尾换行的文件（模拟旧 cli 产物 / 外部编辑）
-    legacy = tmp.parent / "legacy.jsonl"
-    legacy.write_text(
-        "\n".join(json.dumps({"case_id": f"L-{i}", "task": "qa"}) for i in (1, 2)),
-        encoding="utf-8",
-    )
-    append_record(CaseRecord(case_id="L-3", task="qa", task_mode="learn", query="q"), legacy)
-    append_record(CaseRecord(case_id="L-4", task="qa", task_mode="learn", query="q"), legacy)
-    got, bad = [], 0
-    for ln in legacy.read_text(encoding="utf-8").splitlines():
-        try:
-            got.append(json.loads(ln)["case_id"])
-        except Exception:
-            bad += 1
-    check(
-        "⑬g 无尾换行的旧文件：append 前自动补分隔，4 条不丢（且幂等不多补）",
-        got == ["L-1", "L-2", "L-3", "L-4"] and bad == 0,
-        f"可解析={got} 坏行={bad} 物理行={len(legacy.read_text(encoding='utf-8').splitlines())}",
-    )
-
-    # —— B4：负样本对照的前置条件 ——
-    cases = load_cases(ROOT / "evals" / "datasets" / "demo" / "memory_cases.jsonl")
-    m5 = next((c for c in cases if c.case_id == "mem-005"), None)
-    if m5 is None:
-        check("⑬h mem-005 存在", False, "载入 0 条")
-    else:
-        sc = m5.gold.setup_conditions
-        check(
-            "⑬h mem-005 现声明「恰好 0 次批改」（min=0 且 max=0）",
-            sc is not None and sc.min_grade_calls == 0 and sc.max_grade_calls == 0,
-            f"min={getattr(sc, 'min_grade_calls', None)} max={getattr(sc, 'max_grade_calls', None)}",
-        )
-        v0 = _ms.check_case_validity(setup=sc, grade_scores=[], session_scope=0)
-        v1 = _ms.check_case_validity(
-            setup=sc, grade_scores=[{"session": 0, "score": 40.0}], session_scope=0
-        )
-        check(
-            "⑬i 上限真生效：0 次⇒有效；A 段多出 1 次批改⇒case_invalid",
-            v0.valid is True and v1.valid is False,
-            f"0次={v0.valid} 1次={v1.valid} ({v1.reason})",
-        )
-        # ★ 反向：退回「只写 min:0」时空标 lint 必须变红
-        m5_copy = load_cases(ROOT / "evals" / "datasets" / "demo" / "memory_cases.jsonl")
-        target = next(c for c in m5_copy if c.case_id == "mem-005")
-        target.gold.setup_conditions = SetupConditions(min_grade_calls=0)
-        rep = run_sanity([target])
-        check(
-            "⑬j 反向：改回只写 `min: 0` ⇒ gold_sanity 必须报 ERROR（空标 lint 可红）",
-            len(rep.errors) == 1 and rep.errors[0].field_name.endswith("min_grade_calls"),
-            f"ERROR={[(i.field_name, i.message[:22]) for i in rep.errors]}",
-        )
-        check(
-            "⑬k 真实 6 条 memory gold 体检仍全绿（新字段没制造假红灯）",
-            not run_sanity(cases).errors,
-            "",
-        )
-
-    # ★ 已发表的数字不许因为改 gold 而变动：逐条比对两份归档的 validity
-    for fname in ("phase1_memory_step5_store_off.jsonl", "phase1_memory_step5_store_on.jsonl"):
-        fp = ROOT / "evals" / "results" / "task_eval" / fname
-        if not fp.exists():
-            skip(f"⑬l {fname}", "本机归档未入库（D11 裁决 `*.jsonl` 不入库）⇒ 该项未执行", count=1)
-            continue
-        by_id = {c.case_id: c for c in cases}
-        changed = []
-        n = 0
-        for ln in fp.read_text(encoding="utf-8").splitlines():
-            ln = ln.strip()
-            if not ln or ln.startswith("#"):
-                continue
-            r = json.loads(ln)
-            if r.get("task") != "memory":
-                continue
-            n += 1
-            c = by_id.get(r["case_id"])
-            if c is None:
-                changed.append(f"{r['case_id']}(gold 缺失)")
-                continue
-            new_v = _ms.check_case_validity(
-                setup=c.gold.setup_conditions,
-                grade_scores=r.get("grade_scores") or [],
-                session_scope=0,
-            ).valid
-            if new_v != r.get("validity_valid"):
-                changed.append(f"{r['case_id']}:{r.get('validity_valid')}→{new_v}")
-        check(
-            f"⑬l 新 gold 下 {fname} 的 validity 逐条不变（不动已发表数字）",
-            n == 6 and not changed,
-            f"{n} 条；变动={changed}",
-        )
-
-    tmp.unlink(missing_ok=True)
-    legacy.unlink(missing_ok=True)
-
-
-def check_14() -> None:
-    """⑭ Generate 主指标（Task 4 registry 化后）：主指标 = registry 逐题复合（四态）。
-
-    背景：`EFFECT_PLAN §3.1` 冻结的是**逐题 AND**；§4.2 事故 —— 旧布尔合取把
-    None 剔出分母，0.733 被读成 1.000。Task 4 起布尔合取/池化的本地副本已删
-    （`metrics.every_item_passes` / `metrics.delivery_rate`），判据只在
-    `predicates.registry` 一处，复合走 `pc.composite`：fail 优先 → required 项
-    missing_premise 毒化（rate=None，**不冒充通过率**）→ not_applicable 有权缺席。
-    checkpoint 5 裁定 A：老归档缺 `top_items` 键（证据不存在）⇒ `missing_premise`，
-    **不得**记成 fail；键存在但列表为空 ⇒ 仍是 fail（查了且没覆盖 ≠ 没证据）。
-    """
-    section("⑭ Generate 主指标：registry 逐题复合（四态，Task 4 起）")
+def _c14_registry() -> None:
 
     from evaluation.task_eval.predicates import common as pc
-    from evaluation.task_eval.report import build_report, render_markdown
 
     keys = ("gen_structure", "gen_answerability", "gen_coverage", "gen_correctness")
 
@@ -426,14 +289,19 @@ def check_14() -> None:
         isinstance(pooled, float) and isinstance(per_case, float) and pooled - per_case > 0.02,
         f"池化={pooled} vs 逐题={per_case}（崩掉的题只算 1 题，却被 54 个好项摊薄）",
     )
+    return keys
 
-    # ⑭d 真实归档锁定形态（checkpoint 5 裁定 A 后）：phase1_baseline_v2 的 15 条
-    #    generate **全部没有 `top_items` 键**（老归档，检索探针未落盘）⇒ coverage
-    #    missing_premise（测不到，不记 fail）；无 gold ⇒ answerability/correctness
-    #    同为 missing_premise ⇒ 逐题复合全部 missing_premise ⇒ rate=None、n=0、
-    #    n_a_missing_premise=15。（旧读数 0.80/0.9423 是「归档字段 + 旧布尔口径」的
-    #    历史值，随 registry 化退役 —— 语义修正，须随改动披露，非回归。）
+
+# ⑭d 真实归档锁定形态（checkpoint 5 裁定 A 后）：phase1_baseline_v2 的 15 条
+#    generate **全部没有 `top_items` 键**（老归档，检索探针未落盘）⇒ coverage
+#    missing_premise（测不到，不记 fail）；无 gold ⇒ answerability/correctness
+#    同为 missing_premise ⇒ 逐题复合全部 missing_premise ⇒ rate=None、n=0、
+#    n_a_missing_premise=15。（旧读数 0.80/0.9423 是「归档字段 + 旧布尔口径」的
+#    历史值，随 registry 化退役 —— 语义修正，须随改动披露，非回归。）
+def _c14_archive(keys) -> None:
     import json as _json
+
+    from evaluation.task_eval.report import build_report, render_markdown
 
     fp = ROOT / "evals" / "results" / "task_eval" / "phase1_baseline_v2.jsonl"
     if not fp.exists():
@@ -487,3 +355,189 @@ def check_14() -> None:
         st["n"] == 0 and st["n_a_missing_premise"] == 3,
         str(st),
     )
+
+
+def _c13_b1() -> None:
+
+    from evaluation.task_eval.judge import mechanical_reasons_from_record
+
+    # —— B1：重判保留 runner 写的归因 ——
+    rec_ci = {
+        "case_id": "mem-001",
+        "task": "memory",
+        "validity_valid": False,
+        "failure_reason": ["case_invalid"],
+        "reply": "参考答案：略",
+        "hard_fails": [],
+    }
+    got = mechanical_reasons_from_record(rec_ci)
+    check("⑬a 重判保留 `case_invalid`（不再洗成『通过』）", got == ["case_invalid"], str(got))
+
+    rec_mm = {
+        "case_id": "mem-009",
+        "task": "memory",
+        "failure_reason": ["memory_miss"],
+        "reply": "x",
+    }
+    got = mechanical_reasons_from_record(rec_mm)
+    check(
+        "⑬b 重判保留 `memory_miss`（标注缺口记号，非 judge 意见）", got == ["memory_miss"], str(got)
+    )
+
+    # 兜底路径：上一轮已被误清（reasons=[]）但 `validity_valid=False` 仍在 ⇒ 能恢复
+    rec_wiped = {"case_id": "mem-002", "task": "memory", "validity_valid": False, "reply": "x"}
+    got = mechanical_reasons_from_record(rec_wiped)
+    check("⑬c reasons 已被洗空时按 `validity_valid` 重建", got == ["case_invalid"], str(got))
+
+    # ★ 反向：保留面不能过宽 —— judge -only 的 reason 必须被清掉（否则新旧 judge 混在一起）
+    rec_judge = {
+        "case_id": "qa-001",
+        "task": "qa",
+        "pack_nonempty": True,
+        "reply": "答案",
+        "failure_reason": ["generation_wrong", "hallucination"],
+    }
+    got = mechanical_reasons_from_record(rec_judge)
+    check(
+        "⑬d 反向：judge-only reasons 仍被清除（保留面只有两项）",
+        got == [],
+        str(got),
+    )
+
+
+def _c13_jsonl() -> None:
+    import tempfile
+    from pathlib import Path as _P
+
+    from evaluation.task_eval.runner import CaseRecord, append_record, write_jsonl
+
+    # —— B2：行写出格式 ——
+    tmp = _P(tempfile.mkdtemp()) / "b13.jsonl"
+    rows = [{"case_id": f"a-{i}", "task": "qa"} for i in (1, 2)]
+    write_jsonl(tmp, rows)
+    raw = tmp.read_bytes()
+    check(
+        "⑬e write_jsonl 末行带换行（append 前置条件成立）",
+        raw.endswith(b"\n") and len(raw.splitlines()) == 2,
+        f"末字节={raw[-1:]} 行数={len(raw.splitlines())}",
+    )
+    append_record(CaseRecord(case_id="a-3", task="qa", task_mode="learn", query="q"), tmp)
+    append_record(CaseRecord(case_id="a-4", task="qa", task_mode="learn", query="q"), tmp)
+    ids = []
+    bad = 0
+    for ln in tmp.read_text(encoding="utf-8").splitlines():
+        try:
+            ids.append(json.loads(ln)["case_id"])
+        except Exception:
+            bad += 1
+    check(
+        "⑬f 追加到 write_jsonl 产物后 4 条全可解析",
+        ids == ["a-1", "a-2", "a-3", "a-4"] and bad == 0,
+        f"可解析={ids} 坏行={bad}",
+    )
+
+    # ★ 自愈路径：手写一份**没有**尾换行的文件（模拟旧 cli 产物 / 外部编辑）
+    legacy = tmp.parent / "legacy.jsonl"
+    legacy.write_text(
+        "\n".join(json.dumps({"case_id": f"L-{i}", "task": "qa"}) for i in (1, 2)),
+        encoding="utf-8",
+    )
+    append_record(CaseRecord(case_id="L-3", task="qa", task_mode="learn", query="q"), legacy)
+    append_record(CaseRecord(case_id="L-4", task="qa", task_mode="learn", query="q"), legacy)
+    got, bad = [], 0
+    for ln in legacy.read_text(encoding="utf-8").splitlines():
+        try:
+            got.append(json.loads(ln)["case_id"])
+        except Exception:
+            bad += 1
+    check(
+        "⑬g 无尾换行的旧文件：append 前自动补分隔，4 条不丢（且幂等不多补）",
+        got == ["L-1", "L-2", "L-3", "L-4"] and bad == 0,
+        f"可解析={got} 坏行={bad} 物理行={len(legacy.read_text(encoding='utf-8').splitlines())}",
+    )
+    return tmp, legacy
+
+
+def _c13_m5() -> None:
+    from evaluation.task_eval import memory_scorer as _ms
+    from evaluation.task_eval.cases import SetupConditions, load_cases
+    from evaluation.task_eval.gold_sanity import run_sanity
+
+    # —— B4：负样本对照的前置条件 ——
+    cases = load_cases(ROOT / "evals" / "datasets" / "demo" / "memory_cases.jsonl")
+    m5 = next((c for c in cases if c.case_id == "mem-005"), None)
+    if m5 is None:
+        check("⑬h mem-005 存在", False, "载入 0 条")
+    else:
+        sc = m5.gold.setup_conditions
+        check(
+            "⑬h mem-005 现声明「恰好 0 次批改」（min=0 且 max=0）",
+            sc is not None and sc.min_grade_calls == 0 and sc.max_grade_calls == 0,
+            f"min={getattr(sc, 'min_grade_calls', None)} max={getattr(sc, 'max_grade_calls', None)}",
+        )
+        v0 = _ms.check_case_validity(setup=sc, grade_scores=[], session_scope=0)
+        v1 = _ms.check_case_validity(
+            setup=sc, grade_scores=[{"session": 0, "score": 40.0}], session_scope=0
+        )
+        check(
+            "⑬i 上限真生效：0 次⇒有效；A 段多出 1 次批改⇒case_invalid",
+            v0.valid is True and v1.valid is False,
+            f"0次={v0.valid} 1次={v1.valid} ({v1.reason})",
+        )
+        # ★ 反向：退回「只写 min:0」时空标 lint 必须变红
+        m5_copy = load_cases(ROOT / "evals" / "datasets" / "demo" / "memory_cases.jsonl")
+        target = next(c for c in m5_copy if c.case_id == "mem-005")
+        target.gold.setup_conditions = SetupConditions(min_grade_calls=0)
+        rep = run_sanity([target])
+        check(
+            "⑬j 反向：改回只写 `min: 0` ⇒ gold_sanity 必须报 ERROR（空标 lint 可红）",
+            len(rep.errors) == 1 and rep.errors[0].field_name.endswith("min_grade_calls"),
+            f"ERROR={[(i.field_name, i.message[:22]) for i in rep.errors]}",
+        )
+        check(
+            "⑬k 真实 6 条 memory gold 体检仍全绿（新字段没制造假红灯）",
+            not run_sanity(cases).errors,
+            "",
+        )
+    return cases
+
+
+def _c13_scan(cases, tmp, legacy) -> None:
+    from evaluation.task_eval import memory_scorer as _ms
+
+    # ★ 已发表的数字不许因为改 gold 而变动：逐条比对两份归档的 validity
+    for fname in ("phase1_memory_step5_store_off.jsonl", "phase1_memory_step5_store_on.jsonl"):
+        fp = ROOT / "evals" / "results" / "task_eval" / fname
+        if not fp.exists():
+            skip(f"⑬l {fname}", "本机归档未入库（D11 裁决 `*.jsonl` 不入库）⇒ 该项未执行", count=1)
+            continue
+        by_id = {c.case_id: c for c in cases}
+        changed = []
+        n = 0
+        for ln in fp.read_text(encoding="utf-8").splitlines():
+            ln = ln.strip()
+            if not ln or ln.startswith("#"):
+                continue
+            r = json.loads(ln)
+            if r.get("task") != "memory":
+                continue
+            n += 1
+            c = by_id.get(r["case_id"])
+            if c is None:
+                changed.append(f"{r['case_id']}(gold 缺失)")
+                continue
+            new_v = _ms.check_case_validity(
+                setup=c.gold.setup_conditions,
+                grade_scores=r.get("grade_scores") or [],
+                session_scope=0,
+            ).valid
+            if new_v != r.get("validity_valid"):
+                changed.append(f"{r['case_id']}:{r.get('validity_valid')}→{new_v}")
+        check(
+            f"⑬l 新 gold 下 {fname} 的 validity 逐条不变（不动已发表数字）",
+            n == 6 and not changed,
+            f"{n} 条；变动={changed}",
+        )
+
+    tmp.unlink(missing_ok=True)
+    legacy.unlink(missing_ok=True)
