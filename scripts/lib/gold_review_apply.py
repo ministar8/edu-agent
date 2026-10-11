@@ -141,6 +141,49 @@ def assert_only_status_changed(before: bytes, after: bytes) -> None:
         raise AssertionError("说好了要写回，结果一行都没差 —— 那就别写")
 
 
+def _collect_ids(args: argparse.Namespace) -> set[str] | None:
+    """从 --ids / --ids-file / --all-draft 汇总待处理 case_id；出错返回 None。"""
+    ids: set[str] = set()
+    if args.ids:
+        ids = {s.strip() for s in args.ids.replace("，", ",").split(",") if s.strip()}
+    if args.ids_file:
+        p = Path(args.ids_file)
+        if not p.exists():
+            print(f"读不到 ids 文件：{p}", file=sys.stderr)
+            return None
+        ids = {
+            ln.strip()
+            for ln in p.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.lstrip().startswith("#")
+        }
+    if args.all_draft:
+        ids |= _draft_ids()
+    if not ids:
+        print(
+            "没有要处理的 case_id（--ids / --ids-file / --all-draft 至少给一个）", file=sys.stderr
+        )
+        return None
+    return ids
+
+
+def _report(
+    ids: set[str], matched: set[str], total_changed: list[str], fp_lines: list[str], apply: bool
+) -> None:
+    """汇总报告：拒绝项 / §20.0 指纹提示 / 试跑提示。"""
+    if not total_changed:
+        print("⇒ 没有任何行被改动（要么 id 不匹配，要么已经是目标状态）")
+    all_refused = sorted(ids - matched)
+    if all_refused:
+        print(f"⚠️ 这些 id 在 demo 集里找不到，已拒绝：{all_refused}")
+    if fp_lines and total_changed:
+        print(
+            "\n§20.0 效果集指纹那一行请改成（gold 一改就必须同步，否则锚点与数据对不上）：\n  "
+            + " · ".join(fp_lines)
+        )
+    if not apply and total_changed:
+        print("\n（这是试跑。确认无误后加 --apply 才会写盘。）")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="翻转 gold_status（只翻你确认过的 case）")
     src = ap.add_mutually_exclusive_group(required=True)
@@ -155,25 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    ids: set[str] = set()
-    if args.ids:
-        ids = {s.strip() for s in args.ids.replace("，", ",").split(",") if s.strip()}
-    if args.ids_file:
-        p = Path(args.ids_file)
-        if not p.exists():
-            print(f"读不到 ids 文件：{p}", file=sys.stderr)
-            return 2
-        ids = {
-            ln.strip()
-            for ln in p.read_text(encoding="utf-8").splitlines()
-            if ln.strip() and not ln.lstrip().startswith("#")
-        }
-    if args.all_draft:
-        ids |= _draft_ids()
-    if not ids:
-        print(
-            "没有要处理的 case_id（--ids / --ids-file / --all-draft 至少给一个）", file=sys.stderr
-        )
+    ids = _collect_ids(args)
+    if ids is None:
         return 2
 
     mode = "写入" if args.apply else "试跑（不写盘）"
@@ -198,18 +224,7 @@ def main(argv: list[str] | None = None) -> int:
             stem = name.replace("_cases.jsonl", "")
             fp_lines.append(f"`{stem} {after_fp}`")
 
-    if not total_changed:
-        print("⇒ 没有任何行被改动（要么 id 不匹配，要么已经是目标状态）")
-    all_refused = sorted(ids - matched)
-    if all_refused:
-        print(f"⚠️ 这些 id 在 demo 集里找不到，已拒绝：{all_refused}")
-    if fp_lines and total_changed:
-        print(
-            "\n§20.0 效果集指纹那一行请改成（gold 一改就必须同步，否则锚点与数据对不上）：\n  "
-            + " · ".join(fp_lines)
-        )
-    if not args.apply and total_changed:
-        print("\n（这是试跑。确认无误后加 --apply 才会写盘。）")
+    _report(ids, matched, total_changed, fp_lines, args.apply)
     return 0
 
 
