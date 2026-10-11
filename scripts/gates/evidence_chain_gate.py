@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+# ★ scripts/ 也要上路径：`check_6` 用 `import lib.build_claim_ledger`（lib/ 子包在 scripts/ 下）。
+#   移位前靠 `sys.path[0]=scripts/` 隐式生效，进 gates/ 后失效 ⇒ 显式注入。
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
 
 _EXPECTED_ITEMS = 81  # Task 7 结束 49；Task 8 Step 1（8a–8g）+7 = 56；T8-C/T8-E（8h/8i）+2 = 58
 # ★ 修复轮 F7 再 +4：`8j`（map_route_failures 双向）/`8k`（单元内 reset 回归锁）/
@@ -718,7 +721,7 @@ def check_8() -> None:
         return found
 
     routes_reset_calls: list[int] = []
-    _routes_tree = ast.parse(Path("src/rag/routes.py").read_text(encoding="utf-8"))
+    _routes_tree = ast.parse(Path("src/rag/retrieval/routes.py").read_text(encoding="utf-8"))
     for _node in ast.walk(_routes_tree):
         if (
             isinstance(_node, ast.Call)
@@ -872,12 +875,18 @@ def check_8() -> None:
             for n in ast.walk(r.value)
             if isinstance(n, ast.Name)
         }
-        if not acc_vars or not (acc_vars & returned):
+        # ★ 收割「回到调用方」有两种等价形态：① 变量出现在本函数 `return` 里；
+        #   ② 变量是本函数**入参**（可变 list，调用方持有引用）——`_run_one_query` 把
+        #   reset+收割下移后就是 ②：`run_query_failures` 由 `run_gate` 建、传入、再 return 出去。
+        #   两者都满足「收割了且没扔」这一本判据的意图。
+        params = {a.arg for a in (*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs)}
+        if not acc_vars or not (acc_vars & (returned | params)):
             pairing.append(
-                f"{fn.name}: 累计变量={sorted(acc_vars)} return 里的名字={sorted(returned)}"
+                f"{fn.name}: 累计变量={sorted(acc_vars)} "
+                f"return 里的名字={sorted(returned)} 入参={sorted(params)}"
             )
     check(
-        "8m retrieval_gate 的 reset 与收割成对（finalbody 读 query_failures + extend 同一累计变量 + 该变量被 return）",
+        "8m retrieval_gate 的 reset 与收割成对（finalbody 读 query_failures + extend 同一累计变量 + 该变量被 return 或作为入参）",
         bool(_rg_funcs) and not pairing,
         f"含 reset 的函数={[f.name for f in _rg_funcs]}；未配对={pairing}",
     )
@@ -1029,12 +1038,16 @@ def check_9() -> None:
         _SFD(0.1, "hamming")  # 未登记的 space ⇒ 必须抛，不静默回退成 cosine
     except ValueError:
         raised_unknown = True
-    _sc_src = (_pl9.Path(__file__).resolve().parents[2] / "src/rag/semantic_cache.py").read_text(
-        encoding="utf-8"
-    )
-    _vs_src = (_pl9.Path(__file__).resolve().parents[2] / "src/rag/vectorstore.py").read_text(
-        encoding="utf-8"
-    )
+    # ★ rag 重组后：semantic_cache 拆成 `semantic_cache.py + _semantic_cache_{codec,io}.py`、
+    #   vectorstore 拆成 `vectorstore.py + _vectorstore_{base,query,ingest}.py` ⇒ 读整组，
+    #   否则断言会因「字符串搬到了同包的另一文件」而假红（断言原意不变）。
+    _root9g = _pl9.Path(__file__).resolve().parents[2]
+
+    def _concat9g(pattern: str) -> str:
+        return "".join(p.read_text(encoding="utf-8") for p in sorted(_root9g.glob(pattern)))
+
+    _sc_src = _concat9g("src/rag/retrieval/*semantic_cache*.py")
+    _vs_src = _concat9g("src/rag/common/*vectorstore*.py")
     # semantic_cache 不再持有私有换算（`1.0 - distance` 只允许出现在注释里，不能作为赋值表达式）
     _sc_no_private = not any(
         line.strip().startswith(("similarity =", "score =", "sim ="))
@@ -1069,10 +1082,17 @@ def check_9() -> None:
     def _read9(rel: str) -> str:
         return (_root9 / rel).read_text(encoding="utf-8")
 
-    _pipe9 = _read9("src/rag/pipeline.py")
-    _ret9 = _read9("src/rag/retriever.py")
+    def _read9glob(pattern: str) -> str:
+        """★ rag 重组后 `pipeline.py` 成了包、`retriever.py` 拆出 `retriever_io.py`
+        （桥接两行搬了过去）⇒ 按组拼接读，断言原意（键名四跳配对）不变。"""
+        return "".join(p.read_text(encoding="utf-8") for p in sorted(_root9.glob(pattern)))
+
+    _pipe9 = _read9glob("src/rag/retrieval/pipeline/*.py")
+    _ret9 = _read9glob("src/rag/retrieval/retriever*.py")
     _probe9 = _read9("src/evaluation/task_eval/retrieval_probe.py")
-    _run9 = _read9("src/evaluation/task_eval/runner.py")
+    # ★ `runner.py` 精简后拆出 `_runner_record.py`（`CaseRecord.rerank_used` property 在此）
+    #   ⇒ 读 `*runner*.py` 整组，否则 ④ 的 `self.rerank_status == "success"` 查找假红。
+    _run9 = _read9glob("src/evaluation/task_eval/*runner*.py")
     hops = {
         "①pipeline 写 _rerank_status": 'metadata["_rerank_status"] = ' in _pipe9,
         "②retriever 读 _rerank_status": '"_rerank_status"' in _ret9,
