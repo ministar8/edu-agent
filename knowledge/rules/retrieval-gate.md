@@ -16,14 +16,20 @@
 
 | 命令 | 作用 |
 |---|---|
-| `PYTHONPATH=src uv run python -m evaluation.retrieval_gate` | 六路由回归，对比 `evals/retrieval_baseline*.json` |
-| `PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 uv run python -m evaluation.probe_gate` | 小节级探针 `dropped_by` |
+| `PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate` | 六路由回归，对比 `evals/baselines/retrieval_baseline*.json` |
+| `PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 uv run python -m evaluation.gates.probe_gate` | 小节级探针 `dropped_by`，对比 `evals/baselines/probe_baseline.json` |
 
 红线：**未过门禁不得删旧集合**；假 embedding 结论不外推到真实路由。
 
 ---
 
-## 3. Basic 试点附加验收（`scripts/ops/verify_basic_pilot.py`）
+## 3. Basic 试点附加验收（`scripts/ingest/ingest_basic_all.py --verify-only`）
+
+```bash
+PYTHONPATH=src uv run python scripts/ingest/ingest_basic_all.py --verify-only
+```
+
+（早先的 `scripts/ops/verify_basic_pilot.py` 是只扫单集合的试点版，已由上面这条全科版取代并删除。）
 
 ### 3.1 KP 回链
 
@@ -50,10 +56,10 @@ teaches: basic:<section_id> → kp_id
 
 ## 4. 生产级验收（单篇）
 
-- [ ] `basic-writing.md` 清单通过  
-- [ ] 回链 + 负向脚本通过  
-- [ ] `retrieval_gate` 不低于基线  
-- [ ] `probe_gate` 不差于基线  
+- [ ] `knowledge/rules/basic-writing.md` 清单通过  
+- [ ] 回链 + 负向脚本通过（`scripts/ingest/ingest_basic_all.py --verify-only`）  
+- [ ] `evaluation.gates.retrieval_gate` 不低于基线  
+- [ ] `evaluation.gates.probe_gate` 不差于基线  
 
 ---
 

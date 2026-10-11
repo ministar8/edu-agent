@@ -20,7 +20,8 @@ from _kp_co import co
 from _kp_ds import ds
 from _kp_os import os
 
-OUT = Path(r"C:\Users\26452\Desktop\edu-agent\knowledge\knowledge_points")
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / "knowledge" / "knowledge_points"
 OUT.mkdir(parents=True, exist_ok=True)
 
 
