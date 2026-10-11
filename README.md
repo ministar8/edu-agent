@@ -29,7 +29,7 @@ RAG 检索管线: 查询归一 → 分类 → 多路召回(语义 + BM25 + 元�
 | Agent | LangChain 1.x `create_agent` + LangGraph `create_supervisor` + 运行时模型覆盖中间件 |
 | RAG | ChromaDB + bge-m3(TEI) + BM25 + RRF + bge-reranker-v2-m3(TEI) + HyDE + 语义缓存 |
 | 记忆 | 短期 checkpointer + 消息窗口；长期 Store（画像 / episodes / weak_topics / 向量检索） |
-| 评测 | RAGAS Layer-1（faithfulness / context_precision / context_recall / answer_relevancy） |
+| 评测 | ① **`task_eval`**（论文效果章 · 5 任务 × demo case）② RAGAS Layer-1（faithfulness / context_precision / context_recall / answer_relevancy）③ 检索质量门禁（`retrieval_gate` / `probe_gate`） |
 | LLM | DashScope / DeepSeek（OpenAI 兼容接口） |
 | 依赖管理 | uv + pyproject.toml |
 | 质量 | ruff + pyrefly + pre-commit（提交前钩子）+ 检索质量门禁（按路由比基线） |
@@ -48,18 +48,18 @@ edu-agent/
 │   ├── prompts/          # 系统提示词与模板（import 期校验 + PROMPT_SET_VERSION）
 │   ├── schema/           # 协议/领域模型（questions / grading / evidence / auth …）
 │   ├── memory/           # 短期窗口 + 长期 Store 业务封装
-│   ├── evaluation/       # 评测：RAGAS（dataset / adapters / ragas_eval / cli）
-│   │                     #      + 检索质量门禁（retrieval_gate，按路由比基线）
+│   ├── evaluation/       # 评测（三套独立尺子）：task_eval（效果章）/ ragas（RAGAS）/ gates（检索门禁）
+│   │                     #      + diagnostics（遥测报表、逐层追踪）
 │   ├── db/               # SQLAlchemy User 表
 │   ├── service/          # FastAPI（service / auth / threads / errors / health）
 │   ├── tools/            # 离线数据清洗（ingest 使用，不参与运行时问答）
 │   └── run_service.py    # 服务入口
 ├── static/               # 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css）
-├── evals/                # 数据集（datasets/）+ 9 份门禁基线（baselines/，含 6 份检索路由基线）
+├── evals/                # 数据集（datasets/）+ 门禁基线（baselines/：6 份检索路由 + probe + policy）
 ├── data/                 # 运行时指标输出（gitignore）
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile.service
-├── scripts/              # 运维/诊断脚本（tei_ready / check_live_models / compare_indexes）
+├── scripts/              # 运维/诊断/实验脚本，按域分子包（ops · mem · gates · exp · lib · ingest · datasets）
 └── docs/                 # 工程文档（ARCHITECTURE / RETRIEVAL_PLAN / RETRIEVAL_ROADMAP / DOCKER 等）
 ```
 
@@ -67,8 +67,10 @@ edu-agent/
 
 | 入口 | 用途 |
 |---|---|
-| `PYTHONPATH=src uv run python -m evaluation.ragas.cli` | RAGAS 评测（faithfulness / context_precision / context_recall / answer_relevancy） |
+| `PYTHONPATH=src uv run python -m evaluation.task_eval` | **任务级评测（论文效果章）**：5 任务 × demo case；子命令 `run / sanity / calibrate / rejudge / reprobe / backfill`（见 `CLAUDE.md`「常用命令」） |
+| `PYTHONPATH=src uv run python -m evaluation.ragas.cli` | RAGAS 组件指标（faithfulness / context_precision / context_recall / answer_relevancy） |
 | `PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate` | 检索质量门禁：**九项指标**对基线（含章级 `kp_hit@k` / `kp_mrr`），**每条路由各一份基线** |
+| `PYTHONPATH=src uv run python -m evaluation.gates.probe_gate` | 探针门禁（小节级）：目标 chunk 在**哪一层**丢失（对 `probe_baseline.json`） |
 | `scripts/tei_deploy.ps1` | 本机 TEI 容器部署（embedding + reranker） |
 
 > 检索门的真实口径按 `(embedding, rerank)` 组合区分：默认（假 embedding / 重排 `off`）、
@@ -145,7 +147,7 @@ PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/go
 # ↑ 路径已按实仓校正：旧写法 evals/sample_408.jsonl 不存在，真实黄金集 = evals/datasets/golden/sample_408.jsonl（cli.py 的 --dataset 默认值）
 ```
 
-报告输出到 `evals/results/ragas_*.json`。
+报告输出到 `evals/results/generation/ragas/`（`ragas_<tag>.json`；`raw.jsonl` / `metrics.json` / `summary.md` 由 `scripts/ops/ragas_report.py` 派生，见 `evals/results/README.md`）。
 
 ## 代码质量
 
