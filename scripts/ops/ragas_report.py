@@ -78,21 +78,8 @@ def _by_type(details: list[dict]) -> dict[str, dict[str, dict]]:
     return dict(sorted(out.items()))
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--tag", default="final")
-    args = ap.parse_args()
-
-    report_path = RAGAS_DIR / f"ragas_{args.tag}.json"
-    if not report_path.exists():
-        print(f"报告不存在: {report_path}（先跑 evaluation.ragas.cli）")
-        return 2
-    report = json.loads(report_path.read_text(encoding="utf-8"))
-    meta = report.get("_meta", {})
-    details = report.get("details") or []
-    rc = meta.get("run_config", {})
-
-    # 1) raw.jsonl —— 逐样本（question / answer / contexts / scores）
+def _write_raw(details: list[dict]) -> Path:
+    """1) raw.jsonl —— 逐样本（question / answer / contexts / scores）。"""
     raw_path = RAGAS_DIR / "raw.jsonl"
     with raw_path.open("w", encoding="utf-8") as f:
         for row in details:
@@ -113,12 +100,15 @@ def main() -> int:
                 )
                 + "\n"
             )
+    return raw_path
 
-    # 2) metrics.json —— 汇总（总体 + 分类型）
+
+def _build_metrics(tag: str, meta: dict, rc: dict, report: dict, details: list[dict]) -> dict:
+    """2) metrics.json —— 汇总（总体 + 分类型）。"""
     metrics_out = {
         "status": "ok" if not meta.get("error") else "error",
         "error": meta.get("error"),
-        "tag": args.tag,
+        "tag": tag,
         "n_loaded": rc.get("n_loaded"),
         "n_filled": rc.get("n_filled"),
         "query_type_distribution": rc.get("query_type_distribution"),
@@ -129,17 +119,17 @@ def main() -> int:
         "embedding_fake": rc.get("embedding_fake"),
         "note": "逐样本明细见 raw.jsonl 与 ragas_<tag>.json；分类型均值为本文件派生",
         # 本文件由本脚本派生，故 provenance 记本脚本；上游 RAGAS 运行的口径见上方 model 字段
-        "source_report": f"ragas_{args.tag}.json",
+        "source_report": f"ragas_{tag}.json",
         **build_provenance("scripts/ops/ragas_report.py"),
     }
     for m in METRICS:
         metrics_out[m] = report.get(m)
     metrics_out["by_query_type"] = _by_type(details)
+    return metrics_out
 
-    (RAGAS_DIR / "metrics.json").write_text(
-        json.dumps(metrics_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
 
+def _print_summary(report: dict, raw_path: Path, metrics_out: dict, details: list[dict]) -> None:
+    """3) 控制台摘要。"""
     print(f"wrote {raw_path.name} ({len(details)} rows)")
     print("wrote metrics.json")
     for m in METRICS:
@@ -149,6 +139,28 @@ def main() -> int:
     for t, block in metrics_out["by_query_type"].items():
         cells = " ".join(f"{m[:9]}={block[m]['mean']}" for m in METRICS if m in block)
         print(f"  {t:<10} n={block['n']} {cells}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tag", default="final")
+    args = ap.parse_args()
+
+    report_path = RAGAS_DIR / f"ragas_{args.tag}.json"
+    if not report_path.exists():
+        print(f"报告不存在: {report_path}（先跑 evaluation.ragas.cli）")
+        return 2
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    meta = report.get("_meta", {})
+    details = report.get("details") or []
+    rc = meta.get("run_config", {})
+
+    raw_path = _write_raw(details)  # 1) raw.jsonl
+    metrics_out = _build_metrics(args.tag, meta, rc, report, details)  # 2) metrics.json
+    (RAGAS_DIR / "metrics.json").write_text(
+        json.dumps(metrics_out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    _print_summary(report, raw_path, metrics_out, details)  # 3) 控制台摘要
     return 0
 
 
