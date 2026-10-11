@@ -58,8 +58,11 @@ class MetricsTimer(AbstractContextManager):
 # 遥测日志的默认落盘位置。★ 这里是**唯一**的定义处 ——
 # `evaluation.diagnostics.telemetry_report` 把它当作默认输入。两份各写一遍这个表达式迟早漂移，
 # 而漂移的表现是「报表读到的是另一份日志」，**不报错、只是数字变了**。
+# ★ parents[3]：本文件在 `src/rag/common/` 下 ⇒ parents[2]=`src`、parents[3]=仓根。
+#   落盘位置应为**仓根** `data/metrics/`（与 `telemetry_report` 文档串、`.gitignore` 的 `data/` 一致）；
+#   若误用 parents[2] 会静默改写到 `src/data/`。
 DEFAULT_METRICS_PATH = (
-    Path(__file__).resolve().parents[2] / "data" / "metrics" / "rag_metrics.jsonl"
+    Path(__file__).resolve().parents[3] / "data" / "metrics" / "rag_metrics.jsonl"
 )
 
 

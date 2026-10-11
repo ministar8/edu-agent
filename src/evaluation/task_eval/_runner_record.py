@@ -100,11 +100,11 @@ class CaseRecord:
     # 值域来自 retrieval_probe（`retrieval_probe.py:66,140,149`）：
     #   `ok`（探针拿到非空 context）/ `empty`（正常查到空）/ `error`（探针抛错，已收敛不外泄）
     #   `""` = 老归档未知，不得回填。
-    # ★ 刻意**不叫** `route_error`：`judge.py:373` 已经在比较 `== "error"`，改名会把这条既有
+    # ★ 刻意**不叫** `route_error`：`judge.mechanical_reasons_from_record` 已经在比较 `== "error"`，改名会把这条既有
     #   判定与后续归因链同时打断。
     # ★ 实测（2026-10-08：27 份 `evals/results/task_eval/*.jsonl` / 367 条记录）：
     #   `ok`×309、`empty`×34、**`error`×0**，另有 24 条该键缺失。
-    #   ⇒ `error` 目前只存在于 `retrieval_probe.py:66` 的代码默认值里，`judge.py:373` 那条分支
+    #   ⇒ `error` 目前只存在于 `retrieval_probe.py:66` 的代码默认值里，`judge.mechanical_reasons_from_record` 那条分支
     #   **从未被触发过**。所以 B7 要修的不是「加一个值」，而是「让 `error` 真的可达」
     #   （BM25 把抛错咽成空结果），并且 Task 8 的归因门必须为这条分支自带取证。
     # ★ v1.3（裁定 R4）：`error` 自本修复轮起由**消费侧**产出 —— `run_case` 读 `query_failures`，

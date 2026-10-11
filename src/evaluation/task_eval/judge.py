@@ -406,8 +406,7 @@ def apply_judge(record, output: JudgeOutput | None) -> None:
 # ★ 这两个 reason 由 **runner / 标注环节**写入，judge 从不产出，也不依赖本轮生成质量：
 #   `case_invalid` = A 段前置条件没成立（`runner.run_case` 的 memory 分支里 validity 为 False 那一支），
 #   `memory_miss` = gold 未标注/非法（`runner._apply_memory_judgement` 返回的 extra，是「请人工补标」的记号）。
-#   ★ 引用**符号**而不是行号：行号会随每次改动过期（这里就长期写着 `runner.py:505` / `:382`，
-#     实际两处早已搬家），而符号名变了 IDE/重命名会直接带我走。
+#   ★ 引用**符号**而不是行号：行号会随每次改动过期（这里长期写着旧行号，实际早已搬家），而符号名变了 IDE/重命名会直接带我走。
 #   重判把旧 reasons 整个清掉重算，若不显式保留它们，这二类记录会被
 #   **洗成 `primary_failure=none`（看起来像满分通过）**。
 #   实测：`phase1_memory_step5_store_off.jsonl` 里 4 条 `case_invalid` 的

@@ -19,6 +19,7 @@ def from_record_value(value: object, reason: str) -> Verdict:
 
     ★ reason 缺失或非法 ⇒ 按 `missing_premise` 处理（保守侧）：老归档的 `None` 无法证明
       当时是「不适用」还是「测不到」，而把它当「不适用」正是 §4.2 事故的形状。
+      （`predicates/memory.py` 的 `_correct_use` 直接引用本约定，勿删。）
     """
     if value is True:
         return "pass"

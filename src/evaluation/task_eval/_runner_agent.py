@@ -69,7 +69,7 @@ async def _run_agent(
     """跑真实 agent。惰性导入 `scripts/` 下的 smoke 封装（与 gate 同一套调用链）。
 
     ★★ **必须自行装配 checkpointer / store**（2026-10-05 实测教训）：
-    服务端是在 FastAPI lifespan 里挂的（`service.py:129` `agent.checkpointer = saver`），
+    服务端是在 FastAPI lifespan 里挂的（`service.py` 的 lifespan 里 `agent.checkpointer = saver`），
     而 `run_turns` 只调 `get_agent()`、**从不挂**。不挂的后果是**多轮之间没有历史** ——
     实测第 2 轮追问「我叫什么」，系统答「我这边暂时没有你的个人信息记录」。
 

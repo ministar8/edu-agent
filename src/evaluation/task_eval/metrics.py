@@ -155,14 +155,6 @@ def exam_hit_at_k(is_exam_flags: Sequence[bool], k: int = 5) -> bool:
     return any(is_exam_flags[:k])
 
 
-def exam_rank(is_exam_flags: Sequence[bool]) -> int | None:
-    """首条真题的排名（1-based）；无则 None。"""
-    for rank, flag in enumerate(is_exam_flags, 1):
-        if flag:
-            return rank
-    return None
-
-
 # ── Memory 侧：**主指标只允许这一份公式**（2026-10-07 修 #21）────────
 #
 #   洞（实测）：`memory_scorer.MemoryJudgement.correct_use` 在 2026-10-07 的 #4 修复里
@@ -263,7 +255,7 @@ def question_id_recall(predicted: Sequence[str], gold: Sequence[str]) -> float |
 
 
 def question_id_hit(predicted: Sequence[str], gold: Sequence[str]) -> bool | None:
-    """`Pred ∩ Gold ≠ ∅`（答辩友好）；gold 为空 → None。"""
+    """`Pred ∩ Gold ≠ ∅`（答辩友好，属 Phase 1 的 `question_id_*` 家族）；gold 为空 → None。"""
     if not gold:
         return None
     return bool({_norm(x) for x in predicted} & {_norm(x) for x in gold})

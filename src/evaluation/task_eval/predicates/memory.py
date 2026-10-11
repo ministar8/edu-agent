@@ -17,7 +17,7 @@ from evaluation.task_eval.predicates.registry import Predicate, register
 #   旧写法 `... if rec.get("memory_read_status") in ("failed","not_attempted","") else
 #   "not_applicable"` 把「**键不存在**」（老归档从没写过这个字段，`get` 返回 `None`）
 #   划进了 `else` ⇒ 「没有这个证据」被说成「这个样本不适用」，与同包
-#   `predicates/common.py:20-27` 的「reason 不明 ⇒ 保守取 `missing_premise`」直接矛盾：
+#   `predicates/common.from_record_value` 的「reason 不明 ⇒ 保守取 `missing_premise`」直接矛盾：
 #   实测 `cli._backfill` 会把 **37 条** memory 老归档（三维全 None、无 `memory_read_status`
 #   键）的 `item_reasons["memory_correct_use"]` 写成 `not_applicable` —— 那是用 backfill
 #   **掩盖缺失前提**（`missing_premise` 的含义正是「证据不足，必须重测/补记」）。

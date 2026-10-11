@@ -26,7 +26,7 @@ from __future__ import annotations
 from evaluation.task_eval.cases import ANSWER_STATUSES, TaskCase
 from evaluation.task_eval.gold_sanity import ERROR, SanityIssue
 
-# 与 `_check_gold_source_ref`（gold_sanity.py:206）逐字相同的字段清单 —— 三处共用一份键空间。
+# 与 `_check_gold_source_ref`（在 `_gold_sanity_checks.py`）逐字相同的字段清单 —— 三处共用一份键空间。
 _STATUS_KEYED_FIELDS = ("gold_answer", "expected_difficulty", "human_score")
 
 

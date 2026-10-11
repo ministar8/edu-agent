@@ -1024,7 +1024,7 @@ def run_check(args: argparse.Namespace, text: str, records: list[dict[str, Any]]
     print(
         f"      跳过 {stats.n_skipped_not_applicable} 条不适用行（不计入上面的缺键）："
         "qa/grade 在 registry 里没有任何判据 ⇒ 无四态项，`item_reasons` 的唯一生产者"
-        " `cli._backfill`（cli.py:331-335）只在 `for pred in registry.for_task(task)` 内写这个键"
+        " `cli._backfill`（cli.py）只在 `for pred in registry.for_task(task)` 内写这个键"
         " ⇒ 这些行无论怎么 reanalyse 都不会绿，把它们当红灯 = 先天无法清偿的红灯"
         "（正是逼人关掉门禁的成因）。真缺口一条未丢：有判据的任务照旧逐条查。"
     )

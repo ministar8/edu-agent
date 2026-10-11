@@ -246,7 +246,7 @@ async def _reprobe_one(rec: dict, case, args: argparse.Namespace, cfg: dict, mgr
     from evaluation.task_eval.runner import map_route_failures
 
     # ★★ B7 消费侧（修复批 Important-1）：每条 record 的 reprobe = 一个**独立取证单元**，
-    #   与 `runner.run_case`（runner.py:696）和 `retrieval_gate` 的既有边界同构 ——
+    #   与 `runner.run_case` 和 `retrieval_gate` 的既有边界同构 ——
     #   探针**之前** reset、探针返回后**立即**消费，两句必须成对（cf. 判据 `8m`/回归锁 `8k`）。
     #   为什么这里也必须有：异常收敛发生在 `routes._safe_to_thread`（按路由逐个），
     #   探针收不到异常、只会自报 `ok`/`empty` ⇒ 直接写 `probe.status` 会

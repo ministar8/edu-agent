@@ -155,7 +155,7 @@ def _resolve_config(config: RunnableConfig | None) -> dict[str, Any]:
     - **整块替换，不做键级合并**：只要 ``config`` 带了非空 ``configurable``，
       就只信它 —— 显式 config 只写 ``thread_id`` 时，``user_id`` 结果是 ``None``
       （不会去运行时上下文里补）。仓内所有调用方都**同时**给两把键
-      （``service.py:218`` 的 ``configurable`` / gate 的 ⑩a），故今天没有踩到这条；
+      （``service.py`` 的 ``configurable`` / gate 的 ⑩a），故今天没有踩到这条；
       新增调用方若只传其一，请**显式传全**，不要指望回落帮你补 —— 补了反而更难归因。
     - **回落是安全的**：``get_config()`` 读的是 contextvar，asyncio 每个 Task 持有
       自己的 context 副本 ⇒ 并发请求各取各自的用户。实测：4 个 ``RunnableLambda``

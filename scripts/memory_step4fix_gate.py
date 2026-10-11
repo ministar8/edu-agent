@@ -1513,7 +1513,7 @@ def check_13() -> None:
          与 `append_record` 的 `"a"` 模式相遇会把两条粘成一条坏行（实测 3 条只剩 1 条可读）。
          全盘扫过现存 12 份归档：末字节**都是** `\\n` ⇒ 尚未真的烧到过数据，属潜伏。
       B3 **一半被推翻** —— 「显式 config 只写一半会丢 `user_id`」成立，但仓内无此类调用方
-         （`service.py:218` 两把键一起给）⇒ 不改行为，只把契约写进 docstring；
+         （`service.py` 两把键一起给）⇒ 不改行为，只把契约写进 docstring；
          「并发下回落会算到别人头上」**被实测推翻**：`get_config()` 读 contextvar，
          asyncio 每个 Task 各持副本，4 个交错任务仍各自取到自己的 uid（见 ⑩e）。
       B4 **大部分被推翻，剩一条真的** —— `forbidden_values` 是**回复文本里的自由词**，
@@ -3001,7 +3001,7 @@ def check_24() -> None:
 def check_25() -> None:
     """㉕ #27 的处置（D12 选 (B)）：评测侧从 metadata 兜底解析 KP，**产品契约不动**。
 
-    缺陷：`rag/layer_recall.py:43` 的 top-up 路径把 `knowledge_points` 写死成 `[]`，
+    缺陷：`rag/retrieval/layer_recall.py` 的 top-up 路径把 `knowledge_points` 写死成 `[]`，
     而同一份 `metadata` 里就带着 JSON 字符串 ⇒ 走这条路进 top-k 的证据在
     `kp_hit` / `kp_mrr` / Generate 的 `coverage` 眼里等于没标考点（系统性假阴性）。
     ⇒ (B) = 只在**评测读数**这一侧兜底；产品给 agent 的那份契约仍缺 KP，
