@@ -20,6 +20,41 @@ from rag.retrieval.task_policy import resolve_task_policy  # noqa: E402
 _QID_RE = re.compile(r"(?:19|20)\d{2}-Q\d+")
 _ANS_FIELD_RE = re.compile(r"answer_key|reference_answer", re.I)
 
+# Mode Gate 的用例表：每个 task_mode 的 query + 期望的 role 约束
+_MODE_CASES: dict[str, dict] = {
+    "learn": {
+        "q": "什么是二叉排序树？",
+        "block_roles": {"exam_answer", "exam_item", "exam_paper"},
+        "no_answer_fields": True,
+    },
+    "method": {
+        "q": "BST 删除怎么做？",
+        "block_roles": {"exam_answer", "exam_item", "exam_paper"},
+        "no_answer_fields": True,
+    },
+    "practice": {
+        "q": "给我一道 BST 练习题",
+        "block_roles": {"exam_answer", "exam_item", "exam_paper"},
+        "no_answer_fields": True,
+        "no_qid": True,
+    },
+    "grade": {
+        "q": "2019-Q11 我选 C 对吗？",
+        "allow_roles": {"exam_answer"},
+        "no_answer_fields": False,
+    },
+    "explain": {
+        "q": "2019-Q11 为什么选 B？",
+        "allow_roles": {"exam_answer"},
+        "no_answer_fields": False,
+    },
+    "verify": {
+        "q": "BST 删除考过哪些真题？",
+        "block_roles": {"exam_answer"},
+        "no_answer_fields": True,
+    },
+}
+
 
 def _pack() -> FusedEvidence:
     def ev(eid, content, role, layer, **meta):
@@ -60,42 +95,8 @@ def check_mode_gate() -> list[str]:
     fails: list[str] = []
     fused = _pack()
 
-    cases = {
-        "learn": {
-            "q": "什么是二叉排序树？",
-            "block_roles": {"exam_answer", "exam_item", "exam_paper"},
-            "no_answer_fields": True,
-        },
-        "method": {
-            "q": "BST 删除怎么做？",
-            "block_roles": {"exam_answer", "exam_item", "exam_paper"},
-            "no_answer_fields": True,
-        },
-        "practice": {
-            "q": "给我一道 BST 练习题",
-            "block_roles": {"exam_answer", "exam_item", "exam_paper"},
-            "no_answer_fields": True,
-            "no_qid": True,
-        },
-        "grade": {
-            "q": "2019-Q11 我选 C 对吗？",
-            "allow_roles": {"exam_answer"},
-            "no_answer_fields": False,
-        },
-        "explain": {
-            "q": "2019-Q11 为什么选 B？",
-            "allow_roles": {"exam_answer"},
-            "no_answer_fields": False,
-        },
-        "verify": {
-            "q": "BST 删除考过哪些真题？",
-            "block_roles": {"exam_answer"},
-            "no_answer_fields": True,
-        },
-    }
-
     print("==== Mode Gate ====")
-    for mode, spec in cases.items():
+    for mode, spec in _MODE_CASES.items():
         p = resolve_task_policy(spec["q"])
         if p.task_mode != mode:
             # grade/explain/verify 依赖信号；容忍并记录
