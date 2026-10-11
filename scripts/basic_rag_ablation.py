@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from task_layer_ablation import (  # noqa: E402
+from _task_layer_common import (  # noqa: E402
     TASK_QUERIES,
     TASK_TARGET_LAYER,
     _baseline_policy,

@@ -10,7 +10,7 @@
     prefer_l2 ：全任务 preferred=[advanced]
     prefer_l3 ：全任务 preferred=[exams]
 
-任务专有指标（与 task_layer_ablation 同口径）：
+任务专有指标（与 basic_rag_ablation 共用 `_task_layer_common`，保证同口径）：
 
     learn    → L1 hit（basic 进证据包）
     method   → L2 hit（advanced 进包）
@@ -29,7 +29,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import re
 import sys
 import time
 from pathlib import Path
@@ -37,6 +36,16 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from _task_layer_common import (  # noqa: E402
+    _ANS_BODY_RE,
+    _ANS_FIELD_RE,
+    TASK_QUERIES,
+    TASK_TARGET_LAYER,
+    _pack_blob,
+    _pack_layers,
+)
 
 from evaluation.provenance import build_provenance  # noqa: E402
 from rag.retrieval.evidence_policy import (  # noqa: E402
@@ -48,56 +57,6 @@ from rag.retrieval.task_policy import policy_for_mode  # noqa: E402
 from schema.task_policy import TaskPolicy  # noqa: E402
 
 OUT_DIR = ROOT / "evals" / "results" / "retrieval" / "layer_policy"
-
-# 与 task_layer_ablation 同一套任务黄金 query（保证跨实验可比）
-TASK_QUERIES: dict[str, list[str]] = {
-    "learn": [
-        "什么是二叉排序树？",
-        "什么是死锁？",
-        "进程和线程的区别是什么？",
-        "Cache 的映射方式有哪些？",
-        "TCP 三次握手的过程是什么？",
-        "什么是虚拟存储器？",
-    ],
-    "method": [
-        "BST 删除时双支结点怎么处理？",
-        "如何用银行家算法避免死锁？",
-        "页面置换算法 LRU 怎么实现？",
-        "Dijkstra 算法的步骤是什么？",
-        "如何判断一个二叉树是平衡二叉树？",
-        "TCP 拥塞控制怎么实现？",
-    ],
-    "practice": [
-        "给我一道死锁练习题",
-        "来一道 BST 删除的练习题",
-        "出一道进程同步的题目",
-        "给一道 Cache 映射的练习",
-    ],
-    "grade": [
-        "请批改我对「进程死锁四个必要条件」的回答：互斥、占有并等待、不可剥夺、循环等待",
-        "批改我的答案：TCP 三次握手是 SYN、SYN+ACK、ACK",
-        "我对「页面置换 OPT 是最优算法」的理解是：它永不缺页。请批改",
-    ],
-    "explain": [
-        "2019-Q2 为什么树的后根遍历对应二叉树的中序？",
-        "2019-Q11 为什么选 B？请详细解析",
-        "2020-Q2 这道题的解题思路是什么？",
-    ],
-    "verify": [
-        "BST 删除考过哪些真题？",
-        "死锁在历年真题中出现过吗？",
-        "Cache 映射方式考过几次？",
-    ],
-}
-
-TASK_TARGET_LAYER: dict[str, tuple[str, ...]] = {
-    "learn": ("basic",),
-    "method": ("advanced",),
-    "practice": ("advanced", "exams"),
-    "grade": ("exams",),
-    "explain": ("exams",),
-    "verify": ("exams",),
-}
 
 # Layer Policy 臂：只改 preferred_layers（top-up + 排序软偏好）
 # 安全字段（exam_resources / answer_policy / legacy_policy）一律取 policy_for_mode
@@ -123,25 +82,6 @@ LAYER_POLICIES: dict[str, dict[str, Any]] = {
         "note": "全局软偏好 L3 exams",
     },
 }
-
-_ANS_FIELD_RE = re.compile(r"answer_key|reference_answer|correct_answer", re.I)
-_ANS_BODY_RE = re.compile(r"答案[:：]|【答案】|正确答案|标准答案")
-
-
-def _pack_layers(fused) -> list[str]:
-    out = []
-    for ev in fused.text_evidences or []:
-        v = str((ev.metadata or {}).get("kb_depth") or "")
-        out.append(v if v in ("basic", "advanced", "exams") else "legacy")
-    return out
-
-
-def _pack_blob(fused) -> str:
-    parts = []
-    for ev in fused.text_evidences or []:
-        parts.append(ev.content or "")
-        parts.append(str(ev.metadata or ""))
-    return "\n".join(parts)
 
 
 def _build_policy(mode: str, policy_id: str) -> TaskPolicy:
