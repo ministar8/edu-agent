@@ -364,7 +364,13 @@ async def test_store_rehydration(tmp: Path) -> bool:
         settings.SQLITE_STORE_PATH = old_store_path
         settings.MEMORY_STORE_VECTOR_ENABLED = old_vec
 
-    # 记忆卡应来自 Store，且注入 Thread B 的 state（固定 ID 的 SystemMessage）
+    return _verify_rehydration(msgs, card_direct, topic, thread_b, uid)
+
+
+def _verify_rehydration(
+    msgs: list[Any], card_direct: str, topic: str, thread_b: str, uid: str
+) -> bool:
+    """④ 的断言 + 证据登记：记忆卡来自 Store，且注入 Thread B 的 state。"""
     from agents.teaching_graph import MEMORY_CARD_MESSAGE_ID
 
     card_msgs = [
@@ -385,7 +391,6 @@ async def test_store_rehydration(tmp: Path) -> bool:
         and card_matches_store
         and thread_b.startswith("thread-B")
     )
-
     detail = (
         f"card_in_B={bool(card_msgs)} card_len={len(card_text)} "
         f"has_topic={card_has_topic} store_card_len={len(card_direct or '')}"
