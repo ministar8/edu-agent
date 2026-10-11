@@ -173,7 +173,7 @@ def _c18_m1(m1) -> None:
         _apply_memory_judgement,
     )
 
-    if not m1 is not None:
+    if m1 is None:
         return
     rec1 = CaseRecord(
         case_id="mem-001",
