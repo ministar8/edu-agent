@@ -1,7 +1,7 @@
 # Phase 0 demo 集（evals/datasets/demo/）
 
 > 本目录是 **Phase 0 效果测量的唯一 case 来源**（`docs/EFFECT_PLAN.md` §2.B.1）。
-> 由 `scripts/build_demo_cases.py` **确定性生成** —— 不要手工编辑生成结果；
+> 由 `scripts/datasets/build_demo_cases.py` **确定性生成** —— 不要手工编辑生成结果；
 > 要改内容，改生成器或改其引用的上游资产（黄金集 / 真题 / 考点表）。
 
 ## 文件
@@ -86,7 +86,7 @@
 PYTHONPATH=src uv run python -m evaluation.task_eval sanity     # ERROR>0 则 exit 1
 
 # ② 导出两张**互不混用**的复核表（生成脚本）
-PYTHONPATH=src uv run python scripts/export_review_sheets.py
+PYTHONPATH=src uv run python scripts/lib/export_review_sheets.py
 ```
 
 | 表 | 内容 | 谁填 | 用途 |
@@ -100,5 +100,5 @@ PYTHONPATH=src uv run python scripts/export_review_sheets.py
 ## 重新生成
 
 ```bash
-PYTHONPATH=src uv run python scripts/build_demo_cases.py
+PYTHONPATH=src uv run python scripts/datasets/build_demo_cases.py
 ```

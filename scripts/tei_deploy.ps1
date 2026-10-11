@@ -5,7 +5,7 @@
 #   .\scripts\tei_deploy.ps1 -Stop
 #
 # 端口默认与 .env 对齐：embedding 11435、rerank 11436。
-# 校验用 scripts/tei_ready.py（走项目调用路径），不要手写 curl。
+# 校验用 scripts/ops/tei_ready.py（走项目调用路径），不要手写 curl。
 
 param(
     [string]$EmbeddingModelPath = 'D:\models\Embedding\bge-m3',
@@ -112,12 +112,12 @@ Start-TeiContainer -Name $ContainerRerank -ModelArg $rerankModelArg `
     -ExtraArgs @('--dtype', 'float16', '--max-batch-tokens', '2048')
 
 if ($SkipVerify) {
-    Write-Host 'Skip verify. Wait 30-60s for model load, then run scripts/tei_ready.py.'
+    Write-Host 'Skip verify. Wait 30-60s for model load, then run scripts/ops/tei_ready.py.'
     exit 0
 }
 
 Write-Host ''
-Write-Host 'Model load takes ~30-60s. Running readiness check via scripts/tei_ready.py ...'
+Write-Host 'Model load takes ~30-60s. Running readiness check via scripts/ops/tei_ready.py ...'
 $root = Split-Path -Parent $PSScriptRoot
 $env:PYTHONPATH = Join-Path $root 'src'
 $py = Join-Path $root '.venv\Scripts\python.exe'

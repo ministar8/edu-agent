@@ -11,7 +11,7 @@ evals/
 
 `configs/` 是**实验快照**（可读的实验设计记录）。
 
-> ★ **执行以脚本 `CONFIGS` 为准**（`scripts/ablation_retrieval.py` 等）。
+> ★ **执行以脚本 `CONFIGS` 为准**（`scripts/lib/ablation_retrieval.py` 等）。
 > YAML 不驱动运行，只用于：论文附录、答辩讲解、事后追溯「这次改了什么」。
 > 若两者不一致，**以脚本为准**并回来同步 YAML。
 > 每次运行会把当次生效配置写进 `results/` 的归档 json。
@@ -39,6 +39,6 @@ evals/
 | `ragas.yaml` | 生成质量（PENDING） |
 
 ```bash
-uv run python scripts/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,vector_only
-uv run python scripts/basic_rag_ablation.py --limit 60   # full vs vector_only
+uv run python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,vector_only
+uv run python scripts/exp/basic_rag_ablation.py --limit 60   # full vs vector_only
 ```

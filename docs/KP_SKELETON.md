@@ -3,7 +3,7 @@
 > 图例：`*` core · `+` major · `.` minor
 > 标注：`[node_kind/L{level}/{type}] typical_question_types`
 > 粒度：一个 KP = 真题可单独考查的语义单元；aliases 只放同义名
-> 改完可改 `knowledge_points/*.jsonl`，或改 `scripts/gen_kp_skeleton.py` 重生成。
+> 改完可改 `knowledge_points/*.jsonl`，或改 `scripts/ingest/gen_kp_skeleton.py` 重生成。
 
 ## 数据结构 `ds` — 52 节点
 

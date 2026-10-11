@@ -208,7 +208,7 @@ class _VectorStoreBase:
         ★★ v1.3（checkpoint 8 裁定 R1-A）：原列的第三点（`rag/routes._amulti_route_search`
            每轮开头）已**撤销** —— 单元**内部**的清空会销毁本单元尚未被消费的失败证据
            （一条 query 跑多轮，后轮 reset 抹掉前轮的记录），实测净降低检测能力。
-           回归锁：`scripts/evidence_chain_gate.py` 的 `8k`（期望文件集随 ③ 同步）。
+           回归锁：`scripts/gates/evidence_chain_gate.py` 的 `8k`（期望文件集随 ③ 同步）。
         """
         self._query_failures.clear()
 

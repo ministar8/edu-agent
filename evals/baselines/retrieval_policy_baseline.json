@@ -4,9 +4,9 @@
     "policy_version": "1.0",
     "note": "Retrieval Policy 安全门基线；改策略/分类器/裁剪后须 --update 并说明原因",
     "commands": [
-      "scripts/leakage_gate.py",
-      "scripts/e2e_ds_tree_modes.py",
-      "scripts/mode_layer_gate.py"
+      "scripts/gates/leakage_gate.py",
+      "scripts/gates/e2e_ds_tree_modes.py",
+      "scripts/gates/mode_layer_gate.py"
     ]
   },
   "classify": {

@@ -2,7 +2,7 @@
 
 为什么需要
 ----------
-冻结前检查（`scripts/freeze_precheck.py`）发现：归档 JSON **不记录代码版本与黄金集哈希**，
+冻结前检查（`scripts/ops/freeze_precheck.py`）发现：归档 JSON **不记录代码版本与黄金集哈希**，
 从「论文数字」反查到「哪次运行」时，最后一跳只能靠人工维护 `EXPERIMENTS.md §18.0` 的表格。
 本模块把这一跳变成自动的：所有写归档的实验脚本统一带上 `provenance` 字段。
 

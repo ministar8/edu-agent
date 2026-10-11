@@ -7,11 +7,11 @@
 
 | 层 | 目录 | 内容 | 入库脚本 | 向量集合 |
 |---|---|---|---|---|
-| **L1** | `basic/<科>/` | 基础概念（考纲精编） | `scripts/ingest_basic_all.py` | 四科集合（同名） |
-| **L2** | `advanced/<科>/` | 解题方法层（`doc_role=method`） | `scripts/ingest_advanced.py` | 四科集合 |
-| **L3** | `exams/<年>/` | 真题 `items`/`answer`（★ `paper.md` 仅溯源、**不入库**） | `scripts/ingest_exams.py` | `exams` |
-| **L3** | `exams/<科>.md` | 章节例题集 | `scripts/ingest_exam_practice.py` | `exams` |
-| **code** | `code/<科>/` | 代码实现（**独立库**） | `scripts/ingest_code.py` | `code_<科>` |
+| **L1** | `basic/<科>/` | 基础概念（考纲精编） | `scripts/ingest/ingest_basic_all.py` | 四科集合（同名） |
+| **L2** | `advanced/<科>/` | 解题方法层（`doc_role=method`） | `scripts/ingest/ingest_advanced.py` | 四科集合 |
+| **L3** | `exams/<年>/` | 真题 `items`/`answer`（★ `paper.md` 仅溯源、**不入库**） | `scripts/ingest/ingest_exams.py` | `exams` |
+| **L3** | `exams/<科>.md` | 章节例题集 | `scripts/ingest/ingest_exam_practice.py` | `exams` |
+| **code** | `code/<科>/` | 代码实现（**独立库**） | `scripts/ingest/ingest_code.py` | `code_<科>` |
 | — | `knowledge_points/` · `learning_paths/` · `rules/` · `schema/` | KP 图谱 · 学习路径 · 契约 | — | — |
 
 ## 关键约束（改动前必读）

@@ -180,7 +180,7 @@ L2 方法文/专项 ──trains──→ KP
 
 | 工具 | 用途 |
 |---|---|
-| `scripts/gen_kp_skeleton.py` | 骨架生成（可重跑覆盖） |
+| `scripts/ingest/gen_kp_skeleton.py` | 骨架生成（可重跑覆盖） |
 | `docs/KP_SKELETON.md` | 人读树（与 jsonl 同步） |
 | `docs/KB_MASTER_DESIGN.md` | 知识库总册 |
 

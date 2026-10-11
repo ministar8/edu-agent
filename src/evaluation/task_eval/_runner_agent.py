@@ -38,7 +38,7 @@ async def _run_with_agent(
     store_enabled: bool,
 ):
     """按 task 分派：``memory`` 走跨会话的 `run_sessions`，其余走会话内的 `run_turns`。"""
-    from agent_behavior_smoke import (  # type: ignore[import-not-found]
+    from lib.agent_behavior_smoke import (  # type: ignore[import-not-found]
         make_user_id,
         run_sessions,
         run_turns,

@@ -99,7 +99,7 @@ cp .env.example .env          # 必填：DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY�
 ```
 
 - 容器名：`tei-embedding`（**11435**）+ `tei-rerank`（**11436**）；日常用 `docker start tei-embedding tei-rerank`。
-- 校验用 `PYTHONPATH=src uv run python scripts/tei_ready.py`（走项目调用路径；`/health` 200 ≠ 模型就绪）。
+- 校验用 `PYTHONPATH=src uv run python scripts/ops/tei_ready.py`（走项目调用路径；`/health` 200 ≠ 模型就绪）。
 - 端口、镜像、启动参数与端点契约的**唯一说明**见 **[docs/DOCKER.md](docs/DOCKER.md)**「TEI」一节。
 
 ### 4. 构建知识库

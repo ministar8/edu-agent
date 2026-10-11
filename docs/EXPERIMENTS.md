@@ -26,7 +26,7 @@
 
 ## 2. 消融实验（检索组件）
 
-**复现**：`uv run python scripts/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
+**复现**：`uv run python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
 **归档**：`evals/results/retrieval/ablation/component_ablation.json`
 
 | 配置 | kp_hit@k | kp_mrr | Δ kp_mrr | cat@1 | 证据数 |
@@ -107,7 +107,7 @@
 k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 
 **复现**：`PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/ragas/ragas_paired20.jsonl --sample-per-type 5 --no-rerank --include-details --tag final`
-**整理**：`uv run python scripts/ragas_report.py --tag final`
+**整理**：`uv run python scripts/ops/ragas_report.py --tag final`
 **归档**：`evals/results/generation/ragas/`（`raw.jsonl` / `metrics.json` / `summary.md`）
 
 ### 5.1 总体（四项均 n=20，无 judge 掉样）
@@ -152,7 +152,7 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 
 ## 6. Agent 行为质量（软指标 · V-2026-10-02）
 
-**复现**：`uv run python scripts/agent_behavior_gate.py`
+**复现**：`uv run python scripts/gates/agent_behavior_gate.py`
 **归档**：`evals/results/system_validation/agent_behavior/agent_behavior_quality.json`
 
 - 硬安全（泄漏/empty 硬教/无来源确认/编造页码）：**8 case 全 PASS**
@@ -206,7 +206,7 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 
 ## 9. L1/L2/L3 分层消融
 
-**复现**：`uv run python scripts/ablation_retrieval.py --limit 60 --configs full,no_l1,no_l2,no_l3,l1_only,l2_only,l3_only,no_legacy,legacy_only`
+**复现**：`uv run python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_l1,no_l2,no_l3,l1_only,l2_only,l3_only,no_legacy,legacy_only`
 **归档**：`evals/results/retrieval/layer_policy/layer_ablation.json`
 
 ### 9.1 逐层剔除 / 单层保留
@@ -291,7 +291,7 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 - **basic_rag** = 语义向量 top-k（无 BM25/元数据/任务策略；层平铺、legacy 同池）
 - **ours** = 完整系统
 
-**复现**：`uv run python scripts/basic_rag_ablation.py --limit 60`
+**复现**：`uv run python scripts/exp/basic_rag_ablation.py --limit 60`
 **归档**：`evals/results/retrieval/ablation/basic_rag_compare.json`
 
 ### 11.1 检索口径
@@ -329,7 +329,7 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 **对照**（安全字段冻结，只动 `preferred_layers`）：
 flat（全层）/ ours（任务映射）/ prefer_l1 / prefer_l2 / prefer_l3
 
-**复现**：`uv run python scripts/task_mode_layer_policy.py`
+**复现**：`uv run python scripts/exp/task_mode_layer_policy.py`
 **归档**：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy.json`
 
 ### 12.1 主表（flat vs ours，论文表 6，V-2026-10-02）
@@ -396,7 +396,7 @@ flat（全层）/ ours（任务映射）/ prefer_l1 / prefer_l2 / prefer_l3
 **设计**：3 个**独立进程** × 4 配置 × 60 golden（无 seed、无同进程 loop）。
 Δ 为**逐 run 配对差**（ablation_i − full_i）。环境冻结。
 
-**复现**：`uv run python scripts/component_variance.py`
+**复现**：`uv run python scripts/exp/component_variance.py`
 **归档**：`evals/results/retrieval/ablation/component_variance/`（`run{1,2,3}.json` 明细 + `summary.json` 汇总入口）
 
 ### 13.1 mean ± std（n=3）
@@ -435,7 +435,7 @@ flat（全层）/ ours（任务映射）/ prefer_l1 / prefer_l2 / prefer_l3
 **设计**：固定 60 golden / 索引 / embedding / top-k，**只改** `effective_threshold` 乘子
 `{1.0, 0.95, 0.90, 0.85, 0}`。无 LLM。**不改默认 threshold**。
 
-**复现**：`uv run python scripts/threshold_sensitivity.py --arm full,vector_only`
+**复现**：`uv run python scripts/exp/threshold_sensitivity.py --arm full,vector_only`
 **归档**：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity.json`
 
 ### 14.1 full（主配置，V-2026-10-02）
@@ -489,8 +489,8 @@ flat（全层）/ ours（任务映射）/ prefer_l1 / prefer_l2 / prefer_l3
 | `src/rag/retrieval/layer_recall.py` | `topup_preferred_layers(..., eligibility_where=)`；`merge_where_filters(kb_depth, eligibility_where)` |
 | `src/rag/retrieval/retriever.py` | top-up 传入主检索同一 `filter`（= `policy.eligibility_where()`） |
 | `scripts/task_layer_ablation.py` | 补传 `filter=policy.eligibility_where()`（口径对齐） |
-| `scripts/task_mode_layer_policy.py` | 同上 |
-| `scripts/topup_eligibility_gate.py` | **新增**：4+1 场景资格回归门禁 |
+| `scripts/exp/task_mode_layer_policy.py` | 同上 |
+| `scripts/gates/topup_eligibility_gate.py` | **新增**：4+1 场景资格回归门禁 |
 
 **结构约定**：policy 决定「什么资源有资格进来」，layer_recall 只决定「从哪些层补」。
 
@@ -545,7 +545,7 @@ preferred 层**全部不合规**时收敛到 `eligible_layers`；生产 policy �
 - 只回填 `main_items`（已按 `legacy_policy` 过滤）→ **不引入被排除资产，不放松安全**
 - 记入 `layer_pack.sufficiency_refill` 与 release flags（不静默）
 
-**验证**：`scripts/sufficiency_gate.py`（错误偏好 n_pack≥1 且无被禁资源；ours 不回归）
+**验证**：`scripts/gates/sufficiency_gate.py`（错误偏好 n_pack≥1 且无被禁资源；ours 不回归）
 
 **结果**：`pack_nonempty_rate` **全任务 × 全策略 = 1.000**；
 prefer_l3 MACRO 0.681 → **0.944**（与 flat/ours 持平）。
@@ -816,7 +816,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 
 ### 18.6 ★ 冻结前检查发现的**结构性缺口**（待修）
 
-**四层可追溯链检查**（`uv run python scripts/freeze_precheck.py`）：
+**四层可追溯链检查**（`uv run python scripts/ops/freeze_precheck.py`）：
 
 | 层 | 修复前 | **修复后（本版本）** |
 |---|---|---|
@@ -838,7 +838,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
   "recorded_at":    "2026-10-01T…Z",
   "code_version":   "d6eed4c",          // 代码目录有未提交改动时为 "<sha>-dirty"
   "golden_sha256":  "be98912a…",
-  "script":         "scripts/ablation_retrieval.py",
+  "script":         "scripts/lib/ablation_retrieval.py",
   "argv":           ["--limit", "60", "--configs", "full,…"]
 }
 ```
@@ -848,7 +848,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 > 把「代码有未提交改动」这个真正危险的信号淹没在噪声里。
 
 **本版本归档的 `code_version`**：检索类 `d6eed4c` · RAGAS 派生类 `0479d6e`
-（两者差异仅在 `scripts/ragas_report.py`，不影响检索链）。
+（两者差异仅在 `scripts/ops/ragas_report.py`，不影响检索链）。
 
 ---
 
@@ -870,7 +870,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | **论文数字无法反查到代码版本** | 归档不自描述（无 `code_version` / golden hash / 脚本名） | 新增 provenance 注入 **13 个写入点**，全部归档按该版本重跑 | `src/evaluation/provenance.py`；`freeze_precheck` 矩阵 **11/11 全 Y**（§18.6） |
 | **RAGAS judge 用不了强模型** | DashScope **thinking 模式拒绝 `n>1`**，而 `answer_relevancy` 必需 `n>1` | judge 独立槽位 `RAGAS_JUDGE_MODEL` + **只对 judge** 强制关 thinking | `core/settings.py` · `core/llm.py` · `evaluation/adapters.py`（§5） |
 | **RAGAS 可能「白花钱」/ 静默失败** | judge 配额/鉴权失败时**生成已跑完**、费用作废；且全指标 `n=0` 仍退出码 0 | preflight **分别探活**生成/judge + 生成产物**先落盘** + 全无分升级为显式错误 | `evaluation/cli.py` · `evaluation/ragas_eval.py`（§5） |
-| **实验路径与 Agent 路径口径不一致** | 实验脚本未传 `eligibility_where` → baseline 虚低、Δ 失真 | 补传 `filter` + `eligible_layers` | `scripts/task_layer_ablation.py` · `scripts/task_mode_layer_policy.py`（§15.5） |
+| **实验路径与 Agent 路径口径不一致** | 实验脚本未传 `eligibility_where` → baseline 虚低、Δ 失真 | 补传 `filter` + `eligible_layers` | `scripts/task_layer_ablation.py` · `scripts/exp/task_mode_layer_policy.py`（§15.5） |
 
 ### 19.2 未修 / 已决策（如实记录）
 
@@ -923,7 +923,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 >
 > 教训同前：**改 gold 与打标签是同一件事**，锚点必须在打标签之前重算。
 
-> ★ **指纹口径 = 工作副本字节的 sha256**（与 `scripts/freeze_precheck.py:65` 一致），**不是 git blob 哈希**。因为 `.gitattributes` 声明 `*.jsonl text` ⇒ 入库时 CRLF 会归一成 LF，实测同一份黄金集：工作副本（CRLF）`be98912a4c91fb88…` / 归一后（LF）`979b7f96537cb147…`。⇒ **在纯 LF 环境（如 Linux/CI）checkout 后重算会得到另一个值**，那不是数据被改；复算要么在本机工作副本上跑，要么比较前先做行尾归一。
+> ★ **指纹口径 = 工作副本字节的 sha256**（与 `scripts/ops/freeze_precheck.py:65` 一致），**不是 git blob 哈希**。因为 `.gitattributes` 声明 `*.jsonl text` ⇒ 入库时 CRLF 会归一成 LF，实测同一份黄金集：工作副本（CRLF）`be98912a4c91fb88…` / 归一后（LF）`979b7f96537cb147…`。⇒ **在纯 LF 环境（如 Linux/CI）checkout 后重算会得到另一个值**，那不是数据被改；复算要么在本机工作副本上跑，要么比较前先做行尾归一。
 | **归档 `code_version` 现状** | 全部为 **`648d819-dirty`**（见 §20.5 第 3 条——这是本节存在的理由） |
 
 ### 20.1 为什么必须开新版本（三条触发，均已核到代码）
@@ -975,7 +975,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 
 ### 20.3 效果侧实测（本锚点新增，均可从归档反查）
 
-**E-5 · 批改是否跟随词表**（`scripts/memory_e5_probe.py`，配对 12 次批改调用，零 token 风险）
+**E-5 · 批改是否跟随词表**（`scripts/mem/memory_e5_probe.py`，配对 12 次批改调用，零 token 风险）
 ：两臂 system **除词表块外逐字节相同**，同模型同温度（`dashscope:qwen3.7-flash` / `T=0.0`）。
 
 | 臂 | 词级跟随率 | `all_canonical` 题级 | 目标考点入桶 |
@@ -1042,7 +1042,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 10 | `category_hit` 对学科码 **`cn` 恒判未命中** ⇒ **系统性压低 grade / verify 的学科命中指标** | `metrics.category_hit` 旧写法 `.get(subject, subject)` 拿学科码去比类目名：`cn` ≠ `computer_network` ⇒ 恒 False。实测归档分布：`grade` **4 条 `cn` 全 False**、`verify` **4 条 `cn` 全 False**；而 `qa` / `generate` 的 case 用的是 `network` ⇒ 全 True —— **同一函数在两个任务上表现不一致**，这是它长期没暴露的原因。另核实 `retrieval_gate` 自身用 `.get(subject)`（无默认回退），**不受此影响** | ✅ **已修（本轮）**：加 `_SUBJECT_ALIASES = {"cn": "network"}` 对齐，且**未登记学科记 None（N/A，不进分母）**而非 False。护栏新增 **③j**（对齐命中 + 未登记记 N/A），当时 Gate **87 项全绿**（现 116）。★ 归档里那 8 条 False **不可离线重算**（2026-10-07 复核确认：记录只有 `category_hit` 这个**结果布尔**，`tool_calls` 里**没存**每条命中文档的类目 ⇒ 无法反推，正确值需 **Step 9 一并重跑**；旧归档值不覆写 ⇒ ✅ **已补测（§20.8.4）**：同一批 top-k 上新旧公式对照 0.600 → 0.800、`cn` 0/4 → 3/4 ⇒ 确认这 8 条是系统性假阴性，剩余各 1 条为真实未命中）。★ 复核过程本身也纠正了一次误报：直接按 `task` 数 False 会得到 grade 13 / verify 33 条，**看着像**『比登记的 8 条多』—— 其实记录里**没有 `subject` 字段**，必须与 case 表按 `case_id` 关联；关联后 `cn` 恰为 grade 4 + verify 4（且 `cn` 是**唯一 16/16 全 False** 的学科，其余学科有 True 有 False，属真实未命中）⇒ 登记值成立。护栏补 **③j+**：扫遍 `evals/datasets/` 实际出现过的学科码，逐个要求「在映射表里查得到」且「用映射后的真实类目自测为 True」⇒ **防下一个 `cn`**（反向验证：抽掉 `cn` 别名，③j 与③j+ 同时变红） |
 | 11 | Grade 分数解析取**首个数字** ⇒ 把「满分/总分 N」当成得分 | 旧正则在 `"总分 100 分，你得了 62 分"` 上返回 **100**、在 `"得分（满分 100）：62"` 上返回 **100** ⇒ 批改明明正常，指标却记成分数差 38 分；更糟的是它**方向不定**（说明性数字在前就偏高、在后才正常） | ✅ **已修（A1）**：先用 `_MASK_FULLMARK_RE` 把「满分/总分 X」**遮蔽**掉，再按「显式得分 → 你得了 N 分 → a/b 折算 → 兜底」四级正则解析；解析不到返回 **None（N/A）** 而不是 0 分。护栏 **③s**（5 条形态全对）+ **③t**（4 条无分数形态必须 None） |
 | 12 | API 批改端点 `record_grade` **没透传 `knowledge_points`** | `service.py` 的调用缺该参数 ⇒ 本路径写入的 episode KP **恒空** ⇒ `compute_weak_topics` 退回**题干前 80 字**（legacy fallback），薄弱点变成「某道题的开头」 | ✅ **已修（A2）**：`knowledge_points=list(result.knowledge_points or [])`。护栏 **③u**（AST 级：调用参数表里必须有它，防止「删了但注释还在」式漂移） |
-| 13 | 结构化输出的 **salvage 兜底**只在「确实拿到过原文」时生效 | `scripts/memory_e2e_fallback_probe.py` 用注入式假 LLM 驱动**真实** `call_structured`：① 合法对象 OK；② `ValidationError` 带脏原文（多行 KV + 参数标记）⇒ **救回**（score 40，KP `['平衡二叉树','平衡因子']`）；③ 模型**不产 tool call**（返回 `None`）⇒ 无原文可救，结果 `None`（重试后仍失败） | ⚠ **已知盲区，如实披露**（不是修复）：③ 形态下整条批改失败。是否为它再加一层兜底，**由 Step 9 的实测频率决定** —— 现在加就是凭想象加防护。`--reverse`（关掉 salvage）必须变红，实测 exit 1 |
+| 13 | 结构化输出的 **salvage 兜底**只在「确实拿到过原文」时生效 | `scripts/mem/memory_e2e_fallback_probe.py` 用注入式假 LLM 驱动**真实** `call_structured`：① 合法对象 OK；② `ValidationError` 带脏原文（多行 KV + 参数标记）⇒ **救回**（score 40，KP `['平衡二叉树','平衡因子']`）；③ 模型**不产 tool call**（返回 `None`）⇒ 无原文可救，结果 `None`（重试后仍失败） | ⚠ **已知盲区，如实披露**（不是修复）：③ 形态下整条批改失败。是否为它再加一层兜底，**由 Step 9 的实测频率决定** —— 现在加就是凭想象加防护。`--reverse`（关掉 salvage）必须变红，实测 exit 1 |
 | 14 | `--rejudge` 把 runner 写的归因**洗掉** ⇒ 无效样本看起来像通过 | `mechanical_reasons_from_record` 照抄 `runner.mechanical_failures`，而 `case_invalid`（`runner.py:505`）/ `memory_miss`（`runner.py:382`）是 runner **另两处分头**写的。实测归档：`phase1_memory_step5_store_off` 有 **4 条** `failure_reason` 恰为 `["case_invalid"]` ⇒ 重判后变 `[]`、`primary_failure` 翻成 `none`。★ 注：失败率**分母不受影响**（`report._is_invalid` 还看着 `validity_valid`），坏的是**故障分布** —— 「无效」被画成「通过」 | ✅ **已修（B1）**：`_KEEP_ON_REJUDGE = {case_invalid, memory_miss}` 原样保留（二者都**不是** judge 意见），`case_invalid` 另按 `validity_valid` 兜底重建（上一轮已被误清时仍能恢复）。护栏 **⑬a~⑬d**（⑬d 是反向：judge-only 的 `generation_wrong` 仍必须被清掉，防保留面过宽） |
 | 15 | `cli.py` 三处 jsonl 写出**不留尾换行**，与 `append_record` 的 `"a"` 追加相撞 | 两条记录**粘成一条坏行** ⇒ 上一条与这一条**同时**解析失败（实测 3 条只剩 `['a-1']` 可读）。连带 `load_done_ids` 读不到被粘住的 case_id ⇒ 续跑**重做**它，已烧的 token 无从追溯。★ 全盘扫现存 **12 份**归档：末字节**都是** `\n`（都由 `dump_records`/`append_record` 产生）⇒ **尚未真的烧到过数据，属潜伏** | ✅ **已修（B2）**：行格式收口成 `runner.write_jsonl()`（`dump_records` 也改为调用它 ⇒ 只剩一份实现），cli 三处改用它；`append_record` 追加前检测末字节并按需补分隔（自愈，覆盖外部手改/旧产物）。护栏 **⑬e~⑬g**（⑬g 专测「无尾换行的旧文件 + 连追两条仍 4 条不丢」） |
 | 16 | `_resolve_config`：显式 config **整块替换**、不与运行时上下文做键级合并 | 半条 review 结论**被推翻**：回落读的是 **contextvar**，asyncio 每个 Task 持自己的 context 副本 ⇒ 并发不串号（实测 4 个任务注入 U0~U3、内部 `sleep` 交错，两次阅读仍各自取到自己）。半条成立但**无调用方**：仓内给 config 的地方都**同时**给两把键（`service.py` 的 `configurable`、gate ⑩a） | 🟡 **不改行为**（无流量的假设性加固不做），改为**把契约钉住**：docstring 写明「只传其一不会替你补」+ 护栏 **⑩e**（并发隔离）与 **⑩f**（部分显式 config ⇒ `user_id` 为 None）。将来若真要改成合并，必须让 ⑩f 变红后由人裁决 |
@@ -1058,7 +1058,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 26 | **`recalled` / `used` 用子串包含判定，而正样本的 gold `values` 写的是章名** ⇒ 「召回成功」这句话偏松：任何含该字的记忆卡都算命中 | 口径写在 `memory_scorer` 顶部（`recalled_actual = 任一 card 含 values 中任一值`）。旧 `mem-002` 的 values = `["图"]`，而实测卡面是「薄弱：**图**的存储」⇒ 靠子串通过；`mem-003` 的 `["排序"]` 会被「快速排序 / 希尔排序 / 堆排序」**任一**满足 ⇒ 「召回成功」**测不出「召回的是不是设计的那个薄弱点」** | ✅ **已收紧（D8 第三次）**：两条正样本的 `values` 改为具体考点（`图的存储` / `快速排序`；改前核对两值均在 `canonical_names()`，`task_eval sanity` 复跑 **ERROR 0**）⇒ 正样本现在断言精确薄弱点。★ **子串口径本身不改**：记忆卡是自由文本「薄弱：X」，改全等会把排版差异也算成未召回（另一种错）。★ **负样本刻意保留章名**（`mem-005`/`mem-006` 的 `["图"]`）：对 `should_be_recalled=False` 来说偏松匹配让它**更难通过**（方向保守），无假通过风险 ⇒ 不动。指纹 `ffcf2b3233fc5595` → `3c938365da7ce614`（§20.0） |
 | 27 | **layer top-up 路径把 `knowledge_points` 写死成空列表**，而同一份 `metadata` 里就带着 JSON 字符串 ⇒ 凡走这条路径进 top-k 的证据，在 `kp_hit` / `kp_mrr` / `coverage` 眼里**等于没标考点**（系统性假阴性，与 #10 同属「指标侧读不到真值」那一类） | 三条**互相独立**的证据：① **按构造**：`rag/retrieval/layer_recall.py:43` 写 `knowledge_points=[]`，而主路径 `rag/retrieval/evidence.py:93` 用 `_parse_knowledge_points(meta.get("knowledge_points"))`。本轮用假 Document（metadata 带 `["cn.arch.performance","带宽与时延"]`）直接驱动 `_doc_to_evidence` ⇒ 解析器给 **2 项**、该函数给 **`[]`。② **索引侧不背锅**（对 6 个集合做**全量分页**扫描，不是抽样）：`data_structure 777/785=99.0%`、`computer_organization 462/464=99.6%`、`operating_system 405/405=100%`、`computer_network 357/357=100%`、`questions 1358/2050=66.2%`（空值集中在 `doc_role=exam_answer` 685 条 + `exam_item` 7 条）；分桶看 **`doc_role=method` 在四个学科集合都是 100%**，`textbook` 只有 `data_structure 36/44=81.8%` 与 `computer_organization 27/29=93.1%` 有空（os/cn 的 textbook 100%）—— 这正是 §20.5.1 说的「仅剩 10 条 basic 讲义 detail 块」。③ **归档侧对不上**：两份 Step 9 探针归档 `phase1_step9_probeonly_{grade,verify}.jsonl` 的 **123 条 `top_items` 有 60 条 `kp` 为空**，其中 **13 条 `*/method` + 2 条 `*/textbook`** —— 按 ② 这些桶应当全有标签；且同一 `source`（`knowledge/advanced/computer_network/04_comprehensive.md`）在同一份归档里**既有带 kp 的、也有空 kp 的** ⇒ 差异只能来自路径，不能来自索引 | ✅ **已按 (B) 修（D12 裁决 2026-10-08）**。影响：`kp_hit` / `kp_mrr`（⇒ Generate 的 `coverage` 项）被**系统性低估**。★ 同时给 §20.5.1 那 **8 条 `coverage` N/A** 提供了一个比「旧索引未打标」**更可能的解释**：某题 top-5 若全走 top-up ⇒ `_all_kp(top)=[]` ⇒ 判 N/A；但归档**没存 `evidence_id`**（⑯ 只存 source/category/doc_role/kp/score）⇒ 这条**仍不能定论**，不许写成结论。三条路：**(A) 改产品**（`_doc_to_evidence` 改用解析器，1 行）：指标与对外契约一起变真，但 `EvidenceDoc.knowledge_points` 是**契约字段**（`agents/tools.py:54` 会带给 agent）⇒ **动检索链 ⇒ 触发新版本 + qa/generate 的 agent 侧数字要重跑（要 token）**；**(B) 只改评测口径**（`retrieval_probe._to_item` 在 `ev.knowledge_points` 为空时从 `ev.metadata` 兜底解析）：零 token、不触发版本，`retrieval_gate` 与探针当场可重测；代价是「指标说的」与「模型实际看到的」不一致（模型看到的 top-up 项仍无考点标签）；**(C) 只披露**。我建议 **(B) + 把产品侧那半单独披露**：与 #10 完全同构（修指标侧、离线重算、归档不改写），而 (A) 的代价是在收尾锚点上换检索契约。**已落地**：`retrieval_probe._to_item` 在 `ev.knowledge_points` 为空时从 `ev.metadata` 兜底解析（复用 `rag.retrieval.evidence.parse_knowledge_points` —— 原先是私有名，已改公开，防两套解析分叉）；护栏 **㉕a~㉕e**（㉕a 驱动真实 `_to_item`；㉕b 反向：metadata 也没有 ⇒ 记空、**绝不虚构**；㉕c 锁「与解析器同结果」；**㉕d 锁产品契约仍不带宽 KP**（(B) 的边界，改回 (A) 必然红）；㉕e `_all_kp` 不再漏）。⇒ 影响实测见 §20.5.1 末：coverage N/A **12 → 1**、`kp_hit` **0.889(16/18) → 0.966(28/29)**（成对读数、零 LLM）。★ **历史归档一律不回写**：0B/Phase 1 的 `gen_coverage` / `kp_hit` 仍按当时读数引用，论文里两处并列披露 |
 | 28 | **写入证据判据放错了位置、替原因下了结论、且没有下游读者**（2026-10-08 对自己代码的对抗性 review 抓到，四条同源问题一起修） | ① **位置**：`memory_write_missing` 的调用点原先在 `if case.task == "memory"` **之外**，而非 memory 任务走 `run_turns` —— 它照抓 `grade_scores`、却**从不**读 Store ⇒ `episodes` 恒空 ⇒ 任何一次 grade/verify/qa 实跑都会在**第一条**被判 `env_error`，而 `cli._run` 的 `break` 在 `append_record` **之前**（`cli.py:72-79`）⇒ 整轮中止**且那条记录连盘都不落**，中止日志取 `hard_fails[0]`/`retrieval_error`（两者皆空）⇒ 屏幕上是一行**没有原因的**「中止」。★ 这条直接卡住 `EFFECT_PLAN §6 Final Gate`。② **归因**：函数把「没落库」写成**环境类** —— 可缺陷 C（`record_grade` 拿不到 config 被静默跳过）的症状与 TEI 502 一模一样，而 `memory/safe.py:24-35` 把写失败压成一行 WARNING、既不计数也不落到 record ⇒ 单凭 `episodes==[]` **无法区分**，指认环境等于替缺陷 C 打掩护。③ **下游**：注释承诺「不进指标」，但 `report._is_invalid` 与 `memory_step5_paired.ArmSummary` **都不读 `env_error`**（全仓 grep 为零）⇒ 真正产出 Memory 数字的那条路径上，这种样本照样进分母。④ **读链**：清理前那次读取自己抛过错时只写进 `notes`（而 `notes` 从不进 record）⇒ 「没读到」会被下游当成「没写入」 | ✅ **已修（零 token）**：判据移入 memory 分支、**只报「证据缺失」不指认原因**（环境类仍由 `preflight_check()` 与 `is_env_error()` 判），命中时置 `validity_valid=False` ⇒ **复用既有排除链**，`report` 与配对脚本两侧同时生效；新增 record 字段 `memory_write_missing` / `episodes_read_failed`（读链坏了就**不做**写入推断）；`env_error` 兜一句可操作文案，中止日志不再可能为空。护栏 **㉓a~㉓i（10 项）**：㉓a 驱动**真实 `run_case`**（`_run_agent` 与检索探针打桩 ⇒ 零 LLM、零 TEI 依赖）证明 grade 任务不开火、㉓b/c 锁「命中 + 不指认原因」、㉓d/d' 三个反向（有 episode / 读链坏 / OFF 臂）都不报、㉓e+f **逐条验证两个下游读者**、㉓g/h 证明真实环境信号仍开火（没把闸拆没）、㉓i 锁字段落盘。★ **牙齿实测**：把调用点临时移回分支外 ⇒ `㉓a ❌ env_error=True primary=tool_error`、整套 gate 退出码 1；还原后 **175 项全绿 exit 0**（篡改是临时 Edit + 逆 Edit，未落进任何提交）。★ **行为变化要披露**：写链证据缺失**不再中止整轮**（改为逐条标不可测）⇒ 若 TEI 在跑到一半时挂掉，剩余 case 仍会烧 token；判断是不做「无流量的假设性加固」，且预检已在开跑前拦住（㉑a）。要不要加「连续 N 条写链缺失即中止」= **待裁决 D13**。 |
-| 29 | **护栏自己不合格**：㉑c 把 `EMBEDDING_API_BASE` 留在死端口、㉑b 是弱预言、`scripts/` 从来不在 pyrefly 范围内（新写的 ㉒ 里就有一个真类型错） | ① `check_21` 的 `㉑c` 在原 `finally` **之后**改 settings 却只还原 `USE_FAKE_EMBEDDING` ⇒ 跑完 `EMBEDDING_API_BASE=http://127.0.0.1:1`（实测），同进程后续任何 embedding 调用都会 ConnectTimeout。今天没造成红灯**只是因为 ㉑ 后面恰好只剩 ㉒**（不碰 embedding）—— 而「护栏全绿但它描述的路径已不可达」正是本仓反复踩的那一类。② `㉑b` 写的是 `len(probs2) >= 1`，标题却声称「两条路径不互相掩盖」⇒ 删掉 health 那一支它照样绿。③ `pyproject.toml` 的 `project-includes = ["src"]` ⇒ `scripts/` 从未被检查；显式跑 `pyrefly check scripts/memory_step4fix_gate.py` 得 14 errors，其中 **`㉒d` 访问 `res_off.notes` 而 `_run()` 的返回注解写成了 `tuple[_SpyAgent, bool]`**（实返 `CaseResult`）—— 即「不污染进程」这套信任基础的类型从没被静态看过 | ✅ **已修（零 token）**：`㉑c` 包进 `try/finally` 两个字段一起还原，并新增 **`㉑c'`「跑完 settings 已还原」**（还原被删 ⇒ 必红）；`㉑b` 改**双向**断言（`不可达` 与 `推理` 两句都必须在）；`HTTPServer` 补 `server_close()`；`_run()` 注解改成它实际返回的形状（`tuple[smoke.CaseResult, bool 或 None]`） ⇒ 该文件 pyrefly 由 14 → **13 errors**（余下 13 条是 scripts 里的历史噪音：langgraph `Checkpoint` TypedDict 键、`sys.path` 注入导致的 `missing-import` 等，**不在本轮范围**，但口径必须改写）。★ 文档纪律：以后写「pyrefly 0 errors」一律注明**范围 = `src/`**，不能说成全仓 |
+| 29 | **护栏自己不合格**：㉑c 把 `EMBEDDING_API_BASE` 留在死端口、㉑b 是弱预言、`scripts/` 从来不在 pyrefly 范围内（新写的 ㉒ 里就有一个真类型错） | ① `check_21` 的 `㉑c` 在原 `finally` **之后**改 settings 却只还原 `USE_FAKE_EMBEDDING` ⇒ 跑完 `EMBEDDING_API_BASE=http://127.0.0.1:1`（实测），同进程后续任何 embedding 调用都会 ConnectTimeout。今天没造成红灯**只是因为 ㉑ 后面恰好只剩 ㉒**（不碰 embedding）—— 而「护栏全绿但它描述的路径已不可达」正是本仓反复踩的那一类。② `㉑b` 写的是 `len(probs2) >= 1`，标题却声称「两条路径不互相掩盖」⇒ 删掉 health 那一支它照样绿。③ `pyproject.toml` 的 `project-includes = ["src"]` ⇒ `scripts/` 从未被检查；显式跑 `pyrefly check scripts/mem/memory_step4fix_gate.py` 得 14 errors，其中 **`㉒d` 访问 `res_off.notes` 而 `_run()` 的返回注解写成了 `tuple[_SpyAgent, bool]`**（实返 `CaseResult`）—— 即「不污染进程」这套信任基础的类型从没被静态看过 | ✅ **已修（零 token）**：`㉑c` 包进 `try/finally` 两个字段一起还原，并新增 **`㉑c'`「跑完 settings 已还原」**（还原被删 ⇒ 必红）；`㉑b` 改**双向**断言（`不可达` 与 `推理` 两句都必须在）；`HTTPServer` 补 `server_close()`；`_run()` 注解改成它实际返回的形状（`tuple[smoke.CaseResult, bool 或 None]`） ⇒ 该文件 pyrefly 由 14 → **13 errors**（余下 13 条是 scripts 里的历史噪音：langgraph `Checkpoint` TypedDict 键、`sys.path` 注入导致的 `missing-import` 等，**不在本轮范围**，但口径必须改写）。★ 文档纪律：以后写「pyrefly 0 errors」一律注明**范围 = `src/`**，不能说成全仓 |
 | 30 | **护栏的「判据数量」本身不可复现**（I6，与 #29 同属「护栏自己不合格」）：文档与标签里那句「175 项全绿」，在**干净克隆**上其实是「167 项跑过 + 8 项压根没跑」，而 `main()` 照样打印「GATE 通过 · exit 0」 | `⑬l×2`、`⑭d~⑭f`、`⑱a~⑱b`、`⑳d` 这 **8 项**读 `evals/results/task_eval/*.jsonl` 与 `calibration_30.jsonl`；按 **D11** 那些归档刻意不入库 ⇒ 缺文件时旧写法只 `print` 一行 `⏭`、**不进任何计数**，于是总数悄悄变小而退出码不变。★ 这是「**绿灯的数量**不可信」：我们反复防的是「绿而路径不可达」，这次坏的是计数口径本身。实测（一次性篡改脚本，未入库）：把 `check_20` 换成空函数 ⇒ `判定项 171 ≠ 声明 175` 且 exit 1；把 `ROOT` 指向空目录、只跑那四组 ⇒ `⏭` 恰好 **8 项**（另执行 24 项） | ✅ **已修（零 token；选「让数量自己说话」而不是「把归档入库」—— 后者与 D11 冲突）**：新增 `skip()`（跳过必须计数，一个 `if` 挡掉多项时用 `count=`）与模块级 `_EXPECTED_ITEMS = 175`；收尾两条不变量 —— ① 执行数（含跳过）必须等于声明值，② 跳过数必须为 0 —— 任一不满足 ⇒ `_flag()` 置红 + **exit 1**，文案写明「本次不能称为全绿，只能说跑了的那几项绿」。⇒ 新克隆上看到的是一行带原因的红灯，而不是一行更小的绿。★ 维护契约：**加判据必须同步改 `_EXPECTED_ITEMS`**，忘了就红（不靠人记性）。本轮护栏计数不变（仍 **175**，本机 skip=0） |
 | 31 | 对**自己代码**的 review 余下 **12 条 Minor** 的处置：8 修 / 1 删 / 2 留（另 1 条被新护栏取代）——全部零 token | M7 是实测的：同一个「`/health` 404 但 `/embeddings` 正常」的本地桩，旧写法 `problems=['embedding 服务异常 HTTP 404…']`（会把能用的 TEI 拦在门外、`cli` 直接 return 3），新写法 `problems=[]`。护栏 **㉔a~㉔c**（正向 + 反向 + 「负样本用章名不报」三条一起，证明 lint 不是一刀切）、**㉑h**（M7）、**㉔d**（#26 不动已发表数字）；其余 6 条是小改（见处置） | ✅ **修**：M2 `_off_arm_*` 恢复状态改用 `_UNSET` 哨兵（原先 `None` 把「无需恢复」与「恢复成 None」压成一种）；M3 `cli` 打印 `informative_share` 加 `or 0`；M4 `⑳b` 改引用 `CALIBRATION_THRESHOLDS["spearman_min"]` 而不是写死 0.70；M5 `_INFORMATIVE_SHARE_MIN` 改公开名（原先 `cli`/护栏跨模块取私有成员）；M6 `judge.py` 两处过期**行号**引用改成**符号**引用；M7 预检的 health 抱怨只在推理也失败时才计入；M9 护栏的 `HTTPServer` 补 `server_close()`；M10 正样本 `values` 粒度 lint。★ **删**：`㉒d`（它读的是 harness 自己写的 note 文本，突变「OFF 臂什么都不做」时照样绿、措辞一改就假红 ⇒ 是文档不是护栏；note 仍留在 harness 里供报告引用）。**留**：M8（预检沿用产品的 `get_embeddings()` 客户端 ⇒ 不另加短超时；探针必须走产品那条路，最坏 60s 可接受因为它在开跑前且失败即中止）、M12（非 memory 的 record 不存 `grade_scores`/`episodes`；C1 修好后该分支不再影响判定，没有消费者就不扩字段）。⇒ 护栏计数 175 → **179**（`−㉒d` 1、`+㉑h` 1、`+㉔a~d` 4） |
 | 32 | Grade 的「工具未返回 docs」**跨批次落在同两条 case**（`PHASE1_VERIFY.md` TODO-1 的形态升级） | Phase 1 报「批改失败（工具未返回评分结果）」的是 `grd-004`/`grd-011`；本轮 §6 **同一对 case** 报「来源: 未检索到（工具未返回 docs）」，而**同一份归档里评测探针给这两条 query 各 5 条证据、`retrieval_status=ok`、`top_items` 非空** ⇒ 「检索链没结果」这个解释被归档自身否证。其余 13 条 grade 无此措辞 | ⏳ **未修、未确证**（本轮只登记）。归因边界：agent 运行时的工具调用与评测侧探针是**两条独立通道**，探针成功**不能**证明 agent 那次调用成功 —— 要确证仍然只有 TODO-1 写的前提：**per-case tool-call logging**（`tool_calls` 字段对 Grade 15/15 全空、不具诊断性，这条没变）。★ 不做的事：不凭推测改 prompt，也不为了 D16 变绿去放宽判据（D16 实测五任务全 0.000，本行**不影响门槛判定**，只把定性从「偶发」改成「case-specific 可复现」）。⇒ 顺带：`grd-004` 恰是本轮两条 verdict 不一致之一（给 100 而 gold 0）⇒ **无证据时给满分**比「报失败」更值得在答辩上解释 |
@@ -1066,7 +1066,7 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 | 34 | **护栏自己覆写了 tracked 归档**（2026-10-08 实发，我自己踩的）：`agent_behavior_gate.py` 的 `--quality-out` **默认值**指向 `agent_behavior_quality.json` ——那是 **V-2026-10-02 的归档**（tracked，落点 `e36c766`）⇒ 任何人为验证跑一次护栏，就把已发表的数字原地改掉 | 实测：本次为 #33 查连带影响跑该护栏 ⇒ `git status` 出现 `M evals/results/system_validation/agent_behavior/agent_behavior_quality.json`，diff **27 增 / 27 删**，`quality_score 0.1222 → 0.1716`、`reply_len 2097 → 994`（同一判据、不同运行）。⇒ 三件事同时坏：**归档被改** + **绿灯照旧（exit 0）** + **没有任何地方提示这是已发表数字**。改动已复制到临时目录留证，再用 `git restore --source=HEAD` 还原（★ 顺序不能反：先保住证据再还原；且这次还原的是**我自己刚生成的改动**，不是人的未提交工作） | ✅ **已修（零 token）**：默认输出改成**带日期**的新文件（`agent_behavior_quality_YYYYMMDD.json`，与 task_eval 归档同为「不入库」约定），要覆写同名文件必须**显式**传 `--quality-out`；docstring 里的「用法示例」原先示范的正是覆写归档，一并改成带日期。★ 根因不是手滑而是**默认值** —— 来跑护栏的人正是在做验证，不该预期它写归档；护栏的默认行为应当是安全那一侧（与 #29/#30 同属「护栏自身卫生」这一族） |
 | 35 | **出题链会把「题目正文整个丢掉」，只回一句页脚**（⑤ 复测里 `gen-009`：回复 42 字符 = 「以上为指令流水线练习题，可继续…」+「来源: 408考研练习题」，`generation_ok=False`、`failure_reason=[format_violation, generation_incomplete]`） | 同一条 case 在 §6（④）里是 1303 字符、五项全过 ⇒ 不是 case 设计问题。★ 与 **#32 同源**：两处都是「**agent 运行时的工具返回值丢了，而我们看不到工具那一层**」（`tool_calls` 字段对 Grade 15/15 全空、不具诊断性，Generate 同样没有逐次工具记录）⇒ 评测侧只能看见最终回复变短，看不见是工具没返、还是模型没转述 | ⏳ **登记，不擅自扩范围**：要确证只缺一件事 —— **per-case tool-call logging**（`PHASE1_VERIFY.md` TODO-1 的处置前提本来就是它，#32 也等它）。★ 那是产品侧改动 ⇒ 又一个新版本 + 全量重跑；而 ⑤ 复测的 Generate 主指标已过线，所以本次**不夹带**，留作 §7 之后的独立小项。当前影响：这类失败会随机占用一个分母名额 ⇒ 引用 Generate 数字必须带「单批 n=15」 |
 | 36 | **LLM judge 的 `correctness` 判据对「算错」不敏感**：手验 `gen-001` 抓到一道**被判 5.0 而答案客观错**的题（Cache 组号应为 210，它写 46） | 冻结判据是 `gen_correctness = final_quality ≥ 4`，而 `final_quality` 出自 `dashscope:qwen3.8-flash` 的单次判分。★ 生成与判定是**不同模型**（deepseek 生成 / qwen 判）⇒ 不是自评偏袒；但 judge 读的是「答案是否自洽、格式是否完整」，**不会把算术重算一遍**。§22.1 那 5 道手验里 2 道有客观错、1 道满分漏检 | ⏳ **登记为判据局限、不改判据**（`§3.1 v1.0` 已冻结）。⇒ 影响所有引用 `final_quality` 的地方：**它测的是「像不像一份能用的答案」，不是「算得对不对」** —— 与 #20/#7/#10 同族，但这次错在**判据侧**而不是读数侧。可做的低成本改进（留到 §7 之后）：计算型题目让 judge 先重算再判，或抽一批人工复核表（人的活、零 token）。本轮已做的：`gen-010` 的 2.0 我用独立推算证明**判对了**、`gen-001` 的 5.0 证明**判错了** ⇒ 「过线」两个字必须连着这句引用 |
-| 37 | **审核表导出器会吃掉人工标注**（#34 同一族、后果更重）：`export_review_sheets.py` 的 `export_calibration` 无条件写 `"human_score": None`，而 `calibration_30.jsonl` 的 30 条 human_score 是**人工标注** ⇒ 照 docstring 里那句默认命令重跑一次，judge 校准的 exact / within_1 / mae / spearman 四个数就没有输入了 | 实测（本机、`--out-dir` 指向副本，**没碰真表**）：满标注的表重跑后 `human_score` 全空。另外 `--out-dir` **默认就是 tracked 数据集目录** ⇒ 「顺手跑一下」= 直接改已发表数据 | ✅ **已修（零 token）**：① 新增 `merge_preserving_human`，规则是「**表里的非空值一律优先于派生值**」—— 注意不是「派生值为空才保留」，因为 grade 的 `human_score` 本来就带机械预填，审核人改的正是这个字段，按后者判会把「人把 100 改成 0」冲回 100；② 本次集合之外的行 ⇒ 抛 `SheetConflict`、**在打开文件之前**判定并 exit 3（先 `open(path,'w')` 就已经删了），要冲得显式 `--force`；③ 护栏 **㉙a~㉙e + ㉚a~㉚g**（204 → **216**），㉙d 直接钉「已发表那份仍是满标注」。★ 顺带产出两件审 gold 要用的东西：**`scripts/gold_review_apply.py`**（翻转 `gold_status` 的执行器，护栏 ㉚ 钉住它「除 `gold_status` 外逐字段不变 / 注释行逐字节不变 / CRLF 不变 / 幂等 / 跨文件不误报 refused」——最后一条是 dry-run 当场抓出来的 bug）与 **`evals/results/task_eval/GOLD_REVIEW_20261008.md`**（grade 15 + generate 15 的审核工作单）。★ 签名仍然是人的：工具只执行「你确认过的 id」，`--all-draft` 存在但等于一次签 66 份 |
+| 37 | **审核表导出器会吃掉人工标注**（#34 同一族、后果更重）：`export_review_sheets.py` 的 `export_calibration` 无条件写 `"human_score": None`，而 `calibration_30.jsonl` 的 30 条 human_score 是**人工标注** ⇒ 照 docstring 里那句默认命令重跑一次，judge 校准的 exact / within_1 / mae / spearman 四个数就没有输入了 | 实测（本机、`--out-dir` 指向副本，**没碰真表**）：满标注的表重跑后 `human_score` 全空。另外 `--out-dir` **默认就是 tracked 数据集目录** ⇒ 「顺手跑一下」= 直接改已发表数据 | ✅ **已修（零 token）**：① 新增 `merge_preserving_human`，规则是「**表里的非空值一律优先于派生值**」—— 注意不是「派生值为空才保留」，因为 grade 的 `human_score` 本来就带机械预填，审核人改的正是这个字段，按后者判会把「人把 100 改成 0」冲回 100；② 本次集合之外的行 ⇒ 抛 `SheetConflict`、**在打开文件之前**判定并 exit 3（先 `open(path,'w')` 就已经删了），要冲得显式 `--force`；③ 护栏 **㉙a~㉙e + ㉚a~㉚g**（204 → **216**），㉙d 直接钉「已发表那份仍是满标注」。★ 顺带产出两件审 gold 要用的东西：**`scripts/lib/gold_review_apply.py`**（翻转 `gold_status` 的执行器，护栏 ㉚ 钉住它「除 `gold_status` 外逐字段不变 / 注释行逐字节不变 / CRLF 不变 / 幂等 / 跨文件不误报 refused」——最后一条是 dry-run 当场抓出来的 bug）与 **`evals/results/task_eval/GOLD_REVIEW_20261008.md`**（grade 15 + generate 15 的审核工作单）。★ 签名仍然是人的：工具只执行「你确认过的 id」，`--all-draft` 存在但等于一次签 66 份 |
 > ★ **#32 与 #35 是同一件缺失观测的两张脸**：Grade 那两条报「工具未返回 docs」而探针给得出 5 条证据、Generate 这条报「题目正文没了」而上一批同一 case 是完整的 —— 都指向「工具调用层没留痕」。把 #32 的定性从「case-specific 但未确证」往前推一步的前提，和 #35 是同一个（per-case tool-call logging）。
 > ★ **#31 的两个意外收获（比修复本身更值得记）**：**① 新 lint 与既有护栏撞车** —— `⑤c` 的 fixture 一直用 `图` 当「canonical **name**（不是 ID）」的正面例子，而新的粒度 lint 判 `图` 是 `domain`、正样本 ERROR ⇒ `⑤c` 当场变红。**发现它的是 #30 那条计数不变量**（`判定项 179 ≠ 178`、exit 1），不是人肉看出的。修的是 fixture 的取值（`图` → `图的存储`，意图不变），**不是**放宽 lint。★ 撞车的根因是两条护栏各自用同一个词表达**不同**的意思（⑤c 说「名字合法」，㉔ 说「粒度够细」）。**② ㉔d 的第一版绑了两个变量** —— 它比「归档值 vs 当前代码重算」，于是立刻红在 `mem-006`：归档 `(T,T,T)` → 当前 `(T,F,F)`，而那是 **#4 已发表**的口径修正（负样本的 `used` 需要召回事实前提），不是 #26 的回归。⇒ 改成「**同一份代码**下，归档 gold vs 当前 gold」，只让 gold 改动说话。教训：**一条判据只能绑一个变量**，否则红灯无法解释；而这条教训本身是被 ① 那套计数机制暴露的。
 
@@ -1291,49 +1291,49 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 > 在这里**分类归位**。★ **数字一律回指原登记处，本节不另写一份现实**（重录逐条 diff 看 §20.7.1，
 > `mean_evidence_count` 抖动带看 §20.2，效果口径的 37 条偏离看 §20.5），并且**三类不许统一写成「已解决」**：
 > **A 已裁定的设计选择 / B 已知局限 / C 尚待验证的归因**。
-> 复现（三条都是零 token，随时可跑）：`uv run python scripts/evidence_chain_gate.py`、
-> `uv run python scripts/build_claim_ledger.py --records evals/results/task_eval/ec_r1_final_gate.jsonl --check`、
+> 复现（三条都是零 token，随时可跑）：`uv run python scripts/gates/evidence_chain_gate.py`、
+> `uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r1_final_gate.jsonl --check`、
 > `uv run python -m evaluation.task_eval sanity`。
 
 #### A. 已裁定的设计选择（是选择，不是缺陷；改动要有裁定，不许顺手）
 
 | # | 选择 | 依据 | 取证命令 | 这条**不**意味着 |
 |---|---|---|---|---|
-| A1 | **Verify / Grade 两行主指标从 §6 原文的 tier-2 judge 量换轨为 tier-1 机械/物证量**（checkpoint 6 追加条 ⑤） | 依据 D14（Verify 行为层机械化）+ G1b 撤销（两极 gold 无判别域，§20.5 #7） | `uv run python scripts/evidence_chain_gate.py` 的 `6h2`（走校准前置的 tier-2 行只剩 QA）与 `6h3`（派生行 `max(tier)`≤1、tier-2 只出现在 optional 替身） | ★ **不是**「Task 6 偷偷降低了 tier」；也**不是**「judge 门槛已被证明」——见下面两条推论 |
+| A1 | **Verify / Grade 两行主指标从 §6 原文的 tier-2 judge 量换轨为 tier-1 机械/物证量**（checkpoint 6 追加条 ⑤） | 依据 D14（Verify 行为层机械化）+ G1b 撤销（两极 gold 无判别域，§20.5 #7） | `uv run python scripts/gates/evidence_chain_gate.py` 的 `6h2`（走校准前置的 tier-2 行只剩 QA）与 `6h3`（派生行 `max(tier)`≤1、tier-2 只出现在 optional 替身） | ★ **不是**「Task 6 偷偷降低了 tier」；也**不是**「judge 门槛已被证明」——见下面两条推论 |
 | A1-① | 当前这两行将来走向「已证明」**不要求** judge 边界校准 | 因为它们不再建立在 judge 观点上 | 同上 `6h2`/`6h3` | 不要求 ≠ 已免除：QA 行仍要（§1.3 两个前置） |
-| A1-② | 若将来**重新主张** §6 原文那条 tier-2 断言（`final_quality ≥ 4`）⇒ 那是**另一行**，必须自己声明 `tier=2` 并承担 `boundary_calibrated` + `repeat_jitter` 两个前置 | `EVIDENCE_CHAIN.md` §1.3 第二条硬规则 | `uv run python scripts/build_claim_ledger.py --records …` 出 ledger 主表「前置（tier_ok 依据）」列 | 把现有行硬绑回 tier 2 = 造出一条从未被证的断言 |
+| A1-② | 若将来**重新主张** §6 原文那条 tier-2 断言（`final_quality ≥ 4`）⇒ 那是**另一行**，必须自己声明 `tier=2` 并承担 `boundary_calibrated` + `repeat_jitter` 两个前置 | `EVIDENCE_CHAIN.md` §1.3 第二条硬规则 | `uv run python scripts/lib/build_claim_ledger.py --records …` 出 ledger 主表「前置（tier_ok 依据）」列 | 把现有行硬绑回 tier 2 = 造出一条从未被证的断言 |
 | A2 | **§1.1 状态表与冻结公式的口径差 = 改文档收口，不动 `derive_status`**（checkpoint 10 裁定；brief B 表第 9 行） | 公式是三态推导 / ledger / `--check` 的公共依赖；本 Task 明令不改业务代码 | 现行判据与残留代价写在 `docs/EVIDENCE_CHAIN.md` §1.1（含「mutation 取证测的是**判据对契约输入的敏感性**，不是主张的数值」那句） | 不意味着这一格变成「已证明」，也不解除 V0 ② 的拦截（`--check` 第 3 段仍红） |
 | A3 | **`evals/results/task_eval/` 的数值工件（`*.jsonl` / `*.report.json`）纳入版本控制**；★ 逐轮 `*.log` 仍不入库（单份可达 MB 级 ⇒ 沿用 D11 的取舍） | 本轮要求「冻结、只读」必须有版本控制兜着；旧裁定 **D11**（`*.jsonl` 不入库，理由＝二进制不可 diff、仓库变大）**被本轮部分推翻**：结论虽都在 `.md` 里，但「冻结」没有版本控制就只是措辞（brief 验收约束 A.1） | `git ls-files evals/results/task_eval` 计数 + `git status --short -- evals/results/task_eval`（剩下的 `??` 就是仍刻意不入库的那几份）+ `git log --oneline -1` 看本轮提交 | ★ 这是一次**改口**，不是「D11 一直这么定」：归档仍不回写数值，入库只为让「冻结」可核对 |
 | A4 | **旧归档标 `superseded`，不标 `invalidated`、不删文件、不改数值** | brief 验收约束 A.1：被替代 ≠ 无效 | `evals/claims/artifact_status.json` —— ★ 收尾修复批更正：它**不是**由 `claims.artifact_status()` 生成（该 helper 只提供行形状，且只被用于 `ledger.md`「工件状态」节渲染**本次输入工件**那份视图），**目前没有命令能再生成它** ⇒ 后续处理条件见 B17。真实存在的只读核对命令（验证工具、非门禁判据）：`uv run python -c "import json,os; rows=json.load(open('evals/claims/artifact_status.json',encoding='utf-8')); bad=[r['path'] for r in rows if not os.path.exists(r['path'])]+[r['superseded_by'] for r in rows if r['superseded_by'] and not os.path.exists(r['superseded_by'])]; print('缺失:',bad or '无')"` 实测输出 `缺失: 无`；被指向的目标同为表中 **active** 新一代（链式指错 0 处、`invalidated` 0 处） | 不意味着旧读数还能沿用（⇒ B4），也不意味着引用它们违法（⇒ 连着标注引用即可） |
-| A5 | 检索失败 reset **只允许发生在独立取证单元的边界**（spec v1.3 撤销第三个调用点） | 实测后一个 reset 抹掉前一个未消费的证据 ⇒ 净降低检测能力 | `uv run python scripts/evidence_chain_gate.py` 的 B7/归因那一组 | 不意味着 `ip`/异步语义那两条债已清（⇒ B8/B9） |
+| A5 | 检索失败 reset **只允许发生在独立取证单元的边界**（spec v1.3 撤销第三个调用点） | 实测后一个 reset 抹掉前一个未消费的证据 ⇒ 净降低检测能力 | `uv run python scripts/gates/evidence_chain_gate.py` 的 B7/归因那一组 | 不意味着 `ip`/异步语义那两条债已清（⇒ B8/B9） |
 
 #### B. 已知局限（照实披露；本 Task **只登记不修**）
 
 | # | 局限 | 当前状态 | 后续处理条件（什么时候必须动它） | 取证 |
 |---|---|---|---|---|
-| B1 | **§3.1 五项中 `correctness` / `answerability` / `difficulty` 三项在 P−1 盲标之前恒 `missing_premise`** ⇒ Generate 主指标**整族不可出数**（brief Step 3 ①） | 未清偿（P−1 未做） | 填完 `gold_answer` + `expected_difficulty`（零 token，约 2 人时）后重算；届时 ledger 取证时间整体刷新 | `uv run python scripts/build_claim_ledger.py --records … --check` **第 3 段 V0 ②** 就是拦这条的 |
+| B1 | **§3.1 五项中 `correctness` / `answerability` / `difficulty` 三项在 P−1 盲标之前恒 `missing_premise`** ⇒ Generate 主指标**整族不可出数**（brief Step 3 ①） | 未清偿（P−1 未做） | 填完 `gold_answer` + `expected_difficulty`（零 token，约 2 人时）后重算；届时 ledger 取证时间整体刷新 | `uv run python scripts/lib/build_claim_ledger.py --records … --check` **第 3 段 V0 ②** 就是拦这条的 |
 | B2 | **Grade gold 只有两极** ⇒ `score_tolerance@±10` 判别域受限，行级判据改用 `verdict_agreement` 且只作辅助位（brief Step 3 ②） | 已裁定为「语料性质，不补标」（G1b 已撤回） | 只有当 L3 语料出现可标部分分的题型时才重新评估；**禁止**为造判别域而改题 | §20.5 #7、ledger 的 Grade 行注记（`degenerate_gold`） |
 | B3 | **R5 改了复合指标的聚合语义 ⇒ 旧归档的读数不可沿用**（brief Step 3 ③）：同一份归档按新规则重算会得到不同状态词 | 已落地为代码；旧归档不回写 | 若要在新旧之间做比较，必须**两边都按同一套 registry 重算**（`reanalyse`，零 token），不得拿旧报告数字对新代码 | 证据：`evals/claims/artifact_status.json` 里 `phase1_final_gate_20261008.jsonl` 的 `reason=composite_na_semantics_changed`；机制与原事故两个读数写在 `docs/EVIDENCE_CHAIN.md` §4.2（本节不复制） |
 | B4 | **5.B 全部延后项的 limitation 清单**（brief Step 3 ④）：BM25 IDF 截断候选池、`k=5` 被当未指定、`_rrf_scale_needed` 硬编码复刻、parent-window 文本重复、`weak_topics` 清除死分支、生产/评测聚合口径不一致、`difficulty="mixed"` 与子项 `Literal` 冲突、`score` 越界抛错、`is_wrong`/`score` 不一致、B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾 | 逐条**未修**，维持延后 | ★ 两条自动升级条件（不是可选项）：`difficulty=mixed` 或 `score` 越界若让 §6 的 `tool error` 行越过门槛 ⇒ **自动从 5.B 升到 5.A**（阻塞重跑） | 清单原文 `docs/EVIDENCE_CHAIN.md` §5.B（本节只登记状态，不复制第二份） |
-| B5 | **`evidence_pollution` 受「非空包」门控**：检索层归因门是 reason-agnostic 的（`retrieval_status == "empty"` ∧ `pack_nonempty is False` 才开门），而「证据被污染」按定义发生在**包非空**时 ⇒ 这一原因**今天不可能被机械写入**，只能来自 judge 并被隔离 | 现状即如此，**不是** per-reason 门控 | 要做完整 per-reason 门控得给 `evidence_pollution` 单独开一条基于物证（包内类目/学科纯度）的判据 ⇒ 属新增判据，**不属本轮范围** | `src/evaluation/task_eval/judge.py` 的 `retrieval_layer_gate_open()`；`uv run python scripts/evidence_chain_gate.py` 的 `8i` 行（三行规则逐字落地） |
+| B5 | **`evidence_pollution` 受「非空包」门控**：检索层归因门是 reason-agnostic 的（`retrieval_status == "empty"` ∧ `pack_nonempty is False` 才开门），而「证据被污染」按定义发生在**包非空**时 ⇒ 这一原因**今天不可能被机械写入**，只能来自 judge 并被隔离 | 现状即如此，**不是** per-reason 门控 | 要做完整 per-reason 门控得给 `evidence_pollution` 单独开一条基于物证（包内类目/学科纯度）的判据 ⇒ 属新增判据，**不属本轮范围** | `src/evaluation/task_eval/judge.py` 的 `retrieval_layer_gate_open()`；`uv run python scripts/gates/evidence_chain_gate.py` 的 `8i` 行（三行规则逐字落地） |
 | B6 | **`retrieval_status="error"` 的语义 = 任一路由故障或超时**，**不等于**索引整体不可用（Task 8 口径） | 已按此实现（只升级不降级；空清单不凭空造 `error`） | 报告/论文里写这句时必须照抄「任一路由」限定，不得写成「检索服务不可用」 | `src/evaluation/task_eval/runner.py` 的 `_escalate_status`（规则就写在 docstring 里）+ 诊断字段 `route_failure_notes` |
-| B7 | **`empty_result=True ⇒ failed` 与 §5 B2「空结果 → `degraded`」的用词张力**：代码把「重排返回空列表」折进 `failed`，而 spec 那行字面写着空结果属 `degraded` | ★ **本轮不选边、不静默改**（两边各有理由：`_safe_to_thread` 用哨兵区分「真返回了列表」与「抛错/超时走兜底」，实测这条路径不可达） | 裁定权在项目所有者：要么改 `_derive_rerank_status` 的映射并同步 `9c/9e` 判据，要么把 §5 B2 的措辞改成「无分→`degraded`、空→`failed`」并登记为 v1.4 修订 ⇒ **两者都要动代码或动冻结 spec，都不属本 Task** | `src/rag/retrieval/pipeline.py` 的 `_derive_rerank_status` + 同文件 `_RERANK_UNSET` 上方注释；判据 `uv run python scripts/evidence_chain_gate.py` 的 `9a/9c/9e` |
+| B7 | **`empty_result=True ⇒ failed` 与 §5 B2「空结果 → `degraded`」的用词张力**：代码把「重排返回空列表」折进 `failed`，而 spec 那行字面写着空结果属 `degraded` | ★ **本轮不选边、不静默改**（两边各有理由：`_safe_to_thread` 用哨兵区分「真返回了列表」与「抛错/超时走兜底」，实测这条路径不可达） | 裁定权在项目所有者：要么改 `_derive_rerank_status` 的映射并同步 `9c/9e` 判据，要么把 §5 B2 的措辞改成「无分→`degraded`、空→`failed`」并登记为 v1.4 修订 ⇒ **两者都要动代码或动冻结 spec，都不属本 Task** | `src/rag/retrieval/pipeline.py` 的 `_derive_rerank_status` + 同文件 `_RERANK_UNSET` 上方注释；判据 `uv run python scripts/gates/evidence_chain_gate.py` 的 `9a/9c/9e` |
 | B8 | **同步 `similarity_search_with_score` 与异步 `asimilarity_search_with_score` 语义相反**（同步走 Chroma 原生「距离」，异步自己换算成「相似度」）；**当前消费点各自用对了方向**，所以今天没有假数 | 保留为**技术债务**（本轮只登记） | 任何新增调用点都必须先看函数自己的注释；若将来统一到「只暴露相似度」，属检索链改动 ⇒ 换锚点 + 四路由重跑 | `src/rag/common/vectorstore.py` 的 `similarity_search_with_score` / `asimilarity_search_with_score` 两处签名 |
-| B9 | **`embeddings.py` 的 `ip` 分支 `return d`**：`SUPPORTED_SPACES` 含 `ip`，而该分支把内积原样当相似度返回 ⇒ 与「越高越相似」契约的方向**未经实测** | ★ **当前不可达**（现役四个学科集合实测全为 `cosine`）⇒ 但「不可达」**不等于**契约正确，**也不等于**已修复 | 出现任何 `ip` 空间的集合之前：要么把它移出 `SUPPORTED_SPACES`（未知 space 由 `9g` 逼着抛错），要么按 §1.5 先测方向再登记并**实测** | `src/rag/common/embeddings.py` 的 `SUPPORTED_SPACES` / `similarity_from_distance`；判据 `uv run python scripts/evidence_chain_gate.py` 的 `9g` |
-| B10 | **`TIER-DEBT-task3`**：`gen_answer_key_validity` / `gen_analysis_agreement` 两个 `optional=True` 的**机械替身**注册为 `tier=2`，按 §1.3 证据种类定义应为 0/1 ⇒ 后果是**假阴性（过严）**：判据级附表逐条走 `tier_ok_for(p.tier, …)`，无校准 ⇒ 这两行永远显示 tier✗，而理由并不存在。**主行不受影响**（optional 不进 `max(tier)`，由 `6h3` 取证） | 债务**在册未偿**：字面 token 自本轮起同时出现在代码注释、ledger 附表与本节 ⇒ 读者看到锚点能查到实名（评审 M-4 的验收条件） | 改 tier 会让 `7g` 变红 ⇒ **同一提交里**删掉 `7g` 的债名单条目并在本节写明「已清偿」（这条规矩本身就是防「改了判据忘了登记」） | `src/evaluation/task_eval/predicates/generate.py` 两处 `tier_reason=("TIER-DEBT-task3",)`；`uv run python scripts/evidence_chain_gate.py` 的 `7f/7g`；`uv run python scripts/build_claim_ledger.py --records …` 的附表「tier 依据」列 |
+| B9 | **`embeddings.py` 的 `ip` 分支 `return d`**：`SUPPORTED_SPACES` 含 `ip`，而该分支把内积原样当相似度返回 ⇒ 与「越高越相似」契约的方向**未经实测** | ★ **当前不可达**（现役四个学科集合实测全为 `cosine`）⇒ 但「不可达」**不等于**契约正确，**也不等于**已修复 | 出现任何 `ip` 空间的集合之前：要么把它移出 `SUPPORTED_SPACES`（未知 space 由 `9g` 逼着抛错），要么按 §1.5 先测方向再登记并**实测** | `src/rag/common/embeddings.py` 的 `SUPPORTED_SPACES` / `similarity_from_distance`；判据 `uv run python scripts/gates/evidence_chain_gate.py` 的 `9g` |
+| B10 | **`TIER-DEBT-task3`**：`gen_answer_key_validity` / `gen_analysis_agreement` 两个 `optional=True` 的**机械替身**注册为 `tier=2`，按 §1.3 证据种类定义应为 0/1 ⇒ 后果是**假阴性（过严）**：判据级附表逐条走 `tier_ok_for(p.tier, …)`，无校准 ⇒ 这两行永远显示 tier✗，而理由并不存在。**主行不受影响**（optional 不进 `max(tier)`，由 `6h3` 取证） | 债务**在册未偿**：字面 token 自本轮起同时出现在代码注释、ledger 附表与本节 ⇒ 读者看到锚点能查到实名（评审 M-4 的验收条件） | 改 tier 会让 `7g` 变红 ⇒ **同一提交里**删掉 `7g` 的债名单条目并在本节写明「已清偿」（这条规矩本身就是防「改了判据忘了登记」） | `src/evaluation/task_eval/predicates/generate.py` 两处 `tier_reason=("TIER-DEBT-task3",)`；`uv run python scripts/gates/evidence_chain_gate.py` 的 `7f/7g`；`uv run python scripts/lib/build_claim_ledger.py --records …` 的附表「tier 依据」列 |
 | B11 | **`gen_answerability` 的 tier 锚点待 P−1 重新申报**（评审 M-5）：现挂 `§1.3-tier1`，而 §1.3 把 `answerable` 举为 **tier 2** 的例子（`docs/EVIDENCE_CHAIN.md` §1.3 那行 + `judge.py` 确有该 judge 字段）。今天它恒 `missing_premise`（n_measured=0、状态词「未测量」、V0 ② 已拦）⇒ **无假数** | 待处理（本轮只登记） | ★ **P−1 完成、它一旦能返 pass/fail 就必须重新申报锚点与 tier** —— 否则 `tier_ok_for` 会因 `tier≤1` **自动放行两个校准前置**（那才是真正的假绿） | `src/evaluation/task_eval/predicates/generate.py` 的 `gen_answerability` 注册行；附表同列 |
-| B12 | **`9i` 余项：B2 的 hop①（pipeline 非空路径经 `_finalize_retrieval` 写 `doc.metadata["_rerank_status"]`）仍只有「键名配对」结构锁 `9h`** —— hop③（probe 读侧）与桥接/空包、record、基线诸送达段已由收尾修复批（Important-3 明令范围）升为**行为锁** `9m`/`9n`/`9o`/`9p` | **部分清偿**（修复批只偿 Important-3 点到的一半：送达行为锁已进门禁；余 hop① 一条仍未偿，★ 不声称整条已清）。口径红线：行为锁证明的是「**自本批起新生成的工件会记录** `rerank_status`」——历史面**没有**被补齐：实测 28 份归档/该键在历史工件里的存在率 = 0（可重跑核对：`grep -c '"rerank_status"' evals/results/task_eval/*.jsonl | grep -v ":0" | wc -l` ⇒ 命中文件数应为 0；`grep -l rerank_status evals/baselines/*.json | wc -l` ⇒ 应为 0。★ 底数写成命令而不是条数，否则归档每加一行这个数就过期） | 下一轮补 hop① 行为锁：真实跑 `_finalize_retrieval`（构造 docs+ctx）断言 `doc.metadata["_rerank_status"]` 等于传入状态；加判据必须同步改 `_EXPECTED_ITEMS`（忘了就红） | `uv run python scripts/evidence_chain_gate.py` 的 `9h`（结构锁）+ `9m`/`9n`/`9o`/`9p`（行为锁）；历史零证据数字为收尾修复批报告实测 |
-| B13 | **R1-B 语义签署从未发生** ⇒ ledger 主表 `signed` 恒 False，**没有任何一行能到「已证明」** | 待人工：每个判据对着 `EFFECT_PLAN.md` §3.1 原文签一次「已审@版本」，约 1 人时、零 token | 落 `evals/claims/r1b_signatures.json`（约定格式写在 `scripts/build_claim_ledger.py` 的 `load_signatures()`）后该列自动变真 | `uv run python scripts/build_claim_ledger.py --records …` 看主表「R1-B 签署」列（当前显示签署文件不在册） |
-| B14 | **R3「孤立结论」在历史文档里仍大面积存在**：本轮只保证**自己新增/改写的每一行都带锚点**，历史行不要求全部清偿（裁定 T10-B） | 剩余条数**以 `--check` 第 2 段的真实输出为准**，本节不写估计值（写死就是第二条孤立结论） | §7.3 Freeze 收尾时逐条补锚点；补一条就把该行从红名单里消掉，无需改代码 | `uv run python scripts/build_claim_ledger.py --records … --check` **第 2 段**逐个文件打印行号 |
-| B15 | **V0 未清偿**：① 老归档缺 `provenance` 整包 / `item_reasons` 等新键；② B1 所述的 required 判据全未测量 | ★ **这是本轮的正确结果**，不是事故：`--check` 第 3 段就该红 | P−1 + §7.3 Freeze 全量重跑后自动清偿；**禁止**用 `--update-baseline` 或放松检查让它变绿 | `uv run python scripts/build_claim_ledger.py --records … --check` **第 3 段**（逐类缺键点名） |
-| B16 | **`ledger.md` 里有两句「等本轮」的生成文本**（判据附表那条 ★ 注记写着「与 §1.1 口径不一致 / 待 Task 10 文档收口」，工件状态那节写着「历史归档的 superseded 标注由 Task 10 收尾」）⇒ 收口已发生，句子仍是收口**前**的口吻 | 本轮**不改**：`ledger.md` 是生成物，手改会立刻让 `--check` 第 1 段红（文档 ≠ 重算）；而注记文本在 `scripts/build_claim_ledger.py` 里 ⇒ 本 Task 明令不动 `scripts/` | 下一次动 `scripts/` 的小改里同步这两句（★ 只改文本、不改判定），或等 §7.3 Freeze 重跑时随取证时间一起刷新 | 证据：`uv run python scripts/build_claim_ledger.py --records … --check` 第 1 段仍 PASS 就是这两句「未被手改」的记录；现行判据以 `docs/EVIDENCE_CHAIN.md` §1.1 为准，替代关系以 `evals/claims/artifact_status.json` 为准 |
-| B17 | **`evals/claims/artifact_status.json` 目前没有门禁消费者**：A.1 要求的「`superseded_by` 指向真实存在的工件」这一条，只由报告 §4 的一次性脚本查过（`build_claim_ledger.py:814` 附近只打印 active 行）⇒ 引用关系断了不会有判据红。★ 收尾修复批**把登记写准（不偿债）**：两份「工件状态」视图是**不同口径、不许默认为一致** —— ① `artifact_status.json`（17 行 = 9 `superseded` + 8 `active`）= 旧工件**替代关系真源**，手工登记件、**目前没有命令能再生成它**；② `ledger.md:116-124` 那张表（3 行全 `active`）由 `build_claim_ledger.py` 的 `render_artifacts()` 从**本次 ledger 运行的输入工件**（`--records` 归档 + `falsify_latest.json` + `calibration_30.jsonl`）渲染，印的是「本次重算消费了哪些工件」而**不是**替代关系 ⇒ 只有 3 行、构造使然（`ledger.md` 那句「本 ledger 当前只登记 active」即此口径的自述，B16 同源）。17 行的 `path`/`superseded_by` 存在性与「指向 active 新一代」已由 A4 行内那条只读命令实测核过（链式指错 0），但那是**验证工具**、不是判据 | **登记未修**（本 Task 放行条件 1 禁改 `scripts/`，本批同样不偿：不加判据、不改 `build_claim_ledger` 去读这份 JSON）。★ 后续处理条件：下一次触 `scripts/` 的提交里，同批 ① 给 `artifact_status.json` 加一条判据（每个 `superseded_by` 目标存在 + 每个 `path` 存在 + 目标须为 active），② 同步改写 ledger 附表那条 ★ 注记的渲染字符串（B16 遗留的「历史指向」即由此收口），③ 一并把 ①② 两份视图的口径差异写进生成文本。两次改动同批，避免「改了判据忘了登记」 | 证据：`evals/claims/artifact_status.json` 的 17 行；`grep -n artifact_status scripts/build_claim_ledger.py`；两视图差异核对命令见 A4 行内（只读、可重跑） |
+| B12 | **`9i` 余项：B2 的 hop①（pipeline 非空路径经 `_finalize_retrieval` 写 `doc.metadata["_rerank_status"]`）仍只有「键名配对」结构锁 `9h`** —— hop③（probe 读侧）与桥接/空包、record、基线诸送达段已由收尾修复批（Important-3 明令范围）升为**行为锁** `9m`/`9n`/`9o`/`9p` | **部分清偿**（修复批只偿 Important-3 点到的一半：送达行为锁已进门禁；余 hop① 一条仍未偿，★ 不声称整条已清）。口径红线：行为锁证明的是「**自本批起新生成的工件会记录** `rerank_status`」——历史面**没有**被补齐：实测 28 份归档/该键在历史工件里的存在率 = 0（可重跑核对：`grep -c '"rerank_status"' evals/results/task_eval/*.jsonl | grep -v ":0" | wc -l` ⇒ 命中文件数应为 0；`grep -l rerank_status evals/baselines/*.json | wc -l` ⇒ 应为 0。★ 底数写成命令而不是条数，否则归档每加一行这个数就过期） | 下一轮补 hop① 行为锁：真实跑 `_finalize_retrieval`（构造 docs+ctx）断言 `doc.metadata["_rerank_status"]` 等于传入状态；加判据必须同步改 `_EXPECTED_ITEMS`（忘了就红） | `uv run python scripts/gates/evidence_chain_gate.py` 的 `9h`（结构锁）+ `9m`/`9n`/`9o`/`9p`（行为锁）；历史零证据数字为收尾修复批报告实测 |
+| B13 | **R1-B 语义签署从未发生** ⇒ ledger 主表 `signed` 恒 False，**没有任何一行能到「已证明」** | 待人工：每个判据对着 `EFFECT_PLAN.md` §3.1 原文签一次「已审@版本」，约 1 人时、零 token | 落 `evals/claims/r1b_signatures.json`（约定格式写在 `scripts/lib/build_claim_ledger.py` 的 `load_signatures()`）后该列自动变真 | `uv run python scripts/lib/build_claim_ledger.py --records …` 看主表「R1-B 签署」列（当前显示签署文件不在册） |
+| B14 | **R3「孤立结论」在历史文档里仍大面积存在**：本轮只保证**自己新增/改写的每一行都带锚点**，历史行不要求全部清偿（裁定 T10-B） | 剩余条数**以 `--check` 第 2 段的真实输出为准**，本节不写估计值（写死就是第二条孤立结论） | §7.3 Freeze 收尾时逐条补锚点；补一条就把该行从红名单里消掉，无需改代码 | `uv run python scripts/lib/build_claim_ledger.py --records … --check` **第 2 段**逐个文件打印行号 |
+| B15 | **V0 未清偿**：① 老归档缺 `provenance` 整包 / `item_reasons` 等新键；② B1 所述的 required 判据全未测量 | ★ **这是本轮的正确结果**，不是事故：`--check` 第 3 段就该红 | P−1 + §7.3 Freeze 全量重跑后自动清偿；**禁止**用 `--update-baseline` 或放松检查让它变绿 | `uv run python scripts/lib/build_claim_ledger.py --records … --check` **第 3 段**（逐类缺键点名） |
+| B16 | **`ledger.md` 里有两句「等本轮」的生成文本**（判据附表那条 ★ 注记写着「与 §1.1 口径不一致 / 待 Task 10 文档收口」，工件状态那节写着「历史归档的 superseded 标注由 Task 10 收尾」）⇒ 收口已发生，句子仍是收口**前**的口吻 | 本轮**不改**：`ledger.md` 是生成物，手改会立刻让 `--check` 第 1 段红（文档 ≠ 重算）；而注记文本在 `scripts/lib/build_claim_ledger.py` 里 ⇒ 本 Task 明令不动 `scripts/` | 下一次动 `scripts/` 的小改里同步这两句（★ 只改文本、不改判定），或等 §7.3 Freeze 重跑时随取证时间一起刷新 | 证据：`uv run python scripts/lib/build_claim_ledger.py --records … --check` 第 1 段仍 PASS 就是这两句「未被手改」的记录；现行判据以 `docs/EVIDENCE_CHAIN.md` §1.1 为准，替代关系以 `evals/claims/artifact_status.json` 为准 |
+| B17 | **`evals/claims/artifact_status.json` 目前没有门禁消费者**：A.1 要求的「`superseded_by` 指向真实存在的工件」这一条，只由报告 §4 的一次性脚本查过（`build_claim_ledger.py:814` 附近只打印 active 行）⇒ 引用关系断了不会有判据红。★ 收尾修复批**把登记写准（不偿债）**：两份「工件状态」视图是**不同口径、不许默认为一致** —— ① `artifact_status.json`（17 行 = 9 `superseded` + 8 `active`）= 旧工件**替代关系真源**，手工登记件、**目前没有命令能再生成它**；② `ledger.md:116-124` 那张表（3 行全 `active`）由 `build_claim_ledger.py` 的 `render_artifacts()` 从**本次 ledger 运行的输入工件**（`--records` 归档 + `falsify_latest.json` + `calibration_30.jsonl`）渲染，印的是「本次重算消费了哪些工件」而**不是**替代关系 ⇒ 只有 3 行、构造使然（`ledger.md` 那句「本 ledger 当前只登记 active」即此口径的自述，B16 同源）。17 行的 `path`/`superseded_by` 存在性与「指向 active 新一代」已由 A4 行内那条只读命令实测核过（链式指错 0），但那是**验证工具**、不是判据 | **登记未修**（本 Task 放行条件 1 禁改 `scripts/`，本批同样不偿：不加判据、不改 `build_claim_ledger` 去读这份 JSON）。★ 后续处理条件：下一次触 `scripts/` 的提交里，同批 ① 给 `artifact_status.json` 加一条判据（每个 `superseded_by` 目标存在 + 每个 `path` 存在 + 目标须为 active），② 同步改写 ledger 附表那条 ★ 注记的渲染字符串（B16 遗留的「历史指向」即由此收口），③ 一并把 ①② 两份视图的口径差异写进生成文本。两次改动同批，避免「改了判据忘了登记」 | 证据：`evals/claims/artifact_status.json` 的 17 行；`grep -n artifact_status scripts/lib/build_claim_ledger.py`；两视图差异核对命令见 A4 行内（只读、可重跑） |
 
 #### C. 尚待验证的归因（★ 不许升格成「改善」或「退化」）
 
 | # | 事实 | 现在能说到哪一步 | 取证命令 |
 |---|---|---|---|
-| C1 | **六条基线 diff 全非零** ⇒ 计划 Step 4 的预期「默认路由逐位复现」**未实现**（brief A.2 ①，措辞照此） | 只能写「预期不成立，六条逐条 diff 见 §20.7.1」；不得写「复现」 | `uv run python -c` 读 `evals/baselines/retrieval_baseline.json` 与 `evals/baselines/pre_task9_20261009/retrieval_baseline.json` 相减（§20.7.1 登记时用的就是这条重算）。★ 自收尾修复批起改跑可重跑的**两向穷尽核对**：`uv run python scripts/check_baseline_diff_registration.py`（六条 × 全部指标：工件的每个非零 diff 都已登记 ∧ 登记的每个 diff 都能在工件核到，任一处对不上即退出码非 0；验证工具，不进 `evidence_chain_gate`） |
+| C1 | **六条基线 diff 全非零** ⇒ 计划 Step 4 的预期「默认路由逐位复现」**未实现**（brief A.2 ①，措辞照此） | 只能写「预期不成立，六条逐条 diff 见 §20.7.1」；不得写「复现」 | `uv run python -c` 读 `evals/baselines/retrieval_baseline.json` 与 `evals/baselines/pre_task9_20261009/retrieval_baseline.json` 相减（§20.7.1 登记时用的就是这条重算）。★ 自收尾修复批起改跑可重跑的**两向穷尽核对**：`uv run python scripts/ops/check_baseline_diff_registration.py`（六条 × 全部指标：工件的每个非零 diff 都已登记 ∧ 登记的每个 diff 都能在工件核到，任一处对不上即退出码非 0；验证工具，不进 `evidence_chain_gate`） |
 | C2 | **权威路由（`real+on`）有代码态对照**（`dd4e96f` 独立 worktree 与本轮同路由、完整 156 条） | 支持「该漂移在**阶段 A 之前**已存在」⇒ **不得**说本轮代码造成了它（brief A.2 ②） | 三方对照的逐指标结果登记在 §20.7.1 的「受控对照」段（回指，不重述） |
 | C3 | **其余五条路由没有代码态对照** | 一律保留「**归因待定**」（brief A.2 ③）；★ 不许写成检索质量改善或退化 | §20.7.1 的六行表（每行自己标了归因列） |
 | C4 | `mean_evidence_count` 的名义 +0.0064 | ★ 必须连同 §20.2 已登记的**同码运行间抖动带**一并披露，**不作为代码效果证据**（brief A.2 ④）。正确口径是「本轮代码在权威路由上**没有与已知抖动可区分的可测影响**」 | 证据：抖动带与其三次读数登记在 **§20.2**（Task 9 之前就在）；重录侧的引用在 **§20.7.1** ⇒ 两处回指，本节不另写数字 |
@@ -1345,10 +1345,10 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 
 | 动作 | 落点 | 命令 |
 |---|---|---|
-| 勘误改成命令形状 | `docs/README.md` 的锚点行 / 门禁行 / `task_eval` 行 / `.gitignore` 例外行 | 被替换掉的旧声称：写死标签、写死项数、写死「`git ls-files` = 0」三处 ⇒ 现查 `git tag -l`、`grep -n "^_EXPECTED_ITEMS" scripts/memory_step4fix_gate.py`、`git ls-files evals/results/task_eval` |
+| 勘误改成命令形状 | `docs/README.md` 的锚点行 / 门禁行 / `task_eval` 行 / `.gitignore` 例外行 | 被替换掉的旧声称：写死标签、写死项数、写死「`git ls-files` = 0」三处 ⇒ 现查 `git tag -l`、`grep -n "^_EXPECTED_ITEMS" scripts/mem/memory_step4fix_gate.py`、`git ls-files evals/results/task_eval` |
 | `--dataset` 路径校正 | `CLAUDE.md`「常用命令」块、`README.md`「RAGAS 评测」块 | 旧写法 `evals/sample_408.jsonl` **不存在**；真实路径 = `evals/datasets/golden/sample_408.jsonl`（= `src/evaluation/cli.py` 的 `--dataset` 默认值）。核对：`git ls-files evals/datasets/golden` |
 | 旧工件标 `superseded` | `evals/claims/artifact_status.json` | ★ 收尾修复批更正：此件为 Task 10 **手工登记**——`claims.artifact_status()` 只是行形状 helper、**不产这份文件** ⇒ 目前没有命令能再生成它（清偿条件挂 B17；原句「由该函数生成 + 本节末有自查命令」经查为**空头承诺**，Minor-2 按实测改掉）。`superseded_by` 全部指向在库路径且为同表 active 新一代；只读核对命令 = A4 行内那条 `uv run python -c`（可重跑，实测 `缺失: 无`） |
-| `ledger.md` 定稿 | `evals/claims/ledger.md`（此前从未落盘，只有 `ledger_draft.md`） | 生成：`uv run python scripts/build_claim_ledger.py --records evals/results/task_eval/ec_r1_final_gate.jsonl --out evals/claims/ledger.md`；复核：同命令加 `--check`（第 1 段必须 PASS = 文档 == 重算） |
+| `ledger.md` 定稿 | `evals/claims/ledger.md`（此前从未落盘，只有 `ledger_draft.md`） | 生成：`uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r1_final_gate.jsonl --out evals/claims/ledger.md`；复核：同命令加 `--check`（第 1 段必须 PASS = 文档 == 重算） |
 
 ### 20.8 Step 9 实跑结果（2026-10-07 起，逐项追加）
 
@@ -1575,7 +1575,7 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 > ★ **为什么必须现在定稿**：冻结件 §6 写的是「门槛数字推迟到 Phase 0 回填 —— 先测量，再据真实分布设定」，
 > 而规则（怎么算）v1.0 已冻结。⇒ 门槛若等跑完再定，就是**看着结果画线**，等于没有门槛。
 > ★ **本节是 §6 的执行细则，不改 `docs/EFFECT_PLAN.md`**（冻结件只读，drift 记在活文档 —— 纪律 #20）。
-> ★ 数据来源全部可重跑：`PYTHONIOENCODING=utf-8 uv run python scripts/s6_baseline_distribution.py`
+> ★ 数据来源全部可重跑：`PYTHONIOENCODING=utf-8 uv run python scripts/ops/s6_baseline_distribution.py`
 >   （只读归档、零 LLM）；检索侧由门禁自己判（命令见该脚本末行输出）。
 
 | §6 维度 | 冻结的占位 | Phase 0 / Phase 1 实测 | 能否照原口径回填 | **回填门槛** | 依据与必须一起说的风险 |
@@ -1587,7 +1587,7 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 | Memory | ≥80% correct-use | 0B 该率**全 N/A**（6/6；#9：0B 的 gold 里没有 `expected_memory`）；新口径下可测正样本 **n=1**（§20.8.6） | ❌ **无法按 Phase 0 回填** | **已按 D15 改为三条结构断言**（不写百分数）：①**配对成立** `metrics.paired_control_verdict` —— 只统计「两臂都满足前置条件的正样本**交集**」，ON 侧必须召回、OFF 侧必须不召回，且 **OFF 侧出现任何记忆卡一律判失败**（= #24 探测器）；交集为 0 时判**不通过**，不许把「压根没配对」印成「OFF 干净」；②**可追溯** `metrics.memory_traceable`（逐轮日志 + 记忆卡通道 + `episodes` 字段 + `store_enabled` 齐备；`episodes=[]` 是合法结果，缺字段才是没测）；③**分母摊开** `report.memory_measure_scope`（正样本总数 / valid 数 / 不可测数 / 可追溯数）⇒ 报告里任何「100%」旁边必须能看到 1/3 | ★ 为什么：n=1 上的百分数没有统计意义（答辩问「这个 100% 是几条」就崩），而 0B 那批根本没测过这个量 ⇒ 与其回填一个假门槛，不如把「能不能证明」本身门槛化。护栏 **㉗a~㉗g**；㉗g 是拿 d8b/d8/kp 三份真实归档做的**历史三情形回归**（修好后通过 / OFF 有卡被抓住 / 无交集不算通过） |
 | Retrieval | 不低于 V-2026-10-02 | ③ 锚点复现：`kp_mrr 0.8048/0.8051` · `kp_hit@k 0.9103/0.9167` · `category_hit@1 0.9423` · `kp_annotated 156/156`（§20.2 末） | ✅ **已有机械实现** | **`retrieval_gate` exit 0**（各指标不低于基线，容差 **0.02**） | ★ `mean_evidence_count` 有**运行间抖动**（同一份代码连跑 3.9295 vs 3.9231）⇒ 引用它必须带上抖动，别写成三位小数稳定的量 |
 | hard failure | <5% | 两份归档都是 **0/66** | ✅ 能 | **<5%**，分子 = 有 `hard_fails` 的 case，分母 = **有效 n**（排除 `case_invalid`，#6） | 现状远低于门槛；分母口径必须与 `report.failure_rate` 一致，否则两处数字对不上 |
-| tool error | <5% | Phase 1 grade **2/15 = 13.3%**（`grd-004`/`grd-011`，`PHASE1_VERIFY.md` TODO-1 root cause 未确证）；整体 2/66 = 3.03%；0B 全部 0% | ⚠️ **口径决定成败** | **已按 D16 定为「任务级 <5%」**：任一任务 ≥5% 即该行不通过；分子 = `primary_failure=tool_error` 或有 `hard_fails` 的 case，分母 = 该任务的有效 n；`scripts/s6_baseline_distribution.py` 末尾的 D16 段一行命令直接出每任务判定 | ★ 不用整体口径 = 不把 13.3% 说成 3%（否则「你这 <5% 怎么算的」站不住）。⇒ 当前 grade **预判不达**，#11/#12/#13 修完分数解析与 KP 透传后的真实值等 §6 整轮测 |
+| tool error | <5% | Phase 1 grade **2/15 = 13.3%**（`grd-004`/`grd-011`，`PHASE1_VERIFY.md` TODO-1 root cause 未确证）；整体 2/66 = 3.03%；0B 全部 0% | ⚠️ **口径决定成败** | **已按 D16 定为「任务级 <5%」**：任一任务 ≥5% 即该行不通过；分子 = `primary_failure=tool_error` 或有 `hard_fails` 的 case，分母 = 该任务的有效 n；`scripts/ops/s6_baseline_distribution.py` 末尾的 D16 段一行命令直接出每任务判定 | ★ 不用整体口径 = 不把 13.3% 说成 3%（否则「你这 <5% 怎么算的」站不住）。⇒ 当前 grade **预判不达**，#11/#12/#13 修完分数解析与 KP 透传后的真实值等 §6 整轮测 |
 | provenance | 100% | 0B/Phase 1 归档 **0/66 带 `code_version`、0/66 带 `prompt_set_version`**（#3） | ❌ 对历史不可能 | **定义成「③ 之后新产出的每条 record 100% 带 `code_version` + `prompt_set_version` + `retrieval_cfg` + `top_items` + `turn_log`」** | 由护栏 ⑮d/⑮e/⑯/⑰/㉓i 保证；历史归档按 #3 披露「缺字段读作未知、**绝不回填当前 hash**」 |
 | Docker / TEI | 一键启动成功 | 非数字项 | ✅ | **manual**：`docker compose up -d` → `preflight_check()` 返回空（㉑a 探真实推理端点、㉑h 不因缺 `/health` 假红） | 半死 TEI（health 200 / embeddings 502）是**实发事故**，预检必须拦在开跑前 |
 | 四任务链 | 全部可演示 | 非数字项 | ✅ | **manual**：qa / generate / grade / verify 各跑 1 条 + memory 跑 1 条 A→B 跨会话（§20.8.6 那条 `mem-002`） | Memory 演示要能当场指出记忆卡（`MEMORY_CARD_MESSAGE_ID`），否则"有记忆"不可证 |
@@ -1623,7 +1623,7 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.task_eval run 
 
 - 上面这张表就是 §6 的**验收定义**；实跑产出 `phase1_final_gate_*.jsonl` 后逐行填「实测值 vs 门槛」，
   **不达标就照实写不达标**（Verify 的 ge4 与 grade 的 tool error 当前**预判不达**）。
-- ★ 本锚点之后新增的只有**一个只读诊断脚本** `scripts/s6_baseline_distribution.py`（纯新增，
+- ★ 本锚点之后新增的只有**一个只读诊断脚本** `scripts/ops/s6_baseline_distribution.py`（纯新增，
   没有改动任何既有 `src/`+`scripts/` 文件），⇒ `git diff V-2026-10-08 HEAD -- src scripts` 应只显示该文件新增。
 
 ### 22. §6 Final Gate 实测（2026-10-08 实跑 · 只填「实测 vs 门槛」，门槛一字未动）

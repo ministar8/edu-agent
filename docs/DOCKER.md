@@ -121,10 +121,10 @@ TEI **不在 `compose.yaml`** 里 —— 它是独立外部依赖，与 `agent_s
 - 容器名是 **`tei-rerank`**，不是 `tei-reranker`。`restart=unless-stopped`。
 - 端口必须与 `.env` 的 `EMBEDDING_API_BASE` / `RERANK_LOCAL_URL` 一致（默认 `http://localhost:11435` / `http://localhost:11436`）。
 
-启动后模型加载约 **30~60s**。**`/health` 返回 200 ≠ 模型已就绪**，以 `scripts/tei_ready.py` 为准。
+启动后模型加载约 **30~60s**。**`/health` 返回 200 ≠ 模型已就绪**，以 `scripts/ops/tei_ready.py` 为准。
 
 ```powershell
-PYTHONPATH=src uv run python scripts/tei_ready.py
+PYTHONPATH=src uv run python scripts/ops/tei_ready.py
 ```
 
 ### 端点契约（**探活时不要凭记忆写 curl**）
@@ -164,10 +164,10 @@ PYTHONPATH=src uv run python scripts/tei_ready.py
 > print(len(get_embeddings().embed_query('探活')))"
 > ```
 >
-> ★ **这件事已有现成脚本**：`scripts/tei_ready.py`（TEI 就绪巡检）——
+> ★ **这件事已有现成脚本**：`scripts/ops/tei_ready.py`（TEI 就绪巡检）——
 >   它**复用项目自己的 `rag.common.embeddings` / `rag.retrieval.reranker`** 发最小请求，**同时覆盖两个端点**
 >   （两个端点的请求体 schema 不同，见上文）。用法：
->   `PYTHONPATH=src .venv/Scripts/python.exe scripts/tei_ready.py`
+>   `PYTHONPATH=src .venv/Scripts/python.exe scripts/ops/tei_ready.py`
 >   ⇒ **不要**另外手写 curl、也不要再写一个探活脚本 —— 那会造出第二份写法，迟早漂移。
 
 ## 开发热同步
@@ -186,7 +186,7 @@ docker compose watch        # 源码改动 → 同步进容器 → 自动重启
 |---|---|
 | `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker 守护进程未运行。`docker --version` 只报客户端版本，不代表守护进程在跑；用 `docker ps` 或 `tasklist \| grep -i docker` 确认 |
 | 构建时找不到依赖 | `uv.lock` 与 `pyproject.toml` 不一致。本地先跑 `uv lock` 再构建 |
-| 容器起但检索报错 | 先跑 `scripts/tei_ready.py`；容器是否在跑（`tei-embedding` / `tei-rerank`）、地址是否需 `host.docker.internal`，见「TEI」与「环境变量」 |
+| 容器起但检索报错 | 先跑 `scripts/ops/tei_ready.py`；容器是否在跑（`tei-embedding` / `tei-rerank`）、地址是否需 `host.docker.internal`，见「TEI」与「环境变量」 |
 | 改了代码没生效 | 未用 `compose watch`，或该包不在 `develop.watch` 列表内 |
 | 数据丢失 | SQLite 库未挂载 volume，`down` 后随之删除 |
 

@@ -39,11 +39,11 @@
 | 命令 | 成本 | 说明 |
 |---|---|---|
 | `PYTHONPATH=src uv run python -m evaluation.task_eval sanity` | 零 LLM | Gold 体检（canonical / 可机械判定 / gold 泄漏 / 任务专有）。**进 0B 前必跑，有 ERROR 不得跑** |
-| `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step4fix_gate.py` | 零 LLM | **项数与红绿灯只由脚本自己报，文档不抄生成值**（本行此前写死「现 129 项」，而代码声明值已两度上移 ⇒ 属 `EVIDENCE_CHAIN.md` §7 登记的活文档勘误）：声明值现查 `grep -n "^_EXPECTED_ITEMS" scripts/memory_step4fix_gate.py`（含反向自查：脚本收尾比对「判定项数 = 声明值」且跳过数为 0，少跑即 exit 1，见 `EXPERIMENTS.md` §20.5 #30）；实跑命令 = 本行左列。覆盖：⑭ Generate 主指标改逐题「适用项全过」（含「两口径必须分叉且池化偏高」的方向性判据）/ ⑮ 死代码删净（AST 级）+ record 落 `prompt_set_version`（反向验证值必须是活的）/ ⑦ paired control 接口 / ⑧ 示例名 canonical / ⑨ 抗格式飘移 / ⑩ context-fallback（含 ⑩e 并发隔离、⑩f 显式 config 契约）/ ⑪ topic 归一 / ⑫ 词表同源（含 ⑫i 双读、⑫k 根节点双向）/ ⑬ 重判归因保全 + jsonl 尾换行 + 负样本前置条件 / ③a~③u 评测器口径（含 ③j+ 学科码全体扫描、两极 gold 不可判 + `verdict_agreement` + 分数解析遮蔽「满分」） |
-| `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py` | 零 LLM | **证据链门禁**（判据四态与 R5 复合 / mutation 反向取证 / 三态推导与 ledger 一致性 / V0 拦截 / B1·B2·B7 结构与行为锁）：项数同样只看脚本自己打印的那行「全绿（N 项）」，本文不写 N。★ **它全绿只证明「当前这些检查项通过」** —— 不证明历史实验逐位复现、也不证明各层级语义债已清零（边界声明见下面「收尾陈述的边界」与 `EXPERIMENTS.md` §20.7.2）。复现：本行左列 |
-| 同上 `scripts/memory_step4_gate.py` | 零 LLM | 14 项：每 case 独立 `user_id` + 跑前清理 Store（含反向验证） |
-| 同上 `scripts/memory_step2_gate.py` | 2 次批改 LLM | 11 项：批改 → KP → episode → `weak_topics` → 记忆卡 全链路 |
-| 同上 `scripts/memory_e5_probe.py` | 12 次批改 LLM | ★ **测量，不是门禁**（退出码恒 0）：配对对照「词表版 vs 8 示例版」的跟随率。`--reanalyse --write` 可**零成本**用新 gold 原地重析 |
+| `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_step4fix_gate.py` | 零 LLM | **项数与红绿灯只由脚本自己报，文档不抄生成值**（本行此前写死「现 129 项」，而代码声明值已两度上移 ⇒ 属 `EVIDENCE_CHAIN.md` §7 登记的活文档勘误）：声明值现查 `grep -n "^_EXPECTED_ITEMS" scripts/mem/memory_step4fix_gate.py`（含反向自查：脚本收尾比对「判定项数 = 声明值」且跳过数为 0，少跑即 exit 1，见 `EXPERIMENTS.md` §20.5 #30）；实跑命令 = 本行左列。覆盖：⑭ Generate 主指标改逐题「适用项全过」（含「两口径必须分叉且池化偏高」的方向性判据）/ ⑮ 死代码删净（AST 级）+ record 落 `prompt_set_version`（反向验证值必须是活的）/ ⑦ paired control 接口 / ⑧ 示例名 canonical / ⑨ 抗格式飘移 / ⑩ context-fallback（含 ⑩e 并发隔离、⑩f 显式 config 契约）/ ⑪ topic 归一 / ⑫ 词表同源（含 ⑫i 双读、⑫k 根节点双向）/ ⑬ 重判归因保全 + jsonl 尾换行 + 负样本前置条件 / ③a~③u 评测器口径（含 ③j+ 学科码全体扫描、两极 gold 不可判 + `verdict_agreement` + 分数解析遮蔽「满分」） |
+| `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/gates/evidence_chain_gate.py` | 零 LLM | **证据链门禁**（判据四态与 R5 复合 / mutation 反向取证 / 三态推导与 ledger 一致性 / V0 拦截 / B1·B2·B7 结构与行为锁）：项数同样只看脚本自己打印的那行「全绿（N 项）」，本文不写 N。★ **它全绿只证明「当前这些检查项通过」** —— 不证明历史实验逐位复现、也不证明各层级语义债已清零（边界声明见下面「收尾陈述的边界」与 `EXPERIMENTS.md` §20.7.2）。复现：本行左列 |
+| 同上 `scripts/mem/memory_step4_gate.py` | 零 LLM | 14 项：每 case 独立 `user_id` + 跑前清理 Store（含反向验证） |
+| 同上 `scripts/mem/memory_step2_gate.py` | 2 次批改 LLM | 11 项：批改 → KP → episode → `weak_topics` → 记忆卡 全链路 |
+| 同上 `scripts/mem/memory_e5_probe.py` | 12 次批改 LLM | ★ **测量，不是门禁**（退出码恒 0）：配对对照「词表版 vs 8 示例版」的跟随率。`--reanalyse --write` 可**零成本**用新 gold 原地重析 |
 | `… task_eval run --no-agent` / `reprobe` / `backfill` | 零 LLM | 只跑检索探针 / 只重算检索侧指标 / 回填机械可算字段 —— 改判据后**先走这三条**，别急着重跑 agent |
 
 > ★ **CI 只覆盖检索门禁的默认路由**（假 embedding，比 1 份基线）。
@@ -53,7 +53,7 @@
 
 ## 收尾陈述的边界（引用「门禁绿灯」「零 token」这两句时必须一起引）
 
-① **门禁全绿只证明「当前这些检查项通过」** —— 它**不**证明所有历史实验都能复现（本轮重录后六条检索基线 diff 全非零、逐条登记与归因边界见 `EXPERIMENTS.md` **§20.7.1**），也**不**证明各层级的语义债已清零（`TIER-DEBT-task3`、`9i` 这类已登记项在当前态下照绿 ⇒ 护栏通过的语义是「债名单与登记一致」，不是「债已清偿」；待处理清单见 **§20.7.2**）。复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`（项数只看它自己打印的那行）与 `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.py --check` 的**第 3 段**（V0 未清偿 ⇒ 那一段本来就该红）。
+① **门禁全绿只证明「当前这些检查项通过」** —— 它**不**证明所有历史实验都能复现（本轮重录后六条检索基线 diff 全非零、逐条登记与归因边界见 `EXPERIMENTS.md` **§20.7.1**），也**不**证明各层级的语义债已清零（`TIER-DEBT-task3`、`9i` 这类已登记项在当前态下照绿 ⇒ 护栏通过的语义是「债名单与登记一致」，不是「债已清偿」；待处理清单见 **§20.7.2**）。复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/gates/evidence_chain_gate.py`（项数只看它自己打印的那行）与 `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --check` 的**第 3 段**（V0 未清偿 ⇒ 那一段本来就该红）。
 
 ② **「零 LLM token」限定在那六次路由重录**，不外推到整个项目生命周期。证据：每份新基线自带的 `provenance.model_refs.agent`（假模型哨兵值 ⇒ 那六跑没打模型；TEI 是真实服务，属**非 LLM** 调用），逐份登记见 `EXPERIMENTS.md` §20.7.1；复现：`git ls-files evals/baselines` 列出现役基线后逐个读它的 `_meta` / `provenance` 键。★ 项目其余环节照常烧 token —— Step 9 真跑、step2 复跑、§6 整轮都在 `EXPERIMENTS.md` §20.8 / §22 里逐份记着调用次数，引用「零 token」时不要把它们一起抹掉。
 
@@ -80,7 +80,7 @@
 | `generation/ragas/` | `raw.jsonl` 逐样本 · `metrics.json` 汇总 · `summary.md` 结论 |
 | `system_validation/` | Agent 行为 · LangGraph State 闭环 |
 | **`task_eval/`** | **效果章全部证据**：`phase0_baseline_final.jsonl`（66 条**冻结、只读**）· `PHASE0_FREEZE.md` · `phase1_baseline_v2.jsonl` · `PHASE1_VERIFY.md` · Step 5 配对 `phase1_memory_step5_store_{on,off}.jsonl` + `PHASE1_MEMORY_STEP5_FINDINGS.md` · `phase1_e5_prompt_following.jsonl` · **`HANDOVER.md`（交接活文档）** · 本轮重录 `ec_r1_final_gate.jsonl` / `.report.json`。★ 该目录的**跟踪状态看命令、不看本文**（此前写死的「`git ls-files` = 0」作废：数字会漂、命令不会）——已跟踪 = `git ls-files evals/results/task_eval \| wc -l`，未跟踪 = `git status --short -- evals/results/task_eval \| grep -c '^??'` 的行数 ⇒ Task 10 起数值工件（`*.jsonl` / `*.report.json`）已入库，★ **逐轮 `*.log` 仍不入库**（单份可达 MB 级 ⇒ 沿用 D11 的取舍，剩余未跟踪名单现查 `git status --short -- evals/results/task_eval`），「冻结、只读」现在有版本控制兜着；旧读数与新一代的替代关系记在 `evals/claims/artifact_status.json`（标 `superseded`，**不删原文件、不改数值**） |
-| **`../claims/`** | **主张 ledger 与工件状态**：`ledger.md`（生成物，勿手改）· `ledger_draft.md`（Task 6/7 期间的草稿，留档）· `falsify_latest.json`（mutation 取证件）· `artifact_status.json`（旧工件的 `superseded` 标注 + `superseded_by` 指向）。★ **`ledger.md` 由脚本重算产出，本文只给索引**：生成 = `uv run python scripts/build_claim_ledger.py --records` 加归档路径、`--check` 校验「文档 == 重算」；本目录**不含手写百分数** |
+| **`../claims/`** | **主张 ledger 与工件状态**：`ledger.md`（生成物，勿手改）· `ledger_draft.md`（Task 6/7 期间的草稿，留档）· `falsify_latest.json`（mutation 取证件）· `artifact_status.json`（旧工件的 `superseded` 标注 + `superseded_by` 指向）。★ **`ledger.md` 由脚本重算产出，本文只给索引**：生成 = `uv run python scripts/lib/build_claim_ledger.py --records` 加归档路径、`--check` 校验「文档 == 重算」；本目录**不含手写百分数** |
 | `../baselines/` | 门禁基线（`retrieval_baseline.json` 等 6 份 + `probe_baseline.json` 等），门禁运行时即时比对。★ Task 9 重录过一轮 ⇒ **两代并存**：旧一代整份留在 `evals/baselines/pre_task9_20261009/`，替代关系标在 `evals/claims/artifact_status.json`（`superseded`，原文件不删）；名单与份数现查 `git ls-files evals/baselines`，六条 diff 与归因见 `EXPERIMENTS.md` §20.7.1 |
 
 > 目录清单与命名约定的说明见 `evals/results/README.md`；实验数字与解读见 `docs/EXPERIMENTS.md`。

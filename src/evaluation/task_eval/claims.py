@@ -10,7 +10,7 @@ CLAIM_UNMEASURED = "未测量"
 
 # tier 声明的是「这个数字由谁决定」，不是可随手改的样式（Task 6 评审 I-2 的根因就是这个数由人
 # 手写、且没人检查它凭什么）。锚点必须是文档/裁定记录里查得到的**实名**，自由文本不算依据。
-# ★ 这张白名单**只有一份**（Task 7 Step 4b 从 `scripts/build_claim_ledger.py` 上移）：
+# ★ 这张白名单**只有一份**（Task 7 Step 4b 从 `scripts/lib/build_claim_ledger.py` 上移）：
 #   ledger 行侧与 registry 判据侧共用 ⇒ 两处不可能各自漂移，而「两套现实」正是本计划要消灭的。
 TIER_ANCHORS = frozenset(
     {

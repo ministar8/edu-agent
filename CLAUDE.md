@@ -55,9 +55,9 @@ PYTHONPATH=src uv run python -m evaluation.task_eval reprobe      # 只重跑检
 PYTHONPATH=src uv run python -m evaluation.task_eval backfill     # 回填机械可算字段（零 LLM）
 
 # Memory 链路 Gate 与效果探针（★ 本机必须带 PYTHONIOENCODING=utf-8，否则 GBK 打印 ✅ 时崩）
-PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step2_gate.py
-PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_step4fix_gate.py
-PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/memory_e5_probe.py --reanalyse --write  # 零 LLM 重析
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_step2_gate.py
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_step4fix_gate.py
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_e5_probe.py --reanalyse --write  # 零 LLM 重析
 uv run python src/run_service.py         # 启动服务 → http://127.0.0.1:8000
 uv run python -m rag.ingest              # 知识库增量入库
 uv run python -m rag.ingest --rebuild    # 知识库全量重建
@@ -114,7 +114,7 @@ docker compose up --build                # 容器化启动
 
 - 检索依赖两个本地 TEI 容器：`tei-embedding`（`localhost:11435`）与 `tei-rerank`（`localhost:11436`）。
   部署入口只有 `scripts/tei_deploy.ps1`；日常 `docker start tei-embedding tei-rerank`。
-  就绪以 `scripts/tei_ready.py` 为准（`/health` 200 ≠ 模型加载完成）。细节见 `docs/DOCKER.md`「TEI」。
+  就绪以 `scripts/ops/tei_ready.py` 为准（`/health` 200 ≠ 模型加载完成）。细节见 `docs/DOCKER.md`「TEI」。
 - **假 embedding 模式**：`pyproject.toml` 的 `[tool.pytest_env]` 设 `USE_FAKE_EMBEDDING=true` 后，
   `get_embeddings()` 返回本地确定性哈希实现（`rag.common.embeddings.HashingEmbeddings`）——
   **检索质量门禁靠它在无 TEI 时做确定性比对**。该实现**只保留词汇重叠信号、

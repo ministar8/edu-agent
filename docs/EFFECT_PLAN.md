@@ -80,7 +80,7 @@ faithfulness 0.759 · precision 0.684 · **recall 0.400** · relevancy 0.599
 
 #### 2.B.1 Demo Set
 
-★ **不新建 `evals/manual/`** —— 接到现有 `scripts/agent_behavior_gate.py`，把 case 外部化为 jsonl。
+★ **不新建 `evals/manual/`** —— 接到现有 `scripts/gates/agent_behavior_gate.py`，把 case 外部化为 jsonl。
 
 ```
 evals/datasets/demo/{qa,generate,grade,verify,memory}_cases.jsonl
@@ -415,4 +415,4 @@ L2/L3 全走披露、不修。
 | `EXPERIMENTS.md` | 实验总册（§3.4 数字落点） |
 | `evals/reports/paper_tables.md` | 论文表（§3.1 新表并入） |
 | `evals/reports/l2_impact_analysis.md` / `optimization_checklist.md` | L2 决策 + 问题清零（§3.1 Verify **关掉 B2**） |
-| `scripts/agent_behavior_gate.py` | Phase 0 复用基建（case 外部化） |
+| `scripts/gates/agent_behavior_gate.py` | Phase 0 复用基建（case 外部化） |

@@ -23,7 +23,7 @@
 
 ---
 
-## 3. Basic 试点附加验收（`scripts/verify_basic_pilot.py`）
+## 3. Basic 试点附加验收（`scripts/ops/verify_basic_pilot.py`）
 
 ### 3.1 KP 回链
 

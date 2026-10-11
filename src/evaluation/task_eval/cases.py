@@ -2,7 +2,7 @@
 
 设计边界（见 `docs/EFFECT_PLAN.md` §2.B）：
 - 本包只做**任务效果测量**（QA / Generate / Grade / Verify / Memory），
-  与 `scripts/agent_behavior_gate.py` 的**安全/行为门禁**职责分离、互不混合。
+  与 `scripts/gates/agent_behavior_gate.py` 的**安全/行为门禁**职责分离、互不混合。
 - case 来源与 schema 统一，供 gate 与 task_eval 共用（gate 本轮暂不改读，见决策 #4）。
 - 本模块**不 import rag / agents**，只做纯数据契约与加载，保证可离线单测。
 

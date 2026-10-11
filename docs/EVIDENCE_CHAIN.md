@@ -80,13 +80,13 @@ provenance 100%（§6）。断层的全部来源是这一句：
 > 状态词落成「已测量未证明」而不是「未测量」。
 > **裁定 = 改本节措辞去对齐公式，不改 `derive_status`**（公式是三态推导、ledger 与 `--check` 的公共依赖，
 > 动它要连带改 tier/债登记，不属文档收尾的范围）。取证命令：
-> `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/evidence_chain_gate.py`（三态推导那一组）
-> 与 `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.py --check`（第 3 段 V0 ② 仍拦）。
+> `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/gates/evidence_chain_gate.py`（三态推导那一组）
+> 与 `PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --check`（第 3 段 V0 ② 仍拦）。
 > ★ **诚实代价如实留在这里，不许读成已消除**：
 > ① 读者看到「已测量未证明」配「已测 n=0」这一对时**仍然反直觉** —— 状态词说的是「判据有没有牙齿」，
 > 数值列说的是「归档里有没有数」，两者本来就在问不同的问题，但并排印出来就像矛盾；
 > ② `evals/claims/ledger.md` 判据级附表那条 ★ 注记**保留**（它给的是依据：冻结公式 + mutation 测的是
-> **判据对契约输入的敏感性、不是主张的数值**），★ 但它是 `scripts/build_claim_ledger.py` 的渲染产出、
+> **判据对契约输入的敏感性、不是主张的数值**），★ 但它是 `scripts/lib/build_claim_ledger.py` 的渲染产出、
 > 本 Task 不改代码 ⇒ 注记里「与 §1.1 口径不一致 / 待 Task 10 文档收口」那半句在收口后要读作
 > **历史指向**（现行判据以本节为准）；把注记文本一起刷新需要一次动 `scripts/` 的小改；
 > ③ 这一格**不因此变成「已证明」**，也不免除 V0 ② 对「required 判据全未测量」的拦截。
@@ -151,7 +151,7 @@ R1-A 的检查升级为**覆盖性检查**：`mutation 集 ⊇ contract_inputs`�
 ```
 本次实验通过全部门禁。
 证据：evals/claims/ledger.md#gate-2026-10-08
-复现：PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/build_claim_ledger.py --check
+复现：PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --check
 ```
 
 检查器只对「含数字或「全绿/应为空/逐位相同/一致」且 100 字符内无 `证据：`/`复现：`/反引号命令」的行报 warning。
@@ -523,7 +523,7 @@ B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾�
   | 位置 | 过期声称 | 改成 |
   |---|---|---|
   | `docs/README.md:3` | 「标签待打」 | `git tag -l 'V-*' --format='%(refname:short) -> %(objectname:short)'` |
-  | `docs/README.md:40` | 「现 129 项」 | `grep -n "^_EXPECTED_ITEMS" scripts/memory_step4fix_gate.py` 的生成值 |
+  | `docs/README.md:40` | 「现 129 项」 | `grep -n "^_EXPECTED_ITEMS" scripts/mem/memory_step4fix_gate.py` 的生成值 |
   | `docs/README.md:73` | 「`git ls-files` = 0」 | `git ls-files evals/results/task_eval \| wc -l` 与 `git status --short -- evals/results/task_eval \| grep -c '^??'` 两条并列（前者已跟踪的仍是 `.md`，后者是数值工件） |
   | `CLAUDE.md:47` / `README.md:144` | `--dataset evals/sample_408.jsonl` | 实为 `evals/datasets/golden/sample_408.jsonl`（`src/evaluation/cli.py` 的默认值） |
 

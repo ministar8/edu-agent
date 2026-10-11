@@ -440,7 +440,7 @@ async def _amulti_route_search(
     #   销毁本单元尚未被消费的失败证据 —— 一条 query 在 `rag/pipeline.py` 会跑**多轮**
     #   （HyDE 恰在第一轮空/差之后才跑），后一轮的 reset 会把前一轮路由记下的失败抹掉，
     #   于是 `run_case` 读到时是 `[]`（实测：注入 BM25 全线故障 ⇒ 读取时失败记录为空）。
-    #   失败证据必须**活到被消费之后**才清。回归锁见 `scripts/evidence_chain_gate.py` 的 `8k`。
+    #   失败证据必须**活到被消费之后**才清。回归锁见 `scripts/gates/evidence_chain_gate.py` 的 `8k`。
     if depth and depth.skip_bm25:
         route_queries = [(name, rq) for name, rq in route_queries if name != "keyword_bm25"]
 

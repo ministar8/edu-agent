@@ -25,7 +25,7 @@ from rag.knowledge_tagger import tag_chunks_with_knowledge_points
 logger = logging.getLogger(__name__)
 
 # 主链入库目录（目录名即向量集合名）。★ 2026-10-10 改造后，**四科讲义目录已退役**：
-# L1/L2 由 `scripts/ingest_basic_all.py` / `ingest_advanced.py` 入四科集合；
+# L1/L2 由 `scripts/ingest/ingest_basic_all.py` / `ingest_advanced.py` 入四科集合；
 # L3 由 `ingest_exams.py`（按年）+ `ingest_exam_practice.py`（章节题型）入；
 # code 由 `ingest_code.py` 入。主链现只负责 `learning_paths`。
 DEFAULT_CATEGORIES = [

@@ -74,7 +74,7 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 | preferred_layers | `preferred_layers` | 同上 | **软偏好**：top-up 补齐 + 排序提权；非硬过滤 |
 | eligible layers | `eligible_semantic_layers()` | 同上 | **当前策略下允许进池的语义层**（资格派生） |
 | legacy 池策略 | `legacy_policy` | 同上 | `exclude / fallback / include`（资产状态，非第四层） |
-| pack sufficiency | `pack_nonempty_rate` | `scripts/task_mode_layer_policy.py` | 非空证据包占比 |
+| pack sufficiency | `pack_nonempty_rate` | `scripts/exp/task_mode_layer_policy.py` | 非空证据包占比 |
 
 ### 2.1 知识分层（★ legacy 不是"第四层"）
 

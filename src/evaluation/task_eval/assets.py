@@ -2,7 +2,7 @@
 
 为什么单独一个模块
 ------------------
-demo 集生成器（`scripts/build_demo_cases.py`）与 Gold Sanity Check
+demo 集生成器（`scripts/datasets/build_demo_cases.py`）与 Gold Sanity Check
 （`evaluation/task_eval/gold_sanity.py`）**必须看到同一份资产解析结果**。
 各写一份解析器的后果是：sanity 说「gold 合法」，而生成器产出的 gold 却不合法 ——
 评测工具自己先分裂，0B 的 fail 就无法归因到系统。

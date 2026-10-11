@@ -1,5 +1,5 @@
 # task_mode_x_layer_policy.yaml — Task Mode × Layer Policy 交互实验
-# ★ YAML 是实验快照，执行配置以 scripts/task_mode_layer_policy.py 为准
+# ★ YAML 是实验快照，执行配置以 scripts/exp/task_mode_layer_policy.py 为准
 name: task_mode_x_layer_policy
 description: 6 task_mode × 5 layer_policy 交互矩阵（只动 preferred_layers）
 inherits: null
