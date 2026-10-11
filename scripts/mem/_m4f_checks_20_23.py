@@ -21,10 +21,64 @@ def check_20() -> None:
     ★ 本项**不判成败、不动阈值**：只锁「露出存在且算对」，以及「分布正常时不许误报」（避免变成一刀切禁用）。
     """
     section("⑳ 校准 PASS 的秩相关信息量必须自己露出（D6 / #19）")
+    _c20_rank()
+    _c20_second()
+    _c20_calib_file()
+
+
+def check_21() -> None:
+    """㉑ 预检要探到**推理端点**，写链断裂要标成**环境问题**（2026-10-07 实发事故）。
+
+    事故过程（不是假想）：Step 9 跑完后 TEI 半死 —— `/health` 返 **200**，
+    `/embeddings` 返 **502**；`memory.safe` 只打一行 WARNING「长期记忆写入超时（grade，>1.5s），
+    已忽略」就**丢弃写入**。于是护栏 ⑩d' 报「EPISODES 落库 = 0 条」。
+    真正的危险不是红灯，而是**绿灯时的假数字**：若这条发生在正式跑里，
+    画像为空 ⇒ B 段召不回 ⇒ 会被写成「Memory 产品没召回」——
+    而我们当天刚把同类现象归因给 #22 的 KP 阈值。**归因会被环境污染伪造。**
+    ⇒ 两道闸：① 预检必须真发一次向量请求；② 「有批改但零 episode」标 env_error 并中止。
+    """
+    section("㉑ 预检探推理端点 / 写链断裂归环境类（防假归因）")
+    old_base, old_fake = _c21_halfdead(_c21_setup())
+    _c21_fake(old_base, old_fake)
+    _c21_nohealth(old_base, old_fake)
+
+
+def check_22() -> None:
+    """㉒ paired control 的 OFF 臂必须真的关掉 Store（2026-10-07 D8 重跑暴露，登记为 #24）。
+
+    事故：D8 把正样本改成「同考点两次低分」之后，**OFF 组也召回了**（`卡=1`、
+    `recalled_actual=True`，而 harness 自己抓的 `episodes=0`）。查因：
+    `teaching_graph.load_memory` 与 `remember._record_episode` 都在**调用时**取进程级
+    `get_store()`，而 OFF 组原先只置 `agent.store = None` ⇒ Store 从未关闭，
+    「ON 有卡 / OFF 无卡」的对照一直不成立。
+    ★ 更糟的是：Step 5 当时 OFF 显示「0 卡 0 召回」被当成对照生效的证据，
+      那其实是 #22（画像恒空）造成的假象 —— **两个缺陷互相掩盖**。
+      D8 修好了 #22，才让 #24 露头。
+    """
+    section("㉒ OFF 组须真空白进程级 store（#24，防对照失效）")
+    _c22_run(*_c22_setup())
+
+
+def check_23() -> None:
+    """㉓ 写入证据判据的**位置、归因与下游**（2026-10-08 review C1 / I1 / I3）。
+
+    事故（C1）：`memory_write_missing` 的调用点原先落在 `if case.task == "memory"`
+    **之外**。非 memory 任务走 `run_turns` —— 它照抓 `grade_scores`、却从不读 Store，
+    `episodes` 恒空 ⇒ 任何一次 grade/verify/qa 实跑都会在**第一条**被判 `env_error`，
+    而 `cli._run` 的 `break` 在 `append_record` **之前** ⇒ 整轮中止且那条记录连盘都不落，
+    中止日志取 `hard_fails[0]`/`retrieval_error`（两者皆空）⇒ 屏幕上是一行没有原因的「中止」。
+    ⇒ 这一组**必须驱动真实 `run_case`**（把 `_run_agent` 与检索探针打桩，零 LLM、零 TEI 依赖），
+      只测纯函数的 ㉑ 抓不到它 —— 又是「测了 helper、没测接线」那一类。
+    """
+    section("㉓ 写入证据判据：位置 / 归因 / 下游排除（C1+I1+I3）")
+    rec_m, rec_rf = _c23_a(_c23_setup())
+    _c23_b(_c23_setup(), rec_m, rec_rf)
+
+
+def _c20_rank() -> None:
 
     from evaluation.task_eval.judge import (
         CALIBRATION_THRESHOLDS,
-        INFORMATIVE_SHARE_MIN,
         calibrate,
     )
 
@@ -49,6 +103,11 @@ def check_20() -> None:
         f"spearman={rep.spearman} passed={rep.passed} "
         f"阈值={CALIBRATION_THRESHOLDS['spearman_min']}",
     )
+
+
+def _c20_second() -> None:
+    from evaluation.task_eval.judge import INFORMATIVE_SHARE_MIN, calibrate
+
     # ★ 反向：分布正常的表不许误报（否则这条露出会退化成「永远警告」= 没有信息）
     hum = [0, 1, 2, 3, 3, 4, 5, 5, 2, 3, 1, 4, 5, 3, 2, 4, 1, 0, 5, 3, 4, 2, 3, 5, 1, 4, 2, 3, 5, 4]
     llm = [0, 1, 2, 3, 4, 4, 5, 5, 2, 3, 1, 4, 5, 3, 2, 4, 2, 0, 5, 3, 4, 2, 3, 5, 1, 4, 2, 3, 5, 4]
@@ -58,8 +117,13 @@ def check_20() -> None:
         rep2.rank_degenerate is False and (rep2.informative_share or 0) >= INFORMATIVE_SHARE_MIN,
         f"share={rep2.informative_share} deg={rep2.rank_degenerate}",
     )
+
+
+def _c20_calib_file() -> None:
     # ⑳d 真实文件本身必须被报告成退化（读的是仓内校准表，不调 LLM）
     import json as _json
+
+    from evaluation.task_eval.judge import calibrate
 
     p = ROOT / "evals" / "datasets" / "demo" / "calibration_30.jsonl"
     if p.exists():
@@ -83,24 +147,95 @@ def check_20() -> None:
         skip("⑳d", "calibration_30.jsonl 不在本机 ⇒ 真实校准表的秩信息量未验证", count=1)
 
 
-def check_21() -> None:
-    """㉑ 预检要探到**推理端点**，写链断裂要标成**环境问题**（2026-10-07 实发事故）。
+def _c22_setup() -> None:
 
-    事故过程（不是假想）：Step 9 跑完后 TEI 半死 —— `/health` 返 **200**，
-    `/embeddings` 返 **502**；`memory.safe` 只打一行 WARNING「长期记忆写入超时（grade，>1.5s），
-    已忽略」就**丢弃写入**。于是护栏 ⑩d' 报「EPISODES 落库 = 0 条」。
-    真正的危险不是红灯，而是**绿灯时的假数字**：若这条发生在正式跑里，
-    画像为空 ⇒ B 段召不回 ⇒ 会被写成「Memory 产品没召回」——
-    而我们当天刚把同类现象归因给 #22 的 KP 阈值。**归因会被环境污染伪造。**
-    ⇒ 两道闸：① 预检必须真发一次向量请求；② 「有批改但零 episode」标 env_error 并中止。
-    """
-    section("㉑ 预检探推理端点 / 写链断裂归环境类（防假归因）")
+    import lib.agent_behavior_smoke as smoke
+    from langchain_core.messages import AIMessageChunk
 
-    import threading
-    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from memory.runtime import get_store
 
-    from core.settings import settings as _s
-    from evaluation.task_eval.runner import memory_write_missing, preflight_check
+    class _SpyAgent:
+        """在轮内观测 `get_store()` —— 这才是「变量到底有没有被控制」的直接证据。"""
+
+        checkpointer = None
+
+        def __init__(self, store) -> None:
+            self.store = store
+            self.seen: list[bool] = []
+
+        async def astream(self, _inp, *, config, stream_mode, subgraphs):  # noqa: ARG002
+            self.seen.append(get_store() is not None)
+            yield (("supervisor",), "messages", (AIMessageChunk(content="回复"), {}))
+
+    class _NullStore:
+        """只为让 `store is not None` 成立的最小对象（OFF 臂要摘的就是它）。"""
+
+        async def asearch(self, ns, query=None, filter=None, limit=None, offset=0):  # noqa: A002
+            return []
+
+        async def adelete(self, ns, key) -> None:
+            return None
+
+    async def _run(store_enabled: bool) -> tuple[smoke.CaseResult, bool | None]:
+        # ★ 原先注解成 `tuple[_SpyAgent, bool]` —— 实际返回的是 `(CaseResult, observed)`，
+        #   而 `pyrefly` 的 `project-includes` 只含 `src/`（`pyproject.toml`），scripts 从不被
+        #   检查 ⇒ 这类真错一直静默存在（review I7）。
+        spy = _SpyAgent(_NullStore())
+        res = await smoke.run_sessions(
+            spy,
+            [["批改：题一"], ["换个会话：我哪里薄弱？"]],
+            user_id=f"gate-off-arm-{store_enabled}",
+            cleanup_first=False,
+            store_enabled=store_enabled,
+        )
+        # 轮内观测：True = 那一轮 `get_store()` 有值（Store 开着）
+        observed = spy.seen[0] if spy.seen else None
+        return res, observed
+
+    return _SpyAgent, _NullStore, _run
+
+
+def _c22_run(_SpyAgent, _NullStore, _run) -> None:
+    import asyncio as _aio
+
+    from memory.runtime import get_store, set_store
+
+    sentinel = _NullStore()
+    old = get_store()
+    try:
+        set_store(sentinel)
+        _res_on, obs_on = _aio.run(_run(True))
+        check(
+            "㉒a ON 臂：轮内 `get_store()` 有值（对照的前提：这一臂确实开着 Store）",
+            obs_on is True,
+            f"observed={obs_on}",
+        )
+        _res_off, obs_off = _aio.run(_run(False))
+        check(
+            "㉒b ★ OFF 臂：轮内 `get_store()` 必须为 None（旧实现只摘 agent.store ⇒ 这里会是 True）",
+            obs_off is False,
+            f"observed={obs_off}",
+        )
+        check(
+            "㉒c OFF 臂跑完后进程级 store 已恢复（忘恢复会让后续所有 case 静默失去记忆）",
+            get_store() is sentinel,
+            f"get_store() is sentinel = {get_store() is sentinel}",
+        )
+        # ★ 原先这里还有一条「㉒d OFF 臂的 notes 里写明摘除方式」的判据，2026-10-08 删掉：
+        #   它检查的是 harness 自己写的** note 文本**，突变实验（把 OFF 臂换成什么都不做）时
+        #   它照样绿、而措辞一改就假红 —— 那是文档不是护栏（与本组 ⑦b/⑦c 从文本断言
+        #   改成行为断言是同一条理由）。note 本身继续留在 harness 里，报告照常能读。
+    finally:
+        set_store(old)
+    check(
+        "㉒e 护栏自身不污染进程（跑完 store 回到入口前的状态）",
+        get_store() is old,
+    )
+
+
+def _c21_setup() -> None:
+
+    from http.server import BaseHTTPRequestHandler
 
     class _HalfDead(BaseHTTPRequestHandler):
         """复刻事故：健康检查说活着，推理端点 502。"""
@@ -117,6 +252,16 @@ def check_21() -> None:
 
         def log_message(self, *_a):
             pass
+
+    return _HalfDead
+
+
+def _c21_halfdead(_HalfDead) -> None:
+    import threading
+    from http.server import HTTPServer
+
+    from core.settings import settings as _s
+    from evaluation.task_eval.runner import preflight_check
 
     srv = HTTPServer(("127.0.0.1", 0), _HalfDead)
     port = srv.server_address[1]
@@ -145,6 +290,12 @@ def check_21() -> None:
         _s.EMBEDDING_API_BASE, _s.USE_FAKE_EMBEDDING = old_base, old_fake
         srv.shutdown()
         srv.server_close()  # 释放监听套接字（review M9：只 shutdown 会把 socket 留到进程结束）
+    return old_base, old_fake
+
+
+def _c21_fake(old_base, old_fake) -> None:
+    from core.settings import settings as _s
+    from evaluation.task_eval.runner import memory_write_missing, preflight_check
 
     # 假嵌入模式（CI/单测）：base 指向死端口也应放行 —— 证明它没有"顺手多探一发"把 CI 打死
     # ★ 这一支原先在上面的 `finally` **之后**改 settings 却只还原 `USE_FAKE_EMBEDDING`
@@ -201,10 +352,17 @@ def check_21() -> None:
         (memory_write_missing.__doc__ or "").splitlines()[0][:60],
     )
 
+
+def _c21_nohealth(old_base, old_fake) -> None:
     # ★ review M7：有些 OpenAI 兼容服务**没有 `/health` 路由**（404），但 `/embeddings` 完全正常。
     #   旧预检会因为一句 HTTP 404 就 return 3 拒绝开跑 —— 那是**假红**，会把能用的 TEI 拦在门外。
     #   ⇒ 健康检查的抱怨只在推理也失败时才允许一起进 problems。
     import json as _json4h
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from core.settings import settings as _s
+    from evaluation.task_eval.runner import preflight_check
 
     class _NoHealth(BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802
@@ -245,116 +403,12 @@ def check_21() -> None:
     )
 
 
-def check_22() -> None:
-    """㉒ paired control 的 OFF 臂必须真的关掉 Store（2026-10-07 D8 重跑暴露，登记为 #24）。
-
-    事故：D8 把正样本改成「同考点两次低分」之后，**OFF 组也召回了**（`卡=1`、
-    `recalled_actual=True`，而 harness 自己抓的 `episodes=0`）。查因：
-    `teaching_graph.load_memory` 与 `remember._record_episode` 都在**调用时**取进程级
-    `get_store()`，而 OFF 组原先只置 `agent.store = None` ⇒ Store 从未关闭，
-    「ON 有卡 / OFF 无卡」的对照一直不成立。
-    ★ 更糟的是：Step 5 当时 OFF 显示「0 卡 0 召回」被当成对照生效的证据，
-      那其实是 #22（画像恒空）造成的假象 —— **两个缺陷互相掩盖**。
-      D8 修好了 #22，才让 #24 露头。
-    """
-    section("㉒ OFF 组须真空白进程级 store（#24，防对照失效）")
-
-    import asyncio as _aio
-
-    import lib.agent_behavior_smoke as smoke
-    from langchain_core.messages import AIMessageChunk
-
-    from memory.runtime import get_store, set_store
-
-    class _SpyAgent:
-        """在轮内观测 `get_store()` —— 这才是「变量到底有没有被控制」的直接证据。"""
-
-        checkpointer = None
-
-        def __init__(self, store) -> None:
-            self.store = store
-            self.seen: list[bool] = []
-
-        async def astream(self, _inp, *, config, stream_mode, subgraphs):  # noqa: ARG002
-            self.seen.append(get_store() is not None)
-            yield (("supervisor",), "messages", (AIMessageChunk(content="回复"), {}))
-
-    class _NullStore:
-        """只为让 `store is not None` 成立的最小对象（OFF 臂要摘的就是它）。"""
-
-        async def asearch(self, ns, query=None, filter=None, limit=None, offset=0):  # noqa: A002
-            return []
-
-        async def adelete(self, ns, key) -> None:
-            return None
-
-    async def _run(store_enabled: bool) -> tuple[smoke.CaseResult, bool | None]:
-        # ★ 原先注解成 `tuple[_SpyAgent, bool]` —— 实际返回的是 `(CaseResult, observed)`，
-        #   而 `pyrefly` 的 `project-includes` 只含 `src/`（`pyproject.toml`），scripts 从不被
-        #   检查 ⇒ 这类真错一直静默存在（review I7）。
-        spy = _SpyAgent(_NullStore())
-        res = await smoke.run_sessions(
-            spy,
-            [["批改：题一"], ["换个会话：我哪里薄弱？"]],
-            user_id=f"gate-off-arm-{store_enabled}",
-            cleanup_first=False,
-            store_enabled=store_enabled,
-        )
-        # 轮内观测：True = 那一轮 `get_store()` 有值（Store 开着）
-        observed = spy.seen[0] if spy.seen else None
-        return res, observed
-
-    sentinel = _NullStore()
-    old = get_store()
-    try:
-        set_store(sentinel)
-        _res_on, obs_on = _aio.run(_run(True))
-        check(
-            "㉒a ON 臂：轮内 `get_store()` 有值（对照的前提：这一臂确实开着 Store）",
-            obs_on is True,
-            f"observed={obs_on}",
-        )
-        _res_off, obs_off = _aio.run(_run(False))
-        check(
-            "㉒b ★ OFF 臂：轮内 `get_store()` 必须为 None（旧实现只摘 agent.store ⇒ 这里会是 True）",
-            obs_off is False,
-            f"observed={obs_off}",
-        )
-        check(
-            "㉒c OFF 臂跑完后进程级 store 已恢复（忘恢复会让后续所有 case 静默失去记忆）",
-            get_store() is sentinel,
-            f"get_store() is sentinel = {get_store() is sentinel}",
-        )
-        # ★ 原先这里还有一条「㉒d OFF 臂的 notes 里写明摘除方式」的判据，2026-10-08 删掉：
-        #   它检查的是 harness 自己写的** note 文本**，突变实验（把 OFF 臂换成什么都不做）时
-        #   它照样绿、而措辞一改就假红 —— 那是文档不是护栏（与本组 ⑦b/⑦c 从文本断言
-        #   改成行为断言是同一条理由）。note 本身继续留在 harness 里，报告照常能读。
-    finally:
-        set_store(old)
-    check(
-        "㉒e 护栏自身不污染进程（跑完 store 回到入口前的状态）",
-        get_store() is old,
-    )
-
-
-def check_23() -> None:
-    """㉓ 写入证据判据的**位置、归因与下游**（2026-10-08 review C1 / I1 / I3）。
-
-    事故（C1）：`memory_write_missing` 的调用点原先落在 `if case.task == "memory"`
-    **之外**。非 memory 任务走 `run_turns` —— 它照抓 `grade_scores`、却从不读 Store，
-    `episodes` 恒空 ⇒ 任何一次 grade/verify/qa 实跑都会在**第一条**被判 `env_error`，
-    而 `cli._run` 的 `break` 在 `append_record` **之前** ⇒ 整轮中止且那条记录连盘都不落，
-    中止日志取 `hard_fails[0]`/`retrieval_error`（两者皆空）⇒ 屏幕上是一行没有原因的「中止」。
-    ⇒ 这一组**必须驱动真实 `run_case`**（把 `_run_agent` 与检索探针打桩，零 LLM、零 TEI 依赖），
-      只测纯函数的 ㉑ 抓不到它 —— 又是「测了 helper、没测接线」那一类。
-    """
-    section("㉓ 写入证据判据：位置 / 归因 / 下游排除（C1+I1+I3）")
+def _c23_setup() -> None:
 
     from dataclasses import field
 
     import evaluation.task_eval.runner as R
     from evaluation.task_eval.cases import load_demo
-    from evaluation.task_eval.report import summarize_task
 
     @dataclass
     class _Res:
@@ -407,6 +461,11 @@ def check_23() -> None:
         finally:
             R._run_agent, R.probe_retrieval = old_agent, old_probe
 
+    return _drive
+
+
+def _c23_a(_drive) -> None:
+
     gs2 = [{"session": 0, "score": 0.0}, {"session": 0, "score": 0.0}]
     eps = [
         {"topic": "平衡二叉树", "score": 0.0, "knowledge_points": ["平衡二叉树"], "type": "grade"}
@@ -450,6 +509,14 @@ def check_23() -> None:
         f"ok={rec_ok.memory_write_missing}/{rec_ok.validity_valid} "
         f"read_failed={rec_rf.memory_write_missing} off={rec_off.memory_write_missing}",
     )
+    return rec_m, rec_rf
+
+
+def _c23_b(_drive, rec_m, rec_rf) -> None:
+    import lib.memory_step5_paired as paired
+
+    from evaluation.task_eval.report import summarize_task
+
     check(
         "㉓d' 读链失败要**单独留痕**（否则归档里 `episodes=[]` 又会被误读成没写入）",
         rec_rf.episodes_read_failed is True and rec_rf.memory_write_missing is False,
@@ -464,7 +531,6 @@ def check_23() -> None:
         rep.invalid_n == 1 and rep.failure_rate is None,
         f"invalid_n={rep.invalid_n} failure_rate={rep.failure_rate}",
     )
-    import lib.memory_step5_paired as paired  # type: ignore[import-not-found]
 
     arm = paired.ArmSummary(store_enabled=True, records=[d])
     check(

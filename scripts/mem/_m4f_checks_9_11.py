@@ -57,127 +57,11 @@ async def check_10() -> None:
       ⑩d 真写一条 episode 后 `weak_topics` 能派生（链路端到端）
     """
     section("⑩ context-fallback（工具 config 注入缺陷的修复）")
-
-    from memory.remember import (
-        batch_id_from_config,
-        thread_id_from_config,
-        user_id_from_config,
-    )
-
-    # ⑩a 显式优先
-    c = {"configurable": {"user_id": "EXPLICIT", "thread_id": "T1", "question_batch_id": "B1"}}
-    check(
-        "⑩a 显式 config 优先（不破坏既有调用方）",
-        user_id_from_config(c) == "EXPLICIT"
-        and thread_id_from_config(c) == "T1"
-        and batch_id_from_config(c) == "B1",
-    )
-
-    # ⑩c 无上下文不炸
-    check(
-        "⑩c 无 config 且无上下文 ⇒ 安全返回空（不抛错）",
-        user_id_from_config(None) is None and thread_id_from_config(None) == "",
-    )
-
-    # ⑩b 上下文回落
-    from langchain_core.runnables import RunnableLambda
-
-    async def _inner(_):
-        return user_id_from_config(None)
-
-    got = await RunnableLambda(_inner).ainvoke(
-        None, config={"configurable": {"user_id": "CTX-UID"}}
-    )
-    check("⑩b 无显式 config ⇒ 回落运行时上下文取到 user_id", got == "CTX-UID", str(got))
-
-    # ⑩d 端到端：**经 config 解析取 uid** 写 episode ⇒ weak_topics 派生。
-    #   ★ 关键：必须走 `user_id_from_config(None)`（而非显式传 uid），否则会绕过
-    #     本缺陷所在的解析路径 —— 实测直接传 uid 时，护栏在破坏后**不变红**。
-    from langchain_core.runnables import RunnableLambda
-
-    from memory import initialize_store
-    from memory.episodes import arecent_episodes
-    from memory.namespaces import student_episodes_ns, student_profile_ns
-    from memory.profile import aget_profile
-    from memory.remember import record_grade
-    from memory.runtime import set_store
-
-    uid = "gate-ctx-e2e"
-    async with initialize_store() as store:
-        set_store(store)
-        try:
-            for ns in (student_episodes_ns(uid), student_profile_ns(uid)):
-                for it in await store.asearch(ns, limit=200):
-                    await store.adelete(ns, it.key)
-
-            async def _write_two(_):
-                # 模拟工具：只拿到 config 参数（此处为 None），uid 由回落解析得来
-                resolved = user_id_from_config(None)
-                if not resolved:
-                    return None
-                for _i in range(2):
-                    await record_grade(
-                        user_id=resolved,
-                        topic="t",
-                        score=40.0,
-                        knowledge_points=["平衡二叉树"],
-                    )
-                return resolved
-
-            resolved = await RunnableLambda(_write_two).ainvoke(
-                None, config={"configurable": {"user_id": uid}}
-            )
-            eps = await arecent_episodes(store, uid)
-            prof = await aget_profile(store, uid)
-            check(
-                "⑩d uid 经 config 解析（不是硬传）⇒ 真取到 user_id",
-                resolved == uid,
-                str(resolved),
-            )
-            check(
-                "⑩d' 批改写入 ⇒ EPISODES 落库（不再静默跳过）",
-                len(eps) == 2,
-                f"{len(eps)} 条",
-            )
-            check(
-                "⑩d'' 两次低分 ⇒ weak_topics 派生（跨会话召回的前置条件）",
-                prof.weak_topics == ["平衡二叉树"],
-                str(prof.weak_topics),
-            )
-        finally:
-            for ns in (student_episodes_ns(uid), student_profile_ns(uid)):
-                for it in await store.asearch(ns, limit=200):
-                    await store.adelete(ns, it.key)
-            set_store(None)
-
-    # ⑩e ★ 回落**不会**串号：`get_config()` 读的是 contextvar，asyncio 每个 Task
-    #   持有自己的 context 副本 ⇒ 「参数为 None 时用运行时上下文」取到的是
-    #   **本次 graph 调用**的 config，不是「并发里算到谁头上算谁的」。
-    #   这条判据是为了把 B3 里**被推翻的那半**固化下来：推翻一次不够，要留证据。
-    async def _whoami(_):
-        first = user_id_from_config(None)
-        await asyncio.sleep(0.02)  # 强制让 4 个任务交错
-        return first, user_id_from_config(None)
-
-    results = await asyncio.gather(
-        *[
-            RunnableLambda(_whoami).ainvoke(None, config={"configurable": {"user_id": f"U{i}"}})
-            for i in range(4)
-        ]
-    )
-    check(
-        "⑩e 并发交错下，回落仍各取自己的 user_id（contextvar 隔离）",
-        all(a == f"U{i}" and b == f"U{i}" for i, (a, b) in enumerate(results)),
-        str(results),
-    )
-
-    # ⑩f 契约：显式 config **整块替换**、不做键级合并（当前无调用方踩到，故**不改行为**，
-    #   只把语义钉住 —— 将来若要改成合并，必须让这条变红后由人裁决）。
-    partial = {"configurable": {"thread_id": "T-PARTIAL"}}
-    check(
-        "⑩f 只写 thread_id 的显式 config ⇒ user_id 为 None（不回落补键，契约见 docstring）",
-        user_id_from_config(partial) is None and thread_id_from_config(partial) == "T-PARTIAL",
-    )
+    _c10_config()
+    await _c10_runtime()
+    await _c10_episodes()
+    await _c10_isolation()
+    _c10_contract()
 
 
 def check_11() -> None:
@@ -460,4 +344,146 @@ def _c11_batch() -> None:
         out == ["TCP 流量控制", "页面置换算法", "Cache 映射方式", "平衡二叉树"]
         and all(n in canonical for n in out),
         str(out),
+    )
+
+
+def _c10_config() -> None:
+
+    from memory.remember import (
+        batch_id_from_config,
+        thread_id_from_config,
+        user_id_from_config,
+    )
+
+    # ⑩a 显式优先
+    c = {"configurable": {"user_id": "EXPLICIT", "thread_id": "T1", "question_batch_id": "B1"}}
+    check(
+        "⑩a 显式 config 优先（不破坏既有调用方）",
+        user_id_from_config(c) == "EXPLICIT"
+        and thread_id_from_config(c) == "T1"
+        and batch_id_from_config(c) == "B1",
+    )
+
+    # ⑩c 无上下文不炸
+    check(
+        "⑩c 无 config 且无上下文 ⇒ 安全返回空（不抛错）",
+        user_id_from_config(None) is None and thread_id_from_config(None) == "",
+    )
+
+
+async def _c10_runtime() -> None:
+
+    # ⑩b 上下文回落
+    from langchain_core.runnables import RunnableLambda
+
+    from memory.remember import user_id_from_config
+
+    async def _inner(_):
+        return user_id_from_config(None)
+
+    got = await RunnableLambda(_inner).ainvoke(
+        None, config={"configurable": {"user_id": "CTX-UID"}}
+    )
+    check("⑩b 无显式 config ⇒ 回落运行时上下文取到 user_id", got == "CTX-UID", str(got))
+
+
+async def _c10_episodes() -> None:
+
+    # ⑩d 端到端：**经 config 解析取 uid** 写 episode ⇒ weak_topics 派生。
+    #   ★ 关键：必须走 `user_id_from_config(None)`（而非显式传 uid），否则会绕过
+    #     本缺陷所在的解析路径 —— 实测直接传 uid 时，护栏在破坏后**不变红**。
+    from langchain_core.runnables import RunnableLambda
+
+    from memory import initialize_store
+    from memory.episodes import arecent_episodes
+    from memory.namespaces import student_episodes_ns, student_profile_ns
+    from memory.profile import aget_profile
+    from memory.remember import record_grade, user_id_from_config
+    from memory.runtime import set_store
+
+    uid = "gate-ctx-e2e"
+    async with initialize_store() as store:
+        set_store(store)
+        try:
+            for ns in (student_episodes_ns(uid), student_profile_ns(uid)):
+                for it in await store.asearch(ns, limit=200):
+                    await store.adelete(ns, it.key)
+
+            async def _write_two(_):
+                # 模拟工具：只拿到 config 参数（此处为 None），uid 由回落解析得来
+                resolved = user_id_from_config(None)
+                if not resolved:
+                    return None
+                for _i in range(2):
+                    await record_grade(
+                        user_id=resolved,
+                        topic="t",
+                        score=40.0,
+                        knowledge_points=["平衡二叉树"],
+                    )
+                return resolved
+
+            resolved = await RunnableLambda(_write_two).ainvoke(
+                None, config={"configurable": {"user_id": uid}}
+            )
+            eps = await arecent_episodes(store, uid)
+            prof = await aget_profile(store, uid)
+            check(
+                "⑩d uid 经 config 解析（不是硬传）⇒ 真取到 user_id",
+                resolved == uid,
+                str(resolved),
+            )
+            check(
+                "⑩d' 批改写入 ⇒ EPISODES 落库（不再静默跳过）",
+                len(eps) == 2,
+                f"{len(eps)} 条",
+            )
+            check(
+                "⑩d'' 两次低分 ⇒ weak_topics 派生（跨会话召回的前置条件）",
+                prof.weak_topics == ["平衡二叉树"],
+                str(prof.weak_topics),
+            )
+        finally:
+            for ns in (student_episodes_ns(uid), student_profile_ns(uid)):
+                for it in await store.asearch(ns, limit=200):
+                    await store.adelete(ns, it.key)
+            set_store(None)
+
+
+async def _c10_isolation() -> None:
+    from langchain_core.runnables import RunnableLambda
+
+    from memory.remember import user_id_from_config
+
+    # ⑩e ★ 回落**不会**串号：`get_config()` 读的是 contextvar，asyncio 每个 Task
+    #   持有自己的 context 副本 ⇒ 「参数为 None 时用运行时上下文」取到的是
+    #   **本次 graph 调用**的 config，不是「并发里算到谁头上算谁的」。
+    #   这条判据是为了把 B3 里**被推翻的那半**固化下来：推翻一次不够，要留证据。
+    async def _whoami(_):
+        first = user_id_from_config(None)
+        await asyncio.sleep(0.02)  # 强制让 4 个任务交错
+        return first, user_id_from_config(None)
+
+    results = await asyncio.gather(
+        *[
+            RunnableLambda(_whoami).ainvoke(None, config={"configurable": {"user_id": f"U{i}"}})
+            for i in range(4)
+        ]
+    )
+    check(
+        "⑩e 并发交错下，回落仍各取自己的 user_id（contextvar 隔离）",
+        all(a == f"U{i}" and b == f"U{i}" for i, (a, b) in enumerate(results)),
+        str(results),
+    )
+
+
+def _c10_contract() -> None:
+    from memory.remember import thread_id_from_config, user_id_from_config
+
+    # ⑩f 契约：显式 config **整块替换**、不做键级合并（当前无调用方踩到，故**不改行为**，
+    #   只把语义钉住 —— 将来若要改成合并，必须让这条变红后由人裁决）。
+    partial = {"configurable": {"thread_id": "T-PARTIAL"}}
+    check(
+        "⑩f 只写 thread_id 的显式 config ⇒ user_id 为 None（不回落补键，契约见 docstring）",
+        user_id_from_config(partial) is None and thread_id_from_config(partial) == "T-PARTIAL",
     )
