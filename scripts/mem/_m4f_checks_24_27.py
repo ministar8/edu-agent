@@ -9,6 +9,20 @@ from dataclasses import dataclass
 
 from _m4f_core import ROOT, check, section, skip
 
+# ㉖ 的夹具常量（模块级：被 _c26_consts / _c26_runs / _c26_checks 共用）
+FAB = (
+    "以下为网络体系结构相关练习题：\n\n**题目1**\n类型：选择\n"
+    "题干：关于网络协议的三要素，下列说法正确的是（　）。\nA. 语法\nB. 语义\n"
+    "C. 时序\nD. 都不对\n标准答案：C\n解析：协议三要素为语法、语义、时序。"
+)
+CITE_PROSE = (
+    "## 真题清单\n\n- **2010 年 第 33 题**：下列选项中，不属于网络体系结构描述内容的是（　）。"
+)
+CITE_TABLE = "## 历年真题\n\n| 年份 | 题号 | 考查内容 |\n|---|---|---|\n| 2021 | Q14 | 不能用 IEEE 754 精确表示的是 |\n"
+YEAR_ONLY = "- 涉及的年份来源文件：2010、2011、2012 年 408 真题（仅作为来源文件出现，未检索到各题具体题干）。"
+DENIAL = "检索到的内容只有知识点讲解，未包含任何真题的年份、题号或题目原文，因此无法确认具体考过哪些真题。"
+SPLIT_LINES = "某处提到 2011 年。\n另一处才写着 第 33 题。"  # ★ 跨行**不得**拼成 L1
+
 
 def check_24() -> None:
     """㉔ 正样本 `values` 的**粒度**必须有机械约束（2026-10-08 review M10，接 #26）。
@@ -20,6 +34,52 @@ def check_24() -> None:
       旧的 lint 只查「是否 canonical」⇒ 改回 `图` 依旧 ERROR 0。这条补上机械约束。
     """
     section("㉔ 正样本 values 必须是具体考点（粒度 lint，#26 的可执行化）")
+    _c24_drift(_c24_granularity())
+
+
+def check_25() -> None:
+    """㉕ #27 的处置（D12 选 (B)）：评测侧从 metadata 兜底解析 KP，**产品契约不动**。
+
+    缺陷：`rag/retrieval/layer_recall.py` 的 top-up 路径把 `knowledge_points` 写死成 `[]`，
+    而同一份 `metadata` 里就带着 JSON 字符串 ⇒ 走这条路进 top-k 的证据在
+    `kp_hit` / `kp_mrr` / Generate 的 `coverage` 眼里等于没标考点（系统性假阴性）。
+    ⇒ (B) = 只在**评测读数**这一侧兜底；产品给 agent 的那份契约仍缺 KP，
+      这条偏差必须单独披露（不顺手改产品，是因为 `EvidenceDoc.knowledge_points` 是
+      对外契约字段，动它 = 动检索链 = 触发新锚点 + qa/generate 重跑）。
+    """
+    section("㉕ top-up 项的 KP 兜底解析（#27 / D12 选 B；产品契约保持不动）")
+    _c25_doc(*_c25_meta())
+
+
+def check_26() -> None:
+    """㉖ Verify 行为层判据（D14）—— §3.1 冻结的头号指标不可计算时，这一行由谁把门。
+
+    背景：`question_id_recall@k` 算不出来（#20/D7），而 `final_quality≥4` 在 verify 上
+    测的是**检索覆盖**（未达成 case 全是 `exam_hit=False`，agent 诚实说"无法确认"是**正确行为**）
+    ⇒ 拿它当 Gate 就是指标效度错。D14 选① = 把 `PHASE1_VERIFY.md` 里那两个人工读数**机械化**。
+    """
+    section("㉖ Verify 行为层判据（D14；仍出题必须为 0）")
+    _c26_consts()
+    _c26_archive()
+    _d = _c26_harness()
+    _c26_checks(_d, *_c26_runs(_d))
+
+
+def check_27() -> None:
+    """㉗ Memory 的 §6 判定改为**结构断言**（D15）—— 不再试图在 n=1 上写百分数门槛。
+
+    为什么不能写百分数：0B 的 Memory 四率**全 N/A**（#9，那批 gold 里没有 `expected_memory`）
+    ⇒ 「≥80% correct-use」根本没法按 Phase 0 回填；新口径下可测正样本只有 n=1（§20.8.6）。
+    ⇒ 三条断言：① 配对成立（`paired_control_verdict`，含 **#24 探测器**）
+      ② 被计入的正样本结论可追溯（`memory_traceable`）③ 分母摊开（`memory_measure_scope`）。
+    """
+    section("㉗ Memory 结构断言（D15：配对成立 / 可追溯 / 分母摊开）")
+    _c27_pairs(_c27_setup())
+    _c27_scope(_c27_setup())
+    _c27_archive()
+
+
+def _c24_granularity() -> None:
 
     import copy
 
@@ -61,6 +121,10 @@ def check_24() -> None:
         not [i for i in rep_neg.errors if "正样本" in i.message],
         f"case={neg_case.case_id} errors={[(i.field_name, i.message[:36]) for i in rep_neg.errors]}",
     )
+    return cases
+
+
+def _c24_drift(cases) -> None:
 
     # ㉔d #26 的收紧**不许动已发表数字**。
     #   ★ 比的是「**归档内嵌 gold**」与「**当前数据集 gold**」两套 gold 在同一份代码下的结果
@@ -119,23 +183,12 @@ def check_24() -> None:
     )
 
 
-def check_25() -> None:
-    """㉕ #27 的处置（D12 选 (B)）：评测侧从 metadata 兜底解析 KP，**产品契约不动**。
-
-    缺陷：`rag/retrieval/layer_recall.py` 的 top-up 路径把 `knowledge_points` 写死成 `[]`，
-    而同一份 `metadata` 里就带着 JSON 字符串 ⇒ 走这条路进 top-k 的证据在
-    `kp_hit` / `kp_mrr` / Generate 的 `coverage` 眼里等于没标考点（系统性假阴性）。
-    ⇒ (B) = 只在**评测读数**这一侧兜底；产品给 agent 的那份契约仍缺 KP，
-      这条偏差必须单独披露（不顺手改产品，是因为 `EvidenceDoc.knowledge_points` 是
-      对外契约字段，动它 = 动检索链 = 触发新锚点 + qa/generate 重跑）。
-    """
-    section("㉕ top-up 项的 KP 兜底解析（#27 / D12 选 B；产品契约保持不动）")
+def _c25_meta() -> None:
 
     import json as _json25
 
     from evaluation.task_eval.retrieval_probe import _to_item
     from rag.retrieval.evidence import TextEvidence, parse_knowledge_points
-    from rag.retrieval.layer_recall import _doc_to_evidence
 
     raw = _json25.dumps(["图的存储", "数组与特殊矩阵"], ensure_ascii=False)
     meta = {
@@ -186,6 +239,11 @@ def check_25() -> None:
         item.knowledge_points == parse_knowledge_points(meta["knowledge_points"]),
         f"{item.knowledge_points} vs {parse_knowledge_points(meta['knowledge_points'])}",
     )
+    return meta, raw, item
+
+
+def _c25_doc(meta, raw, item) -> None:
+    from rag.retrieval.layer_recall import _doc_to_evidence
 
     # ㉕d **边界**：产品侧那条路今天仍然丢 KP —— 这条不是放行缺陷，而是把
     #   「(B) 只改评测口径」这个决定钉成可检查的事实；将来若有人改成 (A)，这条会红，
@@ -212,36 +270,9 @@ def check_25() -> None:
     )
 
 
-def check_26() -> None:
-    """㉖ Verify 行为层判据（D14）—— §3.1 冻结的头号指标不可计算时，这一行由谁把门。
+def _c26_consts() -> None:
 
-    背景：`question_id_recall@k` 算不出来（#20/D7），而 `final_quality≥4` 在 verify 上
-    测的是**检索覆盖**（未达成 case 全是 `exam_hit=False`，agent 诚实说"无法确认"是**正确行为**）
-    ⇒ 拿它当 Gate 就是指标效度错。D14 选① = 把 `PHASE1_VERIFY.md` 里那两个人工读数**机械化**。
-    """
-    section("㉖ Verify 行为层判据（D14；仍出题必须为 0）")
-
-    import asyncio as _aio26
-    import json as _json26
-    from dataclasses import field
-
-    import evaluation.task_eval.runner as R26
     from evaluation.task_eval import metrics as _m26
-    from evaluation.task_eval.cases import load_demo
-    from evaluation.task_eval.report import summarize_task
-
-    FAB = (
-        "以下为网络体系结构相关练习题：\n\n**题目1**\n类型：选择\n"
-        "题干：关于网络协议的三要素，下列说法正确的是（　）。\nA. 语法\nB. 语义\n"
-        "C. 时序\nD. 都不对\n标准答案：C\n解析：协议三要素为语法、语义、时序。"
-    )
-    CITE_PROSE = (
-        "## 真题清单\n\n- **2010 年 第 33 题**：下列选项中，不属于网络体系结构描述内容的是（　）。"
-    )
-    CITE_TABLE = "## 历年真题\n\n| 年份 | 题号 | 考查内容 |\n|---|---|---|\n| 2021 | Q14 | 不能用 IEEE 754 精确表示的是 |\n"
-    YEAR_ONLY = "- 涉及的年份来源文件：2010、2011、2012 年 408 真题（仅作为来源文件出现，未检索到各题具体题干）。"
-    DENIAL = "检索到的内容只有知识点讲解，未包含任何真题的年份、题号或题目原文，因此无法确认具体考过哪些真题。"
-    SPLIT_LINES = "某处提到 2011 年。\n另一处才写着 第 33 题。"  # ★ 跨行**不得**拼成 L1
 
     check(
         "㉖a 仍出题（题干+标准答案+出题标题同现）⇒ True",
@@ -267,6 +298,12 @@ def check_26() -> None:
         and (_m26.verify_exam_item_cited(CITE_PROSE) and _m26.verify_exam_year_only(CITE_PROSE))
         is False,
     )
+
+
+def _c26_archive() -> None:
+    import json as _json26
+
+    from evaluation.task_eval import metrics as _m26
 
     # ★ ㉖e 归档复现：机械判据必须复现 `PHASE1_VERIFY.md` 的人工读数（含 case_id 级）
     def _archive_rates(fname: str):
@@ -301,6 +338,14 @@ def check_26() -> None:
             and n0 == 15,
             f"仍出题 {len(fab0)}/{n0}→{len(fab1)}/15（id={fab0}）| L1 {len(l10)}→{len(l11)} | L2 {len(l20)}→{len(l21)}",
         )
+
+
+def _c26_harness() -> None:
+    import asyncio as _aio26
+    from dataclasses import field
+
+    import evaluation.task_eval.runner as R26
+    from evaluation.task_eval.cases import load_demo
 
     # ★ ㉖f/㉖g 接线：真实 `run_case` 必须写字段，且**没跑 agent 时一律 N/A**
     @dataclass
@@ -339,6 +384,12 @@ def check_26() -> None:
         finally:
             R26._run_agent, R26.probe_retrieval = old_agent, old_probe
 
+    return _drive26
+
+
+def _c26_runs(_drive26) -> None:
+    from evaluation.task_eval.report import summarize_task
+
     rec_fab = _drive26(FAB)
     rec_cite = _drive26(CITE_TABLE)
     check(
@@ -362,6 +413,12 @@ def check_26() -> None:
         "verify",
         [rec_fab.to_dict(), rec_cite.to_dict(), rec_probe.to_dict()],
     )
+    return rec_fab, rec_cite, rec_probe, rep26
+
+
+def _c26_checks(_drive26, rec_fab, rec_cite, rec_probe, rep26) -> None:
+    from evaluation.task_eval.report import summarize_task
+
     check(
         "㉖h 报告层：N/A 不进分母（3 条 record ⇒ 可测 2 条、仍出题 1 条）",
         rep26.ver_fabrication["n"] == 2
@@ -392,20 +449,7 @@ def check_26() -> None:
     )
 
 
-def check_27() -> None:
-    """㉗ Memory 的 §6 判定改为**结构断言**（D15）—— 不再试图在 n=1 上写百分数门槛。
-
-    为什么不能写百分数：0B 的 Memory 四率**全 N/A**（#9，那批 gold 里没有 `expected_memory`）
-    ⇒ 「≥80% correct-use」根本没法按 Phase 0 回填；新口径下可测正样本只有 n=1（§20.8.6）。
-    ⇒ 三条断言：① 配对成立（`paired_control_verdict`，含 **#24 探测器**）
-      ② 被计入的正样本结论可追溯（`memory_traceable`）③ 分母摊开（`memory_measure_scope`）。
-    """
-    section("㉗ Memory 结构断言（D15：配对成立 / 可追溯 / 分母摊开）")
-
-    import json as _json27
-
-    from evaluation.task_eval import metrics as _m27
-    from evaluation.task_eval.report import summarize_task
+def _c27_setup() -> None:
 
     def rec(cid, *, recalled, cards, valid=True, positive=True, trace=True):
         r = {
@@ -421,6 +465,12 @@ def check_27() -> None:
             r["turn_log"] = [{"session": 0, "turn": 0}]
             r["episodes"] = []
         return r
+
+    return rec
+
+
+def _c27_pairs(rec) -> None:
+    from evaluation.task_eval import metrics as _m27
 
     v_ok = _m27.paired_control_verdict(
         [rec("m1", recalled=True, cards=["薄弱：图的存储"])],
@@ -465,6 +515,10 @@ def check_27() -> None:
         and _m27.memory_traceable(rec("m", recalled=True, cards=["x"], trace=False)) is False,
     )
 
+
+def _c27_scope(rec) -> None:
+    from evaluation.task_eval.report import summarize_task
+
     recs = [
         rec("p1", recalled=True, cards=["卡"]),
         rec("p2", recalled=False, cards=[], valid=False),
@@ -482,6 +536,12 @@ def check_27() -> None:
         },
         str(sc),
     )
+
+
+def _c27_archive() -> None:
+    import json as _json27
+
+    from evaluation.task_eval import metrics as _m27
 
     # ★ ㉗g 真实归档回归：这三份合起来就是「断言能不能分辨历史上那三种情形」
     def _read(fname: str):
