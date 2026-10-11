@@ -26,6 +26,50 @@ def _in_window(ep: Episode, now: datetime, days: int) -> bool:
     return at >= now - timedelta(days=days)
 
 
+def _resolve_weak_thresholds(
+    weak_score: float | None,
+    good_score: float | None,
+    window_days: int | None,
+    min_weak_hits: int | None,
+    min_good_hits: int | None,
+) -> tuple[float, float, int, int, int]:
+    """未显式传入的阈值一律回落到 settings（单一真源）。"""
+    return (
+        settings.MEMORY_WEAK_SCORE if weak_score is None else weak_score,
+        settings.MEMORY_GOOD_SCORE if good_score is None else good_score,
+        settings.MEMORY_WEAK_WINDOW_DAYS if window_days is None else window_days,
+        settings.MEMORY_WEAK_MIN_HITS if min_weak_hits is None else min_weak_hits,
+        settings.MEMORY_WEAK_CLEAR_MIN_GOOD_HITS if min_good_hits is None else min_good_hits,
+    )
+
+
+def _aggregate_kp_stats(
+    windowed: list[Episode],
+    *,
+    weak_score: float,
+    good_score: float,
+    allow_legacy_fallback: bool,
+) -> dict[str, dict[str, int]]:
+    """按规范化 KP 聚合：**每条 episode 的每个 KP 各计一次**。"""
+    stats: dict[str, dict[str, int]] = {}
+    for e in windowed:
+        topics = [t for t in (normalize_topic(k) for k in (e.knowledge_points or [])) if t]
+        if not topics:
+            # 新路径无 KP：仅当允许时才回落旧 topic（题干截断）
+            if not allow_legacy_fallback:
+                continue
+            legacy = normalize_topic(e.topic or e.stem_excerpt)
+            topics = [legacy] if legacy else []
+        score = float(e.score or 0)
+        for topic in topics:
+            bucket = stats.setdefault(topic, {"weak": 0, "good": 0})
+            if score < weak_score:
+                bucket["weak"] += 1
+            elif score >= good_score:
+                bucket["good"] += 1
+    return stats
+
+
 def compute_weak_topics(
     grade_episodes: list[Episode],
     *,
@@ -54,36 +98,20 @@ def compute_weak_topics(
         否则旧数据会重新产生 `weak_topics = ["已知一棵二叉排序树……"]` 这类
         **题干片段**，把历史错误语义带进新指标（评测污染）。
     """
-    weak_score = settings.MEMORY_WEAK_SCORE if weak_score is None else weak_score
-    good_score = settings.MEMORY_GOOD_SCORE if good_score is None else good_score
-    window_days = settings.MEMORY_WEAK_WINDOW_DAYS if window_days is None else window_days
-    min_weak_hits = settings.MEMORY_WEAK_MIN_HITS if min_weak_hits is None else min_weak_hits
-    min_good_hits = (
-        settings.MEMORY_WEAK_CLEAR_MIN_GOOD_HITS if min_good_hits is None else min_good_hits
+    weak_score, good_score, window_days, min_weak_hits, min_good_hits = _resolve_weak_thresholds(
+        weak_score, good_score, window_days, min_weak_hits, min_good_hits
     )
 
     now = datetime.now(UTC)
     windowed = [
         e for e in grade_episodes if e.score is not None and _in_window(e, now, window_days)
     ]
-
-    # 按规范化 KP 聚合：**每条 episode 的每个 KP 各计一次**
-    stats: dict[str, dict[str, int]] = {}
-    for e in windowed:
-        topics = [t for t in (normalize_topic(k) for k in (e.knowledge_points or [])) if t]
-        if not topics:
-            # 新路径无 KP：仅当允许时才回落旧 topic（题干截断）
-            if not allow_legacy_fallback:
-                continue
-            legacy = normalize_topic(e.topic or e.stem_excerpt)
-            topics = [legacy] if legacy else []
-        score = float(e.score or 0)
-        for topic in topics:
-            bucket = stats.setdefault(topic, {"weak": 0, "good": 0})
-            if score < weak_score:
-                bucket["weak"] += 1
-            elif score >= good_score:
-                bucket["good"] += 1
+    stats = _aggregate_kp_stats(
+        windowed,
+        weak_score=weak_score,
+        good_score=good_score,
+        allow_legacy_fallback=allow_legacy_fallback,
+    )
 
     weak: list[str] = []
     for topic, bucket in stats.items():

@@ -1,6 +1,5 @@
 """FastAPI 服务：暴露多 Agent 问答（token/message 双流式）、出题/批改与 JWT 认证。"""
 
-import inspect
 import json
 import logging
 import warnings
@@ -18,11 +17,9 @@ from fastapi.staticfiles import StaticFiles
 from langchain_core._api import LangChainBetaWarning
 from langchain_core.messages import (
     AIMessage,
-    AIMessageChunk,
     BaseMessage,
     HumanMessage,
     SystemMessage,
-    ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
@@ -53,6 +50,15 @@ from schema import (
     UserThreads,
     UserThreadsInput,
 )
+from service._sse import (  # noqa: F401  供 stream 路由与本模块使用
+    _HANDOFF_BACK_PREFIXES,
+    _collect_stream_messages,
+    _create_ai_message,
+    _is_user_visible_message,
+    _last_user_visible_message,
+    _normalize_messages,
+    _token_sse,
+)
 from service.auth import get_current_user
 from service.auth import router as auth_router
 from service.errors import (
@@ -69,27 +75,15 @@ from service.health import collect_health
 from service.metrics import collect_metrics
 from service.threads import list_user_threads
 from service.utils import (
-    convert_message_content_to_string,
     ensure_model_available,
     langchain_to_chat_message,
     messages_from_checkpoint,
-    remove_tool_calls,
 )
 
 logger = logging.getLogger(__name__)
 
 # 过滤 LangChain beta 特性告警，避免日志噪音
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
-
-# 防御性兜底：langgraph-supervisor 的回传控制消息（英文），不应透传给用户。
-#
-# 当前 supervisor 装配为 add_handoff_back_messages=False，库不会产生此类消息，
-# 因此这段过滤**没有活路径**。保留是为了在配置被改回 / 库版本变更时仍能挡住 ——
-# 属于「有备无患」而非「正在生效」的防护，勿据此认为系统依赖它。
-_HANDOFF_BACK_PREFIXES = (
-    "Transferring back to ",
-    "Successfully transferred back to ",
-)
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -287,43 +281,6 @@ async def invoke(
         raise internal_error("Unexpected error") from e
 
 
-def _last_user_visible_message(messages: list[BaseMessage]) -> BaseMessage:
-    """从消息尾部回溯，取最后一条用户可见的消息。
-
-    ``values`` 流的末条消息未必是给用户看的最终回答：专家可能以空 content（或带
-    tool_calls 的中间步骤）收尾，直接取 ``messages[-1]`` 会返回空气泡。这里复用 SSE
-    侧的可见性判定（``_is_user_visible_message``），与流式路径保持同一口径。
-
-    全部不可见时回退到原始末条，保证返回值类型仍是 BaseMessage、不会返回 None。
-    """
-    for message in reversed(messages):
-        if _is_user_visible_message(message):
-            return message
-    return messages[-1]
-
-
-def _is_user_visible_message(message: Any) -> bool:
-    """SSE message 流只放行用户可见的对话内容。
-
-    updates 流（含 subgraphs）会把同一最终消息从内层节点（model/agent）与外层包装
-    节点各报一次，并夹带路由/工具中间消息：
-
-    - SystemMessage：工作记忆卡，只进模型上下文
-    - ToolMessage：工具结果与 handoff 控制消息，不是对话气泡
-    - 带 tool_calls 或空内容的 AIMessage：分派决策与中间步骤，不是最终回答
-    - 同 ID 消息只发一次（配合 message_generator 里的 seen_ids 去重）
-    """
-    if isinstance(message, SystemMessage | ToolMessage):
-        return False
-    if isinstance(message, AIMessage):
-        content = message.content
-        if not content or (isinstance(content, str) and not content.strip()):
-            return False
-        if message.tool_calls:
-            return False
-    return True
-
-
 async def message_generator(
     user_input: StreamInput, agent: Any, kwargs: dict[str, Any], run_id: str
 ) -> AsyncGenerator[str, None]:
@@ -345,32 +302,7 @@ async def message_generator(
             else:
                 stream_mode, event = stream_event
 
-            new_messages: list[Any] = []
-            if stream_mode == "updates":
-                for node, updates in event.items():
-                    if node == "__interrupt__":
-                        # 生成器代替「for + append」：少 1 判定点（backlog #36 第三步）
-                        new_messages.extend(AIMessage(content=i.value) for i in updates)
-                        continue
-                    # 内层/外层节点统一收集，交给 _is_user_visible_message + ID 去重筛选
-                    new_messages.extend((updates or {}).get("messages", []))
-            elif stream_mode == "custom":
-                # CustomData.dispatch 写出的 LangChain ChatMessage(role=custom)
-                new_messages = [event]
-
-            processed_messages = []
-            current_message: dict[str, Any] = {}
-            for message in new_messages:
-                if isinstance(message, tuple):
-                    key, value = message
-                    current_message[key] = value
-                else:
-                    if current_message:
-                        processed_messages.append(_create_ai_message(current_message))
-                        current_message = {}
-                    processed_messages.append(message)
-            if current_message:
-                processed_messages.append(_create_ai_message(current_message))
+            processed_messages = _normalize_messages(_collect_stream_messages(stream_mode, event))
 
             for message in processed_messages:
                 if not _is_user_visible_message(message):
@@ -394,28 +326,13 @@ async def message_generator(
                 yield f"data: {json.dumps({'type': 'message', 'content': chat_message.model_dump()})}\n\n"
 
             if stream_mode == "messages":
-                if not user_input.stream_tokens:
-                    continue
-                msg, metadata = event
-                if "skip_stream" in metadata.get("tags", []):
-                    continue
-                if not isinstance(msg, AIMessageChunk):
-                    continue
-                content = remove_tool_calls(msg.content)
-                if content:
-                    yield f"data: {json.dumps({'type': 'token', 'content': convert_message_content_to_string(content)})}\n\n"
+                for frame in _token_sse(event, user_input):
+                    yield frame
     except Exception as e:
         logger.error("Error in message generator: %s", e)
         yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
     finally:
         yield "data: [DONE]\n\n"
-
-
-def _create_ai_message(parts: dict) -> AIMessage:
-    sig = inspect.signature(AIMessage)
-    valid_keys = set(sig.parameters)
-    filtered = {k: v for k, v in parts.items() if k in valid_keys}
-    return AIMessage(**filtered)
 
 
 def _sse_response_example() -> dict[int | str, Any]:

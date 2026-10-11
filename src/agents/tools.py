@@ -36,14 +36,9 @@ _ERR_GENERATE = "出题失败"
 _ERR_GRADE = "批改失败"
 
 
-def build_retrieval_result(
-    *,
-    query: str,
-    fused: FusedEvidence,
-    verification: VerificationResult | None,
-) -> RetrievalResult:
-    """把检索链内部的 FusedEvidence 映射为对外契约。"""
-    docs = [
+def _evidence_docs(fused: FusedEvidence) -> list[EvidenceDoc]:
+    """把 FusedEvidence 的文本证据映射成对外 `EvidenceDoc` 列表。"""
+    return [
         EvidenceDoc(
             evidence_id=ev.evidence_id,
             source=ev.source,
@@ -56,35 +51,47 @@ def build_retrieval_result(
         )
         for ev in fused.text_evidences
     ]
-    sources = [str(s) for s in (fused.sources or [])]
-    verdict = str(verification.verdict.value) if verification else ""
-    reasons = [str(r) for r in (verification.reasons if verification else [])]
 
-    # legacy 池策略结果显式告知，避免模型误判「库里没有」或不知 fallback 来源
-    layer_pack = (fused.metadata or {}).get("layer_pack") or {}
-    degraded_note = ""
+
+def _degraded_note(layer_pack: dict) -> str:
+    """legacy 池策略结果显式告知，避免模型误判「库里没有」或不知 fallback 来源。"""
+    if not layer_pack:
+        return ""
 
     def safe_int(key: str) -> int:
         # `or 0` 守卫 None / 缺失键，保持与原默认值一致
         return int(layer_pack.get(key) or 0)
 
-    if layer_pack:
-        dropped = safe_int("dropped_legacy")
-        used_fb = safe_int("used_fallback")
-        n_pack = safe_int("n_pack")
-        keep_n = safe_int("keep")
-        if layer_pack.get("degraded"):
-            if dropped:
-                degraded_note = (
-                    f"证据包降级：已按策略剔除 legacy {dropped} 条，"
-                    f"主池候选不足（保留 {n_pack}/{keep_n}）"
-                )
-            else:
-                degraded_note = f"证据包降级：候选不足（保留 {n_pack}/{keep_n}）"
-        elif used_fb:
-            degraded_note = (
-                f"主池候选不足，已从 fallback 池补入 legacy {used_fb} 条（保留 {n_pack}/{keep_n}）"
+    dropped = safe_int("dropped_legacy")
+    used_fb = safe_int("used_fallback")
+    n_pack = safe_int("n_pack")
+    keep_n = safe_int("keep")
+    if layer_pack.get("degraded"):
+        if dropped:
+            return (
+                f"证据包降级：已按策略剔除 legacy {dropped} 条，"
+                f"主池候选不足（保留 {n_pack}/{keep_n}）"
             )
+        return f"证据包降级：候选不足（保留 {n_pack}/{keep_n}）"
+    if used_fb:
+        return f"主池候选不足，已从 fallback 池补入 legacy {used_fb} 条（保留 {n_pack}/{keep_n}）"
+    return ""
+
+
+def build_retrieval_result(
+    *,
+    query: str,
+    fused: FusedEvidence,
+    verification: VerificationResult | None,
+) -> RetrievalResult:
+    """把检索链内部的 FusedEvidence 映射为对外契约。"""
+    docs = _evidence_docs(fused)
+    sources = [str(s) for s in (fused.sources or [])]
+    verdict = str(verification.verdict.value) if verification else ""
+    reasons = [str(r) for r in (verification.reasons if verification else [])]
+
+    # legacy 池策略结果显式告知，避免模型误判「库里没有」或不知 fallback 来源
+    degraded_note = _degraded_note((fused.metadata or {}).get("layer_pack") or {})
 
     if not fused.final_context.strip():
         context = "知识库中未找到相关内容。"
@@ -209,6 +216,18 @@ def _retrieval_error_payload(query: str, exc: BaseException) -> dict[str, Any]:
     ).as_tool_payload()
 
 
+def _resolve_context_mode(context_mode: str | None) -> str | None:
+    """未显式传入时，从多轮上下文（LangGraph / Store / ContextVar）取。"""
+    if context_mode is not None:
+        return context_mode
+    try:
+        from agents.task_context import get_context_mode
+
+        return get_context_mode()
+    except Exception:
+        return None
+
+
 async def _retrieve_payload(
     query: str,
     *,
@@ -228,13 +247,7 @@ async def _retrieve_payload(
     工具一般传 `agent_prior` 而不是硬绑 task_mode，让 query 信号可覆盖。
     """
     # 多轮上下文（LangGraph / Store / ContextVar）
-    if context_mode is None:
-        try:
-            from agents.task_context import get_context_mode
-
-            context_mode = get_context_mode()
-        except Exception:
-            context_mode = None
+    context_mode = _resolve_context_mode(context_mode)
 
     policy = resolve_task_policy(
         query,
