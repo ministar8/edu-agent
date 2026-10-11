@@ -505,7 +505,7 @@ def check_8() -> None:
     reset_units = [
         p
         for p in (
-            "src/evaluation/retrieval_gate.py",
+            "src/evaluation/gates/retrieval_gate/_gate.py",
             "src/evaluation/task_eval/runner.py",
             "src/evaluation/task_eval/cli.py",
         )
@@ -732,7 +732,7 @@ def check_8() -> None:
         not routes_reset_calls
         and src_units
         == {
-            "src/evaluation/retrieval_gate.py",
+            "src/evaluation/gates/retrieval_gate/_gate.py",
             "src/evaluation/task_eval/runner.py",
             "src/evaluation/task_eval/cli.py",
         }
@@ -826,7 +826,9 @@ def check_8() -> None:
     #     要求它内部存在一个 `try/finally`，其 `finalbody` 里同时有
     #     ① 对 `.query_failures` 的**读取**（Load），② 对某个累计变量的 `.extend(...)` 调用，
     #     ③ 该累计变量出现在本函数的 `return` 值里（收割了又扔掉 = 仍然红）。
-    _rg_tree = ast.parse(Path("src/evaluation/retrieval_gate.py").read_text(encoding="utf-8"))
+    _rg_tree = ast.parse(
+        Path("src/evaluation/gates/retrieval_gate/_gate.py").read_text(encoding="utf-8")
+    )
 
     def _walk_many(nodes: list[ast.stmt]) -> list[ast.AST]:
         """`ast.walk` 只吃**单个**节点；`finalbody` 是节点列表 ⇒ 逐个展开再走。"""
@@ -1266,6 +1268,10 @@ def check_9delivery() -> None:
     #      五格 —— 空包分支的 `fused.metadata` **恒有** `rerank_status` 键且值=桥接送出值。
     #      旧代码空包分支**根本没有这个键**（评审实测：状态在桥接这一跳被整包丢弃）。
     import rag.retrieval.pipeline as _pipe9m
+
+    # 档2 拆包后阶段函数住在 pipeline._stages：编排层经该模块命名空间调用它们，
+    # 故**补丁打 `_stages9m`**（打在 `_pipe9m` 包顶层是静默无效的）；调用仍走 `_pipe9m`。
+    import rag.retrieval.pipeline._stages as _stages9m
     import rag.retrieval.retriever as _ret9m
     import rag.retrieval.semantic_cache as _sc9m
     from rag.retrieval.pipeline import _HydeOutcome as _HO9m
@@ -1282,7 +1288,7 @@ def check_9delivery() -> None:
         "_stage_hyde",
         "_stage_expand_windows",
     )
-    _orig9m_pipe = {n: getattr(_pipe9m, n) for n in _pnames9m}
+    _orig9m_pipe = {n: getattr(_stages9m, n) for n in _pnames9m}
     _orig9m_ret = (
         _ret9m.aclassify_query,
         _ret9m.decompose,
@@ -1327,13 +1333,13 @@ def check_9delivery() -> None:
     raised9m = False
     results9mb: dict[object, object] = {}
     try:
-        _pipe9m._stage_classify_query = _p_classify9m
-        _pipe9m._stage_resolve_plan = _p_plan9m
-        _pipe9m._stage_decompose_query = _p_decompose9m
-        _pipe9m._stage_recall_and_merge = _p_recall9m
-        _pipe9m._stage_dedup_and_threshold = _p_dedup9m
-        _pipe9m._stage_hyde = _p_hyde9m
-        _pipe9m._stage_expand_windows = _p_window9m
+        _stages9m._stage_classify_query = _p_classify9m
+        _stages9m._stage_resolve_plan = _p_plan9m
+        _stages9m._stage_decompose_query = _p_decompose9m
+        _stages9m._stage_recall_and_merge = _p_recall9m
+        _stages9m._stage_dedup_and_threshold = _p_dedup9m
+        _stages9m._stage_hyde = _p_hyde9m
+        _stages9m._stage_expand_windows = _p_window9m
         # A1：空包 + HyDE 交回 failed ⇒ 出参送达（真实编排 + 真实 _stage_rerank + 真实 finally 写入）
         docs9m = asyncio.run(
             _pipe9m.aretrieve_documents(
@@ -1342,7 +1348,7 @@ def check_9delivery() -> None:
         )
         a_ok = docs9m == [] and sink_a == {"rerank_status": "failed"}
         # A2：重排**之前**抛异常 ⇒ `finally` 仍要落，且落 ""（未知，不回填）
-        _pipe9m._stage_recall_and_merge = _p_recall_boom9m
+        _stages9m._stage_recall_and_merge = _p_recall_boom9m
         try:
             asyncio.run(
                 _pipe9m.aretrieve_documents(
@@ -1387,7 +1393,7 @@ def check_9delivery() -> None:
             results9mb[_st9mb] = _fused9mb.metadata.get("rerank_status", "<键缺失>")
     finally:
         for n, f in _orig9m_pipe.items():
-            setattr(_pipe9m, n, f)
+            setattr(_stages9m, n, f)
         (
             _ret9m.aclassify_query,
             _ret9m.decompose,

@@ -34,7 +34,8 @@ Q052 = "目录项与索引结点（inode）的关系是什么？"
 @contextmanager
 def scale_threshold(scale: float):
     """把 effective_threshold 乘 scale（0=禁用阈值）。不改源码。"""
-    import rag.retrieval.pipeline as pipeline
+    # 阶段函数住在 pipeline._stages（编排层经该模块命名空间调用它），补丁必须打在那
+    import rag.retrieval.pipeline._stages as pipeline
 
     orig = pipeline._stage_dedup_and_threshold
 
