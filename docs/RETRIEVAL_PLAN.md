@@ -395,7 +395,7 @@ kp 级**无一条下降** ⇒ **满足进入 Step 2 的条件**。
 - **A2 之后 `#18` 已不再被截断**（`dropped_by = survived`，最终 rank 2）
   ⇒ **触发条件不成立，不做**。
 - ★ 另记一处**原表述缺陷**（将来真要放宽时须注意）：原文写的
-  `top_n = k*2 if decomposed else k` **就是当前实现**（`retriever.py:1049`），
+  `top_n = k*2 if decomposed else k` **就是当前实现**（`pipeline/_stages.py` 的 `_stage_rerank`），
   照字面改是 **no-op**；真要放宽得写成「非分解路径也放大」（如恒 `2k`）。
 
 ### Step 6 — 收尾 ✅ **已完成**

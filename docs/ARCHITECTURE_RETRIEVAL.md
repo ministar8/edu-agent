@@ -209,7 +209,7 @@ exams / code + learning_paths），**已覆盖 L1/L2/L3** —— 本节此前记
 实测排除：chunk 内容确定、HNSW 图确定、同进程内确定；`PYTHONHASHSEED=0` 只减不消。
 **收敛到 1 条 query**（`请出一道考查 TCP 序号与确认号的题。`）的 top-2 chunk 互换
 （kp 排名 1↔2，折算 `0.5/156≈0.0032`）。性质是**并列打破**：RRF 主排序
-（`postprocess.py:178`）已用 `_dedup_key` 做次级键、修好了 `cat@1`，但**下游仍有按
+（`postprocess/`）已用 `_dedup_key` 做次级键、修好了 `cat@1`，但**下游仍有按
 「分数」单键排序处**（如 `dedup_same_section`），其并列时依赖受**并发路由完成次序**
 影响的输入顺序。⇒ **低于 ±0.003 的 `kp_mrr` 退化，门禁测不出**（① 的 cat@1 −0.0128
 等**大**结论不受影响）。

@@ -208,7 +208,7 @@ knowledge/*.md (41 篇)
 ### 6.2 评测口径的三个「坑」（已处理）
 
 **(a) contexts 不能既放成员又放拼接体。**
-`fusion.py:228` 的 `final_context = "\n\n".join(parts)`，而 `parts` 就是各条 evidence 的格式化文本。
+`fusion.py` 里的 `final_context = "\n\n".join(parts)`，而 `parts` 就是各条 evidence 的格式化文本。
 若把它和逐条 evidence **一起**作为 `contexts` 交给 RAGAS，指标会因「拼接体 vs 成员」的自我包含
 关系被**系统性抬高**（`not in contexts` 只能挡住完全相同的整串）。
 **已修**：`adapters.retrieve_contexts` 只返回逐条 evidence 正文（去重），kg-only 场景才回退。
@@ -348,7 +348,7 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
    「有代码 ≠ 在用」，判据只能是调用链。
 4. **~~`rerank_used` 语义不准~~ —— ✅ 已修（2026-09-24）**。
    原问题：`_stage_rerank` 返回的 `rerank_used` 判的是「**调用了**重排」，不是「重排**生效**」。
-   `reranker.rerank()` 在 `settings.RERANK_ENABLED` 为假时于 `reranker.py:133`
+   `reranker.rerank()` 在 `settings.RERANK_ENABLED` 为假时于 `reranker.py`
    提前 `return documents[:top_k]`（一行重排都没跑），而 `rerank_used` 仍为 `True`。
    本机 `.env` 正是 `RERANK_ENABLED=false` + `use_rerank` 默认 `True` 的组合
    → **报告会把「未重排」标成「已重排」**。
@@ -356,7 +356,7 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
    （`rerank_active = use_rerank and settings.RERANK_ENABLED`，**刻意不回写 `use_rerank`**
    —— 后者还兼着候选池大小的职责）。关闭时整段短路，顺带消除了
    「候选被 `_apply_rerank_threshold` 兜底截断到 2 条」这个**连带副作用**。
-   `reranker.py:133` 保留为防御网（触达即 warning）。
+   `reranker.py` 的 `RERANK_ENABLED` 闸保留为防御网（触达即 warning）。
    门禁新增 `GATE_RERANK_MODE=disabled` 路由 + `rerank_used` 断言防回归。
    完整分析见 `docs/RERANK_SWITCH_ANALYSIS.md`。
    另：RAGAS 路径仍显式声明 `settings.RERANK_ENABLED = cfg.use_rerank`，
