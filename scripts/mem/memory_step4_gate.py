@@ -85,9 +85,8 @@ async def _count_ns(store, ns) -> int:
     return len(items)
 
 
-async def main() -> int:
-    from memory.runtime import set_store
-
+def _check_user_id_contract() -> None:
+    """缺口①：每 case 独立 user_id（make_user_id）—— 纯函数，不碰 Store。"""
     print("=" * 70)
     print("缺口① 每 case 独立 user_id（make_user_id）")
     print("=" * 70)
@@ -99,58 +98,69 @@ async def main() -> int:
     ok_charset = all(c.isalnum() or c in "-_" for c in a1)
     check("user_id 字符集合法（可作命名空间段）", ok_charset, a1)
 
+
+async def _check_cleanup_contract(store) -> None:
+    """缺口②：跑前清理该 user 的 Store（_cleanup_user_store）。"""
+    print()
+    print("=" * 70)
+    print("缺口② 跑前清理该 user 的 Store（_cleanup_user_store）")
+    print("=" * 70)
+    uid_a, uid_b = await _seed_two_cases(store)
+    print(f"  seed 完成：A={uid_a}  B={uid_b}")
+
+    a_eps = await _count_ns(store, student_episodes_ns(uid_a))
+    a_prof = await aget_profile(store, uid_a)
+    b_eps = await _count_ns(store, student_episodes_ns(uid_b))
+    check("④a seed 后 A 有 episode", a_eps >= 2, f"{a_eps} 条")
+    check("④a seed 后 A 有画像", bool(a_prof.weak_topics), f"{a_prof.weak_topics}")
+
+    card_before = await abuild_memory_card(store, uid_a)
+    check("⑥ 清理前 A 的记忆卡非空", bool(card_before), repr(card_before[:60]))
+
+    removed = await _cleanup_user_store(store, uid_a)
+    print(f"  清理 A 删除 {removed} 项")
+
+    a_eps_after = await _count_ns(store, student_episodes_ns(uid_a))
+    a_prof_after = await aget_profile(store, uid_a)
+    a_prof_items = await _count_ns(store, student_profile_ns(uid_a))
+    check("④b 清理后 A 的 episode 清空", a_eps_after == 0, f"{a_eps_after} 条")
+    check("④b 清理后 A 的画像清空", a_prof_items == 0, f"{a_prof_items} 条")
+    check(
+        "④b 清理后 A 的 weak_topics 为空",
+        not a_prof_after.weak_topics,
+        f"{a_prof_after.weak_topics}",
+    )
+
+    card_after = await abuild_memory_card(store, uid_a)
+    check("⑥ 清理后 A 的记忆卡为空串", card_after == "", repr(card_after[:60]))
+
+    # ⑤ 隔离性：清理 A 不得动 B
+    b_eps_after = await _count_ns(store, student_episodes_ns(uid_b))
+    b_prof_after = await aget_profile(store, uid_b)
+    check("⑤ B 的 episode 未受影响", b_eps_after == b_eps == 2, f"{b_eps_after} 条")
+    check(
+        "⑤ B 的 weak_topics 未受影响",
+        "栈" in b_prof_after.weak_topics,
+        f"{b_prof_after.weak_topics}",
+    )
+
+    # 收尾：清掉 B，避免污染真实 store.db
+    await _cleanup_user_store(store, uid_b)
+    b_final = await _count_ns(store, student_episodes_ns(uid_b))
+    check("收尾 B 已清空（不留脏数据）", b_final == 0, f"{b_final} 条")
+
+
+async def main() -> int:
+    from memory.runtime import set_store
+
+    _check_user_id_contract()  # 缺口①
+
     async with initialize_store() as store:
         # ★ 必须 set_store：`record_grade` 经 `get_store()` 取**进程级**引用，
         #   不 set 则 `_record_episode` 静默跳过（safe_remember 吞异常）→ seed 写不进去。
         #   这与 `service.lifespan` / `task_eval.runner` 的装配方式一致。
         set_store(store)
-        print()
-        print("=" * 70)
-        print("缺口② 跑前清理该 user 的 Store（_cleanup_user_store）")
-        print("=" * 70)
-        uid_a, uid_b = await _seed_two_cases(store)
-        print(f"  seed 完成：A={uid_a}  B={uid_b}")
-
-        a_eps = await _count_ns(store, student_episodes_ns(uid_a))
-        a_prof = await aget_profile(store, uid_a)
-        b_eps = await _count_ns(store, student_episodes_ns(uid_b))
-        check("④a seed 后 A 有 episode", a_eps >= 2, f"{a_eps} 条")
-        check("④a seed 后 A 有画像", bool(a_prof.weak_topics), f"{a_prof.weak_topics}")
-
-        card_before = await abuild_memory_card(store, uid_a)
-        check("⑥ 清理前 A 的记忆卡非空", bool(card_before), repr(card_before[:60]))
-
-        removed = await _cleanup_user_store(store, uid_a)
-        print(f"  清理 A 删除 {removed} 项")
-
-        a_eps_after = await _count_ns(store, student_episodes_ns(uid_a))
-        a_prof_after = await aget_profile(store, uid_a)
-        a_prof_items = await _count_ns(store, student_profile_ns(uid_a))
-        check("④b 清理后 A 的 episode 清空", a_eps_after == 0, f"{a_eps_after} 条")
-        check("④b 清理后 A 的画像清空", a_prof_items == 0, f"{a_prof_items} 条")
-        check(
-            "④b 清理后 A 的 weak_topics 为空",
-            not a_prof_after.weak_topics,
-            f"{a_prof_after.weak_topics}",
-        )
-
-        card_after = await abuild_memory_card(store, uid_a)
-        check("⑥ 清理后 A 的记忆卡为空串", card_after == "", repr(card_after[:60]))
-
-        # ⑤ 隔离性：清理 A 不得动 B
-        b_eps_after = await _count_ns(store, student_episodes_ns(uid_b))
-        b_prof_after = await aget_profile(store, uid_b)
-        check("⑤ B 的 episode 未受影响", b_eps_after == b_eps == 2, f"{b_eps_after} 条")
-        check(
-            "⑤ B 的 weak_topics 未受影响",
-            "栈" in b_prof_after.weak_topics,
-            f"{b_prof_after.weak_topics}",
-        )
-
-        # 收尾：清掉 B，避免污染真实 store.db
-        await _cleanup_user_store(store, uid_b)
-        b_final = await _count_ns(store, student_episodes_ns(uid_b))
-        check("收尾 B 已清空（不留脏数据）", b_final == 0, f"{b_final} 条")
+        await _check_cleanup_contract(store)  # 缺口②
 
     print()
     print("=" * 70)

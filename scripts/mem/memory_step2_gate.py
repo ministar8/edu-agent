@@ -93,91 +93,105 @@ async def _cleanup(store) -> None:
             print(f"    （清理 {ns} 时忽略：{type(exc).__name__}）")
 
 
-async def main() -> int:
+async def _phase_grading(store) -> list[dict]:
+    """①②③：批改 → record_grade → Store 里的 Episode。返回解析后的 grade 字典。"""
     from agents.grading_core import agrade_answer
+
+    print("=" * 70)
+    print("① 批改 → result.knowledge_points")
+    print("=" * 70)
+    results: list[GradingResult] = []
+    for tag, q in (("A", Q_A), ("B", Q_B)):
+        r = await agrade_answer(
+            stem=q["stem"], user_answer=q["user_answer"], standard_answer=q["standard_answer"]
+        )
+        results.append(r)
+        kps = [normalize_topic(k) for k in r.knowledge_points]
+        print(f"  题 {tag}（{q['qid']}）: score={r.score}  KP={r.knowledge_points}")
+        check(f"题 {tag} score < 60", r.score < 60, f"score={r.score}")
+        check(f"题 {tag} KP 非空", bool(kps), f"normalize 后={kps}")
+        check(f"题 {tag} KP 含「{EXPECTED_KP}」", EXPECTED_KP in kps, f"{kps}")
+
+    print()
+    print("=" * 70)
+    print("② record_grade → ③ Episode.knowledge_points（Store）")
+    print("=" * 70)
+    for tag, q, r in zip("AB", (Q_A, Q_B), results, strict=True):
+        eid = await record_grade(
+            user_id=USER_ID,
+            topic=q["stem"][:80],  # legacy 字段，不参与 Memory 语义
+            score=float(r.score),
+            error_analysis=r.error_analysis or "",
+            stem=q["stem"],
+            knowledge_points=r.knowledge_points,
+        )
+        print(f"  题 {tag}: episode_id={eid}")
+
+    eps = await store.asearch(student_episodes_ns(USER_ID), limit=50)
+    grades = []
+    for it in eps:
+        val = it.value
+        if isinstance(val, bytes):
+            val = json.loads(val.decode("utf-8"))
+        grades.append(val)
+    n_with_kp = sum(1 for g in grades if g.get("knowledge_points"))
+    print(f"  Store 里 grade episodes: {len(grades)} 条，其中有 KP 的 {n_with_kp} 条")
+    check(
+        "③ 每条 episode 的 knowledge_points 非空",
+        n_with_kp == len(grades) == 2,
+        f"{n_with_kp}/{len(grades)}",
+    )
+    return grades
+
+
+def _phase_weak_topics(grades: list[dict]) -> None:
+    """④：compute_weak_topics（纯计算，不碰 Store）。"""
+    from memory.schemas import Episode
+
+    print()
+    print("=" * 70)
+    print("④ compute_weak_topics（allow_legacy_fallback=False）")
+    print("=" * 70)
+    ep_objs = [Episode(**g) for g in grades]
+    weak = compute_weak_topics(ep_objs, allow_legacy_fallback=False)
+    print(f"  weak_topics = {weak}")
+    check(f"④ weak_topics 含「{EXPECTED_KP}」", EXPECTED_KP in weak, f"{weak}")
+
+
+async def _phase_profile_and_card(store) -> None:
+    """⑤⑥a：Store 的 weak_topics + 记忆卡。"""
+    print()
+    print("=" * 70)
+    print("⑤ profile.weak_topics（Store）")
+    print("=" * 70)
+    profile = await aget_profile(store, USER_ID)
+    print(f"  profile.weak_topics = {profile.weak_topics}")
+    check(
+        f"⑤ Store 的 weak_topics 含「{EXPECTED_KP}」",
+        EXPECTED_KP in profile.weak_topics,
+        f"{profile.weak_topics}",
+    )
+
+    print()
+    print("=" * 70)
+    print("⑥a 记忆卡（abuild_memory_card）—— Store → 记忆卡")
+    print("=" * 70)
+    card = await abuild_memory_card(store, USER_ID)
+    print("  ---- 记忆卡内容 ----")
+    print("  " + (card.replace("\n", "\n  ") if card else "（空）"))
+    print("  --------------------")
+    check(f"⑥a 记忆卡非空且含「{EXPECTED_KP}」", bool(card) and EXPECTED_KP in card)
+
+
+async def main() -> int:
     from memory.runtime import set_store
 
     async with initialize_store() as store:
         set_store(store)
         await _cleanup(store)
-
-        print("=" * 70)
-        print("① 批改 → result.knowledge_points")
-        print("=" * 70)
-        results: list[GradingResult] = []
-        for tag, q in (("A", Q_A), ("B", Q_B)):
-            r = await agrade_answer(
-                stem=q["stem"], user_answer=q["user_answer"], standard_answer=q["standard_answer"]
-            )
-            results.append(r)
-            kps = [normalize_topic(k) for k in r.knowledge_points]
-            print(f"  题 {tag}（{q['qid']}）: score={r.score}  KP={r.knowledge_points}")
-            check(f"题 {tag} score < 60", r.score < 60, f"score={r.score}")
-            check(f"题 {tag} KP 非空", bool(kps), f"normalize 后={kps}")
-            check(f"题 {tag} KP 含「{EXPECTED_KP}」", EXPECTED_KP in kps, f"{kps}")
-
-        print()
-        print("=" * 70)
-        print("② record_grade → ③ Episode.knowledge_points（Store）")
-        print("=" * 70)
-        for tag, q, r in zip("AB", (Q_A, Q_B), results, strict=True):
-            eid = await record_grade(
-                user_id=USER_ID,
-                topic=q["stem"][:80],  # legacy 字段，不参与 Memory 语义
-                score=float(r.score),
-                error_analysis=r.error_analysis or "",
-                stem=q["stem"],
-                knowledge_points=r.knowledge_points,
-            )
-            print(f"  题 {tag}: episode_id={eid}")
-
-        eps = await store.asearch(student_episodes_ns(USER_ID), limit=50)
-        grades = []
-        for it in eps:
-            val = it.value
-            if isinstance(val, bytes):
-                val = json.loads(val.decode("utf-8"))
-            grades.append(val)
-        n_with_kp = sum(1 for g in grades if g.get("knowledge_points"))
-        print(f"  Store 里 grade episodes: {len(grades)} 条，其中有 KP 的 {n_with_kp} 条")
-        check(
-            "③ 每条 episode 的 knowledge_points 非空",
-            n_with_kp == len(grades) == 2,
-            f"{n_with_kp}/{len(grades)}",
-        )
-
-        print()
-        print("=" * 70)
-        print("④ compute_weak_topics（allow_legacy_fallback=False）")
-        print("=" * 70)
-        from memory.schemas import Episode
-
-        ep_objs = [Episode(**g) for g in grades]
-        weak = compute_weak_topics(ep_objs, allow_legacy_fallback=False)
-        print(f"  weak_topics = {weak}")
-        check(f"④ weak_topics 含「{EXPECTED_KP}」", EXPECTED_KP in weak, f"{weak}")
-
-        print()
-        print("=" * 70)
-        print("⑤ profile.weak_topics（Store）")
-        print("=" * 70)
-        profile = await aget_profile(store, USER_ID)
-        print(f"  profile.weak_topics = {profile.weak_topics}")
-        check(
-            f"⑤ Store 的 weak_topics 含「{EXPECTED_KP}」",
-            EXPECTED_KP in profile.weak_topics,
-            f"{profile.weak_topics}",
-        )
-
-        print()
-        print("=" * 70)
-        print("⑥a 记忆卡（abuild_memory_card）—— Store → 记忆卡")
-        print("=" * 70)
-        card = await abuild_memory_card(store, USER_ID)
-        print("  ---- 记忆卡内容 ----")
-        print("  " + (card.replace("\n", "\n  ") if card else "（空）"))
-        print("  --------------------")
-        check(f"⑥a 记忆卡非空且含「{EXPECTED_KP}」", bool(card) and EXPECTED_KP in card)
+        grades = await _phase_grading(store)  # ①②③
+        _phase_weak_topics(grades)  # ④
+        await _phase_profile_and_card(store)  # ⑤⑥a
 
     print()
     print("=" * 70)
