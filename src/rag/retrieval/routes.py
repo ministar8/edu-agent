@@ -21,8 +21,8 @@ from rag.retrieval.query_classifier import QueryCategory, RetrievalDepth
 from rag.retrieval.recall import (
     build_metadata_routes,
     build_recall_queries,
-    resolve_collection_routes,
 )
+from rag.retrieval.recall_collections import resolve_collection_routes
 
 logger = logging.getLogger(__name__)
 
