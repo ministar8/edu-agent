@@ -31,6 +31,7 @@ import asyncio
 import json
 import sys
 import time
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -178,6 +179,29 @@ async def run_policy_arm(policy_id: str, queries: dict[str, list[str]]) -> dict[
     }
 
 
+def _print_matrix_table(
+    title: str,
+    results: dict[str, dict[str, Any]],
+    key: str,
+    modes: Iterable[str],
+    *,
+    fmt: str = ">12.3f",
+    default: Any = 0.0,
+) -> None:
+    """打印一张 task_mode × layer_policy 矩阵（fmt 控格式，取到 None 记 n/a）。"""
+    policy_ids = list(LAYER_POLICIES)
+    header = f"{'task_mode':<10}" + "".join(f"{p:>12}" for p in policy_ids)
+    print(f"\n==== {title}====")
+    print(header)
+    print("-" * len(header))
+    for mode in modes:
+        line = f"{mode:<10}"
+        for p in policy_ids:
+            v = results[p]["by_mode"].get(mode, {}).get(key, default)
+            line += f"{v:{fmt}}" if v is not None else f"{'n/a':>12}"
+        print(line)
+
+
 def print_matrix(results: dict[str, dict[str, Any]]) -> None:
     policy_ids = list(LAYER_POLICIES)
     print("\n==== Task Mode × Layer Policy（layer_hit_rate）====")
@@ -203,53 +227,32 @@ def print_matrix(results: dict[str, dict[str, Any]]) -> None:
     for p in policy_ids:
         line += f"{results[p]['macro_layer_hit']:>12.3f}"
     print(line)
-    print("\n==== layer_precision@pack（目标层在包内占比）====")
-    header = f"{'task_mode':<10}" + "".join(f"{p:>12}" for p in policy_ids)
-    print(header)
-    print("-" * len(header))
-    for mode in TASK_QUERIES:
-        line = f"{mode:<10}"
-        for p in policy_ids:
-            v = results[p]["by_mode"].get(mode, {}).get("layer_precision_pack", 0.0)
-            line += f"{v:>12.3f}"
-        print(line)
 
-    print("\n==== pack_nonempty_rate（非空 Evidence Pack 占比）====")
-    header = f"{'task_mode':<10}" + "".join(f"{p:>12}" for p in policy_ids)
-    print(header)
-    print("-" * len(header))
-    for mode in TASK_QUERIES:
-        line = f"{mode:<10}"
-        for p in policy_ids:
-            v = results[p]["by_mode"].get(mode, {}).get("pack_nonempty_rate", 0.0)
-            line += f"{v:>12.3f}"
-        print(line)
-
-    print("\n==== mean_n_pack（证据包条数；prefer_l3 在禁 L3 任务上会被安全裁剪掏空）====")
-    header = f"{'task_mode':<10}" + "".join(f"{p:>12}" for p in policy_ids)
-    print(header)
-    print("-" * len(header))
-    for mode in TASK_QUERIES:
-        line = f"{mode:<10}"
-        for p in policy_ids:
-            v = results[p]["by_mode"].get(mode, {}).get("mean_n_pack", 0.0)
-            line += f"{v:>12.2f}"
-        print(line)
+    _print_matrix_table(
+        "layer_precision@pack（目标层在包内占比）", results, "layer_precision_pack", TASK_QUERIES
+    )
+    _print_matrix_table(
+        "pack_nonempty_rate（非空 Evidence Pack 占比）", results, "pack_nonempty_rate", TASK_QUERIES
+    )
+    _print_matrix_table(
+        "mean_n_pack（证据包条数；prefer_l3 在禁 L3 任务上会被安全裁剪掏空）",
+        results,
+        "mean_n_pack",
+        TASK_QUERIES,
+        fmt=">12.2f",
+    )
 
     print("\n（layer_hit = 证据包命中任务目标层；安全字段各臂相同，只动 preferred_layers）")
     print("（leakage 仅统计 answer-hidden 模式；grade/explain 的 answer_policy=released 不计）")
 
-    print("\n==== leakage_rate（answer-hidden 模式）====")
-    hidden_modes = ["learn", "method", "practice", "verify"]
-    header = f"{'task_mode':<10}" + "".join(f"{p:>12}" for p in policy_ids)
-    print(header)
-    print("-" * len(header))
-    for mode in hidden_modes:
-        line = f"{mode:<10}"
-        for p in policy_ids:
-            v = results[p]["by_mode"].get(mode, {}).get("leakage_rate")
-            line += f"{v if v is not None else 'n/a':>12}"
-        print(line)
+    _print_matrix_table(
+        "leakage_rate（answer-hidden 模式）",
+        results,
+        "leakage_rate",
+        ["learn", "method", "practice", "verify"],
+        fmt=">12",
+        default=None,
+    )
 
 
 def print_interaction(results: dict[str, dict[str, Any]]) -> None:
@@ -272,38 +275,8 @@ def print_interaction(results: dict[str, dict[str, Any]]) -> None:
         )
 
 
-async def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--limit-per-mode", type=int, default=6)
-    ap.add_argument("--policies", default="", help="逗号分隔，只跑指定臂（默认全跑）")
-    args = ap.parse_args()
-
-    policy_ids = (
-        [x.strip() for x in args.policies.split(",") if x.strip()]
-        if args.policies
-        else list(LAYER_POLICIES)
-    )
-    for p in policy_ids:
-        if p not in LAYER_POLICIES:
-            print(f"unknown layer policy {p}")
-            return 2
-
-    queries = {m: qs[: args.limit_per_mode] for m, qs in TASK_QUERIES.items()}
-    n_q = sum(len(v) for v in queries.values())
-    print(f"queries: {n_q} total  {{{', '.join(f'{m}:{len(q)}' for m, q in queries.items())}}}")
-    print(f"layer_policies: {policy_ids}")
-    print("安全字段冻结；只动 preferred_layers")
-
-    t0 = time.perf_counter()
-    results: dict[str, dict[str, Any]] = {}
-    for p in policy_ids:
-        print(f"\n---- arm={p} ({LAYER_POLICIES[p]['note']}) ----", flush=True)
-        results[p] = await run_policy_arm(p, queries)
-        print(f"  macro_layer_hit={results[p]['macro_layer_hit']}")
-
-    print_matrix(results)
-    print_interaction(results)
-
+def _write_archive(results: dict[str, dict[str, Any]], queries: dict[str, list[str]]) -> Path:
+    """把本次结果落盘归档（含 provenance），返回写入路径。"""
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
     path = OUT_DIR / f"task_mode_x_layer_policy_{ts}.json"
@@ -346,6 +319,42 @@ async def main() -> int:
         ),
         encoding="utf-8",
     )
+    return path
+
+
+async def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit-per-mode", type=int, default=6)
+    ap.add_argument("--policies", default="", help="逗号分隔，只跑指定臂（默认全跑）")
+    args = ap.parse_args()
+
+    policy_ids = (
+        [x.strip() for x in args.policies.split(",") if x.strip()]
+        if args.policies
+        else list(LAYER_POLICIES)
+    )
+    for p in policy_ids:
+        if p not in LAYER_POLICIES:
+            print(f"unknown layer policy {p}")
+            return 2
+
+    queries = {m: qs[: args.limit_per_mode] for m, qs in TASK_QUERIES.items()}
+    n_q = sum(len(v) for v in queries.values())
+    print(f"queries: {n_q} total  {{{', '.join(f'{m}:{len(q)}' for m, q in queries.items())}}}")
+    print(f"layer_policies: {policy_ids}")
+    print("安全字段冻结；只动 preferred_layers")
+
+    t0 = time.perf_counter()
+    results: dict[str, dict[str, Any]] = {}
+    for p in policy_ids:
+        print(f"\n---- arm={p} ({LAYER_POLICIES[p]['note']}) ----", flush=True)
+        results[p] = await run_policy_arm(p, queries)
+        print(f"  macro_layer_hit={results[p]['macro_layer_hit']}")
+
+    print_matrix(results)
+    print_interaction(results)
+
+    path = _write_archive(results, queries)
     print(f"\narchive → {path}")
     print(f"elapsed={time.perf_counter() - t0:.0f}s")
     return 0
