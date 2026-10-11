@@ -22,17 +22,16 @@ from ._baseline import (
     load_baseline,
 )
 from ._constants import DEFAULT_GOLDEN_PATH, GATE_K, _effective_category
-from ._data import _METRIC_SPECS, QueryOutcome, RerankObservation, RetrievalMetrics, compute_metrics
+from ._data import QueryOutcome, RerankObservation, RetrievalMetrics, compute_metrics
 from ._golden import chapter_of_source, load_golden_queries
 from ._index import build_index, configure_for_gate, wait_for_index_ready
 from ._modes import (
     GATE_RERANK_MODE_ERROR,
     GATE_USE_REAL_EMBEDDING,
-    embedding_mode,
-    rerank_backend,
     rerank_mode,
     rerank_requested,
 )
+from ._report import _build_report
 
 
 class _GateRunResult(NamedTuple):
@@ -81,6 +80,59 @@ def _observe_query(
     return outcome, observation
 
 
+async def _run_one_query(
+    query: str,
+    expected: tuple[str, ...],
+    expected_kps: tuple[str, ...],
+    *,
+    mgr: Any,
+    run_query_failures: list[str],
+    outcomes: list[QueryOutcome],
+    errors: list[tuple[str, str]],
+    rerank_observations: list[RerankObservation],
+    route_contributions: Counter[str],
+) -> None:
+    """跑一条 query 并把结果/异常累积进各累加器。
+
+    ★ B7 的 reset 调用点 ①：每条 query 之前清空进程级失败记录，**紧接着在 `finally`
+      里收割进 `run_query_failures`**。两句必须成对出现 —— 只 reset 不收割 = 把
+      「前面那几条 query 的索引故障」直接扔掉（比不修更静默）；只收割不 reset =
+      每条都从第 1 条开始重复计数。`_query_failures` 是 append-only 的进程级列表，
+      不 reset 就无法定位「到底是哪条 query 把集合查坏了」。
+    """
+    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+
+    mgr.reset_query_failures()
+    try:
+        fused, _verdict = await aretrieve_evidence_with_retry(
+            query=query,
+            k=GATE_K,
+            # 传「调用方是否要求重排」——disabled 态要求了、但部署开关会短路它
+            use_rerank=rerank_requested(),
+            max_retries=0,
+            use_llm_verify=False,
+        )
+    except Exception as exc:  # noqa: BLE001 — 门禁要把"任何异常"都算作失败证据
+        errors.append((query, f"{type(exc).__name__}: {exc}"))
+        outcomes.append(
+            QueryOutcome(
+                query=query,
+                expected_categories=expected,
+                hit_categories=[],
+                expected_knowledge_points=list(expected_kps),
+            )
+        )
+        rerank_observations.append(RerankObservation(False, False, False))
+        # ★ `finally` 在 `return` 生效**之前**执行 ⇒ 异常路径的失败记录同样被收割。
+        return
+    finally:
+        run_query_failures.extend(mgr.query_failures)
+
+    outcome, observation = _observe_query(query, expected, expected_kps, fused, route_contributions)
+    outcomes.append(outcome)
+    rerank_observations.append(observation)
+
+
 async def run_gate(
     golden_path: str | Path = DEFAULT_GOLDEN_PATH,
     limit: int | None = None,
@@ -97,15 +149,12 @@ async def run_gate(
         故进程级列表结束时只剩最后一条 query —— 消费方必须读这份累计值，
         不能再去读 manager 的实时列表，否则「每条 query 前清空」会把前面几条的故障抹掉）。
 
-    单条 query 抛异常**不再中断整轮** —— 之前一个异常会让门禁直接崩掉、什么指标都拿不到，
-    值班的人只能看到 traceback。现在它被记成一条"空结果 + 错误原因"，门禁照样给出完整
-    指标，并在最后单独列出错误、由调用方判为失败。
-
-    这条路径是真实存在的：CI 无 LLM 凭据时 40 条里有 6 条会抛
-    ``openai.OpenAIError: Missing credentials``（见 core.llm.get_llm 的说明）。
+    单条 query 抛异常**不再中断整轮**（逐条处理见 `_run_one_query`）—— 之前一个异常会让
+    门禁直接崩掉、什么指标都拿不到。现在它被记成一条"空结果 + 错误原因"，门禁照样给出完整
+    指标，并在最后单独列出错误、由调用方判为失败。这条路径是真实存在的：CI 无 LLM 凭据时
+    40 条里有 6 条会抛 ``openai.OpenAIError: Missing credentials``（见 core.llm.get_llm）。
     """
     from rag.common.vectorstore import get_vector_store_manager
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
 
     queries = load_golden_queries(golden_path, limit=limit)
     outcomes: list[QueryOutcome] = []
@@ -121,43 +170,17 @@ async def run_gate(
     run_query_failures: list[str] = list(_mgr.query_failures)
 
     for query, expected, expected_kps in queries:
-        # ★ B7 的 reset 调用点 ①：每条 query 之前清空进程级失败记录，**紧接着在
-        #   `finally` 里收割进 `run_query_failures`**。两句必须成对出现 ——
-        #   只 reset 不收割 = 把「前面那几条 query 的索引故障」直接扔掉（比不修更静默）；
-        #   只收割不 reset = 每条都从第 1 条开始重复计数。
-        #   `_query_failures` 是 append-only 的进程级列表，不 reset 就无法定位
-        #   「到底是哪条 query 把集合查坏了」。
-        _mgr.reset_query_failures()
-        try:
-            fused, _verdict = await aretrieve_evidence_with_retry(
-                query=query,
-                k=GATE_K,
-                # 传「调用方是否要求重排」——disabled 态要求了、但部署开关会短路它
-                use_rerank=rerank_requested(),
-                max_retries=0,
-                use_llm_verify=False,
-            )
-        except Exception as exc:  # noqa: BLE001 — 门禁要把"任何异常"都算作失败证据
-            errors.append((query, f"{type(exc).__name__}: {exc}"))
-            outcomes.append(
-                QueryOutcome(
-                    query=query,
-                    expected_categories=expected,
-                    hit_categories=[],
-                    expected_knowledge_points=list(expected_kps),
-                )
-            )
-            rerank_observations.append(RerankObservation(False, False, False))
-            # ★ `finally` 在 `continue` 生效**之前**执行 ⇒ 异常路径的失败记录同样被收割。
-            continue
-        finally:
-            run_query_failures.extend(_mgr.query_failures)
-
-        outcome, observation = _observe_query(
-            query, expected, expected_kps, fused, route_contributions
+        await _run_one_query(
+            query,
+            expected,
+            expected_kps,
+            mgr=_mgr,
+            run_query_failures=run_query_failures,
+            outcomes=outcomes,
+            errors=errors,
+            rerank_observations=rerank_observations,
+            route_contributions=route_contributions,
         )
-        outcomes.append(outcome)
-        rerank_observations.append(observation)
 
     return _GateRunResult(
         compute_metrics(outcomes),
@@ -281,98 +304,6 @@ def _assert_route_preconditions(rerank_observations: list[RerankObservation]) ->
         )
 
     return violations
-
-
-def _report_header() -> list[str]:
-    """报告抬头：标题 + 路由口径（各路由指标不可互比，报告必须自证口径）。"""
-    _rerank_label = {
-        "off": "off",
-        "on": f"on ({rerank_backend()})",
-        "disabled": "disabled (requested, deployment off)",
-    }[rerank_mode()]
-    return [
-        "=" * 68,
-        "  检索质量黄金集门禁",
-        f"  路由 embed={embedding_mode()}  rerank={_rerank_label}   k={GATE_K}",
-        "=" * 68,
-    ]
-
-
-def _report_metric_table(metrics: RetrievalMetrics, baseline: dict[str, Any] | None) -> list[str]:
-    """逐指标「当前 / 基线 / 判定」表。"""
-    current = metrics.as_dict()
-    lines = [f"{'指标':<24}{'当前':>10}{'基线':>10}   判定"]
-    for name, spec in _METRIC_SPECS.items():
-        cur = float(current[name])
-        # 基线里可能没有这一项（新增指标 / 老基线未重录）—— 显示「—」而非硬取，
-        # 否则 `baseline[name]` 会直接 KeyError 崩掉整轮报告。
-        raw_base = baseline.get(name) if baseline else None
-        base = float(raw_base) if raw_base is not None else None
-        if base is None:
-            verdict = "—"
-        else:
-            regressed = (
-                cur < base - spec.tolerance
-                if spec.direction == "higher"
-                else (cur > base + spec.tolerance)
-            )
-            verdict = "退化" if regressed else "通过"
-        base_str = f"{base:.4f}" if base is not None else "—"
-        lines.append(f"{name:<24}{cur:>10.4f}{base_str:>10}   {verdict}")
-    lines.append("")
-    return lines
-
-
-def _report_query_issues(outcomes: list[QueryOutcome]) -> list[str]:
-    """首条未命中 + 返回空证据两类问题查询。"""
-    lines: list[str] = []
-    misses = [o for o in outcomes if o.first_correct_rank != 1]
-    if misses:
-        lines.append(f"首条未命中目标学科的查询（{len(misses)} 条）：")
-        for outcome in misses:
-            got = outcome.hit_categories[0] if outcome.hit_categories else "（空）"
-            # 多值期望用 `/` 连接展示，如 `data_structure/questions`
-            expected_label = "/".join(outcome.expected_categories)
-            lines.append(f"  - {outcome.query[:34]:<34} 期望 {expected_label:<22} 实际 {got}")
-        lines.append("")
-
-    empty = [o for o in outcomes if not o.hit_categories]
-    if empty:
-        lines.append(f"[严重] 返回空证据的查询（{len(empty)} 条）：")
-        for outcome in empty:
-            lines.append(f"  - {outcome.query[:50]}")
-        lines.append("")
-    return lines
-
-
-def _report_route_contributions(route_contributions: Counter[str]) -> list[str]:
-    """路由贡献度：回答「13 条召回路由里谁在干活、谁空转」（此前只能靠临时脚本统计）。"""
-    # ⚠️ 零贡献**不等于**该路由无用：黄金集全是概念题，`code_meta` / `exercise_meta` /
-    # `answer_meta` / `table_meta` 本就只在对应场景（代码/习题/答案/表格查询）才命中。
-    lines = [
-        f"路由贡献度（最终证据里各路由出现次数，合计 {sum(route_contributions.values())} 次）："
-    ]
-    for name, count in route_contributions.most_common():
-        lines.append(f"  {count:>5}  {name}")
-    if not route_contributions:
-        lines.append("  （无）")
-    lines.append("")
-    return lines
-
-
-def _build_report(
-    metrics: RetrievalMetrics,
-    outcomes: list[QueryOutcome],
-    baseline: dict[str, Any] | None,
-    route_contributions: Counter[str] | None = None,
-) -> str:
-    lines: list[str] = []
-    lines += _report_header()
-    lines += _report_metric_table(metrics, baseline)
-    lines += _report_query_issues(outcomes)
-    if route_contributions is not None:
-        lines += _report_route_contributions(route_contributions)
-    return "\n".join(lines)
 
 
 def unexpected_query_failures(failures: list[str], built: set[str]) -> list[str]:
