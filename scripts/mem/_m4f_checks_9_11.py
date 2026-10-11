@@ -388,7 +388,6 @@ async def _c10_runtime() -> None:
 
 
 async def _c10_episodes() -> None:
-
     # ⑩d 端到端：**经 config 解析取 uid** 写 episode ⇒ weak_topics 派生。
     #   ★ 关键：必须走 `user_id_from_config(None)`（而非显式传 uid），否则会绕过
     #     本缺陷所在的解析路径 —— 实测直接传 uid 时，护栏在破坏后**不变红**。
