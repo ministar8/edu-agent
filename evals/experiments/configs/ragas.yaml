@@ -3,7 +3,7 @@ name: ragas
 description: RAGAS faithfulness / answer_relevancy / context_*
 inherits: null
 dataset: datasets/ragas/ragas_paired20.jsonl
-script: python -m evaluation.cli
+script: python -m evaluation.ragas.cli
 metrics: [faithfulness, answer_relevancy, context_precision, context_recall]
 components: {}            # 非检索消融，无组件开关
 legacy_policy: per_mode

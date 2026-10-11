@@ -14,10 +14,10 @@
 
 命令：
 ```bash
-PYTHONPATH=src uv run python -m evaluation.cli \
+PYTHONPATH=src uv run python -m evaluation.ragas.cli \
   --dataset evals/datasets/ragas/ragas_paired20.jsonl \
   --sample-per-type 5 --no-rerank --include-details --tag final
-uv run python scripts/ragas_report.py --tag final
+uv run python scripts/ops/ragas_report.py --tag final
 ```
 
 ## 总体结果
