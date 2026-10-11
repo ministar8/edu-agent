@@ -155,6 +155,47 @@ async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
     }
 
 
+def _print_arm_table(arm: str, arm_results: list[dict[str, Any]]) -> None:
+    """打印单臂的 scale × 指标汇总表。"""
+    print(f"\n==== Threshold Sensitivity ({arm}, n=60) ====")
+    print(
+        f"{'scale':<8} {'kp_hit':>8} {'kp_mrr':>8} {'cat@1':>8} "
+        f"{'cat_mrr':>8} {'n_ev':>8} {'fallback':>10} {'q052':>6}"
+    )
+    print("-" * 72)
+    for r in arm_results:
+        m = r["metrics"]
+        print(
+            f"{r['scale']:<8} {m['kp_hit_at_k']:>8.3f} {m['kp_mrr']:>8.3f} "
+            f"{m['category_hit_at_1']:>8.3f} {m['category_mrr']:>8.3f} "
+            f"{m['mean_evidence_count']:>8.2f} {r['fallback_rate']:>10.2%} "
+            f"{str(r['q052']['kp_hit']):>6}"
+        )
+    print()
+
+
+def _write_archive(all_results: list[dict[str, Any]], arms: list[str]) -> Path:
+    """落盘归档（含 provenance），返回写入路径。"""
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    path = OUT_DIR / f"threshold_sensitivity_{time.strftime('%Y%m%d_%H%M%S')}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "design": "E-next: RRF threshold × scale; fixed 60 golden / index / top-k; no LLM",
+                "arms": arms,
+                "scales": list(SCALES),
+                "results": all_results,
+                **build_provenance("scripts/exp/threshold_sensitivity.py"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 async def main() -> int:
     import argparse
 
@@ -183,39 +224,9 @@ async def main() -> int:
                 f"fallback={r['fallback_count']} ({r['fallback_rate']:.2%})  "
                 f"q052_kp_hit={r['q052']['kp_hit']}"
             )
-        print(f"\n==== Threshold Sensitivity ({arm}, n=60) ====")
-        print(
-            f"{'scale':<8} {'kp_hit':>8} {'kp_mrr':>8} {'cat@1':>8} "
-            f"{'cat_mrr':>8} {'n_ev':>8} {'fallback':>10} {'q052':>6}"
-        )
-        print("-" * 72)
-        for r in arm_results:
-            m = r["metrics"]
-            print(
-                f"{r['scale']:<8} {m['kp_hit_at_k']:>8.3f} {m['kp_mrr']:>8.3f} "
-                f"{m['category_hit_at_1']:>8.3f} {m['category_mrr']:>8.3f} "
-                f"{m['mean_evidence_count']:>8.2f} {r['fallback_rate']:>10.2%} "
-                f"{str(r['q052']['kp_hit']):>6}"
-            )
-        print()
+        _print_arm_table(arm, arm_results)
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    path = OUT_DIR / f"threshold_sensitivity_{time.strftime('%Y%m%d_%H%M%S')}.json"
-    path.write_text(
-        json.dumps(
-            {
-                "design": "E-next: RRF threshold × scale; fixed 60 golden / index / top-k; no LLM",
-                "arms": arms,
-                "scales": list(SCALES),
-                "results": all_results,
-                **build_provenance("scripts/exp/threshold_sensitivity.py"),
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    path = _write_archive(all_results, arms)
     print(f"archive → {path}")
     return 0
 
