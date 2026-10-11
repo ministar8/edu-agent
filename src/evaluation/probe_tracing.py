@@ -181,9 +181,8 @@ def _extract(key: str, out: Any) -> list[Document]:
     return list(out)
 
 
-@contextmanager
-def _capture():
-    """在上下文内替换 `rag.retrieval.retriever` 的阶段名，把每次调用的输出记进列表。
+class _StagePatcher:
+    """在 `rag.retrieval.pipeline._stages` 上临时替换阶段名，把每次调用的输出记进 `events`。
 
     ★ **必须按「所属阶段」限定抓取范围**，不能全局抓：
     `dedup_same_section` 在**分解路径的每个子查询分支**里都会被调用一次
@@ -192,22 +191,22 @@ def _capture():
     「召回池 19 条 → 同section去重后 63 条」这种**条数反而变多**的反常。
     故用两个开关把内部漏斗限定在各自的外层阶段内。
     """
-    # 档2 拆包后阶段函数在 rag.retrieval.pipeline._stages；编排层经该模块命名空间调用
-    # 阶段函数，故补丁必须打在这上面（打在 pipeline 包顶层是静默无效的）。
-    import rag.retrieval.pipeline._stages as R
 
-    events: list[tuple[str, Any]] = []
-    plan_box: dict[str, Any] = {}
-    originals: dict[str, Any] = {}
-    flags = {"in_dedup_stage": False, "in_rerank_stage": False}
+    def __init__(self, module):
+        self._R = module
+        self.events: list[tuple[str, Any]] = []
+        self.plan_box: dict[str, Any] = {}
+        self._originals: dict[str, Any] = {}
+        self._flags = {"in_dedup_stage": False, "in_rerank_stage": False}
 
-    def _wrap_stage(attr: str, on_enter, on_exit, record_key: str | None):
-        original = getattr(R, attr, None)
+    def wrap_stage(self, attr: str, on_enter, on_exit, record_key: str | None) -> None:
+        """包裹一个阶段函数：进出时调 on_enter/on_exit，可选记录其返回值。"""
+        original = getattr(self._R, attr, None)
         if original is None:
             logger.warning("阶段函数不存在，跳过追踪: rag.retrieval.retriever.%s", attr)
             return
-
-        originals[attr] = original
+        self._originals[attr] = original
+        events = self.events
 
         async def wrapper(*args, **kwargs):
             on_enter()
@@ -219,13 +218,15 @@ def _capture():
                 events.append((record_key, _extract(record_key, out)))
             return out
 
-        setattr(R, attr, wrapper)
+        setattr(self._R, attr, wrapper)
 
-    def _wrap_inner(attr: str, flag: str, record_key: str):
-        original = getattr(R, attr, None)
+    def wrap_inner(self, attr: str, flag: str, record_key: str) -> None:
+        """包裹一个「内层漏斗」函数：仅当所属外层阶段正在进行时记录其返回值。"""
+        original = getattr(self._R, attr, None)
         if original is None:
             return
-        originals[attr] = original
+        self._originals[attr] = original
+        events, flags = self.events, self._flags
 
         if inspect.iscoroutinefunction(original):
 
@@ -243,13 +244,16 @@ def _capture():
                     events.append((record_key, _extract(record_key, out)))
                 return out
 
-        setattr(R, attr, wrapper)
+        setattr(self._R, attr, wrapper)
 
-    # 计划阶段：只为拿到 effective_threshold / k / use_rerank 供报告解释
-    plan_attr = "_stage_resolve_plan"
-    orig_plan = getattr(R, plan_attr, None)
-    if orig_plan is not None:
-        originals[plan_attr] = orig_plan
+    def wrap_plan(self) -> None:
+        """包裹计划阶段：只为拿到 effective_threshold / k / use_rerank 供报告解释。"""
+        plan_attr = "_stage_resolve_plan"
+        orig_plan = getattr(self._R, plan_attr, None)
+        if orig_plan is None:
+            return
+        self._originals[plan_attr] = orig_plan
+        plan_box = self.plan_box
 
         def plan_wrapper(*args, **kwargs):
             out = orig_plan(*args, **kwargs)
@@ -265,32 +269,51 @@ def _capture():
             )
             return out
 
-        setattr(R, plan_attr, plan_wrapper)
+        setattr(self._R, plan_attr, plan_wrapper)
 
-    _wrap_stage("_stage_recall_and_merge", lambda: None, lambda: None, "recall")
-    _wrap_stage(
-        "_stage_dedup_and_threshold",
-        lambda: flags.__setitem__("in_dedup_stage", True),
-        lambda: flags.__setitem__("in_dedup_stage", False),
-        "rrf_threshold",
-    )
-    _wrap_stage(
-        "_stage_rerank",
-        lambda: flags.__setitem__("in_rerank_stage", True),
-        lambda: flags.__setitem__("in_rerank_stage", False),
-        None,
-    )
-    _wrap_stage("_stage_expand_windows", lambda: None, lambda: None, "final")
+    def apply_default_wraps(self) -> None:
+        """按固定顺序安装全部包裹（顺序是行为的一部分）。"""
+        flags = self._flags
+        self.wrap_plan()
+        self.wrap_stage("_stage_recall_and_merge", lambda: None, lambda: None, "recall")
+        self.wrap_stage(
+            "_stage_dedup_and_threshold",
+            lambda: flags.__setitem__("in_dedup_stage", True),
+            lambda: flags.__setitem__("in_dedup_stage", False),
+            "rrf_threshold",
+        )
+        self.wrap_stage(
+            "_stage_rerank",
+            lambda: flags.__setitem__("in_rerank_stage", True),
+            lambda: flags.__setitem__("in_rerank_stage", False),
+            None,
+        )
+        self.wrap_stage("_stage_expand_windows", lambda: None, lambda: None, "final")
+        self.wrap_inner("dedup_same_section", "in_dedup_stage", "section_dedup")
+        self.wrap_inner("rerank", "in_rerank_stage", "rerank_topn")
+        self.wrap_inner("_apply_rerank_threshold", "in_rerank_stage", "rel_threshold")
 
-    _wrap_inner("dedup_same_section", "in_dedup_stage", "section_dedup")
-    _wrap_inner("rerank", "in_rerank_stage", "rerank_topn")
-    _wrap_inner("_apply_rerank_threshold", "in_rerank_stage", "rel_threshold")
+    def restore(self) -> None:
+        """还原全部被替换的属性。"""
+        for attr, original in self._originals.items():
+            setattr(self._R, attr, original)
 
+
+@contextmanager
+def _capture():
+    """在上下文内替换阶段函数，把每次调用的输出记进列表；yield `(events, plan_box)`。
+
+    补丁打在 `rag.retrieval.pipeline._stages` 上（编排层经该模块命名空间调用阶段函数；
+    打在 pipeline 包顶层是静默无效的）。实现见 `_StagePatcher`。
+    """
+    import rag.retrieval.pipeline._stages as R
+
+    patcher = _StagePatcher(R)
+    patcher.apply_default_wraps()
     try:
-        yield events, plan_box
+        yield patcher.events, patcher.plan_box
     finally:
-        for attr, original in originals.items():
-            setattr(R, attr, original)
+        patcher.restore()
 
 
 def _rank(docs: list[Document], probe: Probe) -> int | None:
