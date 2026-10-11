@@ -146,6 +146,66 @@ async def run_task_arm(arm: str) -> dict:
     return {"arm": arm, "by_mode": by_mode, "macro_layer_hit": round(sum(rates) / len(rates), 4)}
 
 
+def _print_retrieval_table(ret_basic: dict, ret_ours: dict) -> None:
+    """检索口径对照表（basic vs ours + Δ）。"""
+    print("\n==== 基础 RAG vs 本系统（检索口径）====")
+    cols = ("kp_hit_at_k", "kp_mrr", "category_hit_at_1", "category_mrr", "mean_evidence_count")
+    print(f"{'arm':<12}" + "".join(f"{c:>18}" for c in cols))
+    for r in (ret_basic, ret_ours):
+        print(f"{r['arm']:<12}" + "".join(f"{r.get(c):>18}" for c in cols))
+    print(
+        "Δ(ours-bas)" + "".join(f"{ret_ours.get(c, 0) - ret_basic.get(c, 0):>+18.4f}" for c in cols)
+    )
+
+
+def _print_task_table(task_basic: dict, task_ours: dict) -> None:
+    """任务口径对照表（layer_hit_rate，逐 task_mode + MACRO）。"""
+    print("\n==== 基础 RAG vs 本系统（任务口径）====")
+    print(f"{'task_mode':<10} {'target':<16} {'basic':>10} {'ours':>10} {'Δ':>8}")
+    print("-" * 58)
+    for mode in TASK_QUERIES:
+        b = task_basic["by_mode"].get(mode, {})
+        o = task_ours["by_mode"].get(mode, {})
+        bh, oh = b.get("layer_hit_rate", 0), o.get("layer_hit_rate", 0)
+        tgt = ",".join(TASK_TARGET_LAYER.get(mode, ()))
+        print(f"{mode:<10} {tgt:<16} {bh:>10.3f} {oh:>10.3f} {oh - bh:>+8.3f}")
+    print("-" * 58)
+    print(
+        f"{'MACRO':<10} {'':<16} {task_basic['macro_layer_hit']:>10.3f} "
+        f"{task_ours['macro_layer_hit']:>10.3f} "
+        f"{task_ours['macro_layer_hit'] - task_basic['macro_layer_hit']:>+8.3f}"
+    )
+
+
+def _write_archive(
+    ret_basic: dict, ret_ours: dict, task_basic: dict, task_ours: dict, limit: int
+) -> Path:
+    """落盘归档（含 provenance），返回写入路径。"""
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    path = OUT_DIR / f"basic_rag_{ts}.json"
+    path.write_text(
+        json.dumps(
+            {
+                "recorded_at": ts,
+                "limit": limit,
+                # 当次配置快照（实验可追溯；YAML 是文档，此处是实际执行口径）
+                "config_snapshot": {
+                    "basic_rag": "semantic top-k only (no bm25/metadata/decompose/hyde/rerank/task_policy)",
+                    "ours": "full system (multi-route + task_mode policy)",
+                },
+                "retrieval": {"basic_rag": ret_basic, "ours": ret_ours},
+                "task": {"basic_rag": task_basic, "ours": task_ours},
+                **build_provenance("scripts/exp/basic_rag_ablation.py"),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=60)
@@ -163,53 +223,10 @@ async def main() -> int:
     print("[4/4] ours 任务口径 ...", flush=True)
     task_ours = await run_task_arm("ours")
 
-    print("\n==== 基础 RAG vs 本系统（检索口径）====")
-    cols = ("kp_hit_at_k", "kp_mrr", "category_hit_at_1", "category_mrr", "mean_evidence_count")
-    print(f"{'arm':<12}" + "".join(f"{c:>18}" for c in cols))
-    for r in (ret_basic, ret_ours):
-        print(f"{r['arm']:<12}" + "".join(f"{r.get(c):>18}" for c in cols))
-    print(
-        "Δ(ours-bas)" + "".join(f"{ret_ours.get(c, 0) - ret_basic.get(c, 0):>+18.4f}" for c in cols)
-    )
+    _print_retrieval_table(ret_basic, ret_ours)
+    _print_task_table(task_basic, task_ours)
 
-    print("\n==== 基础 RAG vs 本系统（任务口径）====")
-    print(f"{'task_mode':<10} {'target':<16} {'basic':>10} {'ours':>10} {'Δ':>8}")
-    print("-" * 58)
-    for mode in TASK_QUERIES:
-        b = task_basic["by_mode"].get(mode, {})
-        o = task_ours["by_mode"].get(mode, {})
-        bh, oh = b.get("layer_hit_rate", 0), o.get("layer_hit_rate", 0)
-        tgt = ",".join(TASK_TARGET_LAYER.get(mode, ()))
-        print(f"{mode:<10} {tgt:<16} {bh:>10.3f} {oh:>10.3f} {oh - bh:>+8.3f}")
-    print("-" * 58)
-    print(
-        f"{'MACRO':<10} {'':<16} {task_basic['macro_layer_hit']:>10.3f} "
-        f"{task_ours['macro_layer_hit']:>10.3f} "
-        f"{task_ours['macro_layer_hit'] - task_basic['macro_layer_hit']:>+8.3f}"
-    )
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    path = OUT_DIR / f"basic_rag_{ts}.json"
-    path.write_text(
-        json.dumps(
-            {
-                "recorded_at": ts,
-                "limit": args.limit,
-                # 当次配置快照（实验可追溯；YAML 是文档，此处是实际执行口径）
-                "config_snapshot": {
-                    "basic_rag": "semantic top-k only (no bm25/metadata/decompose/hyde/rerank/task_policy)",
-                    "ours": "full system (multi-route + task_mode policy)",
-                },
-                "retrieval": {"basic_rag": ret_basic, "ours": ret_ours},
-                "task": {"basic_rag": task_basic, "ours": task_ours},
-                **build_provenance("scripts/exp/basic_rag_ablation.py"),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
+    path = _write_archive(ret_basic, ret_ours, task_basic, task_ours, args.limit)
     print(f"\narchive → {path}")
     return 0
 
