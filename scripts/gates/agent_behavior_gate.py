@@ -320,88 +320,8 @@ async def run_all(quality_out: Path) -> int:
     agent = get_agent(DEFAULT_AGENT)
     t0 = time.time()
     results: list[GateCase] = []
-
-    # —— 实网行为（与 smoke 同源，Gate 口径断言）——
-    live_cases = [
-        (
-            "practice_no_answer",
-            ["给我一道 BST 删除的练习题"],
-            hard_check_practice_no_answer,
-            "practice",
-        ),
-        (
-            "empty_no_hallucination",
-            ["2026 年 408 真题第 1 题的官方答案是什么？"],
-            hard_check_empty_no_hallucination,
-            "",
-        ),
-        (
-            "verify_source_usage",
-            ["BST 删除考过哪些真题？"],
-            hard_check_verify_no_false_claim,
-            "verify",
-        ),
-        (
-            "multi_turn_context",
-            ["给我一道 BST 删除的练习题", "我的答案是 C"],
-            None,
-            "practice",
-        ),
-        (
-            "thin_pack_no_fabrication",
-            ["BST 删除时双支结点怎么处理？"],
-            None,
-            "method",
-        ),
-    ]
-
-    for name, turns, hard_fn, mode_hint in live_cases:
-        print(f"[live] {name} ...", flush=True)
-        case = await run_turns(agent, turns)
-        g = _finish_gate(name, turns, case, hard_fn, mode_hint)
-        results.append(g)
-        print(
-            f"[live] {name} -> {g.result} usage={g.metrics.get('evidence_usage', 0):.2f}",
-            flush=True,
-        )
-
-    # —— 三态 Evidence Pack（fixture 注入，逐条独立 patch）——
-    tri_query = "AVL 树失衡时如何用旋转恢复平衡？"
-    tri_specs = [
-        ("tri_full_8docs", _fixture_payload(8, tri_query), "FULL"),
-        ("tri_thin_2docs", _fixture_payload(2, tri_query), "THIN"),
-        ("tri_empty_0docs", _fixture_payload(0, tri_query, empty=True), "EMPTY"),
-    ]
-    for name, payload, tag in tri_specs:
-        print(f"[tri] {name} ({tag}) ...", flush=True)
-        with patch_retrieval_all(payload):
-            case = await run_turns(agent, [tri_query])
-        g = GateCase(name=name, turns=[tri_query], reply=case.reply)
-        g.hard_fails.extend(case.hard_fails)
-        payloads = case.tool_payloads
-        # 三态硬断言
-        if tag == "EMPTY":
-            hard_check_empty_no_hallucination(g, payloads)
-            if payloads and any(p.get("status") == "ok" for p in payloads):
-                g.hard_fails.append("EMPTY 态却拿到 ok 载荷")
-        else:
-            if not payloads:
-                g.hard_fails.append(f"{tag} 态未收到工具载荷")
-            usage = evidence_usage_score(case.reply, payloads)
-            g.metrics = _quality_metrics(g, payloads)
-            if tag == "FULL" and usage < 0.02 and len(case.reply) > 200:
-                g.hard_fails.append(f"FULL 态脱离 pack（usage={usage}）")
-            if tag == "THIN":
-                # 薄包：允许简短回答，禁止长篇扩写 pack 没有的细节
-                pack_terms = _terms(_pack_text(payloads))
-                reply_terms = _terms(case.reply)
-                if len(case.reply) > 500 and len(reply_terms & pack_terms) < 3:
-                    g.hard_fails.append("THIN 态长篇扩写且与 pack 几乎无交集")
-        hard_check_no_fabrication(g, payloads)
-        if not g.metrics:
-            g.metrics = _quality_metrics(g, payloads)
-        g.notes.append(f"state={tag}")
-        results.append(g)
+    await _run_live_phase(agent, results)
+    await _run_tri_phase(agent, results)
 
     # —— 输出表格 ——
     print("==== Agent Behavior Gate ====")
@@ -463,3 +383,91 @@ async def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(main()))
+
+
+async def _run_live_phase(agent, results) -> None:
+
+    # —— 实网行为（与 smoke 同源，Gate 口径断言）——
+    live_cases = [
+        (
+            "practice_no_answer",
+            ["给我一道 BST 删除的练习题"],
+            hard_check_practice_no_answer,
+            "practice",
+        ),
+        (
+            "empty_no_hallucination",
+            ["2026 年 408 真题第 1 题的官方答案是什么？"],
+            hard_check_empty_no_hallucination,
+            "",
+        ),
+        (
+            "verify_source_usage",
+            ["BST 删除考过哪些真题？"],
+            hard_check_verify_no_false_claim,
+            "verify",
+        ),
+        (
+            "multi_turn_context",
+            ["给我一道 BST 删除的练习题", "我的答案是 C"],
+            None,
+            "practice",
+        ),
+        (
+            "thin_pack_no_fabrication",
+            ["BST 删除时双支结点怎么处理？"],
+            None,
+            "method",
+        ),
+    ]
+
+    for name, turns, hard_fn, mode_hint in live_cases:
+        print(f"[live] {name} ...", flush=True)
+        case = await run_turns(agent, turns)
+        g = _finish_gate(name, turns, case, hard_fn, mode_hint)
+        results.append(g)
+        print(
+            f"[live] {name} -> {g.result} usage={g.metrics.get('evidence_usage', 0):.2f}",
+            flush=True,
+        )
+
+
+async def _run_tri_phase(agent, results) -> None:
+
+    # —— 三态 Evidence Pack（fixture 注入，逐条独立 patch）——
+    tri_query = "AVL 树失衡时如何用旋转恢复平衡？"
+    tri_specs = [
+        ("tri_full_8docs", _fixture_payload(8, tri_query), "FULL"),
+        ("tri_thin_2docs", _fixture_payload(2, tri_query), "THIN"),
+        ("tri_empty_0docs", _fixture_payload(0, tri_query, empty=True), "EMPTY"),
+    ]
+    for name, payload, tag in tri_specs:
+        print(f"[tri] {name} ({tag}) ...", flush=True)
+        with patch_retrieval_all(payload):
+            case = await run_turns(agent, [tri_query])
+        g = GateCase(name=name, turns=[tri_query], reply=case.reply)
+        g.hard_fails.extend(case.hard_fails)
+        payloads = case.tool_payloads
+        # 三态硬断言
+        if tag == "EMPTY":
+            hard_check_empty_no_hallucination(g, payloads)
+            if payloads and any(p.get("status") == "ok" for p in payloads):
+                g.hard_fails.append("EMPTY 态却拿到 ok 载荷")
+        else:
+            if not payloads:
+                g.hard_fails.append(f"{tag} 态未收到工具载荷")
+            usage = evidence_usage_score(case.reply, payloads)
+            g.metrics = _quality_metrics(g, payloads)
+            if tag == "FULL" and usage < 0.02 and len(case.reply) > 200:
+                g.hard_fails.append(f"FULL 态脱离 pack（usage={usage}）")
+            if tag == "THIN":
+                # 薄包：允许简短回答，禁止长篇扩写 pack 没有的细节
+                pack_terms = _terms(_pack_text(payloads))
+                reply_terms = _terms(case.reply)
+                if len(case.reply) > 500 and len(reply_terms & pack_terms) < 3:
+                    g.hard_fails.append("THIN 态长篇扩写且与 pack 几乎无交集")
+        hard_check_no_fabrication(g, payloads)
+        if not g.metrics:
+            g.metrics = _quality_metrics(g, payloads)
+        g.notes.append(f"state={tag}")
+        results.append(g)

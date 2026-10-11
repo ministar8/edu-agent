@@ -119,124 +119,10 @@ async def _run_arm(store_enabled: bool, limit: int | None) -> ArmSummary:
 def _render(store_on: ArmSummary, store_off: ArmSummary) -> str:
     """生成 paired-control 对照报告（markdown）。"""
     lines: list[str] = []
-    lines.append("# Step 5 · Memory 跨会话召回 + paired control（Store ON/OFF）")
-    lines.append("")
-    lines.append(f"**日期**：{datetime.now(UTC).astimezone().isoformat(timespec='seconds')}")
-    lines.append("")
-
-    lines.append("## 一、配对总览（同一批 case，只差 Store 开关）")
-    lines.append("")
-    lines.append("| 指标 | Store ON | Store OFF | 差值 | 期望 |")
-    lines.append("|---|---|---|---|---|")
-    lines.append(f"| case 数 | {store_on.n} | {store_off.n} | — | 相同 |")
-    lines.append(
-        f"| 有效 case（valid≠False） | {store_on.n_valid} | {store_off.n_valid} | "
-        f"{store_on.n_valid - store_off.n_valid:+d} | — |"
-    )
-    lines.append(
-        f"| **有 memory card 的 case** | **{store_on.n_memory_cards}** | "
-        f"**{store_off.n_memory_cards}** | {store_on.n_memory_cards - store_off.n_memory_cards:+d} | "
-        f"ON>OFF |"
-    )
-    lines.append(
-        f"| **recalled_actual=True** | **{store_on.n_recalled_actual}** | "
-        f"**{store_off.n_recalled_actual}** | "
-        f"{store_on.n_recalled_actual - store_off.n_recalled_actual:+d} | ON≥OFF（正样本 ON 应 True）|"
-    )
-    lines.append(
-        f"| recalled_pass=True | {store_on.n_retrieved_pass} | {store_off.n_retrieved_pass} | "
-        f"{store_on.n_retrieved_pass - store_off.n_retrieved_pass:+d} | — |"
-    )
-    lines.append(
-        f"| used=True | {store_on.n_used} | {store_off.n_used} | {store_on.n_used - store_off.n_used:+d} | — |"
-    )
-    lines.append(
-        f"| correct_use=True | {store_on.n_correct_use} | {store_off.n_correct_use} | "
-        f"{store_on.n_correct_use - store_off.n_correct_use:+d} | — |"
-    )
-    lines.append("")
-
-    lines.append("## 二、逐条对照（Store ON）")
-    lines.append("")
-    lines.append(
-        "| case | validity | A段得分 | 批改次数 | card数 | recalled_actual | pass | used | correct | failure |"
-    )
-    lines.append("|---|---|---|---|---|---|---|---|---|---|")
-    for x in store_on.records:
-        sc = [g.get("score") for g in (x.get("grade_scores") or [])]
-        lines.append(
-            f"| {x.get('case_id')} | {x.get('validity_valid')} | {sc} | "
-            f"{len(x.get('grade_scores') or [])} | {len(x.get('memory_cards') or [])} | "
-            f"{x.get('memory_recalled_actual')} | {x.get('memory_retrieved')} | "
-            f"{x.get('memory_used')} | {x.get('memory_correct')} | "
-            f"{','.join(x.get('failure_reason') or []) or '-'} |"
-        )
-    lines.append("")
-
-    lines.append("## 三、逐条对照（Store OFF）")
-    lines.append("")
-    lines.append(
-        "| case | validity | card数 | recalled_actual | pass | failure | validity_reason |"
-    )
-    lines.append("|---|---|---|---|---|---|---|")
-    for x in store_off.records:
-        lines.append(
-            f"| {x.get('case_id')} | {x.get('validity_valid')} | "
-            f"{len(x.get('memory_cards') or [])} | {x.get('memory_recalled_actual')} | "
-            f"{x.get('memory_retrieved')} | {','.join(x.get('failure_reason') or []) or '-'} | "
-            f"{x.get('validity_reason') or '-'} |"
-        )
-    lines.append("")
-
-    # —— 结论判定 ——
-    lines.append("## 四、判定")
-    lines.append("")
-    clean = store_off.n_memory_cards == 0 and store_off.n_recalled_actual == 0
-    lines.append(
-        f"- Store OFF 组「有卡的 case」= {store_off.n_memory_cards}、"
-        f"「recalled_actual=True」= {store_off.n_recalled_actual} "
-        f"⇒ {'✅ 干净（无卡、无召回 —— 证明 ON 组的召回确实来自 Store）' if clean else '❌ 不干净（OFF 组仍有卡/召回 ⇒ 存在旁路，需排查）'}"
-    )
-    # ★ D15 断言 ①（§6 的 Memory 行就看这一条）：**两臂都满足前置条件的正样本交集**上，
-    #   ON 侧必须召回、OFF 侧必须不召回，且 OFF 侧出现任何记忆卡一律判失败 ——
-    #   后者就是 #24 的探测器（旧 OFF 臂没空白进程级 store，照样有卡）。
-    from evaluation.task_eval import metrics as _mt
-
-    pv = _mt.paired_control_verdict(store_on.records, store_off.records)
-    lines.append(
-        f"- **配对断言（D15①，逐 case 而不是汇总数）**：交集 {pv['n_pairs']} 条 ⇒ "
-        f"通过 {pv['n_ok']} 条；反例 {pv['failed'] or '无'}；OFF 侧有卡 {pv['off_has_card'] or '无'} "
-        f"⇒ {'✅ 成立' if pv['passed'] else '❌ 不成立'}"
-    )
-    lines.append(
-        f"- **可追溯断言（D15②）**：ON 组 `memory_traceable` = "
-        f"{_mt.rate([_mt.memory_traceable(x) if x.get('validity_valid') is not False else None for x in store_on.records])}"
-        "（逐轮日志 + 记忆卡通道 + `episodes` 字段 + `store_enabled` 齐备）"
-    )
-    on_pos = [
-        x
-        for x in store_on.records
-        if (x.get("gold", {}).get("expected_memory") or {}).get("should_be_recalled") is True
-        and x.get("validity_valid") is not False
-    ]
-    on_pos_hit = sum(1 for x in on_pos if x.get("memory_recalled_actual") is True)
-    lines.append(
-        f"- Store ON·正样本（should_be_recalled=True 且 valid）= {len(on_pos)} 条，"
-        f"实际召回 = {on_pos_hit} 条 ⇒ "
-        f"{'✅ 跨会话召回成立' if on_pos_hit == len(on_pos) and on_pos else '⚠️ 有正样本未召回（见逐条表）'}"
-    )
-    inv = store_on.n_case_invalid + store_off.n_case_invalid
-    lines.append(
-        f"- case_invalid 合计 = {inv} 条（前置条件没凑成）——"
-        f"{'无非预期' if inv == 0 else '这些**不计入产品失败**，需在报告中单列'}"
-    )
-    lines.append("")
-    lines.append(
-        "> ★ **provenance 声明**：本轮使用的代码含 `schema/grading.py` 的 canonical KP 示例修正"
-        "（属**产品 prompt 行为变更**）。该结果**不得回写进 Phase 0B 冻结基线**；"
-        "若 Memory 相关改动正式纳入 Phase 1，应形成新的 provenance/version。"
-    )
-    lines.append("")
+    _render_head(lines)
+    _render_overview(lines, store_on, store_off)
+    _render_records(lines, store_on, store_off)
+    _render_verdict(lines, store_on, store_off)
     return "\n".join(lines)
 
 
@@ -331,3 +217,133 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def _render_head(lines) -> None:
+    lines.append("# Step 5 · Memory 跨会话召回 + paired control（Store ON/OFF）")
+    lines.append("")
+    lines.append(f"**日期**：{datetime.now(UTC).astimezone().isoformat(timespec='seconds')}")
+    lines.append("")
+
+
+def _render_overview(lines, store_on, store_off) -> None:
+
+    lines.append("## 一、配对总览（同一批 case，只差 Store 开关）")
+    lines.append("")
+    lines.append("| 指标 | Store ON | Store OFF | 差值 | 期望 |")
+    lines.append("|---|---|---|---|---|")
+    lines.append(f"| case 数 | {store_on.n} | {store_off.n} | — | 相同 |")
+    lines.append(
+        f"| 有效 case（valid≠False） | {store_on.n_valid} | {store_off.n_valid} | "
+        f"{store_on.n_valid - store_off.n_valid:+d} | — |"
+    )
+    lines.append(
+        f"| **有 memory card 的 case** | **{store_on.n_memory_cards}** | "
+        f"**{store_off.n_memory_cards}** | {store_on.n_memory_cards - store_off.n_memory_cards:+d} | "
+        f"ON>OFF |"
+    )
+    lines.append(
+        f"| **recalled_actual=True** | **{store_on.n_recalled_actual}** | "
+        f"**{store_off.n_recalled_actual}** | "
+        f"{store_on.n_recalled_actual - store_off.n_recalled_actual:+d} | ON≥OFF（正样本 ON 应 True）|"
+    )
+    lines.append(
+        f"| recalled_pass=True | {store_on.n_retrieved_pass} | {store_off.n_retrieved_pass} | "
+        f"{store_on.n_retrieved_pass - store_off.n_retrieved_pass:+d} | — |"
+    )
+    lines.append(
+        f"| used=True | {store_on.n_used} | {store_off.n_used} | {store_on.n_used - store_off.n_used:+d} | — |"
+    )
+    lines.append(
+        f"| correct_use=True | {store_on.n_correct_use} | {store_off.n_correct_use} | "
+        f"{store_on.n_correct_use - store_off.n_correct_use:+d} | — |"
+    )
+    lines.append("")
+
+
+def _render_records(lines, store_on, store_off) -> None:
+
+    lines.append("## 二、逐条对照（Store ON）")
+    lines.append("")
+    lines.append(
+        "| case | validity | A段得分 | 批改次数 | card数 | recalled_actual | pass | used | correct | failure |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    for x in store_on.records:
+        sc = [g.get("score") for g in (x.get("grade_scores") or [])]
+        lines.append(
+            f"| {x.get('case_id')} | {x.get('validity_valid')} | {sc} | "
+            f"{len(x.get('grade_scores') or [])} | {len(x.get('memory_cards') or [])} | "
+            f"{x.get('memory_recalled_actual')} | {x.get('memory_retrieved')} | "
+            f"{x.get('memory_used')} | {x.get('memory_correct')} | "
+            f"{','.join(x.get('failure_reason') or []) or '-'} |"
+        )
+    lines.append("")
+
+    lines.append("## 三、逐条对照（Store OFF）")
+    lines.append("")
+    lines.append(
+        "| case | validity | card数 | recalled_actual | pass | failure | validity_reason |"
+    )
+    lines.append("|---|---|---|---|---|---|---|")
+    for x in store_off.records:
+        lines.append(
+            f"| {x.get('case_id')} | {x.get('validity_valid')} | "
+            f"{len(x.get('memory_cards') or [])} | {x.get('memory_recalled_actual')} | "
+            f"{x.get('memory_retrieved')} | {','.join(x.get('failure_reason') or []) or '-'} | "
+            f"{x.get('validity_reason') or '-'} |"
+        )
+    lines.append("")
+
+
+def _render_verdict(lines, store_on, store_off) -> None:
+
+    # —— 结论判定 ——
+    lines.append("## 四、判定")
+    lines.append("")
+    clean = store_off.n_memory_cards == 0 and store_off.n_recalled_actual == 0
+    lines.append(
+        f"- Store OFF 组「有卡的 case」= {store_off.n_memory_cards}、"
+        f"「recalled_actual=True」= {store_off.n_recalled_actual} "
+        f"⇒ {'✅ 干净（无卡、无召回 —— 证明 ON 组的召回确实来自 Store）' if clean else '❌ 不干净（OFF 组仍有卡/召回 ⇒ 存在旁路，需排查）'}"
+    )
+    # ★ D15 断言 ①（§6 的 Memory 行就看这一条）：**两臂都满足前置条件的正样本交集**上，
+    #   ON 侧必须召回、OFF 侧必须不召回，且 OFF 侧出现任何记忆卡一律判失败 ——
+    #   后者就是 #24 的探测器（旧 OFF 臂没空白进程级 store，照样有卡）。
+    from evaluation.task_eval import metrics as _mt
+
+    pv = _mt.paired_control_verdict(store_on.records, store_off.records)
+    lines.append(
+        f"- **配对断言（D15①，逐 case 而不是汇总数）**：交集 {pv['n_pairs']} 条 ⇒ "
+        f"通过 {pv['n_ok']} 条；反例 {pv['failed'] or '无'}；OFF 侧有卡 {pv['off_has_card'] or '无'} "
+        f"⇒ {'✅ 成立' if pv['passed'] else '❌ 不成立'}"
+    )
+    lines.append(
+        f"- **可追溯断言（D15②）**：ON 组 `memory_traceable` = "
+        f"{_mt.rate([_mt.memory_traceable(x) if x.get('validity_valid') is not False else None for x in store_on.records])}"
+        "（逐轮日志 + 记忆卡通道 + `episodes` 字段 + `store_enabled` 齐备）"
+    )
+    on_pos = [
+        x
+        for x in store_on.records
+        if (x.get("gold", {}).get("expected_memory") or {}).get("should_be_recalled") is True
+        and x.get("validity_valid") is not False
+    ]
+    on_pos_hit = sum(1 for x in on_pos if x.get("memory_recalled_actual") is True)
+    lines.append(
+        f"- Store ON·正样本（should_be_recalled=True 且 valid）= {len(on_pos)} 条，"
+        f"实际召回 = {on_pos_hit} 条 ⇒ "
+        f"{'✅ 跨会话召回成立' if on_pos_hit == len(on_pos) and on_pos else '⚠️ 有正样本未召回（见逐条表）'}"
+    )
+    inv = store_on.n_case_invalid + store_off.n_case_invalid
+    lines.append(
+        f"- case_invalid 合计 = {inv} 条（前置条件没凑成）——"
+        f"{'无非预期' if inv == 0 else '这些**不计入产品失败**，需在报告中单列'}"
+    )
+    lines.append("")
+    lines.append(
+        "> ★ **provenance 声明**：本轮使用的代码含 `schema/grading.py` 的 canonical KP 示例修正"
+        "（属**产品 prompt 行为变更**）。该结果**不得回写进 Phase 0B 冻结基线**；"
+        "若 Memory 相关改动正式纳入 Phase 1，应形成新的 provenance/version。"
+    )
+    lines.append("")
