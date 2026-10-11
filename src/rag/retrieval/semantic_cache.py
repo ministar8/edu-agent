@@ -11,86 +11,32 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import logging
 import threading
 import time
-from pathlib import Path
 from typing import Any
 
 from core.settings import settings
+from rag.retrieval._semantic_cache_codec import (
+    _COLLECTION_NAME,
+    _DATA_DIR,
+    _JSONL_FILE,
+    _MAX_ENTRIES,
+    _SIMILARITY_THRESHOLD,
+    _TTL,
+    _cache_key,
+)
+from rag.retrieval._semantic_cache_io import _EvidenceIoMixin
 from rag.retrieval.evidence import FusedEvidence
 
 logger = logging.getLogger(__name__)
-
-# ── 默认值（可被 settings 覆盖）──────────────────────────────
-_COLLECTION_NAME = "semantic_cache"
-_DATA_DIR = Path(settings.CHROMA_PERSIST_DIR) / "semantic_cache"
-_JSONL_FILE = _DATA_DIR / "evidence.jsonl"
-_TTL = 1800  # 30 分钟
-_MAX_ENTRIES = 500
-_SIMILARITY_THRESHOLD = 0.88
-
-
-# ── 辅助函数 ────────────────────────────────────────────────
-
-
-def _cache_key(
-    query: str,
-    collection_name: str = "",
-    filter_sig: str = "",
-    params_sig: str = "",
-) -> str:
-    """由归一化 query + collection + filter + 检索参数生成确定性 key。
-
-    Different collections、filters 或检索参数（use_rerank / RERANK_ENABLED /
-    k / score_threshold / depth / max_tokens）不得共享缓存条目，
-    即使 query 语义相似也不行。
-
-    ★★ **本 key 刻意不含 `task_mode` / `policy_version` / `cache_scope`** ★★
-    （原先由 `schema/task_policy.TaskPolicy.cache_key_parts()` 声明「必含」，该方法已于
-    2026-10-07 作为死代码删除，其不变量转移到此处 —— 因为它**依赖一个隐式前提**。）
-
-    **为什么不含也不出事**：本缓存只存 **`aretrieve_evidence` 返回的「纯检索结果」**，
-    而所有 **policy 相关处理都在缓存之外**执行：
-
-        aretrieve_evidence_with_retry(...)   ← 缓存发生处（agents/tools.py）
-          ├─ _with_topup(...)                ← 缓存之后（preferred_layers / eligible_layers）
-          ├─ finalize_with_layer_ranking(...) ← 缓存之后（legacy 池策略 + 排序 + 截断）
-          └─ apply_evidence_policy(...)       ← 缓存之后（**release 裁剪，安全出口**）
-
-    且 `aretrieve_evidence` **不 import** `apply_evidence_policy`
-    ⇒ 缓存命中**也无法绕过 release 裁剪**（每次都按当前 policy 重做）⇒ 无泄露。
-
-    另：`task_mode` 已**间接**进 key —— 召回 filter 来自 `policy.eligibility_where()`，
-    而各 mode 的 `exam_resources` 不同 ⇒ filter 不同 ⇒ `filter_sig` 不同。
-    （实测仅 `explain` 的 `eligibility_where()` 返回 `None`，不存在两个 mode 同时为空。）
-
-    ⚠️ **改动须知**：若将来把 `_with_topup` / `finalize_with_layer_ranking` /
-    `apply_evidence_policy` **移进** `aretrieve_evidence`（看起来是很自然的重构），
-    则本缓存会**连 policy 裁剪结果一起缓存** ⇒ 策略变更后旧缓存继续命中 ⇒ **真泄露**。
-    **届时必须先把 `task_mode` / `policy_version` / `cache_scope` 加进本 key。**
-    """
-    normalized = query.strip().lower()
-    raw = f"{normalized}|{collection_name}|{filter_sig}|{params_sig}"
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
-
-
-def _serialize_evidence(fused: FusedEvidence) -> str:
-    """把 FusedEvidence 序列化为 JSON 字符串，用于落盘存储。"""
-    return fused.model_dump_json()
-
-
-def _deserialize_evidence(data: str) -> FusedEvidence:
-    """从 JSON 字符串反序列化 FusedEvidence。"""
-    return FusedEvidence.model_validate_json(data)
 
 
 # ── SemanticCache 类 ──────────────────────────────────────
 
 
-class SemanticCache:
+class SemanticCache(_EvidenceIoMixin):
     """基于 ChromaDB 的 FusedEvidence 语义缓存。
 
     - 向量索引：ChromaDB 集合 ``semantic_cache``（余弦相似度）
@@ -596,98 +542,6 @@ class SemanticCache:
             return True
         except Exception as e:
             return self._reinit_if_stale(e)
-
-    def _read_evidence_at_offset(self, key: str, offset: int) -> FusedEvidence | None:
-        """快路径：按偏移读取并解析；失败/不匹配返回 None（调用方退回线性扫描）。"""
-        try:
-            with open(self._jsonl_path, encoding="utf-8") as f:
-                f.seek(offset)
-                line = f.readline().strip()
-                if line:
-                    entry = json.loads(line)
-                    if entry.get("key") == key and "evidence" in entry:
-                        return _deserialize_evidence(entry["evidence"])
-        except Exception:  # noqa: S110 — 有意忽略：读偏移索引失败即退回线性扫描
-            # 必须留痕（§2.2 规范 2：禁止无日志的 pass）。
-            # 偏移索引若**持续**失效，每次 lookup 都会退化成线性扫描 ——
-            # 这是**性能退化、不影响正确性**，所以用 DEBUG 而不是 WARNING；
-            # 但完全不记的话，这个退化在日志里就彻底不可见。
-            logger.debug("偏移索引读取失败，退回线性扫描 key=%s", key, exc_info=True)
-        return None
-
-    def _scan_evidence_jsonl(self, key: str) -> FusedEvidence | None:
-        """慢路径：线性扫描 JSONL（并重建偏移索引），跳过损坏行。"""
-        if not self._jsonl_path.exists():
-            return None
-        found = None
-        corrupt = 0
-        try:
-            with open(self._jsonl_path, encoding="utf-8") as f:
-                while True:
-                    pos = f.tell()
-                    line = f.readline()
-                    if not line:
-                        break
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        # **单行损坏不能让整个扫描失败。**
-                        # 坏行的现实来源：上次 append 写到一半进程被杀。
-                        # 原实现让 json.loads 的异常冒到外层 except，于是**一条坏行
-                        # 使所有未进偏移索引的键全部查不到** —— 缓存静默变空，
-                        # 只表现为"重启后命中率变低"，没有任何错误可见。
-                        # 跳过坏行、继续扫描，并在最后统一告警。
-                        corrupt += 1
-                        continue
-                    entry_key = entry.get("key", "")
-                    # 扫描时顺带登记偏移
-                    if entry_key not in self._jsonl_offsets:
-                        self._jsonl_offsets[entry_key] = pos
-                    if entry_key == key and "evidence" in entry:
-                        try:
-                            found = _deserialize_evidence(entry["evidence"])
-                        except Exception:
-                            logger.warning("Semantic cache 条目反序列化失败 key=%s，已跳过", key)
-        except Exception as e:
-            logger.warning("Failed to load evidence for key=%s: %s", key, e)
-            return None
-        if corrupt:
-            logger.warning("Semantic cache JSONL 有 %d 行损坏，已跳过", corrupt)
-        return found
-
-    def _load_evidence(self, key: str) -> FusedEvidence | None:
-        """从 JSONL 文件按键加载 FusedEvidence。
-
-        用内存里的 key→offset 索引做 O(1) 查找而非线性扫描；索引失效时退回线性扫描。
-        """
-        # 快路径：走偏移索引
-        offset = self._jsonl_offsets.get(key)
-        if offset is not None:
-            found = self._read_evidence_at_offset(key, offset)
-            if found is not None:
-                return found
-        # 慢路径：线性扫描（并重建偏移索引）
-        return self._scan_evidence_jsonl(key)
-
-    def _save_evidence(self, key: str, query: str, fused: FusedEvidence) -> None:
-        """把证据条目追加到 JSONL 文件。必须在 `_lock` 持有下调用。"""
-        try:
-            meta = self._meta.get(key, {})
-            entry = {
-                "key": key,
-                "query": query,
-                "stored_at": meta.get("stored_at", time.time()),
-                "evidence": _serialize_evidence(fused),
-            }
-            with open(self._jsonl_path, "a", encoding="utf-8") as f:
-                offset = f.tell()
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-            self._jsonl_offsets[key] = offset
-        except Exception as e:
-            logger.warning("Failed to save evidence for key=%s: %s", key, e)
 
     def _evict(self, key: str) -> None:
         """从缓存中逐出单条。"""
