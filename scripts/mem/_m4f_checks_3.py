@@ -14,6 +14,16 @@ from _m4f_core import ROOT, _gold, check, section
 
 def check_3() -> None:
     section("③ Memory 三项机械判定（scorer）")
+    _c3_scorer_a()
+    _c3_scorer_b()
+    _c3_reports()
+    _c3_subject_codes()
+    _c3_verdict(*_c3_tolerance())
+    _c3_parse()
+    _c3_service()
+
+
+def _c3_scorer_a() -> None:
 
     from evaluation.task_eval.cases import Gold
     from evaluation.task_eval.memory_scorer import judge_memory_mechanically as J
@@ -60,6 +70,10 @@ def check_3() -> None:
         (r.recalled_pass, r.used, r.correct, r.correct_use) == (None, None, None, None),
     )
 
+
+def _c3_scorer_b() -> None:
+    from evaluation.task_eval.memory_scorer import judge_memory_mechanically as J
+
     # ── ③d~③g 负样本方向（2026-10-07 修 #4 后新增；旧口径这三个方向全错）──
     #   旧实现：`used` 只看回复里有没有那个词 ⇒
     #     ③d 负样本碰巧提到期望值（其实来自 RAG/题面）⇒ used=True ⇒ 判「用了记忆」**假阳性**
@@ -97,6 +111,9 @@ def check_3() -> None:
         f"used={r.used} correct={r.correct} cu={r.correct_use}",
     )
 
+
+def _c3_reports() -> None:
+
     # ③i 失败率分母必须剔除 case_invalid（修 #6：方案 §2.B「validity ≠ product failure」）
     from evaluation.task_eval.report import summarize_task
 
@@ -130,6 +147,8 @@ def check_3() -> None:
         category_hit("kexue_not_exists", ["computer_network"]) is None,
     )
 
+
+def _c3_subject_codes() -> None:
     # ③j+ ★ 全体扫描（2026-10-07 补）：`cn` 这类漏洞的本质是「数据集里出现的学科码，
     #   映射表不认得」—— 单点断言防不住**下一个**新码。故扫遍 `evals/datasets/` 全部
     #   jsonl，取出实际出现过的学科码，逐个要求：① 能在 `SUBJECT_TO_CATEGORY` 里查到
@@ -138,7 +157,7 @@ def check_3() -> None:
     import json as _json
 
     from evaluation.gates.retrieval_gate import SUBJECT_TO_CATEGORY
-    from evaluation.task_eval.metrics import _SUBJECT_ALIASES
+    from evaluation.task_eval.metrics import _SUBJECT_ALIASES, category_hit
 
     codes: set[str] = set()
     for f in sorted((ROOT / "evals" / "datasets").rglob("*.jsonl")):
@@ -167,6 +186,8 @@ def check_3() -> None:
         f"码={sorted(codes)} 未登记={unmapped} 自测不命中={selfmiss}",
     )
 
+
+def _c3_tolerance() -> None:
     # ── ③l~③n Grade 的两极 gold（2026-10-07 修 #7）──
     #   实测 0B 的 human_score 分布 = {100: 8, 0: 7} ⇒ `score_tolerance` 报 1.000
     #   只证明"模型跟着说了 0/100"。必须置为不可判，且**不能把被隐藏的原始值弄丢**。
@@ -224,10 +245,14 @@ def check_3() -> None:
         tol3.get("degenerate_gold") is False,
         f"n_gold={len(binary[:3])} degenerate={tol3.get('degenerate_gold')}",
     )
+    return binary, tol
 
+
+def _c3_verdict(binary, tol) -> None:
     # ── ③o~③r `verdict_agreement`（#7 的合法替代指标，2026-10-07）──
     from evaluation.task_eval import metrics
     from evaluation.task_eval.metrics import WRONG_SCORE_LINE, verdict_agreement
+    from evaluation.task_eval.report import build_report, render_markdown, summarize_task
 
     # ③o 换指标的理由必须被锁住：**数值差很多、但结论一致** ⇒ verdict 过 / tolerance 败
     check(
@@ -270,6 +295,10 @@ def check_3() -> None:
         f"n={vb2.get('n')} n/a={vb2.get('n_a')}",
     )
 
+
+def _c3_parse() -> None:
+    from evaluation.task_eval import metrics
+
     # ── ③s~③u A1/A2 的回归锁（2026-10-07）──
     # ③s 「满分/总分 X」是**说明性数字**，不能被当得分（旧正则取首个数字，必错这两条）
     s_cases = [
@@ -300,6 +329,9 @@ def check_3() -> None:
         not t_bad,
         f"误判: {t_bad}" if t_bad else "4 条均为 None",
     )
+
+
+def _c3_service() -> None:
 
     # ③u API 批改端点必须把 knowledge_points 透传给 record_grade
     #   ★ 这是**静态**检查（执行它要完整 app + DB）；"执行式"的端到端验证在

@@ -33,144 +33,13 @@ def check_9() -> None:
       ⑨j/k 多行字段可续行 + list 字段按分隔符切分
     """
     section("⑨ 批改链路抗格式飘移")
-
-    from pydantic import ValidationError
-
-    from schema.grading import GradingResult
-
-    # ⑨a 截断
-    r = GradingResult.model_validate({"score": 40, "feedback": "字" * 2000, "is_wrong": True})
-    check(
-        "⑨a 超长 feedback **截断**而非拒绝（不再整次硬失败）",
-        len(r.feedback) == 800,
-        str(len(r.feedback)),
-    )
-    r2 = GradingResult.model_validate({"score": 40, "is_wrong": True})
-    check("⑨a' feedback 可缺省（默认空串）", r2.feedback == "")
-
-    # ⑨b 真错误仍拒绝
-    rejected = 0
-    for bad in (
-        {"score": 150, "feedback": "x", "is_wrong": True},
-        {"score": -1, "feedback": "x", "is_wrong": True},
-        {"feedback": "x", "is_wrong": True},
-        {"score": 40, "feedback": "x"},
-    ):
-        try:
-            GradingResult.model_validate(bad)
-        except ValidationError:
-            rejected += 1
-    check("⑨b 真错误（越界/缺必填）**仍被拒绝**", rejected == 4, f"{rejected}/4")
-
-    # ⑨c 标记清洗
-    from rag.retrieval.llm_calls import _strip_tool_markup as S
-
-    cases = [
-        ("a<parameter=score>b", "ab"),
-        ("x\n<tool_call>\ny", "x\n\ny"),
-        ("<function_call>{}</function_call>", "{}"),
-        ("正文无标记", "正文无标记"),
-        ("泛型 <T> 保留", "泛型 <T> 保留"),
-    ]
-    ok = sum(1 for src, want in cases if S(src) == want)
-    check("⑨c 工具标记清洗正确且不误伤普通尖括号", ok == len(cases), f"{ok}/{len(cases)}")
-
-    # ⑨d 兜底重建
-    #   ★ 第二轮 review 补强：原来只断言 `score`，导致 D2-1（is_wrong 反转）/
-    #     D2-3（KP 丢失）**都不会变红**。现改为断言**全部已解析字段**。
-    from rag.retrieval.llm_calls import _salvage_from_raw
-
-    kv = "score: 40\nfeedback: 反馈<parameter=x>ok\nis_wrong: true"
-    r3 = _salvage_from_raw(kv, GradingResult, "gate")
-    check("⑨d 裸文本+标记 ⇒ 兜底重建成功", r3 is not None and r3.score == 40)
-    check(
-        "⑨d-全字段 兜底结果**每个字段**都正确（不只 score）",
-        r3 is not None and r3.score == 40 and r3.is_wrong is True and "ok" in r3.feedback,
-        f"score={getattr(r3, 'score', None)} is_wrong={getattr(r3, 'is_wrong', None)}",
-    )
-    check(
-        "⑨d' 无标记 ⇒ 不兜底（交回原逻辑）",
-        _salvage_from_raw("score: 40\nfeedback: ok\nis_wrong: true", GradingResult, "gate") is None,
-    )
-    check(
-        "⑨d'' 有标记但缺必填 ⇒ 兜底**不**硬凑（拒绝）",
-        _salvage_from_raw("feedback: a<parameter=x>b", GradingResult, "gate") is None,
-    )
-
-    # ── ⑨g/h/i：第二轮 review 新增（针对裸文本 KV 解析的三个缺陷）──────────
-    from rag.retrieval.llm_calls import _KV_ALL_FIELDS, _try_kv_dict
-
-    # ⑨g 协议一致性：KV 白名单必须**覆盖 schema 全部字段**。
-    #   漏一个 ⇒ 该字段走 schema 默认值被静默丢弃（D2-3 的根因）。
-    schema_fields = set(GradingResult.model_fields)
-    missing = sorted(schema_fields - _KV_ALL_FIELDS)
-    check(
-        "⑨g KV 白名单覆盖 schema 全部字段（漏字段 ⇒ 静默丢失）",
-        not missing,
-        f"schema {len(schema_fields)} 个，缺失: {missing}"
-        if missing
-        else f"schema {len(schema_fields)} 个全覆盖",
-    )
-
-    # ⑨h 首行有前言/空行 ⇒ 仍应从第一个合法 key 起解析（D2-2 回归防护）
-    preambles = [
-        "好的，批改如下：\nscore: 40\nis_wrong: true",
-        "Let me grade this.\nscore: 40\nis_wrong: true",
-        "\n\nscore: 40\nis_wrong: true",
-    ]
-    h_bad = [p for p in preambles if (_try_kv_dict(p) or {}).get("score") != 40]
-    check("⑨h 首行前言/空行 ⇒ 仍解析出 score（不再全盘放弃）", not h_bad, f"失败: {len(h_bad)}")
-
-    # ⑨i is_wrong 不得被「后续非 key 行」污染（D2-1 回归防护）
-    pollution = [
-        "score: 55\nis_wrong: true\ntopic: 平衡二叉树",
-        "score: 55\nis_wrong: true\n知识点: 平衡二叉树",
-        "score: 55\nis_wrong: true\nreason: 概念混淆",
-        "score: 55\nis_wrong: true\n# 备注",
-    ]
-    i_bad = [p for p in pollution if (_try_kv_dict(p) or {}).get("is_wrong") is not True]
-    check(
-        "⑨i is_wrong 不被后续非 key 行污染（防语义反转）",
-        not i_bad,
-        f"被污染: {len(i_bad)} 例",
-    )
-
-    # ⑨j 多行字段仍可续行（feedback / error_analysis），且 list 字段按分隔符切分
-    kv_multi = _try_kv_dict("score: 40\nfeedback: 第一行\n第二行\nis_wrong: true")
-    check(
-        "⑨j feedback 多行续行仍生效（且不污染 is_wrong）",
-        kv_multi is not None
-        and kv_multi.get("feedback") == "第一行\n第二行"
-        and kv_multi.get("is_wrong") is True,
-    )
-    kv_list = _try_kv_dict("score: 40\nis_wrong: true\nknowledge_points: 平衡二叉树、二叉排序树")
-    check(
-        "⑨k knowledge_points 按 list 解析（非硬塞字符串）",
-        isinstance((kv_list or {}).get("knowledge_points"), list)
-        and (kv_list or {}).get("knowledge_points") == ["平衡二叉树", "二叉排序树"],
-    )
-
-    # ⑨e 重试接线
-    from core.settings import settings as _s
-
-    check(
-        "⑨e STRUCTURED_OUTPUT_RETRIES 存在且 ≥1（默认开重试）",
-        int(_s.STRUCTURED_OUTPUT_RETRIES) >= 1,
-        str(_s.STRUCTURED_OUTPUT_RETRIES),
-    )
-    import rag.retrieval.llm_calls as L
-
-    # ★ 按事实修订：重试循环（含 `TimeoutError ⇒ break`）下沉到 `_structured_attempts`，
-    #   断言原意（超时不重试，避免成倍放大延迟）不变。
-    src = inspect.getsource(L._structured_attempts)
-    tree = ast.parse(textwrap.dedent(src))
-    has_timeout_break = any(
-        isinstance(n, ast.If)
-        and "TimeoutError" in ast.unparse(n.test)
-        and any(isinstance(s, ast.Break) for s in n.body)
-        for n in ast.walk(tree)
-    )
-    check("⑨f 超时**不**重试（避免成倍放大延迟）", has_timeout_break)
+    _c9_truncate()
+    _c9_reject()
+    _c9_strip()
+    _c9_salvage()
+    _c9_kv_fields()
+    _c9_parsers()
+    _c9_retry()
 
 
 async def check_10() -> None:
@@ -335,13 +204,176 @@ def check_11() -> None:
           —— 这是 `deadlock → 进程死锁` 漏检后的补丁。⑪c 只测样本，故漏掉了它。
     """
     section("⑪ normalize_topic 不得改坏 canonical name")
+    _c11_canonical()
+    _c11_aliases()
+    _c11_reverse()
+    _c11_batch()
 
-    from memory.topics import (
-        _TOPIC_ALIASES,
-        canonical_names,
-        normalize_topic,
-        normalize_topics,
+
+def _c9_truncate() -> None:
+    from schema.grading import GradingResult
+
+    # ⑨a 截断
+    r = GradingResult.model_validate({"score": 40, "feedback": "字" * 2000, "is_wrong": True})
+    check(
+        "⑨a 超长 feedback **截断**而非拒绝（不再整次硬失败）",
+        len(r.feedback) == 800,
+        str(len(r.feedback)),
     )
+    r2 = GradingResult.model_validate({"score": 40, "is_wrong": True})
+    check("⑨a' feedback 可缺省（默认空串）", r2.feedback == "")
+
+
+def _c9_reject() -> None:
+    from pydantic import ValidationError
+
+    from schema.grading import GradingResult
+
+    # ⑨b 真错误仍拒绝
+    rejected = 0
+    for bad in (
+        {"score": 150, "feedback": "x", "is_wrong": True},
+        {"score": -1, "feedback": "x", "is_wrong": True},
+        {"feedback": "x", "is_wrong": True},
+        {"score": 40, "feedback": "x"},
+    ):
+        try:
+            GradingResult.model_validate(bad)
+        except ValidationError:
+            rejected += 1
+    check("⑨b 真错误（越界/缺必填）**仍被拒绝**", rejected == 4, f"{rejected}/4")
+
+
+def _c9_strip() -> None:
+    from rag.retrieval.llm_calls import _strip_tool_markup as S
+
+    # ⑨c 标记清洗
+
+    cases = [
+        ("a<parameter=score>b", "ab"),
+        ("x\n<tool_call>\ny", "x\n\ny"),
+        ("<function_call>{}</function_call>", "{}"),
+        ("正文无标记", "正文无标记"),
+        ("泛型 <T> 保留", "泛型 <T> 保留"),
+    ]
+    ok = sum(1 for src, want in cases if S(src) == want)
+    check("⑨c 工具标记清洗正确且不误伤普通尖括号", ok == len(cases), f"{ok}/{len(cases)}")
+
+
+def _c9_salvage() -> None:
+    from rag.retrieval.llm_calls import _salvage_from_raw
+    from schema.grading import GradingResult
+
+    # ⑨d 兜底重建
+    #   ★ 第二轮 review 补强：原来只断言 `score`，导致 D2-1（is_wrong 反转）/
+    #     D2-3（KP 丢失）**都不会变红**。现改为断言**全部已解析字段**。
+
+    kv = "score: 40\nfeedback: 反馈<parameter=x>ok\nis_wrong: true"
+    r3 = _salvage_from_raw(kv, GradingResult, "gate")
+    check("⑨d 裸文本+标记 ⇒ 兜底重建成功", r3 is not None and r3.score == 40)
+    check(
+        "⑨d-全字段 兜底结果**每个字段**都正确（不只 score）",
+        r3 is not None and r3.score == 40 and r3.is_wrong is True and "ok" in r3.feedback,
+        f"score={getattr(r3, 'score', None)} is_wrong={getattr(r3, 'is_wrong', None)}",
+    )
+    check(
+        "⑨d' 无标记 ⇒ 不兜底（交回原逻辑）",
+        _salvage_from_raw("score: 40\nfeedback: ok\nis_wrong: true", GradingResult, "gate") is None,
+    )
+    check(
+        "⑨d'' 有标记但缺必填 ⇒ 兜底**不**硬凑（拒绝）",
+        _salvage_from_raw("feedback: a<parameter=x>b", GradingResult, "gate") is None,
+    )
+
+
+def _c9_kv_fields() -> None:
+    from rag.retrieval.llm_calls import _KV_ALL_FIELDS
+    from schema.grading import GradingResult
+
+    # ── ⑨g/h/i：第二轮 review 新增（针对裸文本 KV 解析的三个缺陷）──────────
+
+    # ⑨g 协议一致性：KV 白名单必须**覆盖 schema 全部字段**。
+    #   漏一个 ⇒ 该字段走 schema 默认值被静默丢弃（D2-3 的根因）。
+    schema_fields = set(GradingResult.model_fields)
+    missing = sorted(schema_fields - _KV_ALL_FIELDS)
+    check(
+        "⑨g KV 白名单覆盖 schema 全部字段（漏字段 ⇒ 静默丢失）",
+        not missing,
+        f"schema {len(schema_fields)} 个，缺失: {missing}"
+        if missing
+        else f"schema {len(schema_fields)} 个全覆盖",
+    )
+
+
+def _c9_parsers() -> None:
+    from rag.retrieval.llm_calls import _try_kv_dict
+
+    # ⑨h 首行有前言/空行 ⇒ 仍应从第一个合法 key 起解析（D2-2 回归防护）
+    preambles = [
+        "好的，批改如下：\nscore: 40\nis_wrong: true",
+        "Let me grade this.\nscore: 40\nis_wrong: true",
+        "\n\nscore: 40\nis_wrong: true",
+    ]
+    h_bad = [p for p in preambles if (_try_kv_dict(p) or {}).get("score") != 40]
+    check("⑨h 首行前言/空行 ⇒ 仍解析出 score（不再全盘放弃）", not h_bad, f"失败: {len(h_bad)}")
+
+    # ⑨i is_wrong 不得被「后续非 key 行」污染（D2-1 回归防护）
+    pollution = [
+        "score: 55\nis_wrong: true\ntopic: 平衡二叉树",
+        "score: 55\nis_wrong: true\n知识点: 平衡二叉树",
+        "score: 55\nis_wrong: true\nreason: 概念混淆",
+        "score: 55\nis_wrong: true\n# 备注",
+    ]
+    i_bad = [p for p in pollution if (_try_kv_dict(p) or {}).get("is_wrong") is not True]
+    check(
+        "⑨i is_wrong 不被后续非 key 行污染（防语义反转）",
+        not i_bad,
+        f"被污染: {len(i_bad)} 例",
+    )
+
+    # ⑨j 多行字段仍可续行（feedback / error_analysis），且 list 字段按分隔符切分
+    kv_multi = _try_kv_dict("score: 40\nfeedback: 第一行\n第二行\nis_wrong: true")
+    check(
+        "⑨j feedback 多行续行仍生效（且不污染 is_wrong）",
+        kv_multi is not None
+        and kv_multi.get("feedback") == "第一行\n第二行"
+        and kv_multi.get("is_wrong") is True,
+    )
+    kv_list = _try_kv_dict("score: 40\nis_wrong: true\nknowledge_points: 平衡二叉树、二叉排序树")
+    check(
+        "⑨k knowledge_points 按 list 解析（非硬塞字符串）",
+        isinstance((kv_list or {}).get("knowledge_points"), list)
+        and (kv_list or {}).get("knowledge_points") == ["平衡二叉树", "二叉排序树"],
+    )
+
+
+def _c9_retry() -> None:
+    import rag.retrieval.llm_calls as L
+    from core.settings import settings as _s
+
+    # ⑨e 重试接线
+
+    check(
+        "⑨e STRUCTURED_OUTPUT_RETRIES 存在且 ≥1（默认开重试）",
+        int(_s.STRUCTURED_OUTPUT_RETRIES) >= 1,
+        str(_s.STRUCTURED_OUTPUT_RETRIES),
+    )
+
+    # ★ 按事实修订：重试循环（含 `TimeoutError ⇒ break`）下沉到 `_structured_attempts`，
+    #   断言原意（超时不重试，避免成倍放大延迟）不变。
+    src = inspect.getsource(L._structured_attempts)
+    tree = ast.parse(textwrap.dedent(src))
+    has_timeout_break = any(
+        isinstance(n, ast.If)
+        and "TimeoutError" in ast.unparse(n.test)
+        and any(isinstance(s, ast.Break) for s in n.body)
+        for n in ast.walk(tree)
+    )
+    check("⑨f 超时**不**重试（避免成倍放大延迟）", has_timeout_break)
+
+
+def _c11_canonical() -> None:
+    from memory.topics import canonical_names, normalize_topic
 
     canonical = canonical_names()
     check("⑪a' canonical 集合可加载", len(canonical) > 100, f"{len(canonical)} 个")
@@ -361,6 +393,11 @@ def check_11() -> None:
         f"{len(spaced)} 个含空格" + (f"，破坏: {spaced_broken}" if spaced_broken else ""),
     )
 
+
+def _c11_aliases() -> None:
+    from memory.topics import _TOPIC_ALIASES, canonical_names, normalize_topic
+
+    canonical = canonical_names()
     # ⑪c 别名表条目：逐个核验「键非 canonical 的条目」归一后确实到 canonical。
     #   ★ 注意：`AVL树` **不在** `_TOPIC_ALIASES` 里（它靠 rag 兜底 ③ 命中），
     #     故不能拿它当「别名表覆盖」的样本 —— 这里分开测，避免再次归因错误。
@@ -394,6 +431,11 @@ def check_11() -> None:
         f"死代码条目: {dead}" if dead else "无",
     )
 
+
+def _c11_reverse() -> None:
+    from memory.topics import canonical_names, normalize_topic
+
+    canonical = canonical_names()
     # ⑪d 反向映射：canonical 名不得被 rag 同义词表改写成别的值
     #   反例来源：rag/synonyms.SYNONYM_MAP 含 '二叉排序树'→'二叉搜索树'，
     #   但 '二叉排序树' 本身是 canonical ⇒ 必须原样保留，不能被反向覆盖。
@@ -405,6 +447,11 @@ def check_11() -> None:
         "" if not reverse_bad else f"被改写: {reverse_bad}",
     )
 
+
+def _c11_batch() -> None:
+    from memory.topics import canonical_names, normalize_topics
+
+    canonical = canonical_names()
     # ⑪e 写入路径：保序去重 + 结果全 canonical
     raw_in = ["TCP 流量控制", "页面置换算法", "Cache 映射方式", "平衡二叉树", "平衡二叉树"]
     out = normalize_topics(raw_in)
