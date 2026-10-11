@@ -214,7 +214,11 @@ def merge_where_filters(*filters: dict | None) -> dict | None:
 class LayerWeightProfile(BaseModel):
     """排序权重 profile（layer_policy_id 指向的实验表）。
 
-    ★ 白名单：只允许排序/计算相关字段；安全字段出现即拒绝。
+    ★ 白名单：只允许排序/计算相关字段；安全字段出现即拒绝 —— 这些字段
+      （`answer_policy` / `exam_resources` / `allow_question_id_leak` 等）都**不是**
+      本模型的声明字段，文件末尾的 `extra="forbid"` 会在解析期直接拒绝任何未知键，
+      比逐个点名更严。故此处**不再**另写校验器（旧 `_reject_security_fields` 读的是
+      `model_fields_set`，只含已声明字段 ⇒ 对未声明字段恒空、永远 raise 不到，已删）。
     ★ layer_weights 的键**只能是语义层**（basic/advanced/exams）——
       legacy 是资产质量/迁移状态，用 `legacy_policy` 管，不进权重表。
     """
@@ -226,23 +230,6 @@ class LayerWeightProfile(BaseModel):
     rerank_coefficient: float = 1.0
     top_k: int | None = None
     kp_expansion_weight: float = 0.5
-
-    @model_validator(mode="after")
-    def _reject_security_fields(self) -> LayerWeightProfile:
-        forbidden = {
-            "answer_policy",
-            "explanation_policy",
-            "related_exam_policy",
-            "exam_resources",
-            "allow_question_id_leak",
-            "allow_exam_answer_chunk",
-            "leakage_threshold",
-        }
-        extra = forbidden.intersection(self.model_fields_set)
-        # model_fields_set 只含本模型字段；用 dump 检查未知键由 extra=forbid 保证
-        if extra:
-            raise ValueError(f"layer_policy profile 不得包含安全字段: {sorted(extra)}")
-        return self
 
     @model_validator(mode="after")
     def _reject_legacy_as_layer(self) -> LayerWeightProfile:

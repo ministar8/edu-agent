@@ -142,9 +142,9 @@ class BoundedCache[K, V]:
         `max_size → max_size+1 → max_size-1 → max_size …` 周期性振荡。
 
         单线程就会发生，但只表现为「长度偶尔多 1」，很难察觉；
-        并发下线程调度把它摇成了**间歇性测试失败**
-        （`tests/core/test_cache.py::TestConcurrency::test_set_under_contention_stays_bounded`
-        断言 `len(cache) <= max_size`）。**这就是 CI 长期红、本地却几乎复现不出的根因。**
+        并发下线程调度把它摇成了**间歇性失败**——旧测试套件里那条
+        `len(cache) <= max_size` 断言长期红、本地却几乎复现不出
+        （该套件已从本仓库移出）。**这就是 CI 长期红的根因。**
         """
         if len(self._data) < self._max_size:
             return
