@@ -1,7 +1,9 @@
 # RERANK 开关机制梳理：现状、缺陷与设计选项
 
 > 用途：为「rerank 开关该怎么设计」提供完整决策依据。
-> 依据：2026-09-24 全量代码核实（所有行号经实际读取确认，非估算）。
+> 依据：2026-09-24 全量代码核实。
+> ★ 位置引用一律按 **模块 + 符号名**给出（**不含行号**）——`retriever.py` 后续拆入 `pipeline/` 包、
+> `retrieval_gate` 移入 `gates/` 后行号已漂移，符号名才稳。
 > 状态：**仅梳理，未改动任何代码**。
 
 ---
@@ -25,7 +27,7 @@ rerank 是否真正执行，由 **3 个输入**经 **3 道闸**决定。问题�
 
 | 输入 | 来源 | 语义 | 生产取值 |
 |---|---|---|---|
-| `use_rerank` | 调用方传参 | 「这条路径声明支持重排」 | `tools.py:152` 硬编码 `True` |
+| `use_rerank` | 调用方传参 | 「这条路径声明支持重排」 | `agents/tools.py` 硬编码 `True` |
 | `depth.skip_rerank` | `query_classifier.py` 各 depth | 「这类查询主动省延迟」 | 仅 `SHALLOW_DEPTH=True`；STANDARD/DEEP/CODE/TEXT_ONLY 均 `False` |
 | `settings.RERANK_ENABLED` | **`.env:22`** | 「这个部署是否启用重排」 | `false` |
 
@@ -33,9 +35,9 @@ rerank 是否真正执行，由 **3 个输入**经 **3 道闸**决定。问题�
 
 | # | 位置 | 判据 | 否决范围 |
 |---|---|---|---|
-| 闸 1 | `retriever.py:839`（`_resolve_retrieval_policy`） | `if depth.skip_rerank and use_rerank: use_rerank = False` | 整段（策略层） |
-| 闸 2 | `retriever.py:1038`（`_stage_rerank`） | `if not (use_rerank and filtered):` → 早返回 | 整段（阶段层） |
-| 闸 3 | `reranker.py:133`（`rerank()`） | `if not settings.RERANK_ENABLED: return documents[:top_k]` | **仅 `rerank()` 自身** |
+| 闸 1 | `pipeline/_stages.py`（`_stage_resolve_plan`） | `if depth.skip_rerank and use_rerank: use_rerank = False` | 整段（策略层） |
+| 闸 2 | `pipeline/_stages.py`（`_stage_rerank`） | `if not (use_rerank and filtered):` → 早返回 | 整段（阶段层） |
+| 闸 3 | `reranker.py`（`rerank()`） | `if not settings.RERANK_ENABLED: return documents[:top_k]` | **仅 `rerank()` 自身** |
 
 **关键**：闸 1/闸 2 检查的是同一个变量 `use_rerank`（闸 1 写、闸 2 读）。
 闸 3 是**唯一的配置开关**，且位于**被调用者内部**——这是缺陷 1 的结构性原因。
@@ -44,11 +46,11 @@ rerank 是否真正执行，由 **3 个输入**经 **3 道闸**决定。问题�
 
 | # | 位置 | 触发条件 | 日志 |
 |---|---|---|---|
-| 4 | `reranker.py:130` | 空输入 → `return []` | —（正常） |
-| 5 | `reranker.py:180-182` | `HTTPStatusError` | error |
-| 6 | `reranker.py:183-185` | 其他异常 | error |
-| 7 | `reranker.py:188-189` | rerank 返回空 | warning |
-| 8 | `retriever.py:1057` | `_safe_to_thread` 超时（`default=filtered[:top_k]`） | — |
+| 4 | `reranker.py`（空输入） | 空输入 → `return []` | —（正常） |
+| 5 | `reranker.py`（`HTTPStatusError`） | `HTTPStatusError` | error |
+| 6 | `reranker.py`（其他异常） | 其他异常 | error |
+| 7 | `reranker.py`（空结果） | rerank 返回空 | warning |
+| 8 | `routes.py`（`_safe_to_thread`） | `_safe_to_thread` 超时（`default=filtered[:top_k]`） | — |
 
 → **合计 8 个出口**：3 道闸 + 3 个异常/空降级 + 1 个超时兜底 + 1 个正常空输入。
 其中 4–8 是**必要的容错**，不应改动。
@@ -57,8 +59,8 @@ rerank 是否真正执行，由 **3 个输入**经 **3 道闸**决定。问题�
 
 | 位置 | 对象 | 门控 |
 |---|---|---|
-| `retriever.py:1047` | 主路径候选 | 闸 2 |
-| `retriever.py:1175` | HyDE 内对 `hyde_docs` 的二次 rerank | `if use_rerank and hyde_docs:` |
+| `pipeline/_stages.py`（`_stage_rerank`） | 主路径候选 | 闸 2 |
+| `pipeline/_stages.py`（`_hyde_apply_rerank`） | HyDE 内对 `hyde_docs` 的二次 rerank | `if use_rerank and hyde_docs:` |
 
 两处都受闸 3 约束，故 `.env` 关闭时**两处一起失效**。
 
@@ -70,9 +72,9 @@ rerank 是否真正执行，由 **3 个输入**经 **3 道闸**决定。问题�
 
 | 职责 | 位置 | 说明 |
 |---|---|---|
-| ① 是否执行重排 | `retriever.py:1038`、`1175` | 名副其实 |
-| ② **候选池开多大** | `retriever.py:370-388`（`coarse_k`）、`421`（路由上限） | **名不副实** |
-| ③ 阈值推导的输入 | `retriever.py:370` 分支 | 与 ② 同源 |
+| ① 是否执行重排 | `pipeline/_stages.py`（`_stage_rerank` / `_hyde_apply_rerank`） | 名副其实 |
+| ② **候选池开多大** | `pipeline/_support.py`（`_resolve_coarse_k`） | **名不副实** |
+| ③ 阈值推导的输入 | `pipeline/_support.py`（`_resolve_coarse_k`） | 与 ② 同源 |
 
 ### 职责 ② 的量化影响（实测）
 
@@ -118,19 +120,19 @@ _stage_rerank（retriever.py:1021）
 
 ### D2：`rerank_used` 指标失真
 
-`retriever.py:1065` 在进入重排分支后**硬编码返回 `True`**，未反映 `RERANK_ENABLED` 的否决。
-`rerank_used` 经 `_stage_hyde`（`:1500`/`:1506`）最终写入阶段指标（`:1377`、`:1571`）。
+`pipeline/_orchestrator.py`（`rerank_used` 派生）在进入重排分支后**硬编码返回 `True`**，未反映 `RERANK_ENABLED` 的否决。
+`rerank_used` 经 `_stage_hyde` 最终写入阶段指标。
 → **阶段追踪会把「没重排」记成「重排了」**。
 
 ### D3：误导性日志
 
-D1 的兜底分支会打 `logger.info("Rerank threshold fallback: ...")`（`retriever.py:99-107`），
+D1 的兜底分支会打 `logger.info("Rerank threshold fallback: ...")`（`pipeline/_helpers.py`），
 把「rerank 被关闭」误报成「重排后分数不足」。
 
 ### D4：门禁覆盖缺口
 
-门禁 off 路由传 `use_rerank=False`（`retrieval_gate.py:488`）→ **在闸 2 就早返回**
-（`retriever.py:1041`）→ **根本不会触达 `_apply_rerank_threshold`**。
+门禁 off 路由传 `use_rerank=False`（`gates/retrieval_gate/`）→ **在闸 2 就早返回**
+（`pipeline/_stages.py` 的 `_stage_rerank`）→ **根本不会触达 `_apply_rerank_threshold`**。
 故门禁 off 路由与生产 off 路径是**两条不同代码路径**。
 
 ---
@@ -230,7 +232,7 @@ use_rerank = use_rerank and settings.RERANK_ENABLED
 |---|---|---|
 | Q1 | 选哪个方案 | **A（解耦）** —— 唯一同时满足 C1/C2/C3 |
 | Q2 | 关闭时候选池「偏大」可接受吗 | **接受**。实测 `disabled` 的 `category_precision` 0.9874 > `off` 的 0.9561 —— 偏大反而更好 |
-| Q3 | `reranker.py:133` 是否保留为防御网 | **保留**，并补 `logger.warning`（触达即异常） |
+| Q3 | `reranker.py` 的 `RERANK_ENABLED` 闸是否保留为防御网 | **保留**，并补 `logger.warning`（触达即异常） |
 | Q4 | 是否补门禁 `disabled` 路由 | **已补**（`GATE_RERANK_MODE=disabled`），见 §8 |
 | Q5 | 是否一并修 D2 / D3 | **已修**。D2 由「闸 2 短路」+「门禁新增 `rerank_used` 断言」双重守 |
 | Q6 | `.env` 的 `RERANK_ENABLED` 是否改为 `true` | **待定**（未动）—— 属产品决策，不在本次范围 |
@@ -240,7 +242,7 @@ use_rerank = use_rerank and settings.RERANK_ENABLED
 C 的运行时行为与 A **完全一致**，唯一收益是消除 `use_rerank` 的命名债；
 代价是 **80 处 / 9 文件 / 21 个签名** 的机械改名，且其中 **6 处是字典 key**
 （`"use_rerank"` 出现在 metadata 与 retry hints 里），改名后**不会报错、只会静默失配**
-—— 尤其 `verifier.py:417`（生产端）→ `retriever.py:1787`（消费端）是**跨模块字符串契约**。
+—— 尤其 `verifier.py`（生产端）→ `retriever.py`（消费端）是**跨模块字符串契约**。
 若将来要做，必须先给这些 key 加契约测试（人为改错一边能被抓住）。
 
 ---

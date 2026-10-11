@@ -357,7 +357,7 @@ kp 级**无一条下降** ⇒ **满足进入 Step 2 的条件**。
 
 **★ 影响范围的关键事实**：当前生产 `.env` 是 `RERANK_ENABLED=false` ⇒ 重排不执行
 ⇒ **A2 对当前生产配置零影响**；收益与代价都只在**重排开启**的路由上生效。
-采纳决定与理由见提交信息与 `evals/results/step3_a2_2026-09-27/README.md`。
+采纳决定与理由见提交信息与 `evals/results/step3_a2_2026-09-27/README.md`（**该归档目录已清理**，结论以本文件为准）。
 
 ### Step 4 — C1 / C2：学科关键词修正 ✅ **已完成**
 
@@ -387,7 +387,7 @@ kp 级**无一条下降** ⇒ **满足进入 Step 2 的条件**。
 **生产索引**、**没有就绪屏障**，会间歇性撞 Chroma「Nothing found on disk」
 （表现为召回池条数在两次运行间漂移），**其结论不可采信**。
 本次改用**临时索引 + `wait_for_index_ready`** 复现同一套逐层快照
-（脚本：`evals/results/step4_c1c2_2026-09-27/scripts/probe_on_temp_index.py`）。
+（脚本：`evals/results/step4_c1c2_2026-09-27/scripts/probe_on_temp_index.py`；**该归档目录已清理**）。
 
 ### Step 5 — A3′：`rerank()` 的 `top_n` —— ❌ **经实测已不需要**
 
@@ -462,7 +462,7 @@ kp 级**无一条下降** ⇒ **满足进入 Step 2 的条件**。
   ① `candidate_trace` 跑在**生产索引**上、**没有就绪屏障**，会间歇性撞 Chroma
      「`Nothing found on disk`」（表现为召回池条数在两次运行间漂移）—— **其结论不可采信**。
      需要可信的 `dropped_by` 时用
-     `evals/results/step4_c1c2_2026-09-27/scripts/probe_on_temp_index.py`（临时索引 + `wait_for_index_ready`）。
+     `evals/results/step4_c1c2_2026-09-27/scripts/probe_on_temp_index.py`（临时索引 + `wait_for_index_ready`；**该归档目录已清理**）。
   ② `pre-commit` 的 `ruff-format` 会把**暂存的任意 `.py`** 追加到钩子 `args` 之后 ⇒
      往仓库归档 `.py` 脚本时**首次 `git commit` 会失败**，`git add -A` 后重提即可（不是代码问题）。
 - **进度**：Step 1 ✅ / Step 2 ✅ / Step 3 ✅ / Step 4 ✅ / Step 5 ❌（实测不需要）/ Step 6 ✅。
