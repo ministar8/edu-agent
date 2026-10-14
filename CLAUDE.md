@@ -117,7 +117,15 @@ docker compose up --build                # 容器化启动
   就绪以 `scripts/ops/tei_ready.py` 为准（`/health` 200 ≠ 模型加载完成）。细节见 `docs/DOCKER.md`「TEI」。
 - **假 embedding 模式**：`pyproject.toml` 的 `[tool.pytest_env]` 设 `USE_FAKE_EMBEDDING=true` 后，
   `get_embeddings()` 返回本地确定性哈希实现（`rag.common.embeddings.HashingEmbeddings`）——
-  **检索质量门禁靠它在无 TEI 时做确定性比对**。该实现**只保留词汇重叠信号、
+  **检索质量门禁靠它在无 TEI 时做可复现比对**（★ 严格说**不是逐位确定**：哈希 embedding 本身
+  确定，但**并列打破**不确定 —— 下游仍有按分数单键排序处（如 `dedup_same_section`），其并列
+  次序受**并发路由完成次序**影响；`docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b) 已实测归因，
+  同一节也实测 **HNSW 图本身是确定的**，别把这笔账记到 HNSW 上 ⇒ 实测 `fake/off` 多次复跑中
+  `category_precision` 取到 0.8871 / 0.8873 / 0.8875、`mean_evidence_count` 取到
+  4.4872 / 4.4936 / 4.5000；抖动 ±0.0002 ≪ 容差 0.02（`_data.py:_METRIC_SPECS`，
+  `mean_evidence_count` 更宽为 0.5）⇒ 不会翻门禁。比对是**双向**的：`cur > base + tolerance`
+  同样记退化，所以这个抖动两头都可能触发，只是当前幅度差两个数量级）。
+  该实现**只保留词汇重叠信号、
   没有语义泛化能力，严禁用于生产**。
   注意：`semantic_cache._DATA_DIR` / `_JSONL_FILE` 是**模块级常量（import 期固化）**，
   临时重定向须用 `monkeypatch` 指向临时目录，否则会写坏真实的 `chroma_db/semantic_cache/`。
@@ -137,7 +145,15 @@ docker compose up --build                # 容器化启动
   `retrieval_gate` 的 `kp_*` 是**章级**（只看文件名），测不到「**小节级细节是否进了证据**」；
   本门禁用 `evals/datasets/golden/retrieval_probes.jsonl` 的 5 条 probe，记录每条 probe 的**目标 chunk 在
   哪一层丢失**（`dropped_by`），与 `evals/baselines/probe_baseline.json` 比较 ——
-  **拦「后退」、放行「前进」**（层级序见 `candidate_trace.DROP_REASONS`）。
+  **拦「后退」、放行「前进」**（层级序见 `probe_tracing.DROP_REASONS`）。
+  ★ **退 1 级只告警、不判退化**（`_STAGE_JITTER_TOLERANCE=1`，2026-10-13 加）：`dropped_by` 是
+  **离散标签**，拿不到 `retrieval_gate` 那种连续容差，而坐在层边界上的目标会被检索侧的
+  **并列打破**推过阈值（归因见 `docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b)：下游按分数单键排序处
+  如 `dedup_same_section`，并列次序受**并发路由完成次序**影响；该节实测 **HNSW 图本身确定**）
+  —— 实测同码、同语料、同基线连跑 3 次，`#18` 出现 1 次
+  `rerank_topn(3) → rrf_threshold(2)`（恰好退 1 级）⇒ 假红 exit 1。故退 ≤1 级只走 stderr 告警，
+  退 ≥2 级才判退化。代价：真实的「退一级」会被放过，靠告警行留痕。
+  （★ 这次翻动只做了现象取证，**未单独归因**到 §6.3(b) 那条链。）
   跑在**临时索引 + 就绪屏障**上；权威路由为
   `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1`。
   **不要**用 `candidate_trace` 当门禁 —— 它跑生产索引、无就绪屏障、无退出码。

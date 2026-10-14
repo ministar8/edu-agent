@@ -267,7 +267,14 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 （`05_树与二叉树` / `03_存储系统` / `05_传输层` …）。
 
 ★ 黄金集侧用 `metadata.knowledge_points` 标注章名（可多个，跨章条目给双标注）。
-基线 `_meta.kp_granularity` 记录粒度载体，供 `load_baseline` 自证口径。
+基线 `_meta.kp_granularity` 记录粒度载体，但**仅描述性、不参与校验**：`load_baseline`
+只校 `rerank_mode` / `rerank_backend` / `embedding_mode` 三项，从不读这个键
+（`evaluation/gates/retrieval_gate/_baseline.py`）。
+★ 该标签写死为 `"chapter(file)"`，而真实粒度比「一个文件」粗一档：`_CHAPTER_ALIASES`
+（35 条）里有 **9 组是「多文件 → 同标签」**（`process`+`process_sync`→进程管理、
+`file`+`file_disk`→文件管理、`datalink`+`link`→数据链路层、`network`+`network_ip`→网络层…），
+覆盖黄金集 **63/156 = 40.4%** 的 query ⇒ 这些条目上，同章的兄弟文件顶替命中也会被记作
+`kp` 命中。抬高多少**当前不可测**（黄金集只存中文章名、无文件级期望值），要量化须重标。
 
 ★ **未标注的查询不进 `kp_hit@k` 分母**（`kp_annotated` 单列）—— 「未标注」不等于「未命中」。
 

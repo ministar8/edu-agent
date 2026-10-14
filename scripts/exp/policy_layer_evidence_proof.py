@@ -31,7 +31,7 @@ from rag.retrieval.evidence_policy import (  # noqa: E402
 from rag.retrieval.retriever import aretrieve_evidence_with_retry  # noqa: E402
 from rag.retrieval.task_policy import resolve_task_policy  # noqa: E402
 
-BASELINE_PATH = ROOT / "evals" / "policy_layer_evidence_baseline.json"
+BASELINE_PATH = ROOT / "evals" / "baselines" / "policy_layer_evidence_baseline.json"
 
 # 固定 probe：每 mode 一条，与权重实验隔离
 PROBES = [

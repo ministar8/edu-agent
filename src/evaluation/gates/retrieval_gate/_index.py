@@ -27,7 +27,11 @@ def configure_for_gate(persist_dir: str) -> None:
 
     同理，``rerank`` 三态由 ``GATE_RERANK_MODE`` 决定，覆盖见 ``_MODE_SETTINGS``：
 
-    - ``on``：默认打开 ``RERANK_ENABLED`` 与 ``USE_FAKE_RERANK``，用于无 TEI 的确定性门禁；
+    - ``on``：默认打开 ``RERANK_ENABLED`` 与 ``USE_FAKE_RERANK``，用于无 TEI 的可复现门禁
+      （★ 不是逐位确定：抖动来自**并列打破** —— 下游按分数单键排序处（如 ``dedup_same_section``）
+      的并列次序受**并发路由完成次序**影响；**不是 HNSW**，图本身实测确定，归因见
+      ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3(b)。fake 路由指标有 ±2e-4 量级抖动，
+      容差 0.02 盖得住）；
       真实 embedding 发布前若设置 ``GATE_USE_REAL_RERANK=1``，则改用 `.env` 中的 TEI reranker，
       并写入独立的真实 embedding + 真实 rerank 基线。
     - ``disabled``：``RERANK_ENABLED=False``，但检索链**仍然** ``use_rerank=True``
