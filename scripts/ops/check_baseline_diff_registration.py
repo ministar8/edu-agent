@@ -37,7 +37,8 @@ NEW_DIR = ROOT / "evals" / "baselines"
 # ★ 默认核对「最新一代登记节」。基线每重录一代 → 文档新开一节登记 → 这里改成新节号。
 #   旧节仍可用 `--section` 单独核对；它描述的是它那一代，不该因为后来基线又动一次就变成
 #   永久不可满足的红（§20.7.1 的 39 处红正是被这种写法绑出来的）。
-_DEFAULT_SECTION = "20.7.3"
+#   代际：20.7.1（一代）→ 20.7.3（二代，pre_task9→当代）→ **20.7.4（三代，黄金集修复后重录）**。
+_DEFAULT_SECTION = "20.7.4"
 
 # §20.7.1 表格行的别名 → 基线 `metrics` 的工件键（唯一一座桥，扩充须对着工件键表扩）。
 _DOC_ALIAS: dict[str, str] = {
@@ -89,7 +90,9 @@ def _section(text: str, section_id: str) -> str:
     rest = text[start + len(head) :]
     end = rest.find("\n### ")
     if end == -1:
-        raise SystemExit(f"找不到 `{head}` 的结束边界（下一个 ### 标题）—— 节结构变了，请人工核对")
+        # 最新一代登记在文末：没有下一个 `### ` 标题，节尾即文件尾（EOF 是合法边界）。
+        # 不这么认的话，「追加到文末」这个最自然的登记写法每次都会误报节结构变了。
+        return rest
     return rest[:end]
 
 

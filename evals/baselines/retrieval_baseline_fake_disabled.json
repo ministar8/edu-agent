@@ -56,19 +56,19 @@
     "n_queries": 156,
     "category_hit_at_1": 0.8782,
     "category_hit_at_k": 0.9679,
-    "category_mrr": 0.914,
+    "category_mrr": 0.9145,
     "category_precision": 0.9092,
     "empty_result_rate": 0.0,
     "mean_evidence_count": 5.2949,
-    "kp_hit_at_k": 0.9231,
-    "kp_mrr": 0.7878,
+    "kp_hit_at_k": 0.9423,
+    "kp_mrr": 0.8001,
     "kp_annotated": 156.0
   },
-  "recorded_at": "2026-10-14T03:54:55.934065+00:00",
+  "recorded_at": "2026-10-14T12:17:15.863533+00:00",
   "provenance": {
-    "recorded_at": "2026-10-14T03:54:55.934065+00:00",
-    "code_version": "78e8461",
-    "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
+    "recorded_at": "2026-10-14T12:17:15.863533+00:00",
+    "code_version": "d54d3de-dirty",
+    "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
     "script": "src/evaluation/gates/retrieval_gate/_baseline.py",
     "argv": [
       "--update-baseline"

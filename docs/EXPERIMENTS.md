@@ -97,6 +97,9 @@
 | empty_result_rate | 0.0 |
 
 > 该基线为**回归门禁**，非最优值声明。语义质量用真实 embedding 的消融（§2/§9）。
+> ★ 代际：本表基线值（`category_hit@1 0.904` / `kp_hit@k 0.865` / `kp_mrr 0.670`）属 **10-10 换代前的
+> 旧仪器**读数；同一路由（`fake+off`）当代基线为 `0.8846 / 0.9231 / 0.8041`，见 §20.7.3。
+> 为什么不可互比：见 §18 抬头的代际脚注。
 
 ---
 
@@ -109,6 +112,9 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 **复现**：`PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/ragas/ragas_paired20.jsonl --sample-per-type 5 --no-rerank --include-details --tag final`
 **整理**：`uv run python scripts/ops/ragas_report.py --tag final`
 **归档**：`evals/results/generation/ragas/`（`raw.jsonl` / `metrics.json` / `summary.md`）
+★ 代际：归档里的**数据**（`metrics.json` / `raw.jsonl`）时间戳为 **10-01**，只有 `summary.md` 是
+10-11 —— 那是文档订正、不是重跑。所以本节数字同样属 10-10 换代前的旧体系（含当时的生产索引），
+理由见 §18 抬头的代际脚注。
 
 ### 5.1 总体（四项均 n=20，无 judge 掉样）
 
@@ -700,6 +706,17 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 > 本节点记录修复与证据；§17 的 V-2026-10-01 **已被本节点取代**，
 > §2/§9/§10/§11/§12/§13/§14/§5 的数字均已按本版本重跑。
 
+★★ **代际脚注（2026-10-14 补，统一说明，不在各表重复）**：本节、§1–§17 以及 §20.2 的四路由表，
+都是 **10-10「语料体系换代 + 门禁仪器对齐」之前**的读数。取证：本锚点落点 `e36c766` ＝ **10-01**；
+而 `94a6997`（code 库独立）、`d3813fb`（L3 收口 questions→exams）、`d60d8f0`（删旧体系）、
+`a2dce06`（入库构建下沉 `ingest_layers`）、`8e2add6`（门禁对准生产入库路径 + 重录 6 份基线）、
+`74b9eb5`（探针表改指新语料）**全部落在 10-10 当天**；生产索引亦于当日重建（`chroma_db` 现为
+2026 chunk / 10 集合，与门禁临时索引逐位相等）。
+⇒ 被改的是**测量的输入**（语料结构 + 索引构建链），不只是代码；所以这些数字描述的是旧体系，
+不能当作当前行为的读数。**换代后的门禁权威读数一律看 §20.7.3**（`code_version = 78e8461`）。
+引用时把两者并列并注明口径（「旧体系 V-2026-10-02 实测」vs「换代后 §20.7.3 基线」），
+**不要**把它们当作同一口径下互相印证或互相矛盾的两个版本 —— 它们不可比。
+
 ### 18.0 ★ 版本锚点（可追溯链起点）
 
 | 项 | 值 |
@@ -936,6 +953,10 @@ git rev-parse 1cc69b3                     # 检索三项修复的落点提交
 3. **Memory 写链三层改**：`GradingResult.knowledge_points` → `record_grade` → `compute_weak_topics`。
 
 ### 20.2 检索门禁在本锚点的实测（四路由 + 隔离实验）
+
+> ★ 代际：本表是 **V-2026-10-07 / 08C 锚点（10-07 / 10-08）** 上的门禁实测，早于 10-10 的语料换代与
+> 仪器对齐；同四路由的换代后读数见 §20.7.3（如 `real+on` 权威路由现 `kp_mrr 0.8223`，本表为 0.8048）。
+> 两者不可互证、也不可当作退化，理由见 §18 抬头。
 
 | 路由 | 判定 | 关键值（当前 / 基线） |
 |---|---|---|
@@ -1360,6 +1381,7 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 > 口径与 `scripts/ops/check_baseline_diff_registration.py` 逐字一致（`round(new−old,4)`，非零即登记义务）。
 
 旧一代仍整份保留在 `evals/baselines/pre_task9_20261009/`。下表列的是 **pre_task9 → 当代** 的全部非零 diff，
+★ 反查方向：换代**前**的读数在 §1–§18 与 §20.2，其代际声明见 §18 抬头（并在 §4 / §5 / §20.2 三处就近加了指针）。
 归因列按两代拆开（`10-10 步` = `8e2add6` 吸收的量，`今日步` = 本次 `78e8461` 的量）。
 
 | 路由（基线文件） | pre_task9 → 当代 的全部非零 diff | 分代拆解与归因 |
@@ -1782,3 +1804,47 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python -m evaluation.task_eval run 
 ⇒ ★ 方法上的教训（写给自己）：**验一个数之前先重算它，而不是先复算它的算术过程。**
 上一轮我做了三条路径的复算（手工 AND / `metrics.rate` / `report.json`）就认为「可信」，
 那三只验证了**读数**，一只也没验证**质量**。
+
+---
+
+### 20.7.4 黄金集修复后的基线**三代**重录登记（2026-10-14 晚，禁止静默重录 ⇒ 逐条登记）
+
+> 触发原因：`evals/datasets/golden/sample_408.jsonl` **修订**（详见 `evals/datasets/golden/README.md`）——
+> ① 4 处 KP 假阴性标注（`输入输出管理`×2→`输入输出系统`、`磁盘调度`→`文件管理`、
+> `操作系统概述`→`计算机系统概述`，修复前这 4 条 `kp_hit@k` 恒 0）；② 前 40 条补
+> `query_type: concept`（不改任何判定，只统一同题标注）。
+> `provenance.golden_sha256` 由 `be98912a` 变为 `783e78ff` ⇒ 六条路由基线同批重录。
+> 口径与 `scripts/ops/check_baseline_diff_registration.py` 逐字一致（`round(new−old,4)`，非零即登记义务）。
+
+下表列的是 **pre_task9 → 三代** 的全部非零 diff（机械核对脚本的比对对象）：
+
+| 路由（基线文件） | pre_task9 → 三代的全部非零 diff | 归因拆解（§20.7.3 的量 + 本次黄金集修复） |
+|---|---|---|
+| fake+off（`retrieval_baseline.json`） | category_hit_at_1 -0.0192、category_hit_at_k +0.0065、category_mrr -0.0040、category_precision -0.0049、kp_hit_at_k +0.0833、kp_mrr +0.1476、mean_evidence_count -0.4936 | §20.7.3 记的量 + 修复增量（`kp_hit_at_k` +0.0256 = 4/156，4 条修复标注**全部**命中；`kp_mrr` +0.0133）。`category_mrr` 的 -0.0016 与 `category_precision` 的 -0.0015 是 §6.3(b) 抖动带内的复跑噪声——黄金集修复**机械上不可能**触碰 category 判定（只改 KP 标注与 query_type 标注，`load_golden_queries` 的 category 分支不变），按 §20.7.3 既定口径「抖动带内不得当作代码效应」登记 |
+| fake+on（`retrieval_baseline_rerank.json`） | category_hit_at_1 -0.0064、category_hit_at_k -0.0064、category_mrr -0.0064、category_precision -0.0182、kp_hit_at_k -0.0065、kp_mrr -0.0328、mean_evidence_count -1.1025 | §20.7.3 记的量 + 修复增量（`kp_hit_at_k` +0.0192 = 3/156；`kp_mrr` +0.0128）；category 四项与 §20.7.3 **逐位相同**（本路由复跑确定性好，无新增抖动） |
+| fake+disabled（`retrieval_baseline_fake_disabled.json`） | category_hit_at_1 -0.0449、category_mrr -0.0241、category_precision +0.0067、kp_hit_at_k +0.1474、kp_mrr +0.1724、mean_evidence_count -0.0320 | §20.7.3 记的量 + 修复增量（`kp_hit_at_k` +0.0192 = 3/156；`kp_mrr` +0.0123）。`category_mrr` 的 +0.0005 为抖动带内噪声（同上口径） |
+| real+off（`retrieval_baseline_real_embed.json`） | category_hit_at_1 -0.0128、category_hit_at_k -0.0064、category_mrr -0.0099、category_precision -0.0079、kp_hit_at_k +0.0577、kp_mrr +0.1488、mean_evidence_count -0.5705 | §20.7.3 记的量 + 修复增量（`kp_hit_at_k` +0.0192 = 3/156；`kp_mrr` +0.0160）。`category_precision` 的 -0.0014 为抖动带内噪声（同上口径） |
+| real+on 权威（`retrieval_baseline_real_rerank.json`） | category_hit_at_1 +0.0064、category_mrr +0.0032、category_precision -0.0086、kp_hit_at_k +0.0192、kp_mrr +0.0429、mean_evidence_count -0.6025 | §20.7.3 记的量 + 修复增量（`kp_hit_at_k` +0.0192 = 3/156；`kp_mrr` +0.0257）；category 三项与 §20.7.3 **逐位相同** |
+| real+disabled（`retrieval_baseline_real_disabled.json`） | category_hit_at_1 -0.0064、category_hit_at_k -0.0193、category_mrr -0.0136、category_precision -0.0036、kp_hit_at_k +0.1410、kp_mrr +0.1757、mean_evidence_count -0.0641 | §20.7.3 记的量 + 修复增量（`kp_hit_at_k` +0.0192 = 3/156；`kp_mrr` +0.0192）；category 四项与 §20.7.3 **逐位相同** |
+
+★ **修复增量的形态印证了审计结论**：6 条路由的 `kp_hit_at_k` 增量全部是 `±0.0192`（=3/156）或其整数倍
+（fake+off 为 `+0.0256`=4/156）——正是「4 条假阴性标注变为可命中、其中 3 条在各路由均能检索到正确章、
+fake+off 路由 4 条全中」的量化形态。若增量不是 1/156 的整数倍，反而要怀疑归因。
+★ 第 4 条（`磁盘调度`→`文件管理`）在真实路由上未稳定命中：内容确在 `file_disk` 章，但语义检索
+在该 query 上仍返回他科证据（与 default 路由「首条未命中」清单里该 query 的 category 级未命中
+是同一现象的两个刻度）——这是**检索质量问题的新测面**，不是标注问题，留待检索侧处理。
+
+**probe_baseline 与 policy_layer_evidence_baseline 未动**：探针表（`retrieval_probes.jsonl`）与
+策略层证据集不在本次修订范围，两份基线维持二代值。
+
+复现（按路由，均带 `--update-baseline` 执行；执行前默认路由先不带该开关跑一遍看 diff）::
+
+    # fake+off（CI 默认）
+    PYTHONPATH=src python -m evaluation.gates.retrieval_gate --update-baseline
+    # fake+on / fake+disabled
+    GATE_RERANK_MODE=on        PYTHONPATH=src python -m evaluation.gates.retrieval_gate --update-baseline
+    GATE_RERANK_MODE=disabled  PYTHONPATH=src python -m evaluation.gates.retrieval_gate --update-baseline
+    # real+off / real+on（权威，需 GATE_USE_REAL_RERANK=1）/ real+disabled（需 TEI 在线）
+    GATE_USE_REAL_EMBEDDING=1                                    PYTHONPATH=src python -m evaluation.gates.retrieval_gate --update-baseline
+    GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 PYTHONPATH=src python -m evaluation.gates.retrieval_gate --update-baseline
+    GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=disabled          PYTHONPATH=src python -m evaluation.gates.retrieval_gate --update-baseline
