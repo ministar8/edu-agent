@@ -13,11 +13,18 @@ Chroma「Nothing found on disk」）、没有基线、没有退出码 —— **�
 本模块把探针表变成门禁：跑在**临时索引 + 就绪屏障**上，对每条 probe 记录
 **目标 chunk 在哪一层丢失**，并与基线比较。
 
-★ **语料边界（2026-10-01 实测）**：临时索引由 ``retrieval_gate.build_index()`` 建，
-其语料是 ``rag.ingest.DEFAULT_CATEGORIES``（6 个目录）——**全是 legacy，零 L1/L2/L3**
-（2505 条；生产索引 4085 条含分层）。**5 条探针的目标也确实全在 legacy 文件上**
-（``07_查找.md`` / ``06_代码实现.md`` / ``04_文件管理.md`` / ``02_数据表示与运算.md``）。
-⇒ 本门禁同样**测不到 L1/L2/L3 的退化**。详见 ``retrieval_gate.build_index`` 的 docstring。
+★ **语料边界（2026-10-13 重测 —— 旧版「索引全是 legacy、零 L1/L2/L3」自 2026-10-10 起已失效）**：
+**索引侧已经覆盖分层**：``retrieval_gate.build_index()`` 改用 ``rag.ingest_layers.build_all()``，
+按生产顺序聚合 basic(L1) → advanced(L2) → exams+exam_practice(L3) → code → learning_paths
+（``ingest_layers/__init__.py:29-59``），实测 2026 chunk，与生产库**逐位相等**
+（``chroma_db/chroma.sqlite3`` 的 ``count(embeddings)`` 同为 2026）。
+但**探针侧没跟上**：5 条 probe 的 ``expect_source`` = 4 条 L1 ``basic/``
+（``data_structure/08_search.md`` · ``operating_system/04_file.md`` ×2 ·
+``computer_organization/02_representation.md``）+ 1 条 ``code/operating_system``，
+**没有一条指向 L2 ``advanced/`` 或 L3 ``exams/``**。
+⇒ 覆盖限制仍在，但**原因换了**：不是「索引里没有那些层」，而是「探针没打那些层」——
+补探针即可解除，不必动索引。旧结论里的 L1 部分也已不成立（``#4``/``#9``/``#17``/``#19``
+正是 L1 小节级探针）。源头：``74b9eb5``「探针表改指新语料」只同步了路径串、没改这段结论。
 
 判据为什么是「管线序」而不是「是否 survived」
 --------------------------------------------
@@ -29,6 +36,14 @@ Chroma「Nothing found on disk」）、没有基线、没有退出码 —— **�
 「前进一层」与「后退一层」**都是信息**。若只断言 `survived`，像 `#9` 从
 `rrf_threshold` 前进到 `rerank_topn`（阈值层已修好、卡在下一层）这种**真实的进步**
 会被判成「没变」—— 而那正是 §3⑦ 要测的东西。
+
+★ **退 1 级只告警、不判退化**（`_STAGE_JITTER_TOLERANCE`，2026-10-13 加）：`dropped_by`
+是**离散标签**，拿不到 `retrieval_gate` 那种连续容差，而坐在层边界上的目标会被检索侧的
+**并列打破**推过阈值（归因见 `docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b)：下游按分数单键排序处
+如 `dedup_same_section`，并列次序受**并发路由完成次序**影响；该节实测 **HNSW 图本身确定**）
+—— 实测同码、同语料、同基线连跑 3 次，`#18` 出现 1 次 `rerank_topn(3) → rrf_threshold(2)`
+（恰好退 1 级）⇒ 假红 exit 1。故退 ≤1 级只告警、退 ≥2 级才判退化；告警行走 stderr，不静默。
+（★ 本次翻动只做了现象取证，未单独归因到 §6.3(b) 那条链。）
 
 用法::
 
@@ -65,12 +80,25 @@ DEFAULT_BASELINE_PATH = "evals/baselines/probe_baseline.json"
 # （两份顺序迟早漂移，而漂移后门禁会静默给出反向判定）。
 _STAGE_INDEX: dict[str, int] = {reason: i for i, reason in enumerate(DROP_REASONS)}
 
+# ★ 层序抖动容差（2026-10-13 实测后加）。`dropped_by` 是**离散标签**，拿不到
+#   `retrieval_gate` 那种连续容差（`_METRIC_SPECS`：category_*/kp_* 0.02、count 0.5），
+#   而它由「目标在哪一层被截断」推导 —— 坐在层边界上的目标会被检索侧的**并列打破**
+#   推过阈值（归因见 `docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b)：下游按分数单键排序处如
+#   `dedup_same_section`，其并列次序受**并发路由完成次序**影响；该节实测 HNSW 图本身
+#   是确定的 ⇒ 别把账记到 HNSW 上）。实测：同码、同语料、同基线连跑 3 次，probe #18
+#   出现 1 次 `rerank_topn(3) → rrf_threshold(2)`，恰好退 1 级 ⇒ 假红 exit 1（★ 这次翻动
+#   只做了现象取证，**未单独归因**到 §6.3(b) 那条链）。
+#   ⇒ 退 1 级记**告警不失败**，退 ≥2 级才判退化。代价：真实的「退一级」会被放过，
+#   靠告警行留痕（不是静默）；要更严就配合多次取样取最差。
+_STAGE_JITTER_TOLERANCE = 1
+
 
 def _stage_index(dropped_by: str) -> int:
     """把 `dropped_by` 映射成可比较的进度值；未知取值按最差处理并告警。"""
     idx = _STAGE_INDEX.get(dropped_by)
     if idx is None:
-        logger.warning("未知的 dropped_by=%r —— 按最差（0）处理，请检查 probe_tracing", dropped_by)
+        # 未知取值按比「not_recalled(0)」更差处理（-1）—— 宁可误报退化，不可漏报。
+        logger.warning("未知的 dropped_by=%r —— 按最差（-1）处理，请检查 probe_tracing", dropped_by)
         return -1
     return idx
 
@@ -103,6 +131,7 @@ def run_probes(probe_path: str, *, k: int = 5) -> list[dict[str, Any]]:
                 "dropped_by": result.dropped_by,
                 "stages": [{"key": s.key, "count": s.count, "rank": s.rank} for s in result.stages],
                 "note": result.rerank_note,
+                "rerank_scored": result.rerank_scored,
             }
         )
     return out
@@ -172,12 +201,56 @@ def compare_to_baseline(observations: list[dict[str, Any]], baseline: dict[int, 
             )
             continue
         cur, base = item["dropped_by"], baseline[pid]
-        if _stage_index(cur) < _stage_index(base):
+        if _stage_index(cur) < _stage_index(base) - _STAGE_JITTER_TOLERANCE:
             regressions.append(
                 f"probe #{pid} 退化：{base} → {cur}"
-                f"（目标在**更早**的层丢失了；query={item['query'][:40]}）"
+                f"（目标在**更早**的层丢失了 {_stage_index(base) - _stage_index(cur)} 级，"
+                f"超出抖动容差 {_STAGE_JITTER_TOLERANCE}；query={item['query'][:40]}）"
             )
     return regressions
+
+
+def jitter_warnings(observations: list[dict[str, Any]], baseline: dict[int, str]) -> list[str]:
+    """退级幅度落在抖动容差带内的 probe —— **告警不判退化**（见 `_STAGE_JITTER_TOLERANCE`）。
+
+    与 `compare_to_baseline` 同口径、同为纯函数；两者对同一条 probe 互斥。
+    单独成函数而不是塞进 regressions，是为了让「红」仍然只表示真退化。
+    """
+    out: list[str] = []
+    for item in observations:
+        pid = item["id"]
+        if pid not in baseline:
+            continue
+        cur, base = item["dropped_by"], baseline[pid]
+        delta = _stage_index(base) - _stage_index(cur)
+        if 0 < delta <= _STAGE_JITTER_TOLERANCE:
+            out.append(
+                f"probe #{pid} 层序抖动：{base} → {cur}（退 {delta} 级，在容差 "
+                f"{_STAGE_JITTER_TOLERANCE} 内 ⇒ 不判退化；query={item['query'][:40]}）"
+            )
+    return out
+
+
+def _assert_rerank_scored(observations: list[dict[str, Any]]) -> list[str]:
+    """反假绿：重排路由开启时，探针的重排阶段必须**真的打了分**。
+
+    为什么需要它：`dropped_by` 由「目标在哪一层被截断」推导，而截断（``rerank`` 的
+    ``top_n``）在重排**没打分**时照样发生 —— 只是按 RRF 原序截，不是按重排分截。
+    于是 TEI 不可达 / ``rerank()`` 静默降级时，`dropped_by` 仍可能与基线逐字一致，
+    门禁就「假绿」了（这正是 ``retrieval_gate._assert_route_preconditions`` 在检索门禁
+    里防的那类静默回退，本门禁此前没有）。`rerank_scored` 是 ``trace_probe`` 抓到的
+    「rerank_topn 快照里有没有 rerank_score > 0」的直接信号。
+    """
+    if RG.rerank_mode() != "on":
+        return []
+    unscored = sorted(o["id"] for o in observations if not o.get("rerank_scored", True))
+    if unscored:
+        return [
+            f"探针 {unscored} 的重排阶段被调用但未真正打分（rerank_score 全 0）—— "
+            "dropped_by 不可信，门禁会假绿。请确认 TEI rerank 就绪（scripts/ops/tei_ready.py）"
+            "或检查 RERANK_ENABLED 是否被静默关掉。"
+        ]
+    return []
 
 
 def _format(observations: list[dict[str, Any]], baseline: dict[int, str] | None) -> str:
@@ -187,7 +260,14 @@ def _format(observations: list[dict[str, Any]], baseline: dict[int, str] | None)
         mark = ""
         if baseline and item["id"] in baseline:
             d = _stage_index(item["dropped_by"]) - _stage_index(baseline[item["id"]])
-            mark = " 前进" if d > 0 else (" 退化" if d < 0 else "")
+            if d > 0:
+                mark = " 前进"
+            elif d < -_STAGE_JITTER_TOLERANCE:
+                mark = " 退化"
+            elif d < 0:
+                mark = " 抖动"
+            else:
+                mark = ""
         lines.append(
             f"#{item['id']:<6} {item['dropped_by']:<16} {base:<16} {item['target'][:40]}{mark}"
         )
@@ -253,6 +333,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[错误] {exc}", file=sys.stderr)
         return 2
 
+    # 反假绿前置闸：重排没打分 ⇒ dropped_by 不可信，必须先拦（比基线比对更早，
+    # 也别带着它录基线）。与检索门禁的 `_assert_route_preconditions` 同一职责。
+    violations = _assert_rerank_scored(observations)
+    if violations:
+        print("[失败] 重排未真正打分（反静默回退）：", file=sys.stderr)
+        for item in violations:
+            print(f"  - {item}", file=sys.stderr)
+        return 2
+
     if args.json:
         print(json.dumps(build_baseline_payload(observations), ensure_ascii=False, indent=2))
         return 0
@@ -270,13 +359,27 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     regressions = compare_to_baseline(observations, baseline)
+    jitter = jitter_warnings(observations, baseline)
+    if jitter:
+        print(
+            f"[告警] {len(jitter)} 条层序抖动（退 ≤{_STAGE_JITTER_TOLERANCE} 级 ⇒ 不判退化）：",
+            file=sys.stderr,
+        )
+        for item in jitter:
+            print(f"  - {item}", file=sys.stderr)
     if regressions:
         print("[失败] 探针退化：", file=sys.stderr)
         for item in regressions:
             print(f"  - {item}", file=sys.stderr)
         return 1
 
-    print("探针门禁通过：所有目标都不比基线丢失得更早。")
+    if jitter:
+        print(
+            f"探针门禁通过：无超出容差（{_STAGE_JITTER_TOLERANCE} 级）的退化；"
+            f"{len(jitter)} 条抖动已在上方告警。"
+        )
+    else:
+        print("探针门禁通过：所有目标都不比基线丢失得更早。")
     return 0
 
 

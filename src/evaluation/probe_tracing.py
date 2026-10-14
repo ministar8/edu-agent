@@ -119,6 +119,10 @@ class TraceResult:
     dropped_by: str
     plan: dict[str, Any] = field(default_factory=dict)
     rerank_note: str = ""
+    # ★ 重排是否**真的打了分**（rerank_score 写入证据）。False = 重排阶段被调用
+    #   但没打分（TEI 不可达 / 结果为空 / RERANK_ENABLED 被绕开）—— 此时 `dropped_by`
+    #   仍可能和基线一致（截断照样发生，只是按 RRF 原序），是门禁最危险的假绿来源。
+    rerank_scored: bool = True
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -374,12 +378,14 @@ async def trace_probe(probe: Probe, *, k: int = 5, use_rerank: bool = True) -> T
             )
         )
 
+    rerank_scored = True
     note = ""
     if sum(1 for key, _ in events if key == "recall") > 1:
         note = "召回被调用多次（HyDE 触发），快照取首轮；结论可能不完整"
     elif first.get("rerank_topn") and not any(
         (d.metadata or {}).get("rerank_score") for d in first["rerank_topn"]
     ):
+        rerank_scored = False
         note = (
             "重排阶段被调用但**没有真正打分**（RERANK_ENABLED=false 时 rerank() 提前返回）"
             " —— 用 --rerank 重跑才能看到重排漏斗"
@@ -391,4 +397,5 @@ async def trace_probe(probe: Probe, *, k: int = 5, use_rerank: bool = True) -> T
         dropped_by=_resolve_drop_reason(stages),
         plan=plan_box,
         rerank_note=note,
+        rerank_scored=rerank_scored,
     )
