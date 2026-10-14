@@ -6,46 +6,46 @@
 #   因为 kp_hit@k 的命中值由 retrieval_gate.chapter_of_source 从证据文件名算出。
 #   用词表外的标签不会报错，只会让该条永远判为「未命中」。
 # 共 156 条：concept 60 / generate 32 / grade 32 / code 32（2026-09-24 扩量，原 40 条未改动）。
-{"query": "什么是进程死锁？死锁的四个必要条件是什么？", "reference": "死锁是多个进程互相等待对方持有的资源而都无法继续执行的状态。四个必要条件：互斥、占有并等待、不可抢占、循环等待。", "metadata": {"subject": "os", "knowledge_points": ["进程管理"]}}
-{"query": "虚拟内存的作用是什么？", "reference": "虚拟内存让进程逻辑地址空间可以大于物理内存，通过分页/置换在磁盘与内存间换入换出，提高多道程序度并隔离进程地址空间。", "metadata": {"subject": "os", "knowledge_points": ["内存管理"]}}
-{"query": "页面置换算法中的 Belady 异常说明了什么？", "reference": "Belady 异常指某些算法（如 FIFO）在物理块增加时缺页次数反而上升，说明并非所有置换算法都满足堆栈性质。", "metadata": {"subject": "os", "knowledge_points": ["内存管理"]}}
-{"query": "进程和程序有什么区别？", "reference": "程序是静态的指令序列，进程是程序的一次执行过程，是动态的；同一程序可对应多个进程。", "metadata": {"subject": "os", "knowledge_points": ["进程管理"]}}
-{"query": "什么是临界区？为什么需要互斥？", "reference": "临界区是访问共享资源的代码段；若多个进程同时进入会导致结果不可再现，因此需要互斥保证同一时刻只有一个进程进入。", "metadata": {"subject": "os", "knowledge_points": ["进程管理"]}}
-{"query": "进程同步有哪些常见机制？", "reference": "常见机制包括信号量与 PV 操作、管程、条件变量、消息传递等，用于协调并发进程的执行顺序与共享资源访问。", "metadata": {"subject": "os", "knowledge_points": ["进程管理"]}}
-{"query": "什么是段页式存储管理？", "reference": "段页式将地址空间先分段再分页，逻辑上按段管理、物理上按页分配，兼具段的共享保护与页的离散分配优点，但需多次访存。", "metadata": {"subject": "os", "knowledge_points": ["内存管理"]}}
-{"query": "文件系统中 inode 的作用是什么？", "reference": "inode（索引节点）保存文件元数据与数据块地址等信息，目录项将文件名映射到 inode，从而实现文件名与存储位置的分离。", "metadata": {"subject": "os", "knowledge_points": ["文件管理"]}}
-{"query": "什么是死锁的预防与避免？", "reference": "预防是破坏死锁四个必要条件之一；避免是在资源分配时用银行家算法等判断安全状态，仅在安全时分配。", "metadata": {"subject": "os", "knowledge_points": ["进程管理"]}}
-{"query": "分页和分段有什么区别？", "reference": "分页按固定大小物理划分、对用户透明；分段按逻辑模块划分、对用户可见。页是物理单位，段是逻辑单位。", "metadata": {"subject": "os", "knowledge_points": ["内存管理"]}}
-{"query": "什么是二叉搜索树？", "reference": "二叉搜索树是每个节点左子树键值均小于该节点、右子树键值均大于该节点的二叉树，支持有序查找与插入删除。", "metadata": {"subject": "ds", "knowledge_points": ["树与二叉树"]}}
-{"query": "栈和队列的主要区别是什么？", "reference": "栈是后进先出（LIFO），队列是先进先出（FIFO）；栈只能在栈顶操作，队列在队尾入队、队头出队。", "metadata": {"subject": "ds", "knowledge_points": ["栈和队列"]}}
-{"query": "什么是哈希冲突？如何解决？", "reference": "哈希冲突指不同关键字映射到同一地址。解决方法包括开放定址法、链地址法（拉链法）、再哈希等。", "metadata": {"subject": "ds", "knowledge_points": ["查找"]}}
-{"query": "快速排序的基本思想是什么？", "reference": "选基准将序列划分为小于和大于基准的两部分，递归排序子序列；平均时间复杂度 O(n log n)，最坏 O(n²)。", "metadata": {"subject": "ds", "knowledge_points": ["排序"]}}
-{"query": "什么是平衡二叉树（AVL）？", "reference": "AVL 树是任意节点左右子树高度差不超过 1 的二叉搜索树，通过旋转在插入删除后保持平衡，保证查找为 O(log n)。", "metadata": {"subject": "ds", "knowledge_points": ["树与二叉树"]}}
-{"query": "图的深度优先遍历和广度优先遍历有什么不同？", "reference": "DFS 沿一条路径尽可能深再回溯，适合连通性与拓扑；BFS 按层扩展，适合最短路径（无权图）。", "metadata": {"subject": "ds", "knowledge_points": ["图"]}}
-{"query": "顺序表和链表各有什么优缺点？", "reference": "顺序表随机访问 O(1)、插入删除中间元素 O(n)；链表插入删除 O(1)（已知位置）、随机访问 O(n)，额外指针空间。", "metadata": {"subject": "ds", "knowledge_points": ["线性表"]}}
-{"query": "什么是堆？堆排序的原理是什么？", "reference": "堆是完全二叉树，满足父节点键值大于（或小于）子节点；堆排序反复取出堆顶并调整，得到有序序列。", "metadata": {"subject": "ds", "knowledge_points": ["排序", "树与二叉树"]}}
-{"query": "B 树和 B+ 树有什么区别？", "reference": "B+ 树非叶节点只存关键字作索引，数据都在叶节点且叶节点有序链接，更适合磁盘范围查询与数据库索引。", "metadata": {"subject": "ds", "knowledge_points": ["查找", "树与二叉树"]}}
-{"query": "线性表的链式存储结构有哪些形式？", "reference": "包括单链表、双链表、循环链表等，通过指针将结点链接，便于动态增删。", "metadata": {"subject": "ds", "knowledge_points": ["线性表"]}}
-{"query": "TCP 三次握手的作用是什么？", "reference": "三次握手用于同步双方初始序号、确认收发能力并协商 MSS 等参数，避免历史连接造成的混乱。", "metadata": {"subject": "network", "knowledge_points": ["传输层"]}}
-{"query": "TCP 和 UDP 的主要区别是什么？", "reference": "TCP 面向连接、可靠、有序、有流量与拥塞控制；UDP 无连接、不保证可靠，开销小、实时性好。", "metadata": {"subject": "network", "knowledge_points": ["传输层"]}}
-{"query": "什么是拥塞控制？TCP 拥塞控制有哪些阶段？", "reference": "拥塞控制防止过多数据注入网络导致性能下降；TCP 常见阶段为慢开始、拥塞避免、快重传、快恢复。", "metadata": {"subject": "network", "knowledge_points": ["传输层"]}}
-{"query": "IP 地址与 MAC 地址有什么区别？", "reference": "IP 地址是网络层逻辑地址，用于路由；MAC 地址是数据链路层物理地址，用于同一链路内交付。", "metadata": {"subject": "network", "knowledge_points": ["网络层", "数据链路层"]}}
-{"query": "什么是子网划分？", "reference": "子网划分通过借用主机位作子网号，将一个网络分成多个逻辑子网，便于管理与减少广播域。", "metadata": {"subject": "network", "knowledge_points": ["网络层"]}}
-{"query": "HTTP 和 HTTPS 有什么区别？", "reference": "HTTPS 在 HTTP 之下加入 TLS/SSL，提供加密、完整性校验与身份认证；HTTP 明文传输。", "metadata": {"subject": "network", "knowledge_points": ["应用层"]}}
-{"query": "什么是 ARP 协议？", "reference": "ARP 将同一局域网内的 IP 地址解析为 MAC 地址，主机通过 ARP 请求/应答获得下一跳的硬件地址。", "metadata": {"subject": "network", "knowledge_points": ["网络层", "数据链路层"]}}
-{"query": "路由选择协议 RIP 和 OSPF 有什么不同？", "reference": "RIP 基于距离向量、以跳数为度量、收敛较慢；OSPF 基于链路状态、使用 Dijkstra，收敛更快、适合较大网络。", "metadata": {"subject": "network", "knowledge_points": ["网络层"]}}
-{"query": "传输层端口号的作用是什么？", "reference": "端口号区分同一主机上不同应用进程，实现进程到进程的复用与分用。", "metadata": {"subject": "network", "knowledge_points": ["传输层"]}}
-{"query": "什么是滑动窗口协议？", "reference": "滑动窗口允许发送方在未收到确认前连续发送多个分组，窗口大小决定在途数据量，提高信道利用率并配合流量控制。", "metadata": {"subject": "network", "knowledge_points": ["数据链路层", "传输层"]}}
-{"query": "Cache 的作用是什么？", "reference": "Cache 位于 CPU 与主存之间，存放近期使用的程序与数据，缓解 CPU 与主存速度不匹配。", "metadata": {"subject": "co", "knowledge_points": ["存储系统"]}}
-{"query": "什么是存储器层次结构？", "reference": "典型层次为寄存器-Cache-主存-辅存；Cache-主存解决速度问题，主存-辅存解决容量问题。", "metadata": {"subject": "co", "knowledge_points": ["存储系统"]}}
-{"query": "MAR 和 MDR 分别是什么？", "reference": "MAR 是主存地址寄存器，保存访问地址；MDR 是主存数据寄存器，保存读出或待写入的数据。二者逻辑上属存储器但集成在 CPU。", "metadata": {"subject": "co", "knowledge_points": ["计算机系统概述", "存储系统"]}}
-{"query": "什么是流水线？流水线冒险有哪些？", "reference": "流水线将指令重叠执行提高吞吐；冒险包括结构冒险、数据冒险、控制冒险，可通过转发、暂停、分支预测等缓解。", "metadata": {"subject": "co", "knowledge_points": ["中央处理器"]}}
-{"query": "指令周期包括哪些阶段？", "reference": "通常包括取指、间址（若有）、执行、中断等阶段，对应不同机器周期。", "metadata": {"subject": "co", "knowledge_points": ["中央处理器"]}}
-{"query": "什么是总线？总线有哪些类型？", "reference": "总线是部件间共享的传输通道；按传输内容可分为数据总线、地址总线、控制总线。", "metadata": {"subject": "co", "knowledge_points": ["总线"]}}
-{"query": "浮点数加减运算的基本步骤是什么？", "reference": "对阶、尾数加减、规格化、舍入、溢出判断等步骤。", "metadata": {"subject": "co", "knowledge_points": ["数据表示与运算"]}}
-{"query": "什么是中断？中断与异常有何区别？", "reference": "中断通常指外部设备引发的异步事件；异常是 CPU 执行指令过程中产生的同步事件（如缺页、除零）。", "metadata": {"subject": "co", "knowledge_points": ["输入输出系统", "中央处理器"]}}
-{"query": "什么是直接映射 Cache？", "reference": "主存块只能映射到 Cache 中固定的一行，实现简单但冲突失效较多。", "metadata": {"subject": "co", "knowledge_points": ["存储系统"]}}
-{"query": "I/O 控制方式有哪些？", "reference": "常见有程序查询、中断、DMA、通道等，控制 CPU 与外设的数据交换并降低 CPU 干预。", "metadata": {"subject": "co", "knowledge_points": ["输入输出系统"]}}
+{"query": "什么是进程死锁？死锁的四个必要条件是什么？", "reference": "死锁是多个进程互相等待对方持有的资源而都无法继续执行的状态。四个必要条件：互斥、占有并等待、不可抢占、循环等待。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["进程管理"]}}
+{"query": "虚拟内存的作用是什么？", "reference": "虚拟内存让进程逻辑地址空间可以大于物理内存，通过分页/置换在磁盘与内存间换入换出，提高多道程序度并隔离进程地址空间。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["内存管理"]}}
+{"query": "页面置换算法中的 Belady 异常说明了什么？", "reference": "Belady 异常指某些算法（如 FIFO）在物理块增加时缺页次数反而上升，说明并非所有置换算法都满足堆栈性质。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["内存管理"]}}
+{"query": "进程和程序有什么区别？", "reference": "程序是静态的指令序列，进程是程序的一次执行过程，是动态的；同一程序可对应多个进程。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["进程管理"]}}
+{"query": "什么是临界区？为什么需要互斥？", "reference": "临界区是访问共享资源的代码段；若多个进程同时进入会导致结果不可再现，因此需要互斥保证同一时刻只有一个进程进入。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["进程管理"]}}
+{"query": "进程同步有哪些常见机制？", "reference": "常见机制包括信号量与 PV 操作、管程、条件变量、消息传递等，用于协调并发进程的执行顺序与共享资源访问。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["进程管理"]}}
+{"query": "什么是段页式存储管理？", "reference": "段页式将地址空间先分段再分页，逻辑上按段管理、物理上按页分配，兼具段的共享保护与页的离散分配优点，但需多次访存。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["内存管理"]}}
+{"query": "文件系统中 inode 的作用是什么？", "reference": "inode（索引节点）保存文件元数据与数据块地址等信息，目录项将文件名映射到 inode，从而实现文件名与存储位置的分离。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["文件管理"]}}
+{"query": "什么是死锁的预防与避免？", "reference": "预防是破坏死锁四个必要条件之一；避免是在资源分配时用银行家算法等判断安全状态，仅在安全时分配。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["进程管理"]}}
+{"query": "分页和分段有什么区别？", "reference": "分页按固定大小物理划分、对用户透明；分段按逻辑模块划分、对用户可见。页是物理单位，段是逻辑单位。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["内存管理"]}}
+{"query": "什么是二叉搜索树？", "reference": "二叉搜索树是每个节点左子树键值均小于该节点、右子树键值均大于该节点的二叉树，支持有序查找与插入删除。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["树与二叉树"]}}
+{"query": "栈和队列的主要区别是什么？", "reference": "栈是后进先出（LIFO），队列是先进先出（FIFO）；栈只能在栈顶操作，队列在队尾入队、队头出队。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["栈和队列"]}}
+{"query": "什么是哈希冲突？如何解决？", "reference": "哈希冲突指不同关键字映射到同一地址。解决方法包括开放定址法、链地址法（拉链法）、再哈希等。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["查找"]}}
+{"query": "快速排序的基本思想是什么？", "reference": "选基准将序列划分为小于和大于基准的两部分，递归排序子序列；平均时间复杂度 O(n log n)，最坏 O(n²)。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["排序"]}}
+{"query": "什么是平衡二叉树（AVL）？", "reference": "AVL 树是任意节点左右子树高度差不超过 1 的二叉搜索树，通过旋转在插入删除后保持平衡，保证查找为 O(log n)。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["树与二叉树"]}}
+{"query": "图的深度优先遍历和广度优先遍历有什么不同？", "reference": "DFS 沿一条路径尽可能深再回溯，适合连通性与拓扑；BFS 按层扩展，适合最短路径（无权图）。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["图"]}}
+{"query": "顺序表和链表各有什么优缺点？", "reference": "顺序表随机访问 O(1)、插入删除中间元素 O(n)；链表插入删除 O(1)（已知位置）、随机访问 O(n)，额外指针空间。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["线性表"]}}
+{"query": "什么是堆？堆排序的原理是什么？", "reference": "堆是完全二叉树，满足父节点键值大于（或小于）子节点；堆排序反复取出堆顶并调整，得到有序序列。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["排序", "树与二叉树"]}}
+{"query": "B 树和 B+ 树有什么区别？", "reference": "B+ 树非叶节点只存关键字作索引，数据都在叶节点且叶节点有序链接，更适合磁盘范围查询与数据库索引。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["查找", "树与二叉树"]}}
+{"query": "线性表的链式存储结构有哪些形式？", "reference": "包括单链表、双链表、循环链表等，通过指针将结点链接，便于动态增删。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["线性表"]}}
+{"query": "TCP 三次握手的作用是什么？", "reference": "三次握手用于同步双方初始序号、确认收发能力并协商 MSS 等参数，避免历史连接造成的混乱。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["传输层"]}}
+{"query": "TCP 和 UDP 的主要区别是什么？", "reference": "TCP 面向连接、可靠、有序、有流量与拥塞控制；UDP 无连接、不保证可靠，开销小、实时性好。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["传输层"]}}
+{"query": "什么是拥塞控制？TCP 拥塞控制有哪些阶段？", "reference": "拥塞控制防止过多数据注入网络导致性能下降；TCP 常见阶段为慢开始、拥塞避免、快重传、快恢复。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["传输层"]}}
+{"query": "IP 地址与 MAC 地址有什么区别？", "reference": "IP 地址是网络层逻辑地址，用于路由；MAC 地址是数据链路层物理地址，用于同一链路内交付。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["网络层", "数据链路层"]}}
+{"query": "什么是子网划分？", "reference": "子网划分通过借用主机位作子网号，将一个网络分成多个逻辑子网，便于管理与减少广播域。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["网络层"]}}
+{"query": "HTTP 和 HTTPS 有什么区别？", "reference": "HTTPS 在 HTTP 之下加入 TLS/SSL，提供加密、完整性校验与身份认证；HTTP 明文传输。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["应用层"]}}
+{"query": "什么是 ARP 协议？", "reference": "ARP 将同一局域网内的 IP 地址解析为 MAC 地址，主机通过 ARP 请求/应答获得下一跳的硬件地址。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["网络层", "数据链路层"]}}
+{"query": "路由选择协议 RIP 和 OSPF 有什么不同？", "reference": "RIP 基于距离向量、以跳数为度量、收敛较慢；OSPF 基于链路状态、使用 Dijkstra，收敛更快、适合较大网络。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["网络层"]}}
+{"query": "传输层端口号的作用是什么？", "reference": "端口号区分同一主机上不同应用进程，实现进程到进程的复用与分用。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["传输层"]}}
+{"query": "什么是滑动窗口协议？", "reference": "滑动窗口允许发送方在未收到确认前连续发送多个分组，窗口大小决定在途数据量，提高信道利用率并配合流量控制。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["数据链路层", "传输层"]}}
+{"query": "Cache 的作用是什么？", "reference": "Cache 位于 CPU 与主存之间，存放近期使用的程序与数据，缓解 CPU 与主存速度不匹配。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["存储系统"]}}
+{"query": "什么是存储器层次结构？", "reference": "典型层次为寄存器-Cache-主存-辅存；Cache-主存解决速度问题，主存-辅存解决容量问题。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["存储系统"]}}
+{"query": "MAR 和 MDR 分别是什么？", "reference": "MAR 是主存地址寄存器，保存访问地址；MDR 是主存数据寄存器，保存读出或待写入的数据。二者逻辑上属存储器但集成在 CPU。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["计算机系统概述", "存储系统"]}}
+{"query": "什么是流水线？流水线冒险有哪些？", "reference": "流水线将指令重叠执行提高吞吐；冒险包括结构冒险、数据冒险、控制冒险，可通过转发、暂停、分支预测等缓解。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["中央处理器"]}}
+{"query": "指令周期包括哪些阶段？", "reference": "通常包括取指、间址（若有）、执行、中断等阶段，对应不同机器周期。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["中央处理器"]}}
+{"query": "什么是总线？总线有哪些类型？", "reference": "总线是部件间共享的传输通道；按传输内容可分为数据总线、地址总线、控制总线。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["总线"]}}
+{"query": "浮点数加减运算的基本步骤是什么？", "reference": "对阶、尾数加减、规格化、舍入、溢出判断等步骤。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["数据表示与运算"]}}
+{"query": "什么是中断？中断与异常有何区别？", "reference": "中断通常指外部设备引发的异步事件；异常是 CPU 执行指令过程中产生的同步事件（如缺页、除零）。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["输入输出系统", "中央处理器"]}}
+{"query": "什么是直接映射 Cache？", "reference": "主存块只能映射到 Cache 中固定的一行，实现简单但冲突失效较多。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["存储系统"]}}
+{"query": "I/O 控制方式有哪些？", "reference": "常见有程序查询、中断、DMA、通道等，控制 CPU 与外设的数据交换并降低 CPU 干预。", "metadata": {"subject": "co", "query_type": "concept", "knowledge_points": ["输入输出系统"]}}
 {"query": "邻接矩阵和邻接表各适合什么样的图？", "reference": "邻接矩阵用二维数组存边，适合顶点数少、边稠密的图，判断任意两点间是否有边为 O(1)，但空间为 O(n²)；邻接表用链表存每个顶点的邻接点，适合稀疏图，空间为 O(n+e)，但判断两点间是否有边需遍历该顶点的链表。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["图"]}}
 {"query": "什么是线索二叉树？引入线索的目的是什么？", "reference": "线索二叉树利用二叉链表中空的左右孩子指针，分别指向该结点在某种遍历次序下的前驱和后继，这些指针称为线索。目的是在不使用栈、不递归的情况下实现遍历，且不需要额外存储空间。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["树与二叉树"]}}
 {"query": "KMP 算法中 next 数组的含义是什么？", "reference": "next[j] 表示模式串前 j 个字符组成的子串中最长相等前后缀的长度。它刻画了失配后模式串可以向右滑动的距离，使主串指针不回溯，从而把时间复杂度降为 O(n+m)。", "metadata": {"subject": "ds", "query_type": "concept", "knowledge_points": ["串"]}}
@@ -59,7 +59,7 @@
 {"query": "进程上下文切换的开销来自哪些方面？", "reference": "主要来自保存与恢复 CPU 现场（通用寄存器、PC、PSW）、切换页表基址寄存器导致 TLB 失效、刷新流水线、以及内核栈切换与调度器自身开销。纯切换通常为微秒级，但 TLB 失效引起的后续缺页会放大实际代价。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["进程管理"]}}
 {"query": "管程与信号量相比有什么优势？", "reference": "管程把共享变量和对其操作的过程封装在一起，同一时刻只允许一个进程进入，互斥由编译器自动保证，程序员不必显式调用 P/V，从而降低了死锁与同步遗漏的风险；管程用条件变量实现同步，语义比裸信号量更清晰。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["进程管理"]}}
 {"query": "目录项与索引结点（inode）的关系是什么？", "reference": "索引结点存放文件的全部元数据（类型、权限、大小、时间、数据块地址等）；目录项只保存文件名到索引结点号的映射。这样检索目录时只需调入较短的目录项，索引结点可常驻内存，减少磁盘 I/O；硬链接就是多个目录项指向同一索引结点。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["文件管理"]}}
-{"query": "什么是 SPOOLing 技术？", "reference": "SPOOLing（假脱机）利用磁盘上的输入井、输出井配合多道程序技术，把独占设备虚拟为共享设备。以打印机为例：进程把输出送入输出井，由专门的输出进程按队列真正送往打印机，使多个进程可以同时使用一台打印机。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["输入输出管理"]}}
+{"query": "什么是 SPOOLing 技术？", "reference": "SPOOLing（假脱机）利用磁盘上的输入井、输出井配合多道程序技术，把独占设备虚拟为共享设备。以打印机为例：进程把输出送入输出井，由专门的输出进程按队列真正送往打印机，使多个进程可以同时使用一台打印机。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["输入输出系统"]}}
 {"query": "局部性原理包括哪两个方面？它与虚拟存储是什么关系？", "reference": "时间局部性指刚被访问的信息很可能再次被访问（源于循环）；空间局部性指刚被访问信息的邻近信息很可能被访问（源于数组与顺序执行）。虚拟存储正建立在局部性之上：只需当前用到的页驻留内存即可支撑程序运行，因而能用小内存运行大程序。", "metadata": {"subject": "os", "query_type": "concept", "knowledge_points": ["内存管理"]}}
 {"query": "CSMA/CD 中的二进制指数退避算法是如何工作的？", "reference": "检测到冲突后立即停止发送并发送强化冲突信号，然后从 0 到 2^k−1 中随机取一个数作为退避时间，其中 k = min(重传次数, 10)。重传 16 次仍失败则丢弃。重传次数越多，可选退避区间越大，从而降低再次冲突的概率，体现了对高负载的自适应。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["数据链路层"]}}
 {"query": "NAT 解决了什么问题？有什么副作用？", "reference": "NAT（网络地址转换）让多台使用私有 IP 的主机通过少量公网 IP 访问 Internet：出方向改写源 IP 与端口，入方向按映射表改写目的 IP 与端口。它缓解了 IPv4 地址枯竭并隐藏了内网结构，但破坏了端到端透明性，使外网无法主动向内网主机发起连接。", "metadata": {"subject": "network", "query_type": "concept", "knowledge_points": ["网络层"]}}
@@ -85,8 +85,8 @@
 {"query": "请出一道考查进程同步的题。", "reference": "示例题：用信号量实现生产者—消费者问题，缓冲区大小为 n，写出信号量定义与双方的 PV 操作序列。考查点：mutex 保证缓冲区互斥访问，empty 与 full 分别表示空位数与产品数；P 操作的顺序不可颠倒，否则会引起死锁。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["进程管理"]}}
 {"query": "请出一道考查页面置换算法的题。", "reference": "示例题：页面访问序列为 3,2,1,0,3,2,4,3,2,1,0,4，分别用 3 个和 4 个物理块执行 FIFO，求缺页次数。答案：3 块时缺页 9 次，4 块时反而缺页 10 次，即 Belady 异常。考查点：FIFO 不满足堆栈性质，LRU 与 OPT 满足，故不会出现该异常。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["内存管理"]}}
 {"query": "请出一道考查文件物理结构的题。", "reference": "示例题：某文件系统采用索引分配，索引结点含 10 个直接块指针、1 个一级间接指针、1 个二级间接指针，块大小 4KB、块号占 4 字节，求单个文件的最大长度。答案：一级间接可存 4KB/4B = 1024 个块号，二级间接可存 1024² 个，(10 + 1024 + 1024²)×4KB 约为 4GB 量级。考查点：索引分配的寻址能力与访存次数。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["文件管理"]}}
-{"query": "请出一道考查磁盘调度的题。", "reference": "示例题：磁头当前位于 100 号磁道，请求队列为 55,58,39,18,90,160,150,38,184，分别用 FCFS、SSTF、SCAN（向磁道号增大方向）求磁头移动总道数。考查点：SSTF 每次选最近的请求，可能饥饿；SCAN 单向扫到端点再折返；FCFS 按到达顺序，公平但效率低。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["输入输出管理"]}}
-{"query": "请出一道考查系统调用的题。", "reference": "示例题：说明系统调用与普通函数调用在实现上的区别。考查点：系统调用需通过陷入（trap）指令从用户态切换到核心态，参数传递与控制转移由硬件配合完成，返回后再恢复用户态；普通函数调用不涉及运行状态切换。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["操作系统概述"]}}
+{"query": "请出一道考查磁盘调度的题。", "reference": "示例题：磁头当前位于 100 号磁道，请求队列为 55,58,39,18,90,160,150,38,184，分别用 FCFS、SSTF、SCAN（向磁道号增大方向）求磁头移动总道数。考查点：SSTF 每次选最近的请求，可能饥饿；SCAN 单向扫到端点再折返；FCFS 按到达顺序，公平但效率低。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["文件管理"]}}
+{"query": "请出一道考查系统调用的题。", "reference": "示例题：说明系统调用与普通函数调用在实现上的区别。考查点：系统调用需通过陷入（trap）指令从用户态切换到核心态，参数传递与控制转移由硬件配合完成，返回后再恢复用户态；普通函数调用不涉及运行状态切换。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["计算机系统概述"]}}
 {"query": "请出一道考查银行家算法的题。", "reference": "示例题：给定 Available、Max、Allocation 矩阵，用银行家算法判断某请求 Request 能否分配，并给出一个安全序列。考查点：先检查 Request ≤ Need 且 Request ≤ Available，试探分配后执行安全性算法，只有存在安全序列才真正分配，否则回滚。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["进程管理"]}}
 {"query": "请出一道考查分页地址转换的题。", "reference": "示例题：某分页系统页大小 4KB，页表项 4 字节，逻辑地址 32 位，求单级页表大小；若改为两级页表且每级页表恰好占一页，求每级页表项数。答案：页内偏移 12 位、页号 20 位，单级页表 2^20 项共 4MB；两级时每级 2^10 = 1024 项。考查点：多级页表用时间换空间，避免连续存放巨大页表。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["内存管理"]}}
 {"query": "请出一道考查磁盘空闲空间管理的题。", "reference": "示例题：分别说明空闲表法、空闲链表法、位示图法和成组链接法在分配与回收时的开销差异。考查点：位示图便于连续查找但占用空间大；成组链接法用一个栈存放大量空闲块号，只在栈满或空时才读写磁盘，是 UNIX 采用的方法。", "metadata": {"subject": "os", "query_type": "generate", "knowledge_points": ["文件管理"]}}
@@ -120,7 +120,7 @@
 {"query": "学生的答案是：分页对用户透明，分段对用户可见。请批改。", "reference": "正确。分页是系统按固定大小划分的物理单位，对用户完全透明；分段是按程序的逻辑模块划分的逻辑单位，用户与编译器可见并能指定段名与段长。这是分页与分段的本质区别之一。", "metadata": {"subject": "os", "query_type": "grade", "knowledge_points": ["内存管理"]}}
 {"query": "学生的答案是：一个文件可以有多个硬链接，删除其中任意一个链接，文件就被删除了。请批改。", "reference": "错误。硬链接是多个目录项指向同一个索引结点，索引结点中维护链接计数。删除一个目录项只是把计数减 1，只有计数归零且没有进程打开该文件时，才会真正释放文件数据块。", "metadata": {"subject": "os", "query_type": "grade", "knowledge_points": ["文件管理"]}}
 {"query": "学生的答案是：文件系统采用多级目录主要是为了节省存储空间。请批改。", "reference": "错误。多级目录的主要目的是解决文件重名问题，并便于按类别管理、提高检索效率。节省空间反而是次要的，甚至因为目录项增多而多占空间。", "metadata": {"subject": "os", "query_type": "grade", "knowledge_points": ["文件管理"]}}
-{"query": "学生的答案是：设备驱动程序直接控制硬件，与中断处理无关。请批改。", "reference": "不准确。驱动程序负责把上层抽象请求翻译成对设备寄存器的读写，而 I/O 完成的通知通常依靠中断；中断处理程序与驱动程序是紧密配合的两部分，前者负责唤醒等待 I/O 的进程并做必要的收尾。", "metadata": {"subject": "os", "query_type": "grade", "knowledge_points": ["输入输出管理"]}}
+{"query": "学生的答案是：设备驱动程序直接控制硬件，与中断处理无关。请批改。", "reference": "不准确。驱动程序负责把上层抽象请求翻译成对设备寄存器的读写，而 I/O 完成的通知通常依靠中断；中断处理程序与驱动程序是紧密配合的两部分，前者负责唤醒等待 I/O 的进程并做必要的收尾。", "metadata": {"subject": "os", "query_type": "grade", "knowledge_points": ["输入输出系统"]}}
 {"query": "学生的答案是：时间片轮转调度中时间片越大系统开销越小，所以时间片越大越好。请批改。", "reference": "错误。时间片过大时轮转会退化为先来先服务，交互响应明显变差；时间片过小则上下文切换开销占比过高。时间片需要在响应时间与切换开销之间折中，一般取略大于一次典型交互所需的时间。", "metadata": {"subject": "os", "query_type": "grade", "knowledge_points": ["进程管理"]}}
 {"query": "学生的答案是：TCP/IP 是四层模型，所以它没有表示层和会话层。请批改。", "reference": "表述不准确。TCP/IP 模型确实不设独立的表示层与会话层，但这两层的功能并未消失——数据格式转换、加密压缩、会话管理被合并进应用层，由各应用协议自行实现。说「没有这些功能」是错的。", "metadata": {"subject": "network", "query_type": "grade", "knowledge_points": ["体系结构"]}}
 {"query": "学生的答案是：基带传输和宽带传输的区别在于带宽大小不同。请批改。", "reference": "错误。区别在于信号形式而非带宽大小：基带传输直接传送数字信号并占据整个信道频带；宽带传输把数字信号调制到多个不同频段的载波上，可同时传输多路信号。", "metadata": {"subject": "network", "query_type": "grade", "knowledge_points": ["物理层"]}}
