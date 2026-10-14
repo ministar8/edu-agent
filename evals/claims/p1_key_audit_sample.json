@@ -42,32 +42,32 @@
     {
       "year": "2009",
       "question_id": "2009-Q2",
-      "verifier_reading": "",
-      "verdict": "pending"
+      "verifier_reading": "C",
+      "verdict": "pass"
     },
     {
       "year": "2009",
       "question_id": "2009-Q33",
-      "verifier_reading": "",
-      "verdict": "pending"
+      "verifier_reading": "B",
+      "verdict": "pass"
     },
     {
       "year": "2009",
       "question_id": "2009-Q25",
-      "verifier_reading": "",
-      "verdict": "pending"
+      "verifier_reading": "C",
+      "verdict": "pass"
     },
     {
       "year": "2009",
       "question_id": "2009-Q7",
-      "verifier_reading": "",
-      "verdict": "pending"
+      "verifier_reading": "A",
+      "verdict": "pass"
     },
     {
       "year": "2009",
       "question_id": "2009-Q11",
-      "verifier_reading": "",
-      "verdict": "pending"
+      "verifier_reading": "C",
+      "verdict": "fail"
     },
     {
       "year": "2010",
@@ -78,14 +78,14 @@
     {
       "year": "2010",
       "question_id": "2010-Q40",
-      "verifier_reading": "",
-      "verdict": "pending"
+      "verifier_reading": "A",
+      "verdict": "pass"
     },
     {
       "year": "2010",
       "question_id": "2010-Q12",
-      "verifier_reading": "",
-      "verdict": "pending"
+      "verifier_reading": "D",
+      "verdict": "pass"
     },
     {
       "year": "2010",

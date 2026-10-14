@@ -1,0 +1,142 @@
+{
+  "instruction": "key_ok=true 键正确；false 时 correct_key 填正键；对照真题原件判定",
+  "verdicts": {
+    "grd-001": {
+      "qid": "2009-Q33",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-002": {
+      "qid": "2009-Q11",
+      "key_ok": false,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "ai",
+      "confirmed_key": null
+    },
+    "grd-003": {
+      "qid": "2009-Q1",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-004": {
+      "qid": "2009-Q12",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-005": {
+      "qid": "2009-Q40",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-006": {
+      "qid": "2009-Q17",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-007": {
+      "qid": "2009-Q2",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-008": {
+      "qid": "2009-Q25",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-009": {
+      "qid": "2010-Q40",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw_revoke",
+      "confirmed_key": null
+    },
+    "grd-010": {
+      "qid": "2010-Q12",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-011": {
+      "qid": "2009-Q5",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    },
+    "grd-012": {
+      "qid": "2011-Q23",
+      "key_ok": false,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "ai",
+      "confirmed_key": null
+    },
+    "grd-013": {
+      "qid": "2011-Q33",
+      "key_ok": false,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "ai",
+      "confirmed_key": null
+    },
+    "grd-014": {
+      "qid": "2010-Q20",
+      "key_ok": false,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "ai",
+      "confirmed_key": null
+    },
+    "grd-015": {
+      "qid": "2009-Q7",
+      "key_ok": true,
+      "correct_key": null,
+      "stem_garbled": false,
+      "note": "对照 2009/2010/2011 408 真题原卷人工核验（题源：408计算机统考真题库/计算机考研杂货铺），2026-10-14",
+      "human_verdict": "raw",
+      "confirmed_key": null
+    }
+  },
+  "verified_by": "项目所有者（人工对照真题原卷）",
+  "verified_at": "2026-10-14"
+}
