@@ -141,7 +141,7 @@ docker compose up --build                # 容器化启动
   `PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate`。
   它用确定性哈希 embedding + 临时索引跑 156 条黄金集 query（`evals/datasets/golden/sample_408.jsonl`），与 `evals/baselines/retrieval_baseline.json`
   对比，任一指标退化即失败。**它衡量的是检索管线是否退化，不是语义质量**（语义质量用
-  `evals/cli.py` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，
+  `evaluation.ragas.cli` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，
   但**必须在 PR 里说明为什么这个变化是可接受的**。
 - **探针门禁（细粒度补充）**：`PYTHONPATH=src uv run python -m evaluation.gates.probe_gate`。
   `retrieval_gate` 的 `kp_*` 是**章级**（只看文件名），测不到「**小节级细节是否进了证据**」；

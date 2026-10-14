@@ -277,7 +277,9 @@ P−1（人工盲标，阻塞 Task 3 的可测分支）
   ⇒ 规程已参数化：`scripts/p1_key_audit_sample.py`（抽样器，含 n 自校验）+
   `evals/claims/p1_key_audit_sample.json`（**在看到任何核验结果之前**冻结的 59 原子清单，种子 20261009，
   四个低覆盖批次各 ≥5、合计恰 59、清单内不预填源键值）。复算核对：
-  `uv run python scripts/p1_key_audit_sample.py --check`。
+  ~~`uv run python scripts/p1_key_audit_sample.py --check`~~。
+  ★ 2026-10-14 补记：抽样器脚本已在 `0cac1d4`（删 8 个一次性诊断脚本）中删除，`--check` 自校验
+  随之失效；**冻结清单 JSON 仍在**，需要重算时从 git 历史取回脚本。
   ★ 答案形态/状态、扩查五步、R 行启用**已冻结进规格 §4.4**；仍留两个空位待第 3 步：
   §4.4.3 四态映射、§4.4.4 父题/part 汇总规则（已明令**不得复用 §1.6 R5**）。
   ⇒ 在这两处冻结 + 标注指南/分歧处理/审计 schema 定稿之前，**不启动盲标、不重录**。

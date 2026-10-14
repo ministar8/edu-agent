@@ -66,7 +66,7 @@
 
 ## 3. Legacy 资产池策略（三策略对比）
 
-**复现**：`uv run python scripts/legacy_runtime_compare.py`
+**复现**：~~`uv run python scripts/legacy_runtime_compare.py`~~（一次性诊断脚本，`0cac1d4` 已删；git 历史可取回，归档 JSON 仍可读）
 **归档**：`evals/results/retrieval/legacy_runtime/legacy_runtime.json`
 
 | 策略 | 层精度 pack（6 probe 均值） | legacy 占坑 |
@@ -254,7 +254,9 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 - baseline = L1/L2/L3 平铺 + legacy=include
 - ours = task_mode → preferred_layers → legacy_policy
 
-**复现**：`uv run python scripts/task_layer_ablation.py`
+**复现**：~~`uv run python scripts/task_layer_ablation.py`~~（两臂 {baseline, ours} 是
+`scripts/exp/task_mode_layer_policy.py` 五臂 {flat≡baseline, ours, prefer_l1/l2/l3} 的子集，`8a51a87` 已合并去重；
+本表数字与归档仍有效）
 **归档**：`evals/results/retrieval/ablation/task_layer_ablation.json`
 
 ### 10.1 任务专有指标
@@ -560,7 +562,7 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 
 **问题**：`l2_only kp_mrr 0.7167`，L2 是分层短板。
 
-**复现**：`uv run python scripts/l2_coverage_analysis.py`
+**复现**：~~`uv run python scripts/l2_coverage_analysis.py`~~（一次性分析脚本，`0cac1d4` 已删；git 历史可取回，归档 JSON 仍可读）
 **归档**：`evals/results/retrieval/ablation/l2_coverage.json`（**V-2026-10-02 重跑**）
 
 ### 16.1 L2 数据规模

@@ -60,6 +60,7 @@ edu-agent/
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile.service
 ├── scripts/              # 运维/诊断/实验脚本，按域分子包（ops · mem · gates · exp · lib · ingest · datasets）
+├── tests/                # 单测（遥测采样口径，19 例；CI 的 lint job 会跑 pytest）
 └── docs/                 # 工程文档（ARCHITECTURE / RETRIEVAL_PLAN / RETRIEVAL_ROADMAP / DOCKER 等）
 ```
 
@@ -152,18 +153,21 @@ PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/go
 ## 代码质量
 
 ```bash
-uv run ruff check src/         # Lint
-uv run ruff format src/        # 格式化
+uv run ruff check src/ tests/  # Lint
+uv run ruff format src/ tests/ # 格式化
 uv run pyrefly check           # 类型检查（须 0 错误）
+uv run pytest -q               # 单测（遥测采样口径；纯本地 I/O，无网络无密钥）
 pre-commit install             # 安装 git 钩子（一次性；此后每次 commit 自动跑）
 ```
 
 钩子包含：YAML 校验、文件尾换行、行尾空白、ruff（`--fix`）、ruff-format、pyrefly。
 `evals/` 为门禁基线输入，已豁免空白类改写。
 
-> 说明：本工作区**不含测试套件与代码覆盖率**（有效检查范围是 `src/`；移出内容原归档于
-> `../edu-agent-engineering-archive/`，该目录**在本机已不存在**，2026-10-03 核实，无本地副本可取回）。
-> ★ 但**有 CI**：`.github/workflows/ci.yml` 两个 job —— lint/类型（ruff check + format --check + pyrefly）
+> 说明：**测试套件于 2026-10-14 恢复**（`tests/`，目前仅覆盖**遥测采样口径**，19 例——采样三条性质、
+> 报表两份计数、`core.settings` 导出旋钮）；**代码覆盖率仍未恢复**（其余移出内容原归档于
+> `../edu-agent-engineering-archive/`，该目录**在本机已不存在**，2026-10-03 核实、2026-10-14 复核仍无，
+> 无本地副本可取回）。lint/类型的有效检查范围是 `src/` 与 `tests/`。
+> ★ **有 CI**：`.github/workflows/ci.yml` 两个 job —— lint/类型/单测（ruff check + format --check + pyrefly + pytest）
 > 与**检索质量门禁的默认路由**（假 embedding，比 1 份基线；不依赖 TEI、不联网、不需真密钥），
 > 另支持 `workflow_dispatch` 供答辩现场触发。
 > ★ **`task_eval` 与三个 Memory Gate 刻意不进 CI**（要真密钥、按 token 计费、模型输出有随机性）

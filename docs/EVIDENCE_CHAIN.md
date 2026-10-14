@@ -568,7 +568,7 @@ B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾�
 
 | 冻结项 | 值 | 可复核处 |
 |---|---|---|
-| 总体 | 有键题 **514** 道（`answer_key` 为单个 A–H，程序现算） | `scripts/p1_key_audit_sample.py` 的 `keyed_atoms()` |
+| 总体 | 有键题 **514** 道（`answer_key` 为单个 A–H，程序现算） | 冻结工件 `evals/claims/p1_key_audit_sample.json`（由 `scripts/p1_key_audit_sample.py` 的 `keyed_atoms()` 生成；脚本 `0cac1d4` 已删，git 历史可取回） |
 | 样本量 / 目标 | **n=59**；零接受属性抽样：真实错键率 ≥5% 时以 ≥95% 概率至少发现一个 ⇒ `n=ceil(ln(1-c)/ln(1-p))`，**代码自校验**（改 p/c 而 n 不动即 exit 1，牙齿已实测） | 同上 `_design_n()` |
 | 抽样单位 | `(question_id, answer_key)` 原子；**清单内不预填源键值**（防核验者被同一份 OCR 派生文本定锚） | `evals/claims/p1_key_audit_sample.json` |
 | 分层与硬配额 | 按来源文件=年份；2009/2010/2013/2016 **每层 ≥5**，其余 39 道按有键规模分配（最大余数补齐），合计恰 59 | 同上 `design.strata` 与 `allocation` |
@@ -576,7 +576,7 @@ B3 空召回写缓存、B5 `/api/metrics` 鉴权与阻塞、B6 SSE 断连收尾�
 | 缺键题 | **160** 道不入任何正确率分母，单独登记为 `missing_key`；★ 不得用模型生成答案、按考点猜答、或把「参考解析为空」解释成「答案已验证」来填 | 普查工件 `evals/claims/p1_corpus_census.json` |
 | 核验依据 | **对照原始扫描页人工重读**题干+选项+键；禁止用 `items.md` 自身（同一次 OCR 的产物）自证 | 规程本行 |
 | 不足配额 | 记录为「层内不足」，缺口**不得静默挪用**（实测 2016 有键恰 5 道 ⇒ 该层=全查，无缺口） | `design.shortfall_notes` |
-| 冻结清单可重算 | `uv run python scripts/p1_key_audit_sample.py --check` ⇒ 清单与脚本重算不一致即红 | 刚实跑 PASS |
+| 冻结清单可重算 | ~~`uv run python scripts/p1_key_audit_sample.py --check`~~ ⇒ 当时「清单与脚本重算不一致即红」，**实跑 PASS**；★ 脚本 `0cac1d4` 已删，这条自校验能力随之消失（需要时从 git 历史取回） | 冻结清单：`evals/claims/p1_key_audit_sample.json` |
 
 ★ **发现错键后的处置（★ 待项目所有者确认后才冻结；未冻结前不得据初步结果临场决定扩查）**，提案：
 (a) 立即停止引用任何「键可靠」结论；(b) **出错层（年份批次）整体降级**为「来源可靠性未证」，其题目暂不作
