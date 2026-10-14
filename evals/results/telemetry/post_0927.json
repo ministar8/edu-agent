@@ -1,0 +1,234 @@
+{
+  "_meta": {
+    "log_path": "C:\\Users\\26452\\Desktop\\edu-agent\\data\\metrics\\rag_metrics.jsonl",
+    "log_bytes": 655496477,
+    "log_lines": 1723957,
+    "bad_lines": 50,
+    "time_span": [
+      "2026-09-23T16:31:19.829608+00:00",
+      "2026-10-14T05:37:38.798313+00:00"
+    ],
+    "golden_paths": [
+      "evals/datasets/golden/sample_408.jsonl",
+      "evals/datasets/ragas/ragas_paired20.jsonl"
+    ],
+    "golden_queries": 156,
+    "generated_at": "2026-10-14 14:07:27",
+    "window": {
+      "since": "2026-09-27T07:00:00+00:00",
+      "until": "2026-10-01T16:00:00+00:00",
+      "filtered": true,
+      "anchor": "2026-10-14T05:37:38.798313+00:00"
+    },
+    "note": "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ 本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
+  },
+  "event_counts": {
+    "chroma_query": 580961,
+    "embedding_batch": 339839,
+    "embed_documents": 315821,
+    "split_documents": 229765,
+    "retrieve_evidence": 146098,
+    "retrieve_query": 73690,
+    "clean_documents": 19333,
+    "index_documents": 17895,
+    "ingest_file_summary": 492,
+    "ingest_warmup_summary": 13
+  },
+  "traffic_split": {
+    "retrieve_query": {
+      "total": 29154,
+      "evaluation": 26559,
+      "other": 2595,
+      "evaluation_ratio": 0.911
+    },
+    "retrieve_evidence": {
+      "total": 58103,
+      "evaluation": 52880,
+      "other": 5223
+    },
+    "other_top_queries": [
+      [
+        "BST 删除考过哪些真题？",
+        109
+      ],
+      [
+        "BST 删除时双支结点怎么处理？",
+        82
+      ],
+      [
+        "什么是二叉排序树？",
+        80
+      ],
+      [
+        "给我一道死锁练习题",
+        76
+      ],
+      [
+        "如何用银行家算法避免死锁？",
+        70
+      ],
+      [
+        "页面置换算法 LRU 怎么实现？",
+        70
+      ],
+      [
+        "Dijkstra 算法的步骤是什么？",
+        70
+      ],
+      [
+        "如何判断一个二叉树是平衡二叉树？",
+        70
+      ],
+      [
+        "TCP 拥塞控制怎么实现？",
+        70
+      ],
+      [
+        "什么是死锁？",
+        68
+      ]
+    ]
+  },
+  "funnel_by_query_type": {
+    "concept": {
+      "n": 17680,
+      "before_threshold": 31.0955,
+      "after_section_dedup": 29.5002,
+      "after_threshold": 13.5913,
+      "after_rerank": 5.2946,
+      "after_window": 5.3214,
+      "threshold_keep_rate": 0.4607,
+      "hit_rate": 0.9807
+    },
+    "generate": {
+      "n": 2963,
+      "before_threshold": 91.2528,
+      "after_section_dedup": 91.1131,
+      "after_threshold": 17.814,
+      "after_rerank": 4.7432,
+      "after_window": 4.7432,
+      "threshold_keep_rate": 0.1955,
+      "hit_rate": 1.0
+    },
+    "grade": {
+      "n": 2931,
+      "before_threshold": 52.0754,
+      "after_section_dedup": 51.7718,
+      "after_threshold": 8.6858,
+      "after_rerank": 4.522,
+      "after_window": 4.522,
+      "threshold_keep_rate": 0.1678,
+      "hit_rate": 0.9997
+    },
+    "code": {
+      "n": 2985,
+      "before_threshold": 58.6797,
+      "after_section_dedup": 58.1337,
+      "after_threshold": 13.7474,
+      "after_rerank": 5.6841,
+      "after_window": 5.6888,
+      "threshold_keep_rate": 0.2365,
+      "hit_rate": 1.0
+    },
+    "_all_eval": {
+      "n": 26559,
+      "before_threshold": 43.2223,
+      "after_section_dedup": 42.0499,
+      "after_threshold": 13.5386,
+      "after_rerank": 5.1916,
+      "after_window": 5.2099,
+      "threshold_keep_rate": 0.322,
+      "hit_rate": 0.9871
+    }
+  },
+  "threshold_by_query_type": {
+    "concept": {
+      "0.06": 3645,
+      "0.066": 261,
+      "0.08": 6626,
+      "0.088": 5939,
+      "0.1": 883,
+      "0.12": 326
+    },
+    "generate": {
+      "0.12": 2963
+    },
+    "grade": {
+      "0.12": 2931
+    },
+    "code": {
+      "0.066": 178,
+      "0.088": 274,
+      "0.1": 362,
+      "0.11": 1939,
+      "0.12": 232
+    }
+  },
+  "distribution": {
+    "retrieval_layer": {
+      "L2": 19890,
+      "L3": 3780,
+      "L1": 2889
+    },
+    "route_type": {
+      "l2_standard": 19890,
+      "l3_code": 3489,
+      "l1_fast": 2889,
+      "l3_deep": 291
+    },
+    "use_rerank": {
+      "True": 14178,
+      "False": 12381
+    },
+    "rerank_used": {
+      "False": 24202,
+      "True": 2357
+    },
+    "decomposed": {
+      "False": 20953,
+      "True": 5606
+    },
+    "classifier_source": {
+      "rule": 24272,
+      "rule+llm": 2287
+    }
+  },
+  "evidence": {
+    "semantic_cache_hit_rate": 0.0118,
+    "semantic_cache_samples": 58103,
+    "verifier_used": {
+      "True": 58103
+    },
+    "evidence_verdict": {
+      "pass": 55065,
+      "hard_fail": 3038
+    },
+    "retry_count": {
+      "0": 58095,
+      "1": 8
+    }
+  },
+  "ingest": {
+    "events": 332,
+    "files": 51,
+    "per_category": {
+      "computer_network": 314,
+      "computer_organization": 415,
+      "data_structure": 703,
+      "learning_paths": 24,
+      "operating_system": 358,
+      "questions": 691
+    },
+    "indexed_total": 2505,
+    "split_total": 2529,
+    "mismatched_files": [
+      {
+        "category": "data_structure",
+        "file": "07_查找.md",
+        "chunks": 106,
+        "indexed_chunks": 82,
+        "dropped": 24
+      }
+    ]
+  }
+}

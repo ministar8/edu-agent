@@ -11,16 +11,17 @@
 与 `retrieval_gate` / `probe_gate` 的关键区别：
 
 - **无基线、无退出码判定**。退出码只用于「读不到文件」这类错误（返回 2）。
-  理由：本日志的输入以**评测流量**为主（跑一次门禁就写入 936 条），
+  理由：本日志的输入以**评测流量**为主（采样上线前实测：跑一次门禁就写入 936 条），
   内容随「跑了几次门禁」而变 ⇒ 拿它当带基线的门禁会引入一个**不稳定判据**。
 - 只读，不碰索引、不碰生产数据。
 
-★ 使用前必须知道的两件事
+★ 使用前必须知道的三件事
 ------------------------
 **① 它大概率不是线上统计。** 用 `tags.query_preview ∩ 黄金集` 可以判断一条记录是不是
-评测跑出来的。实测（2026-09-27）`retrieve_query` 里 **99.4% 是评测流量**，真实用户流量
-约等于 0。所以本报表回答的是「**管线各层在黄金集上的行为分布**」，
-**不是**「线上检索准不准」。`traffic_split` 一节会把这件事量化出来。
+评测跑出来的。实测这份日志的评测占比**随窗口变**：09-27 之前的窗口 **99.3%**，
+含此后流量的整份日志 **93.9%**（2026-10-14 重算）—— 真实用户流量始终约等于 0。
+所以本报表回答的是「**管线各层在黄金集上的行为分布**」，**不是**「线上检索准不准」。
+`traffic_split` 一节会把这件事量化出来。
 
 **② 它混了多个代码版本 ⇒ 必须按时间切开看。** 同一份日志里写着 Step 1~10 各轮实验的
 运行记录，**同一个指标在不同时间段是不同的代码跑出来的**。实测（2026-09-27）：
@@ -30,6 +31,14 @@
 
     ... --since 2026-09-27T15:00          # 本机时区；只算此后的记录
     ... --since 6h                        # 最近 6 小时（锚点是日志最新一条事件，不是「现在」）
+
+**③ 高频事件是采过样的，`event_counts` 不再是「发生次数」。** 自 2026-10-14 起
+`chroma_query` / `embedding_batch` / `embed_documents` 在**写侧**就按 1/100 削
+（`rag.common.metrics._TELEMETRY_SAMPLE_EVERY`），留下的每条自带 `sampled_every`。
+⇒ `event_counts` 读作**日志行数**，「发生了多少次」读 `event_counts_estimated`
+（注意它是**下界**，模 100 的末周期没有代表行 —— 详见 `scan_log` 的 docstring）；
+`_meta.sampled_records` 告诉你这份日志到底有没有标注（旧归档 = 0，两份数字相等）。
+`status != "ok"` 的记录**永不采样**，所以错误次数始终是精确的。要全量：`METRICS_SAMPLE_EVERY=1`。
 
 它比 `candidate_trace` 强的地方
 --------------------------------
@@ -70,6 +79,7 @@ from evaluation.diagnostics._telemetry_common import (
     STAGES,
 )
 from evaluation.diagnostics._telemetry_format import format_report  # noqa: F401
+from evaluation.diagnostics._telemetry_ingest import build_ingest_summary
 from rag.common.metrics import DEFAULT_METRICS_PATH
 
 logger = logging.getLogger(__name__)
@@ -114,9 +124,15 @@ def scan_log(log_path: Path) -> dict[str, Any]:
     """**单遍**扫日志，只保留聚合所需的最小信息。
 
     刻意不保存 `chroma_query` / `embedding_batch` / `embed_documents` 的明细 ——
-    它们占全部行数的九成以上，而报表只需要条数（保存会把内存打满）。
+    报表只数它们的条数（保存会把内存打满）。实测占比按窗口不同：整份归档 71.7% 行数，
+    2026-10-10→10-14 这段 44.3% 行数 / 31.0% 字节数。
+
+    ★ 两份计数（`event_counts` / `event_counts_estimated`）的来龙去脉见**模块 docstring ③**；
+    倍率解读的两个坑 —— 还原值是**下界**、`split_documents` 的标注密度 —— 见 `_record_factor`。
     """
     event_counts: Counter[str] = Counter()
+    event_estimates: Counter[str] = Counter()
+    sampled_records = 0
     query_rows: list[dict[str, Any]] = []
     evidence_rows: list[dict[str, Any]] = []
     ingest_rows: list[dict[str, Any]] = []
@@ -134,7 +150,11 @@ def scan_log(log_path: Path) -> dict[str, Any]:
                 bad_lines += 1
                 continue
             event = str(rec.get("event") or "")
+            factor = _record_factor(rec)
+            if factor > 1:
+                sampled_records += 1
             event_counts[event] += 1
+            event_estimates[event] += factor
             ts = rec.get("ts")
             if isinstance(ts, str):
                 first_ts = first_ts or ts
@@ -148,6 +168,8 @@ def scan_log(log_path: Path) -> dict[str, Any]:
 
     return {
         "event_counts": dict(event_counts),
+        "event_counts_estimated": dict(event_estimates),
+        "sampled_records": sampled_records,
         "query_rows": query_rows,
         "evidence_rows": evidence_rows,
         "ingest_rows": ingest_rows,
@@ -156,6 +178,23 @@ def scan_log(log_path: Path) -> dict[str, Any]:
         "bytes": log_path.stat().st_size,
         "time_span": [first_ts, last_ts],
     }
+
+
+def _record_factor(rec: dict[str, Any]) -> int:
+    """写侧自报的采样倍率；没有这个字段（或值不合法）就是全量 = 1。
+
+    ★ 乘回计数是**下界**：每 N 条留 1 条的模 N 计数下，最后一个不满周期的 <N 条没有代表行
+    ⇒ 还原值必然是 N 的整数倍（加非 ok 的精确计数）。实测整理时四类合计缺 128 条
+    （`split_documents` 62 / `embed_documents` 58 / `chroma_query` 6 / `embedding_batch` 2），
+    上界是 N−1 每类每进程；要精确数只能回未采样的原始日志。
+    ★ 第 4 类 `split_documents` 的**标注**只来自 2026-10-14 那次**历史整理** ——
+    事件本身是入库切分的正常发射点（`rag.chunking.splitter`，任何一次入库都会全量写它、
+    写侧不加标注，见 `../edu-agent-eval-archive/telemetry/MANIFEST.json` 的
+    `sampling_trim_2026-10-14`）⇒ 同一份日志里它的标注密度比另三类稀，
+    跨事件比条数时注意这点。
+    """
+    raw = rec.get("sampled_every")
+    return raw if isinstance(raw, int) and raw > 1 else 1
 
 
 def _slim(rec: dict[str, Any]) -> dict[str, Any]:
@@ -274,49 +313,6 @@ def summarize_by_key(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
     return dict(counter.most_common())
 
 
-def build_ingest_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """入库侧聚合：**每个文件取最后一次**（同一文件被重入库多次）。
-
-    ★ 为什么要同时统计 `chunks` 与 `indexed_chunks`：
-    `chunks` 是切分产出，`indexed_chunks` 是**真正入库**的数量，两者之差是
-    `vectorstore` 按**内容哈希**判重丢掉的量（`index_documents.dedup_skipped`）。
-    实测（2026-09-27）合计 `indexed_chunks` = 2092，与生产索引规模**逐位一致** ⇒
-    这个字段可以作为「遥测 vs 实际索引」的交叉校验；差值则指向具体文件。
-    把差值单列出来，是为了不让「切分产出 106、实际入库 82」这种落差藏在合计里。
-    """
-    last: dict[tuple[str, str], tuple[int, int]] = {}
-    for row in rows:
-        if not row["file"]:
-            continue
-        chunks = row["values"].get("chunks")
-        indexed = row["values"].get("indexed_chunks")
-        if isinstance(chunks, int) and isinstance(indexed, int):
-            last[(row["category"], row["file"])] = (chunks, indexed)
-
-    per_category: dict[str, int] = defaultdict(int)
-    for (_category, _file), (_chunks, indexed) in last.items():
-        per_category[_category] += indexed
-    mismatched = [
-        {
-            "category": category,
-            "file": file,
-            "chunks": chunks,
-            "indexed_chunks": indexed,
-            "dropped": chunks - indexed,
-        }
-        for (category, file), (chunks, indexed) in sorted(last.items())
-        if chunks != indexed
-    ]
-    return {
-        "events": len(rows),
-        "files": len(last),
-        "per_category": dict(sorted(per_category.items())),
-        "indexed_total": sum(indexed for _c, indexed in last.values()),
-        "split_total": sum(chunks for chunks, _i in last.values()),
-        "mismatched_files": mismatched,
-    }
-
-
 def _group_by_type(
     eval_rows: list[dict[str, Any]], query_index: dict[str, dict[str, str]]
 ) -> dict[str, list[dict[str, Any]]]:
@@ -354,6 +350,9 @@ def _build_meta(
         "log_path": str(log_path),
         "log_bytes": scan["bytes"],
         "log_lines": scan["lines"],
+        # 带 `sampled_every` 标注的行数。=0 ⇒ 这份日志是全量捕获（或是采样上线前的旧归档），
+        # 此时 event_counts 与 event_counts_estimated 相等；>0 ⇒ 只有后者能当「发生次数」读。
+        "sampled_records": scan["sampled_records"],
         "bad_lines": scan["bad_lines"],
         "time_span": scan["time_span"],
         "golden_paths": golden,
@@ -366,7 +365,10 @@ def _build_meta(
             "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ "
             "本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。"
             "② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 "
-            "不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
+            "不同时间段是不同代码跑出来的）。"
+            "③ `sampled_records > 0` 时高频簿记事件按 1/N 采过样 ⇒ `event_counts` 是"
+            "**日志行数**，`event_counts_estimated` 才是**发生次数**（下界：末个不满周期无代表行）。"
+            "无基线、无判定 —— 它不是门禁。"
         ),
     }
 
@@ -452,6 +454,7 @@ def build_report(
     return {
         "_meta": _build_meta(scan, log_path, golden, query_index, window),
         "event_counts": dict(Counter(scan["event_counts"]).most_common()),
+        "event_counts_estimated": dict(Counter(scan["event_counts_estimated"]).most_common()),
         "traffic_split": _build_traffic_split(
             query_rows, eval_rows, other_rows, evidence_rows, eval_ev, other_ev, other_top
         ),

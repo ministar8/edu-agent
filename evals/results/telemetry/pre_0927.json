@@ -1,0 +1,233 @@
+{
+  "_meta": {
+    "log_path": "C:\\Users\\26452\\Desktop\\edu-agent\\data\\metrics\\rag_metrics.jsonl",
+    "log_bytes": 655496477,
+    "log_lines": 1723957,
+    "bad_lines": 50,
+    "time_span": [
+      "2026-09-23T16:31:19.829608+00:00",
+      "2026-10-14T05:37:38.798313+00:00"
+    ],
+    "golden_paths": [
+      "evals/datasets/golden/sample_408.jsonl",
+      "evals/datasets/ragas/ragas_paired20.jsonl"
+    ],
+    "golden_queries": 156,
+    "generated_at": "2026-10-14 14:07:18",
+    "window": {
+      "since": "2026-09-22T16:00:00+00:00",
+      "until": "2026-09-27T07:00:00+00:00",
+      "filtered": true,
+      "anchor": "2026-10-14T05:37:38.798313+00:00"
+    },
+    "note": "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ 本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
+  },
+  "event_counts": {
+    "chroma_query": 580961,
+    "embedding_batch": 339839,
+    "embed_documents": 315821,
+    "split_documents": 229765,
+    "retrieve_evidence": 146098,
+    "retrieve_query": 73690,
+    "clean_documents": 19333,
+    "index_documents": 17895,
+    "ingest_file_summary": 492,
+    "ingest_warmup_summary": 13
+  },
+  "traffic_split": {
+    "retrieve_query": {
+      "total": 22678,
+      "evaluation": 22511,
+      "other": 167,
+      "evaluation_ratio": 0.9926
+    },
+    "retrieve_evidence": {
+      "total": 44365,
+      "evaluation": 44358,
+      "other": 7
+    },
+    "other_top_queries": [
+      [
+        "什么是栈和队列",
+        4
+      ],
+      [
+        "二叉树的遍历方式",
+        4
+      ],
+      [
+        "图的深度优先搜索",
+        4
+      ],
+      [
+        "哈希表解决冲突的方法",
+        4
+      ],
+      [
+        "快速排序的原理",
+        4
+      ],
+      [
+        "最短路径Dijkstra算法",
+        4
+      ],
+      [
+        "最小生成树Prim算法",
+        4
+      ],
+      [
+        "B树和B+树的区别",
+        4
+      ],
+      [
+        "Cache的映射方式",
+        4
+      ],
+      [
+        "虚拟存储器的工作原理",
+        4
+      ]
+    ]
+  },
+  "funnel_by_query_type": {
+    "concept": {
+      "n": 9752,
+      "before_threshold": 29.5572,
+      "after_section_dedup": 28.7499,
+      "after_threshold": 11.5118,
+      "after_rerank": 4.5972,
+      "after_window": 5.1646,
+      "threshold_keep_rate": 0.4004,
+      "hit_rate": 0.9987
+    },
+    "generate": {
+      "n": 4255,
+      "before_threshold": 112.0533,
+      "after_section_dedup": 111.8388,
+      "after_threshold": 8.3572,
+      "after_rerank": 3.7662,
+      "after_window": 3.9337,
+      "threshold_keep_rate": 0.0747,
+      "hit_rate": 0.9946
+    },
+    "grade": {
+      "n": 4227,
+      "before_threshold": 69.3887,
+      "after_section_dedup": 68.8623,
+      "after_threshold": 7.7705,
+      "after_rerank": 3.9506,
+      "after_window": 4.5588,
+      "threshold_keep_rate": 0.1128,
+      "hit_rate": 0.9931
+    },
+    "code": {
+      "n": 4277,
+      "before_threshold": 87.704,
+      "after_section_dedup": 86.7655,
+      "after_threshold": 13.5228,
+      "after_rerank": 5.0949,
+      "after_window": 5.9603,
+      "threshold_keep_rate": 0.1559,
+      "hit_rate": 0.9963
+    },
+    "_all_eval": {
+      "n": 22511,
+      "before_threshold": 63.6775,
+      "after_section_dedup": 63.0101,
+      "after_threshold": 10.5951,
+      "after_rerank": 4.4133,
+      "after_window": 4.9693,
+      "threshold_keep_rate": 0.1681,
+      "hit_rate": 0.9964
+    }
+  },
+  "threshold_by_query_type": {
+    "concept": {
+      "0.06": 3042,
+      "0.066": 399,
+      "0.08": 3167,
+      "0.088": 2567,
+      "0.1": 444,
+      "0.12": 133
+    },
+    "generate": {
+      "0.12": 4255
+    },
+    "grade": {
+      "0.12": 4227
+    },
+    "code": {
+      "0.066": 262,
+      "0.088": 401,
+      "0.1": 324,
+      "0.11": 2992,
+      "0.12": 298
+    }
+  },
+  "distribution": {
+    "retrieval_layer": {
+      "L2": 16286,
+      "L3": 4459,
+      "L1": 1766
+    },
+    "route_type": {
+      "l2_standard": 16286,
+      "l3_code": 4189,
+      "l1_fast": 1766,
+      "l3_deep": 270
+    },
+    "use_rerank": {
+      "False": 11281,
+      "True": 11230
+    },
+    "rerank_used": {
+      "False": 16838,
+      "True": 5673
+    },
+    "decomposed": {
+      "False": 19736,
+      "True": 2775
+    },
+    "classifier_source": {
+      "rule": 22503,
+      "rule+llm": 8
+    }
+  },
+  "evidence": {
+    "semantic_cache_hit_rate": 0.0032,
+    "semantic_cache_samples": 44365,
+    "verifier_used": {
+      "True": 44365
+    },
+    "evidence_verdict": {
+      "pass": 37435,
+      "hard_fail": 6930
+    },
+    "retry_count": {
+      "0": 44365
+    }
+  },
+  "ingest": {
+    "events": 160,
+    "files": 40,
+    "per_category": {
+      "computer_network": 314,
+      "computer_organization": 415,
+      "data_structure": 703,
+      "learning_paths": 24,
+      "operating_system": 358,
+      "questions": 278
+    },
+    "indexed_total": 2092,
+    "split_total": 2116,
+    "mismatched_files": [
+      {
+        "category": "data_structure",
+        "file": "07_查找.md",
+        "chunks": 106,
+        "indexed_chunks": 82,
+        "dropped": 24
+      }
+    ]
+  }
+}

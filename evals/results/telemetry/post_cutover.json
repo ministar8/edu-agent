@@ -1,0 +1,217 @@
+{
+  "_meta": {
+    "log_path": "C:\\Users\\26452\\Desktop\\edu-agent\\data\\metrics\\rag_metrics.jsonl",
+    "log_bytes": 655496477,
+    "log_lines": 1723957,
+    "bad_lines": 50,
+    "time_span": [
+      "2026-09-23T16:31:19.829608+00:00",
+      "2026-10-14T05:37:38.798313+00:00"
+    ],
+    "golden_paths": [
+      "evals/datasets/golden/sample_408.jsonl",
+      "evals/datasets/ragas/ragas_paired20.jsonl"
+    ],
+    "golden_queries": 156,
+    "generated_at": "2026-10-14 14:07:37",
+    "window": {
+      "since": "2026-10-09T16:00:00+00:00",
+      "until": null,
+      "filtered": true,
+      "anchor": "2026-10-14T05:37:38.798313+00:00"
+    },
+    "note": "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ 本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
+  },
+  "event_counts": {
+    "chroma_query": 580961,
+    "embedding_batch": 339839,
+    "embed_documents": 315821,
+    "split_documents": 229765,
+    "retrieve_evidence": 146098,
+    "retrieve_query": 73690,
+    "clean_documents": 19333,
+    "index_documents": 17895,
+    "ingest_file_summary": 492,
+    "ingest_warmup_summary": 13
+  },
+  "traffic_split": {
+    "retrieve_query": {
+      "total": 16464,
+      "evaluation": 16264,
+      "other": 200,
+      "evaluation_ratio": 0.9879
+    },
+    "retrieve_evidence": {
+      "total": 32820,
+      "evaluation": 32422,
+      "other": 398
+    },
+    "other_top_queries": [
+      [
+        "请批改我的作答：\n在 OSI参考模型中，自下而上第一个提供端到端服务的层次是 。\nA. 数据链路层\nB. 传输层\nC. 会话层\nD. 应用层\n我选 B。",
+        73
+      ],
+      [
+        "9m 查询",
+        48
+      ],
+      [
+        "位示图法是怎么工作的？",
+        13
+      ],
+      [
+        "2019年408第5题标准答案",
+        9
+      ],
+      [
+        "IPv4 子网划分怎么做",
+        6
+      ],
+      [
+        "BST 删除的三种情况怎么解题",
+        6
+      ],
+      [
+        "2019 年 408 第2题 树 转化为二叉树 后根遍历",
+        2
+      ],
+      [
+        "数据结构的渐近增长和大O记法加法乘法规则",
+        2
+      ],
+      [
+        "BST 双支删除中序前驱后继怎么替换",
+        2
+      ],
+      [
+        "AVL 插入后最小不平衡子树怎么旋转",
+        2
+      ]
+    ]
+  },
+  "funnel_by_query_type": {
+    "concept": {
+      "n": 6340,
+      "before_threshold": 19.1121,
+      "after_section_dedup": 13.1069,
+      "after_threshold": 7.0741,
+      "after_rerank": 4.3058,
+      "after_window": 4.3585,
+      "threshold_keep_rate": 0.5397,
+      "hit_rate": 1.0
+    },
+    "generate": {
+      "n": 3308,
+      "before_threshold": 78.5175,
+      "after_section_dedup": 69.5196,
+      "after_threshold": 16.7412,
+      "after_rerank": 4.6239,
+      "after_window": 4.6239,
+      "threshold_keep_rate": 0.2408,
+      "hit_rate": 1.0
+    },
+    "grade": {
+      "n": 3296,
+      "before_threshold": 41.5913,
+      "after_section_dedup": 32.2755,
+      "after_threshold": 8.2488,
+      "after_rerank": 4.5218,
+      "after_window": 4.5218,
+      "threshold_keep_rate": 0.2556,
+      "hit_rate": 1.0
+    },
+    "code": {
+      "n": 3320,
+      "before_threshold": 53.1557,
+      "after_section_dedup": 36.8639,
+      "after_threshold": 10.6428,
+      "after_rerank": 4.8967,
+      "after_window": 4.9316,
+      "threshold_keep_rate": 0.2887,
+      "hit_rate": 1.0
+    },
+    "_all_eval": {
+      "n": 16264,
+      "before_threshold": 42.6998,
+      "after_section_dedup": 33.3151,
+      "after_threshold": 10.0069,
+      "after_rerank": 4.5349,
+      "after_window": 4.5626,
+      "threshold_keep_rate": 0.3004,
+      "hit_rate": 1.0
+    }
+  },
+  "threshold_by_query_type": {
+    "concept": {
+      "0.06": 2002,
+      "0.066": 309,
+      "0.08": 1969,
+      "0.088": 1648,
+      "0.1": 309,
+      "0.12": 103
+    },
+    "generate": {
+      "0.12": 3308
+    },
+    "grade": {
+      "0.12": 3296
+    },
+    "code": {
+      "0.066": 206,
+      "0.088": 309,
+      "0.1": 411,
+      "0.11": 2175,
+      "0.12": 219
+    }
+  },
+  "distribution": {
+    "retrieval_layer": {
+      "L2": 11663,
+      "L3": 3423,
+      "L1": 1178
+    },
+    "route_type": {
+      "l2_standard": 11663,
+      "l3_code": 3217,
+      "l1_fast": 1178,
+      "l3_deep": 206
+    },
+    "use_rerank": {
+      "False": 12274,
+      "True": 3990
+    },
+    "rerank_used": {
+      "False": 14034,
+      "True": 2230
+    },
+    "decomposed": {
+      "False": 14513,
+      "True": 1751
+    },
+    "classifier_source": {
+      "rule": 16264
+    }
+  },
+  "evidence": {
+    "semantic_cache_hit_rate": 0.0,
+    "semantic_cache_samples": 32820,
+    "verifier_used": {
+      "True": 32820
+    },
+    "evidence_verdict": {
+      "pass": 29713,
+      "hard_fail": 3107
+    },
+    "retry_count": {
+      "0": 32820
+    }
+  },
+  "ingest": {
+    "events": 0,
+    "files": 0,
+    "per_category": {},
+    "indexed_total": 0,
+    "split_total": 0,
+    "mismatched_files": []
+  }
+}

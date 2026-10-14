@@ -68,6 +68,10 @@ class Settings(BaseSettings):
     PORT: int = 8000
     GRACEFUL_SHUTDOWN_TIMEOUT: int = 30
     LOG_LEVEL: LogLevel = LogLevel.INFO
+    # 遥测日志里高频「簿记」事件（chroma_query / embedding_batch / embed_documents）
+    # 每 N 条留 1 条；`1` = 全量捕获（复现、消融、看逐条延迟分布时用）。
+    # 规则表与非 ok 记录永不采样的口径见 `rag.common.metrics._TELEMETRY_SAMPLE_EVERY`。
+    METRICS_SAMPLE_EVERY: int = 100
 
     # ── LLM 网关凭证（配了哪个 key 就启用哪个网关）──────
     DASHSCOPE_API_KEY: SecretStr | None = None
@@ -429,3 +433,9 @@ settings.CHROMA_PERSIST_DIR = _resolve_project_path(settings.CHROMA_PERSIST_DIR)
 settings.KNOWLEDGE_DIR = _resolve_project_path(settings.KNOWLEDGE_DIR)
 settings.SQLITE_DB_PATH = _resolve_project_path(settings.SQLITE_DB_PATH)
 settings.SQLITE_STORE_PATH = _resolve_project_path(settings.SQLITE_STORE_PATH)
+
+# ★ 遥测采样倍率要**导出到进程环境**：`rag.common.metrics` 刻意不 import 本模块
+# （埋点模块不该把配置层的导入期校验拖进主链路），它只读 `os.environ`。
+# 而 pydantic-settings 读 dotenv 时不会写回 `os.environ` —— 不导出的话
+# `.env.example` 里那行 `METRICS_SAMPLE_EVERY` 就是死的。同一手法见 `export_langsmith_env`。
+os.environ["METRICS_SAMPLE_EVERY"] = str(settings.METRICS_SAMPLE_EVERY)

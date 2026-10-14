@@ -93,11 +93,13 @@ docker compose up --build                # 容器化启动
 
 本仓库是**运行时 + 论文核心**的裁剪版：
 
-- **不含**测试套件、代码覆盖率与结构规模棘轮门禁 —— 已从本仓库移出。
-  ★ 原归档目录 `../edu-agent-engineering-archive/` **在本机已不存在**（2026-10-03 核实），
-  无本地副本可取回。
+- **测试套件于 2026-10-14 恢复**（`tests/`，目前只有**遥测采样口径**的 19 例：采样三条性质、
+  报表两份计数、`core.settings` 导出旋钮）。**代码覆盖率与结构规模棘轮门禁仍未恢复** ——
+  原归档目录 `../edu-agent-engineering-archive/` **在本机已不存在**（2026-10-03 核实，
+  2026-10-14 复核仍无），无本地副本可取回。新增测试请继续走「反向验证」证明其能抓 bug。
 - **有 CI，但只有两条 job**（`.github/workflows/ci.yml`，2026-10-06 加）：
-  ① `ruff check` + `ruff format --check` + `pyrefly check`；
+  ① `ruff check` + `ruff format --check` + `pyrefly check` + `pytest -q`（2026-10-14 加，
+  纯本地 I/O、无网络无密钥，由 `[tool.pytest_env]` 供假环境）；
   ② 检索质量门禁 —— **只跑默认路由**（假 embedding / 重排 off），比对的只是
   `evals/baselines/retrieval_baseline.json` **这 1 份**。★ 门禁整体按 `(embedding, rerank)`
   组合登记了 **6 份基线**，但其余 5 条（含唯一能答语义质量问题的**真 TEI 路由**）
@@ -161,11 +163,22 @@ docker compose up --build                # 容器化启动
   它给 `data/metrics/rag_metrics.jsonl`（由 `rag.common.metrics` 写入、此前**无任何读方**）
   补上读方：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、入库交叉校验。
   **无基线、无判定**；`--output <path>` 落盘归档（建议 `evals/results/`）。
-  ★ 两条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源 —— 实测 **99.4% 是评测流量**
+  ★ 三条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源 —— 评测占比**随窗口变**，
+  不是常数：09-27 之前的窗口 99.3%，含此后流量的整份日志只有 **93.9%**（2026-10-14 实测）。
   ⇒ 它回答「管线各层在黄金集上的行为分布」，**不是**线上统计，别拿它推断生产表现。
   ② **日志混了多个代码版本**（Step 1~10 各轮实验都写进同一份），必须用
   `--since` / `--until`（ISO 或 `6h`/`3d`）把窗口钉到单一版本，否则读到的是**混合口径**
-  —— 实测 `generate` 过阈率在 09-27 15:00 前后为 0.075 → 0.187。
+  —— 实测 `generate` 过阈率在 09-27 15:00 前后为 0.075 → 0.187（窗口边界取法不同会复现成
+  0.1955，量级与结论不变）。
+  ③ 高频簿记事件（`chroma_query` / `embedding_batch` / `embed_documents`）自 2026-10-14 起
+  在**写侧**就按 1/100 采样 ⇒ `event_counts` 只能读作「日志行数」，「发生多少次」要读
+  `event_counts_estimated`（按每条自带的 `sampled_every` 还原）。`status != "ok"` **永不采样**
+  （同窗口 `chroma_query` 有 2,852 条 error，那是向量库读失败的唯一现场证据）。
+  要全量：`METRICS_SAMPLE_EVERY=1`。`event_counts_estimated` 是**下界**：模 100 的最后一个不满周期
+  没有代表行，四类合计少 128 条（每类误差上界 99），要精确数只能回未采样的原件。
+  同一规则也**追溯**整理过 10-10→10-14 这段历史：473,478 行 → 61,114 行、188.6 MB → 50.3 MB
+  （比写侧多削一类 `split_documents`，写侧对它仍全量）；原件 gz、前后 sha256、逐类残差
+  登记在 `../edu-agent-eval-archive/telemetry/MANIFEST.json` 的 `sampling_trim_2026-10-14`。
 - **门禁里的索引就绪屏障**：ChromaDB `add_documents` 之后立即查询会**间歇性**抛
   `Error creating hnsw segment reader: Nothing found on disk` —— 每次命中的集合不同，
   命中后该集合整轮不可查询（检索结果全错但不报错），会被误报成"检索退化"。

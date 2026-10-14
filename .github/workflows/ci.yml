@@ -1,11 +1,13 @@
 name: CI
 
-# 毕设「够用」版 CI：只做三件事 ——
+# 毕设「够用」版 CI：只做四件事 ——
 #   1) lint / 类型检查（通用工程规范）
-#   2) 检索质量门禁（与论文主题直接相关：每次 push 重跑黄金集、比对**默认路由**的 1 份基线）
-#   3) 基线重录登记的机械核对（零 token、纯 stdlib：把「禁止静默重录」从纪律变成判据）
+#   2) 单元测试（纯本地 I/O，无网络无密钥：口径类判据别只写在文档里）
+#   3) 检索质量门禁（与论文主题直接相关：每次 push 重跑黄金集、比对**默认路由**的 1 份基线）
+#   4) 基线重录登记的机械核对（零 token、纯 stdlib：把「禁止静默重录」从纪律变成判据）
 # 刻意不做：RAGAS（要真 key + 花钱 + 随机）、probe_gate（基线是 real embedding 口径，
-# 需真 TEI）、真实 TEI 路由（要 GPU）、覆盖率（本仓无测试套件）。
+# 需真 TEI）、真实 TEI 路由（要 GPU）、覆盖率统计（套件刚恢复，覆盖面只有遥测采样这几例，
+# 报出来的百分比只会误导）。
 on:
   push:
     branches: [main]
@@ -14,19 +16,22 @@ on:
 
 jobs:
   lint:
-    name: lint / 类型检查
+    name: lint / 类型检查 / 单测
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true # 缓存 uv 下载与 venv，二次运行快很多
-      # 默认包含 dev 组（ruff / pyrefly 都在里面）
+      # 默认包含 dev 组（ruff / pyrefly / pytest 都在里面）
       - run: uv sync --frozen
-      - run: uv run ruff check src/
+      - run: uv run ruff check src/ tests/
       # ★ check 与 format 是两条独立命令，必须分别跑（只跑一条会漏）
-      - run: uv run ruff format --check src/
+      - run: uv run ruff format --check src/ tests/
       - run: uv run pyrefly check
+      # 口径类判据（遥测采样：错误记录不削、留痕自带倍率）由 [tool.pytest_env] 供假环境，
+      # 不联网、不建索引。★ 进 CI 的理由与核对脚本同一条：不跑的验证等于没有验证。
+      - run: uv run pytest -q
 
   retrieval-gate:
     name: 检索质量门禁（假 embedding 路由）

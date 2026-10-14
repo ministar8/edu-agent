@@ -1,0 +1,234 @@
+{
+  "_meta": {
+    "log_path": "C:\\Users\\26452\\Desktop\\edu-agent\\data\\metrics\\rag_metrics.jsonl",
+    "log_bytes": 655496477,
+    "log_lines": 1723957,
+    "bad_lines": 50,
+    "time_span": [
+      "2026-09-23T16:31:19.829608+00:00",
+      "2026-10-14T05:37:38.798313+00:00"
+    ],
+    "golden_paths": [
+      "evals/datasets/golden/sample_408.jsonl",
+      "evals/datasets/ragas/ragas_paired20.jsonl"
+    ],
+    "golden_queries": 156,
+    "generated_at": "2026-10-14 14:07:07",
+    "window": {
+      "since": "2026-09-22T16:00:00+00:00",
+      "until": "2026-10-01T16:00:00+00:00",
+      "filtered": true,
+      "anchor": "2026-10-14T05:37:38.798313+00:00"
+    },
+    "note": "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ 本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
+  },
+  "event_counts": {
+    "chroma_query": 580961,
+    "embedding_batch": 339839,
+    "embed_documents": 315821,
+    "split_documents": 229765,
+    "retrieve_evidence": 146098,
+    "retrieve_query": 73690,
+    "clean_documents": 19333,
+    "index_documents": 17895,
+    "ingest_file_summary": 492,
+    "ingest_warmup_summary": 13
+  },
+  "traffic_split": {
+    "retrieve_query": {
+      "total": 51832,
+      "evaluation": 49070,
+      "other": 2762,
+      "evaluation_ratio": 0.9467
+    },
+    "retrieve_evidence": {
+      "total": 102468,
+      "evaluation": 97238,
+      "other": 5230
+    },
+    "other_top_queries": [
+      [
+        "BST 删除考过哪些真题？",
+        109
+      ],
+      [
+        "BST 删除时双支结点怎么处理？",
+        82
+      ],
+      [
+        "什么是二叉排序树？",
+        80
+      ],
+      [
+        "给我一道死锁练习题",
+        76
+      ],
+      [
+        "什么是死锁？",
+        72
+      ],
+      [
+        "如何用银行家算法避免死锁？",
+        70
+      ],
+      [
+        "页面置换算法 LRU 怎么实现？",
+        70
+      ],
+      [
+        "Dijkstra 算法的步骤是什么？",
+        70
+      ],
+      [
+        "如何判断一个二叉树是平衡二叉树？",
+        70
+      ],
+      [
+        "TCP 拥塞控制怎么实现？",
+        70
+      ]
+    ]
+  },
+  "funnel_by_query_type": {
+    "concept": {
+      "n": 27432,
+      "before_threshold": 30.5486,
+      "after_section_dedup": 29.2334,
+      "after_threshold": 12.8521,
+      "after_rerank": 5.0467,
+      "after_window": 5.2656,
+      "threshold_keep_rate": 0.4396,
+      "hit_rate": 0.9871
+    },
+    "generate": {
+      "n": 7218,
+      "before_threshold": 103.5147,
+      "after_section_dedup": 103.3308,
+      "after_threshold": 12.2393,
+      "after_rerank": 4.1672,
+      "after_window": 4.266,
+      "threshold_keep_rate": 0.1184,
+      "hit_rate": 0.9968
+    },
+    "grade": {
+      "n": 7158,
+      "before_threshold": 62.2994,
+      "after_section_dedup": 61.8642,
+      "after_threshold": 8.1453,
+      "after_rerank": 4.1845,
+      "after_window": 4.5437,
+      "threshold_keep_rate": 0.1317,
+      "hit_rate": 0.9958
+    },
+    "code": {
+      "n": 7262,
+      "before_threshold": 75.7738,
+      "after_section_dedup": 74.9966,
+      "after_threshold": 13.6151,
+      "after_rerank": 5.3371,
+      "after_window": 5.8487,
+      "threshold_keep_rate": 0.1815,
+      "hit_rate": 0.9978
+    },
+    "_all_eval": {
+      "n": 49070,
+      "before_threshold": 52.6062,
+      "after_section_dedup": 51.6654,
+      "after_threshold": 12.1883,
+      "after_rerank": 4.8345,
+      "after_window": 5.0996,
+      "threshold_keep_rate": 0.2359,
+      "hit_rate": 0.9914
+    }
+  },
+  "threshold_by_query_type": {
+    "concept": {
+      "0.06": 6687,
+      "0.066": 660,
+      "0.08": 9793,
+      "0.088": 8506,
+      "0.1": 1327,
+      "0.12": 459
+    },
+    "generate": {
+      "0.12": 7218
+    },
+    "grade": {
+      "0.12": 7158
+    },
+    "code": {
+      "0.066": 440,
+      "0.088": 675,
+      "0.1": 686,
+      "0.11": 4931,
+      "0.12": 530
+    }
+  },
+  "distribution": {
+    "retrieval_layer": {
+      "L2": 36176,
+      "L3": 8239,
+      "L1": 4655
+    },
+    "route_type": {
+      "l2_standard": 36176,
+      "l3_code": 7678,
+      "l1_fast": 4655,
+      "l3_deep": 561
+    },
+    "use_rerank": {
+      "True": 25408,
+      "False": 23662
+    },
+    "rerank_used": {
+      "False": 41040,
+      "True": 8030
+    },
+    "decomposed": {
+      "False": 40689,
+      "True": 8381
+    },
+    "classifier_source": {
+      "rule": 46775,
+      "rule+llm": 2295
+    }
+  },
+  "evidence": {
+    "semantic_cache_hit_rate": 0.0081,
+    "semantic_cache_samples": 102468,
+    "verifier_used": {
+      "True": 102468
+    },
+    "evidence_verdict": {
+      "pass": 92500,
+      "hard_fail": 9968
+    },
+    "retry_count": {
+      "0": 102460,
+      "1": 8
+    }
+  },
+  "ingest": {
+    "events": 492,
+    "files": 51,
+    "per_category": {
+      "computer_network": 314,
+      "computer_organization": 415,
+      "data_structure": 703,
+      "learning_paths": 24,
+      "operating_system": 358,
+      "questions": 691
+    },
+    "indexed_total": 2505,
+    "split_total": 2529,
+    "mismatched_files": [
+      {
+        "category": "data_structure",
+        "file": "07_查找.md",
+        "chunks": 106,
+        "indexed_chunks": 82,
+        "dropped": 24
+      }
+    ]
+  }
+}

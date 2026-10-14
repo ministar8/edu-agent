@@ -98,10 +98,10 @@ max-complexity = 25
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-# 本工作区不含 `tests/`，故未设 `testpaths`：空 testpaths 会让 pytest 发
-# `PytestConfigWarning: No files were found in testpaths` 并**退回从仓库根递归搜索**
-# —— 那是比报错更隐蔽的信号：届时根目录若误放测试文件会被无声收集。
-# 取回测试套件时再一并恢复该项。
+# ★ 2026-10-14 恢复 `tests/`（遥测采样口径）⇒ 按当初的约定一并恢复 `testpaths`。
+# 没有它时裸 `pytest` 会退回从仓库根递归搜索 —— 那是比报错更隐蔽的信号：
+# 根目录若误放测试文件会被无声收集（`.*` 在默认 norecursedirs 里，`.venv` 不会被扫）。
+testpaths = ["tests"]
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.pytest_env]

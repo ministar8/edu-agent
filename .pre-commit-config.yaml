@@ -28,12 +28,12 @@ repos:
       #   实测代价：2026-09-27 归档 Step 4/6/7 的脚本时，首次 `git commit` 均因此中止。
       #   注意 pre-commit 会把**暂存的文件名追加到 args 之后** —— 只写 `src/` 挡不住 `evals/`。
       - id: ruff
-        # 范围是 `src/`：本工作区不含 `tests/`，带上它会报 E902（不是代码问题）；
+        # 范围 `src/` + `tests/`（2026-10-14 恢复 tests/ 后与 CI 的 `ruff check src/ tests/` 对齐）；
         # `scripts/` 是运维/诊断脚本，不纳入自动改写。
-        args: [--fix, src/]
+        args: [--fix, src/, tests/]
         exclude: ^evals/
       - id: ruff-format
-        args: [src/]
+        args: [src/, tests/]
         exclude: ^evals/
 
   - repo: local

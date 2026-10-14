@@ -21,6 +21,12 @@ def _fmt_header(meta: dict[str, Any]) -> list[str]:
         f"  规模      {meta['log_lines']} 行 / {meta['log_bytes'] / 1e6:.1f} MB"
         f"  (坏行 {meta['bad_lines']})"
     )
+    sampled = meta.get("sampled_records") or 0
+    if sampled:
+        out.append(
+            f"  采样      {sampled} 行带 1/N 标注 ⇒ 各类条数是**日志行数**、"
+            "不是发生次数（还原值见 event_counts_estimated，需 --json）"
+        )
     out.append(f"  时间跨度  {meta['time_span'][0]} → {meta['time_span'][1]}")
     window = meta.get("window") or {}
     if window.get("filtered"):

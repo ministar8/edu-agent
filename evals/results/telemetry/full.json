@@ -1,0 +1,234 @@
+{
+  "_meta": {
+    "log_path": "C:\\Users\\26452\\Desktop\\edu-agent\\data\\metrics\\rag_metrics.jsonl",
+    "log_bytes": 655496477,
+    "log_lines": 1723957,
+    "bad_lines": 50,
+    "time_span": [
+      "2026-09-23T16:31:19.829608+00:00",
+      "2026-10-14T05:37:38.798313+00:00"
+    ],
+    "golden_paths": [
+      "evals/datasets/golden/sample_408.jsonl",
+      "evals/datasets/ragas/ragas_paired20.jsonl"
+    ],
+    "golden_queries": 156,
+    "generated_at": "2026-10-14 14:06:57",
+    "window": {
+      "since": null,
+      "until": null,
+      "filtered": false,
+      "anchor": "2026-10-14T05:37:38.798313+00:00"
+    },
+    "note": "只读遥测日志。① 输入以**评测流量**为主（见 traffic_split）⇒ 本报表回答「管线各层在黄金集上的行为分布」，**不是**线上统计。② 日志混了多个代码版本 ⇒ 不看 window 就无法解释数字（同一指标在 不同时间段是不同代码跑出来的）。无基线、无判定 —— 它不是门禁。"
+  },
+  "event_counts": {
+    "chroma_query": 580961,
+    "embedding_batch": 339839,
+    "embed_documents": 315821,
+    "split_documents": 229765,
+    "retrieve_evidence": 146098,
+    "retrieve_query": 73690,
+    "clean_documents": 19333,
+    "index_documents": 17895,
+    "ingest_file_summary": 492,
+    "ingest_warmup_summary": 13
+  },
+  "traffic_split": {
+    "retrieve_query": {
+      "total": 73690,
+      "evaluation": 69193,
+      "other": 4497,
+      "evaluation_ratio": 0.939
+    },
+    "retrieve_evidence": {
+      "total": 146098,
+      "evaluation": 137370,
+      "other": 8728
+    },
+    "other_top_queries": [
+      [
+        "请批改我的作答：\n在 OSI参考模型中，自下而上第一个提供端到端服务的层次是 。\nA. 数据链路层\nB. 传输层\nC. 会话层\nD. 应用层\n我选 B。",
+        201
+      ],
+      [
+        "9m 查询",
+        118
+      ],
+      [
+        "BST 删除考过哪些真题？",
+        113
+      ],
+      [
+        "BST 删除时双支结点怎么处理？",
+        83
+      ],
+      [
+        "什么是二叉排序树？",
+        80
+      ],
+      [
+        "给我一道死锁练习题",
+        77
+      ],
+      [
+        "什么是死锁？",
+        73
+      ],
+      [
+        "如何用银行家算法避免死锁？",
+        70
+      ],
+      [
+        "页面置换算法 LRU 怎么实现？",
+        70
+      ],
+      [
+        "Dijkstra 算法的步骤是什么？",
+        70
+      ]
+    ]
+  },
+  "funnel_by_query_type": {
+    "concept": {
+      "n": 35444,
+      "before_threshold": 28.6977,
+      "after_section_dedup": 26.5428,
+      "after_threshold": 11.8718,
+      "after_rerank": 4.997,
+      "after_window": 5.1779,
+      "threshold_keep_rate": 0.4473,
+      "hit_rate": 0.99
+    },
+    "generate": {
+      "n": 11367,
+      "before_threshold": 98.9279,
+      "after_section_dedup": 96.1617,
+      "after_threshold": 14.8839,
+      "after_rerank": 4.515,
+      "after_window": 4.5777,
+      "threshold_keep_rate": 0.1548,
+      "hit_rate": 0.998
+    },
+    "grade": {
+      "n": 11126,
+      "before_threshold": 56.7494,
+      "after_section_dedup": 53.6727,
+      "after_threshold": 8.389,
+      "after_rerank": 4.2731,
+      "after_window": 4.5041,
+      "threshold_keep_rate": 0.1563,
+      "hit_rate": 0.9972
+    },
+    "code": {
+      "n": 11256,
+      "before_threshold": 69.1061,
+      "after_section_dedup": 63.7403,
+      "after_threshold": 12.9116,
+      "after_rerank": 5.1799,
+      "after_window": 5.5215,
+      "threshold_keep_rate": 0.2026,
+      "hit_rate": 0.9986
+    },
+    "_all_eval": {
+      "n": 69193,
+      "before_threshold": 51.3192,
+      "after_section_dedup": 48.3933,
+      "after_threshold": 11.9758,
+      "after_rerank": 4.8312,
+      "after_window": 5.0269,
+      "threshold_keep_rate": 0.2475,
+      "hit_rate": 0.9939
+    }
+  },
+  "threshold_by_query_type": {
+    "concept": {
+      "0.06": 9375,
+      "0.066": 1032,
+      "0.08": 12229,
+      "0.088": 10517,
+      "0.1": 1708,
+      "0.12": 583
+    },
+    "generate": {
+      "0.12": 11367
+    },
+    "grade": {
+      "0.12": 11126
+    },
+    "code": {
+      "0.066": 688,
+      "0.088": 1047,
+      "0.1": 1181,
+      "0.11": 7548,
+      "0.12": 792
+    }
+  },
+  "distribution": {
+    "retrieval_layer": {
+      "L2": 50466,
+      "L3": 12376,
+      "L1": 6351
+    },
+    "route_type": {
+      "l2_standard": 50466,
+      "l3_code": 11567,
+      "l1_fast": 6351,
+      "l3_deep": 809
+    },
+    "use_rerank": {
+      "False": 37622,
+      "True": 31571
+    },
+    "rerank_used": {
+      "False": 57470,
+      "True": 11723
+    },
+    "decomposed": {
+      "False": 58632,
+      "True": 10561
+    },
+    "classifier_source": {
+      "rule": 66898,
+      "rule+llm": 2295
+    }
+  },
+  "evidence": {
+    "semantic_cache_hit_rate": 0.0057,
+    "semantic_cache_samples": 146098,
+    "verifier_used": {
+      "True": 146098
+    },
+    "evidence_verdict": {
+      "pass": 131872,
+      "hard_fail": 14226
+    },
+    "retry_count": {
+      "0": 146090,
+      "1": 8
+    }
+  },
+  "ingest": {
+    "events": 492,
+    "files": 51,
+    "per_category": {
+      "computer_network": 314,
+      "computer_organization": 415,
+      "data_structure": 703,
+      "learning_paths": 24,
+      "operating_system": 358,
+      "questions": 691
+    },
+    "indexed_total": 2505,
+    "split_total": 2529,
+    "mismatched_files": [
+      {
+        "category": "data_structure",
+        "file": "07_查找.md",
+        "chunks": 106,
+        "indexed_chunks": 82,
+        "dropped": 24
+      }
+    ]
+  }
+}

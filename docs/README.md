@@ -61,7 +61,7 @@
 
 | 命令 | 说明 |
 |---|---|
-| `python -m evaluation.diagnostics.telemetry_report` | 把 `data/metrics/rag_metrics.jsonl` 聚合成人可读报表：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、分层/路由分布、入库交叉校验。**只读、无基线、无判定** —— 退出码只用于「读不到日志」。★ 两条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源，实测 **99.4% 是评测流量** ⇒ 它回答的是「管线各层在黄金集上的行为分布」，**不是**线上统计；② 日志**混了多个代码版本**，必须用 `--since` / `--until` 把窗口钉到单一版本（实测 `generate` 过阈率在 09-27 15:00 前后 0.075 → 0.187），否则读到的是**混合口径**。`--output <path>` 可把 JSON 落盘归档（建议 `evals/results/`） |
+| `python -m evaluation.diagnostics.telemetry_report` | 把 `data/metrics/rag_metrics.jsonl` 聚合成人可读报表：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、分层/路由分布、入库交叉校验。**只读、无基线、无判定** —— 退出码只用于「读不到日志」。★ 三条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源，评测占比**随窗口变**（09-27 前 99.3%，含此后流量的整份日志 93.9%） ⇒ 它回答的是「管线各层在黄金集上的行为分布」，**不是**线上统计；② 日志**混了多个代码版本**，必须用 `--since` / `--until` 把窗口钉到单一版本（实测 `generate` 过阈率在 09-27 15:00 前后 0.075 → 0.187），否则读到的是**混合口径**。③ `chroma_query`/`embedding_batch`/`embed_documents` 自 2026-10-14 起在写侧按 1/100 采样 ⇒ `event_counts` 只能读作**日志行数**，发生次数读 `event_counts_estimated`（**下界**，末周期无代表行）；`status != "ok"` 永不采样（要全量用 `METRICS_SAMPLE_EVERY=1`）。`--output <path>` 可把 JSON 落盘归档（建议 `evals/results/`） |
 
 ## 评测产物（`evals/results/`）
 
