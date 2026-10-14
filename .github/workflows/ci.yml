@@ -1,8 +1,9 @@
 name: CI
 
-# 毕设「够用」版 CI：只做两件事 ——
+# 毕设「够用」版 CI：只做三件事 ——
 #   1) lint / 类型检查（通用工程规范）
 #   2) 检索质量门禁（与论文主题直接相关：每次 push 重跑黄金集、比对**默认路由**的 1 份基线）
+#   3) 基线重录登记的机械核对（零 token、纯 stdlib：把「禁止静默重录」从纪律变成判据）
 # 刻意不做：RAGAS（要真 key + 花钱 + 随机）、probe_gate（基线是 real embedding 口径，
 # 需真 TEI）、真实 TEI 路由（要 GPU）、覆盖率（本仓无测试套件）。
 on:
@@ -49,3 +50,16 @@ jobs:
       - run: uv sync --frozen --no-dev
       # 156 条黄金集 × 9 指标，比 retrieval_baseline.json；任一指标跌破即退出码 1
       - run: uv run python -m evaluation.gates.retrieval_gate
+
+  baseline-registration:
+    name: 基线重录登记核对（零 token）
+    runs-on: ubuntu-latest
+    # 核对脚本只用 stdlib（argparse/json/re/pathlib），所以不装依赖、不建 venv。
+    # 判据是双向穷尽：登记表里写的每个 diff 都要能在工件里核到，且工件里每个非零 diff
+    # 都必须已登记 —— 「禁止静默重录」从此不靠自觉。
+    # ★ 为什么要进 CI：`8e2add6`（2026-10-10）重录 6 份基线却一行登记都没改，而该脚本
+    #   按当时设计「是验证工具、不进 evidence_chain_gate、不进 CI」，于是 §20.7.1 连续
+    #   红 3 天无人跑过、无人看见。零成本的东西没理由留在人肉环节。
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/ops/check_baseline_diff_registration.py

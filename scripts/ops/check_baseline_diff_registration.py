@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -32,6 +33,11 @@ ROOT = Path(__file__).resolve().parents[2]
 DOC = ROOT / "docs" / "EXPERIMENTS.md"
 OLD_DIR = ROOT / "evals" / "baselines" / "pre_task9_20261009"
 NEW_DIR = ROOT / "evals" / "baselines"
+
+# ★ 默认核对「最新一代登记节」。基线每重录一代 → 文档新开一节登记 → 这里改成新节号。
+#   旧节仍可用 `--section` 单独核对；它描述的是它那一代，不该因为后来基线又动一次就变成
+#   永久不可满足的红（§20.7.1 的 39 处红正是被这种写法绑出来的）。
+_DEFAULT_SECTION = "20.7.3"
 
 # §20.7.1 表格行的别名 → 基线 `metrics` 的工件键（唯一一座桥，扩充须对着工件键表扩）。
 _DOC_ALIAS: dict[str, str] = {
@@ -68,13 +74,22 @@ _DIFF_RE = re.compile(r"([A-Za-z][A-Za-z0-9@_]*?)\s*(\*\*)?\s*([+−-])\s*(\d+\.
 _NUM = 4
 
 
-def _section(text: str) -> str:
-    """切出 §20.7.1 一节（到 §20.7.2 为止）。找不到即报错——宁可不跑，不许静默空扫。"""
-    start = text.index("### 20.7.1")
-    rest = text[start + len("### 20.7.1") :]
-    end = rest.find("### 20.7.2")
+def _section(text: str, section_id: str) -> str:
+    """切出 `section_id`（如 `20.7.3`）那一节，到下一个 `### ` 标题为止。
+
+    ★ 节尾边界不再写死成「下一个固定小节号」：早先它硬编码 `### 20.7.2`，于是每加一代登记
+      都得改代码；而真正的问题更深 —— 本工具把「旧代目录 / 新代目录 / 登记节」三者绑死成
+      一对，导致基线只要再动一次，上一节就**永久不可满足**（§20.7.1 的 39 处红即由此而来，
+      不只是「有人没登记」）。现在三者都是参数，每一代各自可重跑核对。
+    """
+    head = f"### {section_id}"
+    if head not in text:
+        raise SystemExit(f"文档里没有 `{head}` 这一节 —— 该代登记尚未写入，或节号写错")
+    start = text.index(head)
+    rest = text[start + len(head) :]
+    end = rest.find("\n### ")
     if end == -1:
-        raise SystemExit("找不到 §20.7.1 的结束边界（### 20.7.2）—— 节结构变了，请人工核对")
+        raise SystemExit(f"找不到 `{head}` 的结束边界（下一个 ### 标题）—— 节结构变了，请人工核对")
     return rest[:end]
 
 
@@ -83,7 +98,7 @@ def _row_for(section: str, fname: str) -> str:
     for line in section.splitlines():
         if line.startswith("|") and f"`{fname}`" in line:
             return line
-    raise SystemExit(f"§20.7.1 表格里找不到 `{fname}` 对应的行")
+    raise SystemExit(f"登记表格（{fname}）里找不到以 `{fname}` 标识的那一行")
 
 
 def _parse_claims(row: str) -> dict[str, float]:
@@ -109,16 +124,32 @@ def _metrics(path: Path) -> dict[str, float]:
     return json.loads(path.read_text(encoding="utf-8"))["metrics"]
 
 
-def main() -> int:
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        description="核对「基线重录 diff 登记表」是否穷尽且逐值属实（只读，零 token）。"
+        "★ 旧代/新代/登记节三者都是参数 —— 每一代登记各跑各的，"
+        "上一代不会因为基线再动一次就变成永久不可满足的红。"
+    )
+    p.add_argument("--section", default=_DEFAULT_SECTION, help="登记小节号（不带 ### 前缀）")
+    p.add_argument("--doc", default=str(DOC), help="登记表所在文档")
+    p.add_argument("--old-dir", default=str(OLD_DIR), help="旧一代基线目录")
+    p.add_argument("--new-dir", default=str(NEW_DIR), help="当代基线目录")
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    doc_p, old_dir, new_dir = Path(args.doc), Path(args.old_dir), Path(args.new_dir)
+    sec = f"§{args.section}"
     problems: list[str] = []
     try:
-        section = _section(DOC.read_text(encoding="utf-8"))
-    except ValueError as e:
+        section = _section(doc_p.read_text(encoding="utf-8"), args.section)
+    except (ValueError, SystemExit) as e:
         print(f"[拒绝] 文档节定位失败：{e}")
         return 2
 
     for fname in _BASELINE_FILES:
-        old_p, new_p = OLD_DIR / fname, NEW_DIR / fname
+        old_p, new_p = old_dir / fname, new_dir / fname
         if not old_p.exists() or not new_p.exists():
             print(f"[拒绝] 基线工件缺失：{old_p if not old_p.exists() else new_p}")
             return 2
@@ -143,7 +174,7 @@ def main() -> int:
         # 方向 1：工件里每个非零 diff 都出现在该行（穷尽性 —— 「主要 diff」就是从这里漏的）
         for k, d in computed.items():
             if k not in claims:
-                problems.append(f"{fname}：工件非零 diff `{k} {d:+.4f}` **未登记**进 §20.7.1 行")
+                problems.append(f"{fname}：工件非零 diff `{k} {d:+.4f}` **未登记**进 {sec} 行")
             elif abs(claims[k] - d) > 1e-9:
                 problems.append(f"{fname}：`{k}` 登记为 {claims[k]:+.4f}，工件算出来是 {d:+.4f}")
         # 方向 2：文档里每个 diff 都能在工件核到（真实性，含写了个工件里为零的差值）
@@ -161,7 +192,7 @@ def main() -> int:
             print(f"  - {p}")
         return 1
     print(
-        "\n[一致] §20.7.1 六行 × 全部指标：工件的每个非零 diff 均已登记、"
+        f"\n[一致] {sec} 六行 × 全部指标：工件的每个非零 diff 均已登记、"
         "登记的每个 diff 均与工件逐值吻合（两向核对，无抽查）。"
     )
     return 0

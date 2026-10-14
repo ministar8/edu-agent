@@ -1350,7 +1350,60 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 | 旧工件标 `superseded` | `evals/claims/artifact_status.json` | ★ 收尾修复批更正：此件为 Task 10 **手工登记**——`claims.artifact_status()` 只是行形状 helper、**不产这份文件** ⇒ 目前没有命令能再生成它（清偿条件挂 B17；原句「由该函数生成 + 本节末有自查命令」经查为**空头承诺**，Minor-2 按实测改掉）。`superseded_by` 全部指向在库路径且为同表 active 新一代；只读核对命令 = A4 行内那条 `uv run python -c`（可重跑，实测 `缺失: 无`） |
 | `ledger.md` 定稿 | `evals/claims/ledger.md`（此前从未落盘，只有 `ledger_draft.md`） | 生成：`uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r1_final_gate.jsonl --out evals/claims/ledger.md`；复核：同命令加 `--check`（第 1 段必须 PASS = 文档 == 重算） |
 
-### 20.8 Step 9 实跑结果（2026-10-07 起，逐项追加）
+### 20.7.3 六条路由基线**二代**重录登记（2026-10-14，禁止静默重录 ⇒ 逐条登记）
+
+> 本节补的是**两笔欠账**：① `8e2add6`（2026-10-10 19:20，`chore(eval): 重录 6 条检索基线 —— 门禁对准
+> 生产入库路径后`）**只改了 6 个 JSON、`docs/EXPERIMENTS.md` 0 行** —— 即 §20.7.1 标题所禁止的
+> 「静默重录」；② 今日 `78e8461` 一代（反假绿前置闸 + 层序抖动容差落地后重录）。
+> 口径与 `scripts/ops/check_baseline_diff_registration.py` 逐字一致（`round(new−old,4)`，非零即登记义务）。
+
+旧一代仍整份保留在 `evals/baselines/pre_task9_20261009/`。下表列的是 **pre_task9 → 当代** 的全部非零 diff，
+归因列按两代拆开（`10-10 步` = `8e2add6` 吸收的量，`今日步` = 本次 `78e8461` 的量）。
+
+| 路由（基线文件） | pre_task9 → 当代 的全部非零 diff | 分代拆解与归因 |
+|---|---|---|
+| fake+off（`retrieval_baseline.json`） | category_hit_at_1 -0.0192、category_hit_at_k +0.0065、category_mrr -0.0024、category_precision -0.0034、kp_hit_at_k +0.0577、kp_mrr +0.1343、mean_evidence_count -0.4936 | 除 `category_precision`（10-10 −0.0036 / 今日 +0.0002）与 `mean_evidence_count`（10-10 −0.5000 / 今日 +0.0064）外，其余五项全部由 10-10 一步贡献、今日步为 0.0000 |
+| fake+on（`retrieval_baseline_rerank.json`） | category_hit_at_1 -0.0064、category_hit_at_k -0.0064、category_mrr -0.0064、category_precision -0.0182、kp_hit_at_k -0.0257、kp_mrr -0.0456、mean_evidence_count -1.1025 | 今日步仅 `kp_hit_at_k` / `kp_mrr` 各 +0.0064，其余今日步 0.0000 |
+| fake+disabled（`retrieval_baseline_fake_disabled.json`） | category_hit_at_1 -0.0449、category_mrr -0.0246、category_precision +0.0067、kp_hit_at_k +0.1282、kp_mrr +0.1601、mean_evidence_count -0.0320 | 六项全部由 10-10 一步贡献，今日步 0.0000 |
+| real+off（`retrieval_baseline_real_embed.json`） | category_hit_at_1 -0.0128、category_hit_at_k -0.0064、category_mrr -0.0099、category_precision -0.0065、kp_hit_at_k +0.0385、kp_mrr +0.1328、mean_evidence_count -0.5705 | 六项全部由 10-10 一步贡献，今日步 0.0000 |
+| real+disabled（`retrieval_baseline_real_disabled.json`） | category_hit_at_1 -0.0064、category_hit_at_k -0.0193、category_mrr -0.0136、category_precision -0.0036、kp_hit_at_k +0.1218、kp_mrr +0.1565、mean_evidence_count -0.0641 | 今日步仅 `category_precision` +0.0001 与 `mean_evidence_count` +0.0064，其余 0.0000 |
+| real+on 权威（`retrieval_baseline_real_rerank.json`） | category_hit_at_1 +0.0064、category_mrr +0.0032、category_precision -0.0086、kp_hit_at_k -0.0064、kp_mrr +0.0172、mean_evidence_count -0.6025 | 六项全部由 10-10 一步贡献，今日步 0.0000 |
+
+★ **10-10 那一步为什么这么大（仪器变更，不是检索改善）**：`build_index()` 的临时索引由「通用
+`load → clean → split → enhance → tag`」换成**与生产同源**的 `rag.ingest_layers.build_all()`
+（`ingest_layers/__init__.py:29-59`，聚合 basic→advanced→exams+practice→code→learning_paths），
+`indexed_chunks` **2505 → 2026**，且 2026 与生产库 `chroma_db/chroma.sqlite3` 的
+`count(embeddings)` **逐位相等**（旧仪器与生产逐集合不等，见 `ARCHITECTURE_RETRIEVAL.md` §6.3(a) 的
+对照表及其「★ 2026-10-10 已修」行）。⇒ **归属警告**：§18 / §20.2 / §20.7.1 里引用旧仪器读数
+（如 `kp_mrr 0.6761`、`kp_hit 0.8718`）的数字**不可与本表当代读数并列**；本表 `kp_mrr` 一步 +0.13
+量级即来自此。
+
+★ **今日步全部落在抖动带内，不得当作代码效应**：`§6.3(b)` 已实测噪声地板 ≈ ±0.003（`kp_mrr`），
+本次直接复现 —— `real+off` 的 `kp_mrr` 在 10-13 21:3x 那轮抽到 **0.8282**、今日 11:58 那轮抽到
+**0.8314**（差 **0.0032** = `0.5/156`，正是 §6.3(b) 归因的「单条 query top-2 互换」量级）；
+`fake+off` 的 `mean_evidence_count` 抽到 4.4936 / 4.5000 两值；`fake+on` 的 `kp_*` 两项差 +0.0064。
+⇒ 口径：**任何单次读数都不能作为退化或改善的证据**；本表的「今日步」是抽样落点，不是趋势。
+
+**probe_baseline 单独说明（结构不同，不进上表）**：今日重录与**同表代** `74b9eb5`（10-10 19:42）
+逐条相同 —— `#4 survived` / `#9 survived` / `#17 section_dedup` / `#18 rerank_topn` /
+`#19 section_dedup`，5/5 无变化。★ **不可**与 `8e2add6` 那代逐条比：`74b9eb5` 同时把探针表的
+`expect_source` 从 legacy 文件（`07_查找.md` / `06_代码实现.md` / `04_文件管理.md` /
+`02_数据表示与运算.md`）改指新语料（`basic/data_structure/08_search.md` 等），目标身份变了，
+属仪器变更而非退化。另：本代起每条观测多一个 `rerank_scored` 键，**只有 `5df3e47` 的代码才产出它**。
+
+**核对方式**（`check_baseline_diff_registration.py` 已把「旧代 / 新代 / 登记节」三者参数化）：
+
+```bash
+uv run python scripts/ops/check_baseline_diff_registration.py --section 20.7.3      # 本表，期望 [一致] exit 0
+uv run python scripts/ops/check_baseline_diff_registration.py --section 20.7.1      # 旧节，必然报红（见下）
+```
+
+★ 旧节 `--section 20.7.1` 报红**不是数据错**：该节登记的是「pre_task9 → 10-09 代」，而工具比的是
+「pre_task9 → 现盘」，基线已两度前移 ⇒ 该节结构上不可再满足（这正是它此前被静默绕过、连红 3 天无人
+发现的原因）。`8e2add6^` 时刻该命令实测为 `[一致] exit 0` —— 即 §20.7.1 在它那一代是真的。
+默认节号已随本节落地而切到 `20.7.3`。
+
+
 
 
 > ★ 本节只放**跑出来的数**，每个数都标：归档文件名 + `code_version` + `prompt_set_version` + 调用次数。

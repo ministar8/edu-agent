@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "note": "由 evaluation.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
+    "note": "由 evaluation.gates.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
     "embedding_mode": "real",
     "embedding": "real TEI bge-m3",
     "rerank_mode": "off",
@@ -47,7 +47,7 @@
     "k": 5,
     "golden_path": "evals/datasets/golden/sample_408.jsonl",
     "indexed_chunks": 2026,
-    "recorded_at": "2026-10-10",
+    "recorded_at": "2026-10-14",
     "rerank_status_counts": {
       "off": 156
     }
@@ -64,15 +64,14 @@
     "kp_mrr": 0.8314,
     "kp_annotated": 156.0
   },
-  "recorded_at": "2026-10-10T10:46:12.807310+00:00",
+  "recorded_at": "2026-10-14T03:58:56.534071+00:00",
   "provenance": {
-    "recorded_at": "2026-10-10T10:46:12.807310+00:00",
-    "code_version": "8ebc95d-dirty",
+    "recorded_at": "2026-10-14T03:58:56.534071+00:00",
+    "code_version": "78e8461",
     "golden_sha256": "be98912a4c91fb88151640c82515127465031c1e79382b99c40e32311d6d1a66",
-    "script": "src/evaluation/retrieval_gate.py",
+    "script": "src/evaluation/gates/retrieval_gate/_baseline.py",
     "argv": [
-      "--update-baseline",
-      "--force-baseline"
+      "--update-baseline"
     ],
     "model_refs": {
       "agent": "fake:fake",

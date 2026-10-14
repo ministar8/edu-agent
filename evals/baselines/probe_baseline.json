@@ -5,7 +5,7 @@
     "rerank_backend": "real",
     "probe_path": "evals/datasets/golden/retrieval_probes.jsonl",
     "k": 5,
-    "recorded_at": "2026-10-10"
+    "recorded_at": "2026-10-14"
   },
   "probes": [
     {
@@ -45,7 +45,8 @@
           "rank": 1
         }
       ],
-      "note": ""
+      "note": "",
+      "rerank_scored": true
     },
     {
       "id": 18,
@@ -84,7 +85,8 @@
           "rank": null
         }
       ],
-      "note": ""
+      "note": "",
+      "rerank_scored": true
     },
     {
       "id": 9,
@@ -123,7 +125,8 @@
           "rank": 1
         }
       ],
-      "note": ""
+      "note": "",
+      "rerank_scored": true
     },
     {
       "id": 17,
@@ -162,7 +165,8 @@
           "rank": null
         }
       ],
-      "note": ""
+      "note": "",
+      "rerank_scored": true
     },
     {
       "id": 19,
@@ -201,7 +205,8 @@
           "rank": null
         }
       ],
-      "note": ""
+      "note": "",
+      "rerank_scored": true
     }
   ]
 }
