@@ -247,13 +247,25 @@ def _write_scoring_fields(
         case.task, probe, reply, hard_fails, retrieval_status=effective_status
     )
     # ── Verify 行为层三判据（D14，2026-10-08）────────────────────────────
-    #   ★ 只在**真有回复**时记：`--no-agent` 的探针跑或 agent 抛错时 `reply=""`，
-    #     此时记 False/False/False 会被读成「没出题、引用了真题」= 把**没测**说成**测过**。
-    #     所以一律 None（N/A，不进分母）—— 与 #4/#6/#7 的 N/A 纪律一致。
-    if case.task == "verify" and reply.strip():
-        record.ver_fabricated = metrics.verify_fabricated(reply)
-        record.ver_exam_item_cited = metrics.verify_exam_item_cited(reply)
-        record.ver_exam_year_only = metrics.verify_exam_year_only(reply)
+    #   ★ 2026-10-15 owner 裁定 B2 第三路（改 backfill 落盘口径）：这三个字段曾有
+    #     **两个写入方、极性相反** —— runner 直写 metric 极性（`verify_fabricated`
+    #     返 True = 仍出题 = 坏事）vs backfill 按 registry 落 verdict 极性
+    #     （`to_record_value("pass") = True` = 好事）。实测后果：ec 代归档
+    #     `ver_fabricated=True×15` 被 `report` 按 metric 极性读成「编造率 1.000」
+    #     的**假红**（registry 重算实情：pass 15/15、编造率 0）。
+    #     root fix = 两个写入方统一走 **registry 判据**（公式仍只有 registry 一处），
+    #     并按 protocol 同写 `item_reasons` 标记 ⇒ 读取方凭标记无歧义解码
+    #     （`report._fabrication_flag`；ec 代归档 vs phase1 代归档不再混读）。
+    #     registry 判据自带「无回复/缺检索状态 ⇒ missing_premise ⇒ None」纪律，
+    #     取代原来的 `reply.strip()` 前置守卫（没测 ≠ 没出题）。
+    if case.task == "verify":
+        from evaluation.task_eval.predicates import common as pc
+        from evaluation.task_eval.predicates import registry
+
+        for pred in registry.for_task("verify"):
+            v = pred.fn(record.to_dict())
+            setattr(record, pred.name, pc.to_record_value(v))
+            record.item_reasons[pred.name] = "" if v in ("pass", "fail") else v
 
 
 def _apply_write_missing_gate(

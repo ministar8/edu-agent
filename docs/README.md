@@ -17,7 +17,7 @@
 | **`ARCHITECTURE_RETRIEVAL.md`** | **检索架构总览（as-built）+ 术语表 + 模块索引 + 已知局限** | **写论文第 3 章 / 定位代码** |
 | **`RETRIEVAL_PLAN.md`** | **当前执行方案**（Step 1~6 + 实测数据 + 已否决项） | **动手改检索前** |
 | `RETRIEVAL_ROADMAP.md` | 效果路线图；**含「不做清单」（同类改动有负收益先例）** | **动手改检索前** |
-| **`EFFECT_PLAN.md`** | **效果完整度提升方案**（Phase 0 体检 → 任务级评测 → 闸门 → 验收；四张任务表 + rubric + 退出条件） | **补效果 / 写论文效果章前**。★ **定稿 v1.0 = 冻结件**：口径若与代码不一致，只登记偏离（见 `EXPERIMENTS.md` §20.5），**不改写本文件** |
+| **`EFFECT_PLAN.md`** | **效果完整度提升方案**（Phase 0 体检 → 任务级评测 → 闸门 → 验收；四张任务表 + rubric + 退出条件） | **补效果 / 写论文效果章前**。★ **定稿 v1.0 = 冻结件**：口径若与代码不一致，只登记偏离（见 `EXPERIMENTS.md` §20.5），**不改写本文件** |（证据：`docs/EFFECT_PLAN.md`，冻结件 v1.0）
 | **`EVIDENCE_CHAIN.md`** | **证据链重建方案（主张 ↔ 证据对齐）**：R1–R5 规则、三态推导、`5.A/5.B` 业务链二分、反向取证矩阵、V0–V6 退出准则 | **引用任何「已被证明」的措辞前** —— 它定义什么算证据；★ §1.1 状态表的判据自 checkpoint 10 起与 `claims.derive_status` 对齐（口径差的收口与残留代价写在该节，不在本文复述） |
 | **`EVIDENCE_CHAIN_PLAN.md`** | 上方案的**执行计划**（Task 1–10 + 逐 Task 判据编号） | 追某条判据（`5a`/`8i`/`9h`…）是哪一步、为什么存在时 |
 | **`EXPERIMENTS.md`** | **实验总册 + 版本锚点**：§1–§17 检索实验 · **§18 检索锚点** · §19 最终系统决策表 · **§20 效果锚点**（§20.4 结果归属矩阵 / §20.5 已知偏离账本 / §20.7.1 Task 9 六条路由重录 / **§20.7.2 Task 10 偏离合并登记：已裁定设计选择 / 已知局限 / 尚待验证归因 三类**） | **引用任何论文数字前** —— 先查它属于哪个锚点、是否落在「已知偏离」里 |
@@ -61,7 +61,7 @@
 
 | 命令 | 说明 |
 |---|---|
-| `python -m evaluation.diagnostics.telemetry_report` | 把 `data/metrics/rag_metrics.jsonl` 聚合成人可读报表：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、分层/路由分布、入库交叉校验。**只读、无基线、无判定** —— 退出码只用于「读不到日志」。★ 三条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源，评测占比**随窗口变**（09-27 前 99.3%，含此后流量的整份日志 93.9%） ⇒ 它回答的是「管线各层在黄金集上的行为分布」，**不是**线上统计；② 日志**混了多个代码版本**，必须用 `--since` / `--until` 把窗口钉到单一版本（实测 `generate` 过阈率在 09-27 15:00 前后 0.075 → 0.187），否则读到的是**混合口径**。③ `chroma_query`/`embedding_batch`/`embed_documents` 自 2026-10-14 起在写侧按 1/100 采样 ⇒ `event_counts` 只能读作**日志行数**，发生次数读 `event_counts_estimated`（**下界**，末周期无代表行）；`status != "ok"` 永不采样（要全量用 `METRICS_SAMPLE_EVERY=1`）。`--output <path>` 可把 JSON 落盘归档（建议 `evals/results/`） |
+| `python -m evaluation.diagnostics.telemetry_report` | 把 `data/metrics/rag_metrics.jsonl` 聚合成人可读报表：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、分层/路由分布、入库交叉校验。**只读、无基线、无判定** —— 退出码只用于「读不到日志」。★ 三条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源，评测占比**随窗口变**（09-27 前 99.3%，含此后流量的整份日志 93.9%） ⇒ 它回答的是「管线各层在黄金集上的行为分布」，**不是**线上统计；② 日志**混了多个代码版本**，必须用 `--since` / `--until` 把窗口钉到单一版本（实测 `generate` 过阈率在 09-27 15:00 前后 0.075 → 0.187），否则读到的是**混合口径**。③ `chroma_query`/`embedding_batch`/`embed_documents` 自 2026-10-14 起在写侧按 1/100 采样 ⇒ `event_counts` 只能读作**日志行数**，发生次数读 `event_counts_estimated`（**下界**，末周期无代表行）；`status != "ok"` 永不采样（要全量用 `METRICS_SAMPLE_EVERY=1`）。`--output <path>` 可把 JSON 落盘归档（建议 `evals/results/`） |（证据：`src/evaluation/diagnostics/telemetry_report.py` · `data/metrics/rag_metrics.jsonl`）
 
 ## 评测产物（`evals/results/`）
 

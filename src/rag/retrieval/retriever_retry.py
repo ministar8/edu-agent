@@ -1,4 +1,10 @@
-"""证据校验与重试参数辅助（从 retriever.py 拆出，行为等价）。"""
+"""证据校验辅助（从 retriever.py 拆出，行为等价）。
+
+★ 2026-10-15 owner 裁定 B5：随 LLM 校验层整层删除，原 `_llm_verify`（use_llm=True
+  专用）与 `_apply_retry_hints`（重试 hints 落地，仅 LLM verify 路径消费）一并移除；
+  本模块余下 `_verdict_from`（取 aretrieve_evidence 已写入的规则 verdict）与
+  `_evidence_kwargs`（主路径调参字典）。
+"""
 
 from __future__ import annotations
 
@@ -7,7 +13,6 @@ import logging
 from rag.retrieval.evidence import FusedEvidence
 from rag.retrieval.pipeline import StageSink
 from rag.retrieval.query_classifier import RetrievalDepth
-from rag.retrieval.retrieval_plan import L2_STANDARD
 from rag.retrieval.verifier import VerificationResult
 
 logger = logging.getLogger(__name__)
@@ -24,29 +29,6 @@ def _verdict_from(fused: FusedEvidence) -> VerificationResult:
         except Exception as e:
             logger.debug("evidence_verdict 解析失败，按 PASS 兜底: %s", e)
     return VerificationResult(verdict=Verdict.PASS, overall_score=1.0)
-
-
-async def _llm_verify(fused: FusedEvidence, query: str) -> VerificationResult:
-    """跑 LLM 验证并把 verdict 写回 metadata。"""
-    from rag.retrieval.verifier import averify_evidence
-
-    result = await averify_evidence(fused, query=query, use_llm=True)
-    fused.metadata["evidence_verdict"] = result.model_dump(mode="json")
-    return result
-
-
-def _apply_retry_hints(current_kwargs: dict, hints: dict) -> None:
-    """把 verify 给出的 retry hints 落到下次检索参数上（就地改 `current_kwargs`）。"""
-    if "k" in hints:
-        current_kwargs["k"] = hints["k"]
-        if current_kwargs.get("depth") and current_kwargs["depth"].depth == "shallow":
-            current_kwargs["depth"] = L2_STANDARD.depth
-    if "score_threshold" in hints:
-        current_kwargs["score_threshold"] = hints["score_threshold"]
-    if "max_tokens" in hints:
-        current_kwargs["max_tokens"] = hints["max_tokens"]
-    if "use_rerank" in hints:
-        current_kwargs["use_rerank"] = hints["use_rerank"]
 
 
 def _evidence_kwargs(

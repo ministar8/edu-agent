@@ -196,8 +196,8 @@ async def _retrieve_fused(query: str, *, k: int, use_rerank: bool):
     `averify_evidence` 永远走不到，追踪里会出现两个恒为 0 的假指标
     （见模块文档串「追踪入口必须与生产一致」）。
 
-    ``max_retries=0`` 是为了**可复现**：带重试时同一条 query 调用 `aretrieve_evidence`
-    的次数会随 verdict 变化，阶段序列长度不稳定，「逐阶段比对」就失去意义了。
+    ★ 2026-10-15 B5 后无重试路径（LLM verify + retry 分支已删）：同一条 query 调用
+    `aretrieve_evidence` 的次数恒为 1，阶段序列长度天然稳定，「逐阶段比对」可复现。
     """
     import rag.retrieval.retriever as R
 
@@ -205,8 +205,6 @@ async def _retrieve_fused(query: str, *, k: int, use_rerank: bool):
         query=query,
         k=k,
         use_rerank=use_rerank,
-        max_retries=0,
-        use_llm_verify=False,
     )
     return fused
 

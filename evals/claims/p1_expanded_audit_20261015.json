@@ -1,0 +1,1651 @@
+{
+ "generated_for": "A1 expanded audit mechanical recompute",
+ "worksheet": "evals/results/task_eval/P1_EXPANDED_AUDIT_20261015_filled.md",
+ "worksheet_sha256_prefix": "f59bfec7977d4237",
+ "n_rows": 126,
+ "verdicts": {
+  "一致": 35,
+  "不一致": 78,
+  "无可比键": 13
+ },
+ "verdict_column_consistency": "126/126",
+ "by_year": {
+  "2009": {
+   "一致": 5,
+   "无可比键": 10
+  },
+  "2010": {
+   "一致": 1
+  },
+  "2011": {
+   "不一致": 15,
+   "一致": 1
+  },
+  "2012": {
+   "一致": 1
+  },
+  "2013": {
+   "一致": 1
+  },
+  "2014": {
+   "一致": 1
+  },
+  "2015": {
+   "一致": 4,
+   "不一致": 13
+  },
+  "2016": {
+   "无可比键": 1
+  },
+  "2017": {
+   "一致": 1
+  },
+  "2018": {
+   "一致": 1
+  },
+  "2019": {
+   "一致": 4,
+   "不一致": 13
+  },
+  "2020": {
+   "一致": 1
+  },
+  "2021": {
+   "一致": 3,
+   "不一致": 13,
+   "无可比键": 1
+  },
+  "2022": {
+   "一致": 1
+  },
+  "2023": {
+   "一致": 1
+  },
+  "2024": {
+   "不一致": 13,
+   "一致": 3,
+   "无可比键": 1
+  },
+  "2025": {
+   "一致": 6,
+   "不一致": 11
+  }
+ },
+ "provisional_disagreements": [
+  "2011-Q1",
+  "2011-Q2",
+  "2011-Q3",
+  "2011-Q6",
+  "2011-Q8",
+  "2011-Q9",
+  "2011-Q10",
+  "2011-Q11",
+  "2011-Q12",
+  "2011-Q13",
+  "2011-Q14",
+  "2011-Q15",
+  "2011-Q16",
+  "2011-Q17",
+  "2011-Q19",
+  "2015-Q3",
+  "2015-Q4",
+  "2015-Q5",
+  "2015-Q8",
+  "2015-Q10",
+  "2015-Q11",
+  "2015-Q12",
+  "2015-Q13",
+  "2015-Q14",
+  "2015-Q16",
+  "2015-Q18",
+  "2015-Q19",
+  "2015-Q20",
+  "2019-Q3",
+  "2019-Q4",
+  "2019-Q5",
+  "2019-Q6",
+  "2019-Q7",
+  "2019-Q8",
+  "2019-Q10",
+  "2019-Q11",
+  "2019-Q12",
+  "2019-Q13",
+  "2019-Q14",
+  "2019-Q17",
+  "2019-Q18",
+  "2021-Q4",
+  "2021-Q5",
+  "2021-Q6",
+  "2021-Q7",
+  "2021-Q8",
+  "2021-Q9",
+  "2021-Q10",
+  "2021-Q11",
+  "2021-Q14",
+  "2021-Q15",
+  "2021-Q16",
+  "2021-Q17",
+  "2021-Q18",
+  "2024-Q2",
+  "2024-Q4",
+  "2024-Q5",
+  "2024-Q6",
+  "2024-Q7",
+  "2024-Q8",
+  "2024-Q9",
+  "2024-Q11",
+  "2024-Q14",
+  "2024-Q15",
+  "2024-Q17",
+  "2024-Q18",
+  "2024-Q19",
+  "2025-Q2",
+  "2025-Q4",
+  "2025-Q5",
+  "2025-Q6",
+  "2025-Q9",
+  "2025-Q11",
+  "2025-Q12",
+  "2025-Q16",
+  "2025-Q17",
+  "2025-Q18",
+  "2025-Q19"
+ ],
+ "no_comparable_key": [
+  "2009-Q3",
+  "2009-Q6",
+  "2009-Q8",
+  "2009-Q10",
+  "2009-Q13",
+  "2009-Q14",
+  "2009-Q15",
+  "2009-Q16",
+  "2009-Q18",
+  "2009-Q19",
+  "2021-Q12",
+  "2024-Q10",
+  "2016-Q1"
+ ],
+ "rows": [
+  {
+   "no": 1,
+   "scope": "出错层 50%",
+   "qid": "2009-Q1",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 2,
+   "scope": "出错层 50%",
+   "qid": "2009-Q3",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 3,
+   "scope": "出错层 50%",
+   "qid": "2009-Q5",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 4,
+   "scope": "出错层 50%",
+   "qid": "2009-Q6",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 5,
+   "scope": "出错层 50%",
+   "qid": "2009-Q8",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 6,
+   "scope": "出错层 50%",
+   "qid": "2009-Q9",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "一致"
+  },
+  {
+   "no": 7,
+   "scope": "出错层 50%",
+   "qid": "2009-Q10",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 8,
+   "scope": "出错层 50%",
+   "qid": "2009-Q12",
+   "subject": "os",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 9,
+   "scope": "出错层 50%",
+   "qid": "2009-Q13",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 10,
+   "scope": "出错层 50%",
+   "qid": "2009-Q14",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 11,
+   "scope": "出错层 50%",
+   "qid": "2009-Q15",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 12,
+   "scope": "出错层 50%",
+   "qid": "2009-Q16",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 13,
+   "scope": "出错层 50%",
+   "qid": "2009-Q17",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "一致"
+  },
+  {
+   "no": 14,
+   "scope": "出错层 50%",
+   "qid": "2009-Q18",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 15,
+   "scope": "出错层 50%",
+   "qid": "2009-Q19",
+   "subject": "os",
+   "reading": "D",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 16,
+   "scope": "出错层 50%",
+   "qid": "2011-Q1",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 17,
+   "scope": "出错层 50%",
+   "qid": "2011-Q2",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 18,
+   "scope": "出错层 50%",
+   "qid": "2011-Q3",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 19,
+   "scope": "出错层 50%",
+   "qid": "2011-Q4",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 20,
+   "scope": "出错层 50%",
+   "qid": "2011-Q6",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 21,
+   "scope": "出错层 50%",
+   "qid": "2011-Q8",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 22,
+   "scope": "出错层 50%",
+   "qid": "2011-Q9",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 23,
+   "scope": "出错层 50%",
+   "qid": "2011-Q10",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 24,
+   "scope": "出错层 50%",
+   "qid": "2011-Q11",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 25,
+   "scope": "出错层 50%",
+   "qid": "2011-Q12",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 26,
+   "scope": "出错层 50%",
+   "qid": "2011-Q13",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 27,
+   "scope": "出错层 50%",
+   "qid": "2011-Q14",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 28,
+   "scope": "出错层 50%",
+   "qid": "2011-Q15",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 29,
+   "scope": "出错层 50%",
+   "qid": "2011-Q16",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 30,
+   "scope": "出错层 50%",
+   "qid": "2011-Q17",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 31,
+   "scope": "出错层 50%",
+   "qid": "2011-Q19",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 32,
+   "scope": "出错层 50%",
+   "qid": "2015-Q1",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "一致"
+  },
+  {
+   "no": 33,
+   "scope": "出错层 50%",
+   "qid": "2015-Q3",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 34,
+   "scope": "出错层 50%",
+   "qid": "2015-Q4",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 35,
+   "scope": "出错层 50%",
+   "qid": "2015-Q5",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 36,
+   "scope": "出错层 50%",
+   "qid": "2015-Q8",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 37,
+   "scope": "出错层 50%",
+   "qid": "2015-Q9",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 38,
+   "scope": "出错层 50%",
+   "qid": "2015-Q10",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 39,
+   "scope": "出错层 50%",
+   "qid": "2015-Q11",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 40,
+   "scope": "出错层 50%",
+   "qid": "2015-Q12",
+   "subject": "os",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 41,
+   "scope": "出错层 50%",
+   "qid": "2015-Q13",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 42,
+   "scope": "出错层 50%",
+   "qid": "2015-Q14",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 43,
+   "scope": "出错层 50%",
+   "qid": "2015-Q15",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 44,
+   "scope": "出错层 50%",
+   "qid": "2015-Q16",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 45,
+   "scope": "出错层 50%",
+   "qid": "2015-Q17",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 46,
+   "scope": "出错层 50%",
+   "qid": "2015-Q18",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 47,
+   "scope": "出错层 50%",
+   "qid": "2015-Q19",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 48,
+   "scope": "出错层 50%",
+   "qid": "2015-Q20",
+   "subject": "os",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 49,
+   "scope": "出错层 50%",
+   "qid": "2019-Q1",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 50,
+   "scope": "出错层 50%",
+   "qid": "2019-Q2",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 51,
+   "scope": "出错层 50%",
+   "qid": "2019-Q3",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 52,
+   "scope": "出错层 50%",
+   "qid": "2019-Q4",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 53,
+   "scope": "出错层 50%",
+   "qid": "2019-Q5",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 54,
+   "scope": "出错层 50%",
+   "qid": "2019-Q6",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 55,
+   "scope": "出错层 50%",
+   "qid": "2019-Q7",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 56,
+   "scope": "出错层 50%",
+   "qid": "2019-Q8",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 57,
+   "scope": "出错层 50%",
+   "qid": "2019-Q10",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 58,
+   "scope": "出错层 50%",
+   "qid": "2019-Q11",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 59,
+   "scope": "出错层 50%",
+   "qid": "2019-Q12",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 60,
+   "scope": "出错层 50%",
+   "qid": "2019-Q13",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 61,
+   "scope": "出错层 50%",
+   "qid": "2019-Q14",
+   "subject": "os",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 62,
+   "scope": "出错层 50%",
+   "qid": "2019-Q15",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 63,
+   "scope": "出错层 50%",
+   "qid": "2019-Q16",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 64,
+   "scope": "出错层 50%",
+   "qid": "2019-Q17",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 65,
+   "scope": "出错层 50%",
+   "qid": "2019-Q18",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 66,
+   "scope": "出错层 50%",
+   "qid": "2021-Q1",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 67,
+   "scope": "出错层 50%",
+   "qid": "2021-Q2",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 68,
+   "scope": "出错层 50%",
+   "qid": "2021-Q4",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 69,
+   "scope": "出错层 50%",
+   "qid": "2021-Q5",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 70,
+   "scope": "出错层 50%",
+   "qid": "2021-Q6",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 71,
+   "scope": "出错层 50%",
+   "qid": "2021-Q7",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 72,
+   "scope": "出错层 50%",
+   "qid": "2021-Q8",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 73,
+   "scope": "出错层 50%",
+   "qid": "2021-Q9",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 74,
+   "scope": "出错层 50%",
+   "qid": "2021-Q10",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 75,
+   "scope": "出错层 50%",
+   "qid": "2021-Q11",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 76,
+   "scope": "出错层 50%",
+   "qid": "2021-Q12",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 77,
+   "scope": "出错层 50%",
+   "qid": "2021-Q13",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 78,
+   "scope": "出错层 50%",
+   "qid": "2021-Q14",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 79,
+   "scope": "出错层 50%",
+   "qid": "2021-Q15",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 80,
+   "scope": "出错层 50%",
+   "qid": "2021-Q16",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 81,
+   "scope": "出错层 50%",
+   "qid": "2021-Q17",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 82,
+   "scope": "出错层 50%",
+   "qid": "2021-Q18",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 83,
+   "scope": "出错层 50%",
+   "qid": "2024-Q2",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 84,
+   "scope": "出错层 50%",
+   "qid": "2024-Q3",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "一致"
+  },
+  {
+   "no": 85,
+   "scope": "出错层 50%",
+   "qid": "2024-Q4",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 86,
+   "scope": "出错层 50%",
+   "qid": "2024-Q5",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 87,
+   "scope": "出错层 50%",
+   "qid": "2024-Q6",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 88,
+   "scope": "出错层 50%",
+   "qid": "2024-Q7",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 89,
+   "scope": "出错层 50%",
+   "qid": "2024-Q8",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 90,
+   "scope": "出错层 50%",
+   "qid": "2024-Q9",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 91,
+   "scope": "出错层 50%",
+   "qid": "2024-Q10",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 92,
+   "scope": "出错层 50%",
+   "qid": "2024-Q11",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 93,
+   "scope": "出错层 50%",
+   "qid": "2024-Q13",
+   "subject": "os",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 94,
+   "scope": "出错层 50%",
+   "qid": "2024-Q14",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 95,
+   "scope": "出错层 50%",
+   "qid": "2024-Q15",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 96,
+   "scope": "出错层 50%",
+   "qid": "2024-Q16",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 97,
+   "scope": "出错层 50%",
+   "qid": "2024-Q17",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 98,
+   "scope": "出错层 50%",
+   "qid": "2024-Q18",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 99,
+   "scope": "出错层 50%",
+   "qid": "2024-Q19",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 100,
+   "scope": "出错层 50%",
+   "qid": "2025-Q1",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 101,
+   "scope": "出错层 50%",
+   "qid": "2025-Q2",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 102,
+   "scope": "出错层 50%",
+   "qid": "2025-Q3",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 103,
+   "scope": "出错层 50%",
+   "qid": "2025-Q4",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 104,
+   "scope": "出错层 50%",
+   "qid": "2025-Q5",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 105,
+   "scope": "出错层 50%",
+   "qid": "2025-Q6",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 106,
+   "scope": "出错层 50%",
+   "qid": "2025-Q7",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 107,
+   "scope": "出错层 50%",
+   "qid": "2025-Q8",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 108,
+   "scope": "出错层 50%",
+   "qid": "2025-Q9",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 109,
+   "scope": "出错层 50%",
+   "qid": "2025-Q11",
+   "subject": "ds",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 110,
+   "scope": "出错层 50%",
+   "qid": "2025-Q12",
+   "subject": "os",
+   "reading": "D",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "A",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 111,
+   "scope": "出错层 50%",
+   "qid": "2025-Q13",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 112,
+   "scope": "出错层 50%",
+   "qid": "2025-Q14",
+   "subject": "co",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  },
+  {
+   "no": 113,
+   "scope": "出错层 50%",
+   "qid": "2025-Q16",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 114,
+   "scope": "出错层 50%",
+   "qid": "2025-Q17",
+   "subject": "co",
+   "reading": "C",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 115,
+   "scope": "出错层 50%",
+   "qid": "2025-Q18",
+   "subject": "co",
+   "reading": "B",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 116,
+   "scope": "出错层 50%",
+   "qid": "2025-Q19",
+   "subject": "co",
+   "reading": "A",
+   "ws_verdict": "参考键不一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "不一致"
+  },
+  {
+   "no": 117,
+   "scope": "相邻批次",
+   "qid": "2010-Q4",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 118,
+   "scope": "相邻批次",
+   "qid": "2012-Q1",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 119,
+   "scope": "相邻批次",
+   "qid": "2013-Q2",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 120,
+   "scope": "相邻批次",
+   "qid": "2014-Q1",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 121,
+   "scope": "相邻批次",
+   "qid": "2016-Q1",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "无源键可比",
+   "repo_key": "null",
+   "recomputed": "无可比键"
+  },
+  {
+   "no": 122,
+   "scope": "相邻批次",
+   "qid": "2017-Q1",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 123,
+   "scope": "相邻批次",
+   "qid": "2018-Q1",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 124,
+   "scope": "相邻批次",
+   "qid": "2020-Q1",
+   "subject": "ds",
+   "reading": "C",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "C",
+   "recomputed": "一致"
+  },
+  {
+   "no": 125,
+   "scope": "相邻批次",
+   "qid": "2022-Q1",
+   "subject": "ds",
+   "reading": "B",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "B",
+   "recomputed": "一致"
+  },
+  {
+   "no": 126,
+   "scope": "相邻批次",
+   "qid": "2023-Q1",
+   "subject": "ds",
+   "reading": "D",
+   "ws_verdict": "参考键一致（暂定）",
+   "repo_key": "D",
+   "recomputed": "一致"
+  }
+ ],
+ "caveat": "readings are third-party public-page values per worksheet self-declaration; mismatches are PROVISIONAL pending formal original-paper blind re-read; not confirmed error keys",
+ "exams_chain_source_distribution": {
+  "third_party/high": 674
+ },
+ "demo_collision_surface": {
+  "verify_cases": {
+   "n": 15,
+   "hit_confirmed_error_keys": [
+    [
+     "ver-002",
+     "2009-Q11"
+    ],
+    [
+     "ver-007",
+     "2011-Q5"
+    ]
+   ],
+   "hit_provisional_disagreements": [
+    [
+     "ver-002",
+     "2019-Q12"
+    ],
+    [
+     "ver-003",
+     "2011-Q2"
+    ],
+    [
+     "ver-003",
+     "2024-Q2"
+    ],
+    [
+     "ver-003",
+     "2025-Q2"
+    ],
+    [
+     "ver-004",
+     "2015-Q12"
+    ],
+    [
+     "ver-004",
+     "2025-Q12"
+    ],
+    [
+     "ver-006",
+     "2011-Q13"
+    ],
+    [
+     "ver-006",
+     "2015-Q14"
+    ],
+    [
+     "ver-006",
+     "2021-Q14"
+    ],
+    [
+     "ver-006",
+     "2024-Q14"
+    ],
+    [
+     "ver-007",
+     "2011-Q6"
+    ],
+    [
+     "ver-007",
+     "2021-Q4"
+    ],
+    [
+     "ver-007",
+     "2025-Q4"
+    ],
+    [
+     "ver-010",
+     "2015-Q16"
+    ],
+    [
+     "ver-010",
+     "2019-Q17"
+    ],
+    [
+     "ver-010",
+     "2021-Q16"
+    ],
+    [
+     "ver-010",
+     "2024-Q17"
+    ],
+    [
+     "ver-010",
+     "2024-Q18"
+    ],
+    [
+     "ver-014",
+     "2011-Q14"
+    ],
+    [
+     "ver-014",
+     "2011-Q15"
+    ]
+   ],
+   "hit_no_comparable_key": [
+    [
+     "ver-004",
+     "2009-Q19"
+    ],
+    [
+     "ver-006",
+     "2009-Q13"
+    ],
+    [
+     "ver-006",
+     "2021-Q12"
+    ],
+    [
+     "ver-007",
+     "2009-Q3"
+    ],
+    [
+     "ver-007",
+     "2009-Q6"
+    ],
+    [
+     "ver-010",
+     "2009-Q14"
+    ],
+    [
+     "ver-014",
+     "2009-Q15"
+    ]
+   ]
+  },
+  "grade_cases": {
+   "n": 15,
+   "hit_confirmed_error_keys": [
+    [
+     "grd-002",
+     "2009-Q11"
+    ]
+   ],
+   "hit_provisional_disagreements": [],
+   "hit_no_comparable_key": []
+  },
+  "gold_review": {
+   "n": 30,
+   "hit_confirmed_error_keys": [
+    [
+     "grd-002",
+     "2009-Q11"
+    ]
+   ],
+   "hit_provisional_disagreements": [],
+   "hit_no_comparable_key": []
+  },
+  "qa_cases": {
+   "n": 15,
+   "hit_confirmed_error_keys": [],
+   "hit_provisional_disagreements": [],
+   "hit_no_comparable_key": []
+  },
+  "memory_cases": {
+   "n": 6,
+   "hit_confirmed_error_keys": [],
+   "hit_provisional_disagreements": [],
+   "hit_no_comparable_key": []
+  },
+  "generate_cases": {
+   "n": 15,
+   "hit_confirmed_error_keys": [],
+   "hit_provisional_disagreements": [],
+   "hit_no_comparable_key": []
+  },
+  "calibration_30": {
+   "n": 30,
+   "hit_confirmed_error_keys": [],
+   "hit_provisional_disagreements": [],
+   "hit_no_comparable_key": []
+  }
+ },
+ "items_md_total": 674,
+ "demo_collision_surface_method": "field-precise set membership (corrected 2026-10-15 19:30; supersedes blob substring method)",
+ "correction_20261015_1930": {
+  "corrected_at": "2026-10-15T19:30:00+08:00",
+  "bug": "§20.7.7⑦ 与 demo_collision_surface 旧值用无边界子串匹配（'2021-Q3' 命中 '2021-Q31' 等长题号）",
+  "fix": "字段精确抽取 + 集合成员匹配（verify=expected_question_ids；grade=gold_source_ref #后 qid；gold_review=notes/_ref qid）",
+  "confirmed_error_key_hits": {
+   "old_blob": {
+    "verify": 5,
+    "grade": 1,
+    "gold_review": 1
+   },
+   "new_fieldprecise": {
+    "verify": 2,
+    "grade": 1,
+    "gold_review": 1
+   }
+  },
+  "old_values_kept_for_trail": true,
+  "old_blob": {
+   "verify_cases": {
+    "hit_confirmed_error_keys": 5,
+    "hit_provisional_disagreements": 38,
+    "hit_no_comparable_key": 14
+   },
+   "grade_cases": {
+    "hit_confirmed_error_keys": 1,
+    "hit_provisional_disagreements": 2,
+    "hit_no_comparable_key": 1
+   },
+   "gold_review": {
+    "hit_confirmed_error_keys": 1,
+    "hit_provisional_disagreements": 2,
+    "hit_no_comparable_key": 1
+   }
+  },
+  "false_positive_examples": [
+   "2021-Q3 命中 2021-Q31/Q32/Q38/Q40（ver-008/012/013）",
+   "2009-Q3 命中 2009-Q33（grd-001，实际出处是 2009-Q33）",
+   "2011-Q2 命中 2011-Q23（grd-012）、2011-Q3 命中 2011-Q33（grd-013）"
+  ],
+  "owner_finding_confirms": "owner 审核汇总第 1 条独立发现同一问题（ver-008/012/013 不含 2021-Q3），机械复算属实"
+ }
+}

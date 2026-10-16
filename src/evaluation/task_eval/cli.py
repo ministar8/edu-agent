@@ -387,13 +387,28 @@ def _backfill(args: argparse.Namespace) -> int:
         logger.error("读不到 record：%s", args.records)
         return 2
     n = 0
+    overrides: list[str] = []
     for rec in records:
         task = str(rec.get("task") or "")
         for pred in registry.for_task(task):
             v = pred.fn(rec)
-            rec[pred.name] = pc.to_record_value(v)
+            new = pc.to_record_value(v)
+            # ★ 2026-10-15 owner 裁定 B2 第三路（改落盘口径）：写入前与**已存值**比对，
+            #   不一致显式记账 —— 历史的痛：`ver_fabricated` 有过两个写入方且极性相反
+            #   （runner metric 极性 / backfill verdict polarity），ec 代覆盖 phase1 代时
+            #   无人察觉，直到 report 把 verdict 极性的 `True×15` 读成「编造率 1.000」假红。
+            #   只记账、不改判据口径；合法覆盖 = 换公式/换 gold 后的预期重算。
+            if pred.name in rec and rec.get(pred.name) != new:
+                overrides.append(f"{rec.get('case_id')}:{pred.name}")
+            rec[pred.name] = new
             rec.setdefault("item_reasons", {})[pred.name] = "" if v in ("pass", "fail") else v
             n += 1
+    if overrides:
+        logger.warning(
+            "回填覆盖已存值 %d 处（旧值与 registry 重算不一致，已显式记账而非静默）：%s",
+            len(overrides),
+            ", ".join(overrides[:20]) + (" …" if len(overrides) > 20 else ""),
+        )
     logger.info("按 registry 回填判据：%d 条判定", n)
 
     if args.out:

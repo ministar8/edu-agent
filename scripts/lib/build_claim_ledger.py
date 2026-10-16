@@ -143,8 +143,10 @@ def falsify_evidence(
 
     ① `all_flipped=False` 且基线全 pass ⇒ 读作 **partial**（存在形式覆盖、语义无操作的
       op，plan-mandated）——不得当 full，不得因此算 proven；
-    ② `baselines_pass=False` 且该判据在归档上全 missing_premise ⇒ **预期**（gold 前提
-      不存在，基线本就 pass 不了；P−1 盲标暂停中）——不是失败，但同样不得算 proven；
+    ② `baselines_pass=False` 且该判据在归档上全 missing_premise ⇒ **预期**（缺前提 ⇒
+      基线本就 pass 不了；缺前提的根因逐判据不同——gold 未填 / 来源不完整 / 机械判据
+      不适用于该题型；P−1 已填 gold 的判据也可能因适用域结构性不可测）——不是失败，
+      但同样不得算 proven；
       不满足「全 missing_premise」却 baselines_pass=False ⇒ 意外，注记要求排查；
     ③ `inputs` 已在 `load_falsify` 去重。
     ★ `baselines_pass` 始终留在 falsify_passed 的合取里：不允许为「变绿」悄悄去掉。
@@ -177,8 +179,8 @@ def falsify_evidence(
         if archive_all_mp:
             notes.append(
                 "baselines_pass=False 属**预期**：该判据在归档上全 missing_premise"
-                "（gold 前提不存在，P−1 盲标暂停中），基线本就 pass 不了——"
-                "不是失败，但不得算 proven"
+                "（缺前提 ⇒ 基线本就 pass 不了；缺哪个前提见该判据 contract_inputs "
+                "与 ledger 缺前提明细），——不是失败，但不得算 proven"
             )
         else:
             notes.append("baselines_pass=False（意外：归档上存在已测值，需排查取证夹具）")
@@ -273,8 +275,9 @@ def build_ledger(records_spec: str, falsify_report: str) -> str:
         "无附带损伤、无抛异常），**不是**「主张被证伪」。",
         "> ★ falsify_latest.json 消费三口径（Task 5 披露）：① `all_flipped=False` 且基线全 "
         "pass ⇒ 读作 **partial**（形式覆盖、语义无操作，plan-mandated），不得当 full、不得算 "
-        "proven；② 冻结名 `baselines_pass=False` 属**预期**（gold 未盲标、P−1 暂停，基线本就是 "
-        "missing_premise）——不是失败，也不得算 proven；③ `inputs` 多 op 重复项已去重。",
+        "proven；② 冻结名 `baselines_pass=False` 属**预期**（判据在归档上全 missing_premise "
+        "⇒ 基线本就是 missing_premise；缺前提的根因逐判据不同，见逐行注记）——不是失败，"
+        "也不得算 proven；③ `inputs` 多 op 重复项已去重。",
         "> ★ missing_premise 全链原样传播（predicates → composite/rate → 本表）："
         "缺前提的行显示 `N/A（rate=None; …）`并在注记点名缺哪个前提，绝不折成 pass/fail。",
         f"> 本表汇总：{cl.CLAIM_PROVEN} {counts.get(cl.CLAIM_PROVEN, 0)} 行 / "
@@ -412,8 +415,11 @@ def run_check(args: argparse.Namespace, text: str, records: list[dict[str, Any]]
     """三段各自判定：① ledger 一致性 ② R3 孤立结论 ③ V0 拦截（§8①/§8②）。
 
     ★ 退出码仍是「任一段红 ⇒ 1」，但**每段单独打印自己的 PASS/FAIL**：
-      混在一起会把「V0 尚未清偿」（P−1 未做 + 老归档缺 provenance/item_reasons）
+      混在一起会把「V0 尚未清偿」（判据全 missing_premise + 归档缺 provenance/item_reasons）
       误读成「ledger 算错了」—— 前者是计划里等待办的事实，后者会让人怀疑整条证据链。
+      ★ generate 的 gold 已由 P−1 盲标填写（2026-10-15，13 present + gen-005
+        incomplete_source + gen-009 missing_key）；剩余 V0 ② 红的根因是判据结构性不可测
+        （人工可判定性结论通道 / 纯选择题适用域 / 难度行中文映射缺失），不是 gold 未填。
     """
     print("── 第 1 段【ledger 一致性】文档 == 重算 ──")
     seg1_red = _check_ledger_consistency(args, text)
@@ -435,8 +441,9 @@ def run_check(args: argparse.Namespace, text: str, records: list[dict[str, Any]]
         "逐条补锚点是 Task 10 的收尾工作。"
     )
     print(
-        "      ② 第 3 段红 = **V0 尚未清偿**（P−1 盲标未做 + 老归档缺 provenance/item_reasons），"
-        "不是 ledger 算错了；这两件事分属不同段，别混读。"
+        "      ② 第 3 段红 = **V0 尚未清偿**（判据全 missing_premise + 归档缺 provenance/"
+        "item_reasons；generate 的 gold 已由 P−1 盲标填写，剩余未测根因是判据结构性不可测，"
+        "逐条见上面的 V0 ② 输出），不是 ledger 算错了；这两件事分属不同段，别混读。"
         "本轮的正确结果就是这一段红 —— 它正是本计划的目的（§8：未证明的东西不得当成绩）。"
     )
     return 1 if (seg1_red or seg2_red or seg3_red) else 0

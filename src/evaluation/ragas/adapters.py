@@ -95,8 +95,6 @@ async def retrieve_contexts(
         query=query,
         k=k,
         use_rerank=use_rerank,
-        max_retries=0,
-        use_llm_verify=False,
     )
     contexts, details = _contexts_from_fused(fused)
     return contexts or [""], details

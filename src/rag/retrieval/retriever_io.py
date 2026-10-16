@@ -155,7 +155,7 @@ async def _verify_fused(fused: FusedEvidence, query: str) -> None:
     from rag.retrieval.verifier import averify_evidence
 
     try:
-        verification = await averify_evidence(fused, query=query, use_llm=False)
+        verification = await averify_evidence(fused, query=query)
         fused.metadata["evidence_verdict"] = verification.model_dump(mode="json")
     except Exception as e:
         logger.warning("Async evidence verification failed: %s", e)

@@ -198,16 +198,39 @@ def _add_memory_metrics(rep: TaskReport, records: list[dict[str, Any]]) -> None:
     )
 
 
+def _fabrication_flag(rec: dict[str, Any]) -> bool | None:
+    """`ver_fabricated` 归档值 → 「仍出题（坏事）」标志；**极性自适配**。
+
+    ★ 2026-10-15 owner 裁定 B2 第三路：同名字段有两个历史写入方、极性相反 ——
+      · runner 直写（metric 极性：True = 仍出题 = 坏事）⇒ 只存在于 phase1 代归档；
+      · backfill / runner（修复后）按 registry 落盘（verdict 极性：`True = pass`）
+        ⇒ ec 代归档起。修复后 runner 与 backfill 同源同极性（见 runner.py 注）。
+    ★ 区分标志 = `item_reasons` 是否含该判据名：backfill 对 registry 判据**恒写**
+      `item_reasons[<名>]`（pass/fail 记空串、缺前提记原因），旧 runner 不写。
+      ⇒ 有标记 ⇒ verdict 极性（fail 落 False）；无标记 ⇒ metric 极性（True 即坏事）。
+    ★ None（缺前提/没测）原样返回，`metrics.rate` 把它剔出分母 —— 不并入失败率。
+    """
+    v = rec.get("ver_fabricated")
+    if v is None:
+        return None
+    reasons = rec.get("item_reasons")
+    if isinstance(reasons, dict) and "ver_fabricated" in reasons:
+        return v is False  # verdict 极性：fail ⇒ False ⇒ 仍出题（坏事）
+    return bool(v)  # metric 极性（phase1 代归档）：True 即坏事
+
+
 def _add_verify_metrics(rep: TaskReport, records: list[dict[str, Any]]) -> None:
     """Verify 专有：行为层三判据（D14）。"""
     # ★ D14：Verify 这一行改由行为层把门（`question_id_recall@k` 不可计算 = #20；
     #   `final_quality≥4` 在 verify 上测的是**检索覆盖**，见 `metrics.verify_*` 的说明）。
     #   `rate()` 天然排除 None ⇒ 探针跑/无回复的 case 不会被算成「没出题」。
-    #   ★ 读 JSON 时注意：`ver_fabrication` 是**坏事率**，里面的 `passed` 数的是
-    #     「判为 True（= 仍出题）」的条数，不是「通过」。门槛要求它的 rate **= 0**。
-    rep.ver_fabrication = metrics.rate([r.get("ver_fabricated") for r in records])
+    #   ★ 读 JSON 时注意：`ver_fabrication` 是**坏事率**（仍出题率），门槛要求 rate **= 0**；
+    #   `ver_item_cited` / `ver_year_only` 是**好事率**（给出真题条目的占比）—— 后两者的
+    #   两种历史极性恰好同向（True=命中=好事），无需解码；只有 `ver_fabricated`
+    #   一域会翻（metric: True=坏事 / verdict: True=pass），故单独走 `_fabrication_flag`。
     rep.ver_item_cited = metrics.rate([r.get("ver_exam_item_cited") for r in records])
     rep.ver_year_only = metrics.rate([r.get("ver_exam_year_only") for r in records])
+    rep.ver_fabrication = metrics.rate([_fabrication_flag(r) for r in records])
 
 
 def summarize_task(task: str, records: list[dict[str, Any]]) -> TaskReport:

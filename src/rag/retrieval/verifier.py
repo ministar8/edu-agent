@@ -1,13 +1,17 @@
 """EvidenceVerifier — 对 aretrieve_evidence 返回的 FusedEvidence 做质量校验
 
-两层校验：
-1. 规则层（零延迟）：证据数量、分数阈值、来源多样性、内容长度、覆盖率
-2. LLM 层（可选）：相关性判断、完整性评估
+规则层校验（零延迟）：证据数量、分数阈值、来源多样性、内容长度、覆盖率
 
 校验结果驱动后续决策：
 - pass → 直接使用
 - soft_fail → 可用但建议重试（如来源单一）
 - hard_fail → 必须重试（如零证据或全部低分）
+
+★ 2026-10-15 owner 裁定 B5：原「LLM 层（可选）相关性判断 / 完整性评估」**整层删除**
+  （`_arun_llm_relevance_check` + `use_llm` 开关 + `llm_relevance` 权重及其重分配逻辑）。
+  删除前全部调用点恒 `use_llm=False`，该层从未启用；`llm_relevance` 权重在未执行时
+  恒定重分配给规则层，留之只会让「可选层」读起来像存在的能力。恢复需按
+  EFFECT_PLAN §6 走「新版本 + 全量重跑 + 门禁重录」并重新过冻结清单，不在本轮范围。
 """
 
 from __future__ import annotations
@@ -19,9 +23,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from core.settings import settings
-from prompts import RELEVANCE_PROMPT
 from rag.retrieval.evidence import FusedEvidence, TextEvidence
-from rag.retrieval.llm_calls import call_text
 
 logger = logging.getLogger(__name__)
 
@@ -265,73 +267,6 @@ def _run_rule_checks(fused: FusedEvidence) -> list[CheckResult]:
 
 
 # ════════════════════════════════════════════════════════
-#  LLM 层校验（可选，有 token 成本）
-# ════════════════════════════════════════════════════════
-
-
-async def _arun_llm_relevance_check(
-    query: str,
-    fused: FusedEvidence,
-) -> CheckResult | None:
-    """LLM 判断证据相关性与完整性（异步）"""
-    if not fused.text_evidences:
-        return None
-
-    # 只取前 5 条证据，控制 token
-    evidences = fused.text_evidences[:5]
-    lines = []
-    for i, ev in enumerate(evidences, 1):
-        snippet = ev.content[:200].replace("\n", " ")
-        lines.append(f"{i}. [{ev.source}] {snippet}")
-    evidence_list = "\n".join(lines)
-
-    messages = RELEVANCE_PROMPT.format_messages(query=query, evidence_list=evidence_list)
-
-    text = await call_text(
-        messages,
-        temperature=settings.TEMP_PRECISE,
-        timeout=settings.LLM_TIMEOUT,
-        stage="verify",
-    )
-    if text is None:
-        return None
-
-    import json as _json
-
-    try:
-        # 解析 LLM 返回的 JSON —— 输出不可信，解析失败一律降级
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        if start < 0 or end <= start:
-            logger.warning("LLM relevance check: 无法解析 JSON")
-            return None
-
-        parsed = _json.loads(text[start:end])
-        relevant_count = int(parsed.get("relevant_count", 0))
-        irrelevant_count = int(parsed.get("irrelevant_count", 0))
-        completeness = float(parsed.get("completeness", 0.5))
-        reason = str(parsed.get("reason", ""))
-
-        total = relevant_count + irrelevant_count
-        if total == 0:
-            return None
-
-        relevance_ratio = relevant_count / total
-        score = relevance_ratio * 0.6 + completeness * 0.4
-        passed = relevance_ratio >= 0.5 and completeness >= 0.3
-
-        return CheckResult(
-            name="llm_relevance",
-            passed=passed,
-            score=score,
-            detail=f"relevant={relevant_count}/{total}, completeness={completeness:.2f}, {reason}",
-        )
-    except Exception as e:
-        logger.warning("LLM relevance check parse failed: %s", e)
-        return None
-
-
-# ════════════════════════════════════════════════════════
 #  综合判定 + 重试建议
 # ════════════════════════════════════════════════════════
 
@@ -359,7 +294,6 @@ _CHECK_WEIGHTS: dict[str, float] = {
     "content_sufficiency": 0.15,
     "duplication": 0.05,
     "final_context": 0.15,
-    "llm_relevance": 0.10,  # LLM 层可选，未执行时权重重分配
 }
 
 
@@ -429,16 +363,17 @@ def _compute_retry_hints(
 async def averify_evidence(
     fused: FusedEvidence,
     query: str = "",
-    use_llm: bool = False,
 ) -> VerificationResult:
     """异步校验 FusedEvidence 质量（原生 async，一路 await）
 
     在 async 上下文中使用此函数，避免 asyncio.run() 嵌套风险。
 
+    ★ 2026-10-15 owner 裁定 B5：原 `use_llm` 开关随 LLM 校验层整层删除（调用点恒
+      False、从未启用）；函数保留 `query` 形参以稳教既有调用方签名，但不再消费它。
+
     Args:
         fused: aretrieve_evidence 返回的 FusedEvidence
-        query: 原始查询（LLM 层需要）
-        use_llm: 是否启用 LLM 相关性检查（有 token 成本）
+        query: 原始查询（历史形参，保留兼容；LLM 层删除后不再使用）
 
     Returns:
         VerificationResult 含 verdict / checks / retry_hints
@@ -446,13 +381,7 @@ async def averify_evidence(
     # 1. 规则层
     checks = _run_rule_checks(fused)
 
-    # 2. LLM 层（原生 await）
-    if use_llm and query:
-        llm_result = await _arun_llm_relevance_check(query, fused)
-        if llm_result is not None:
-            checks.append(llm_result)
-
-    # 3. 计算综合分数
+    # 2. 计算综合分数
     overall_score, verdict, reasons, retry_hints = _compute_verification(fused, checks)
 
     return VerificationResult(
@@ -468,19 +397,10 @@ def _compute_verification(
     fused: FusedEvidence, checks: list[CheckResult]
 ) -> tuple[float, Verdict, list[str], dict]:
     """从 checks 计算综合分数、判定、原因、重试建议（纯计算，无 I/O）"""
-    active_weights = dict(_CHECK_WEIGHTS)
-    has_llm = any(c.name == "llm_relevance" for c in checks)
-    if not has_llm:
-        llm_weight = active_weights.pop("llm_relevance", 0.10)
-        remaining = sum(active_weights.values())
-        if remaining > 0:
-            for key in active_weights:
-                active_weights[key] += llm_weight * (active_weights[key] / remaining)
-
     check_map = {c.name: c for c in checks}
     weighted_sum = 0.0
     weight_total = 0.0
-    for name, weight in active_weights.items():
+    for name, weight in _CHECK_WEIGHTS.items():
         if name in check_map:
             weighted_sum += check_map[name].score * weight
             weight_total += weight

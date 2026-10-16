@@ -48,9 +48,7 @@ from rag.retrieval.retriever_io import (
     _with_topup,
 )
 from rag.retrieval.retriever_retry import (
-    _apply_retry_hints,
     _evidence_kwargs,
-    _llm_verify,
     _verdict_from,
 )
 from rag.retrieval.verifier import VerificationResult
@@ -196,81 +194,25 @@ async def aretrieve_evidence(
     return fused
 
 
-async def _verify_with_optional_retry(
-    fused: FusedEvidence,
-    query: str,
-    *,
-    current_kwargs: dict,
-    allowed: list[str],
-    preferred_layers: Sequence[str] | None,
-    eligibility_where: dict | None,
-    attempts_allowed: int,
-) -> tuple[FusedEvidence, VerificationResult, int]:
-    """LLM verify；命中 hints 时按 hints 重试**一次**。返回 (fused, result, 实际重试次数)。"""
-    from rag.retrieval.verifier import Verdict
-
-    result = await _llm_verify(fused, query)
-    if not (attempts_allowed and result.verdict != Verdict.PASS and result.retry_hints):
-        return fused, result, 0
-
-    hints = result.retry_hints
-    _apply_retry_hints(current_kwargs, hints)
-    logger.info(
-        "Async verify retry (once) for query=%s verdict=%s hints=%s",
-        query[:40],
-        result.verdict.value,
-        hints,
-    )
-    fused = await _with_topup(
-        query,
-        preferred_layers,
-        allowed,
-        await aretrieve_evidence(**current_kwargs),
-        eligibility_where,
-    )
-    result = await _llm_verify(fused, query)
-    return fused, result, 1
-
-
 async def _finalize_evidence(
     fused: FusedEvidence,
     query: str,
     collection_name: str,
     *,
     retry_metric_start: float,
-    current_kwargs: dict,
-    allowed: list[str],
-    preferred_layers: Sequence[str] | None,
-    eligibility_where: dict | None,
-    max_retries: int,
-    use_llm_verify: bool,
 ) -> tuple[FusedEvidence, VerificationResult]:
-    """可选 LLM verify + 最多一次 retry，并上报检索入口指标。"""
-    if use_llm_verify:
-        # 可选路径：LLM verify + 最多 1 次 retry（设计定稿：不维护多轮重试）
-        attempts_allowed = 1 if max_retries > 0 else 0
-        fused, result, retry_count = await _verify_with_optional_retry(
-            fused,
-            query,
-            current_kwargs=current_kwargs,
-            allowed=allowed,
-            preferred_layers=preferred_layers,
-            eligibility_where=eligibility_where,
-            attempts_allowed=attempts_allowed,
-        )
-    else:
-        # 默认路径：不 verify / 不 retry —— 规则 verdict 已在 aretrieve_evidence 内写入 metadata
-        result = _verdict_from(fused)
-        attempts_allowed = retry_count = 0
+    """默认路径：不 verify / 不 retry —— 规则 verdict 已在 aretrieve_evidence 内写入 metadata。
 
+    ★ 2026-10-15 owner 裁定 B5：原 `use_llm_verify=True` 分支（LLM verify + 最多一次
+      retry，`_verify_with_optional_retry`）随 LLM 校验层整层删除；本函数只剩默认路径。
+      参数 `max_retries` / `use_llm_verify` 已从入口一并移除（全调用点恒 False/0）。
+    """
+    result = _verdict_from(fused)
     _emit_evidence_metric(
         query=query,
         collection_name=collection_name,
         start=retry_metric_start,
         fused=fused,
-        retry_count=retry_count,
-        max_retries=attempts_allowed,
-        use_llm_verify=use_llm_verify,
     )
     return fused, result
 
@@ -286,22 +228,21 @@ async def aretrieve_evidence_with_retry(
     depth: RetrievalDepth | None = None,
     on_stage: StageSink | None = None,
     *,
-    max_retries: int = 1,
-    use_llm_verify: bool = False,
     preferred_layers: Sequence[str] | None = None,
     eligible_layers: Sequence[str] | None = None,
 ) -> tuple[FusedEvidence, VerificationResult]:
-    """异步检索入口：默认**不走** verify/retry，可选 LLM verify + 最多 1 次 retry。
+    """异步检索入口（agent / 检索门禁 / RAGAS / 探针同口）。
 
-    路径：
+    路径（2026-10-15 B5 后唯一路径）：
 
-        use_llm_verify?
-           │
-           ├─ False（默认）→ 直接返回
-           │    规则 verdict 已在 aretrieve_evidence 内写入 metadata，
-           │    不再二次 verify、不触发 retry。
-           │
-           └─ True → LLM verify → 必要时 retry **1 次** → 再 verify
+        retrieve → 规则 verify（在 aretrieve_evidence 内）→ 返回
+
+    ★ 函数名 `with_retry` 是**历史遗留**：原「可选 LLM verify + 最多一次 retry」分支
+      已随 LLM 校验层删除（owner 裁定 B5，2026-10-15；全调用点恒 `use_llm_verify=False`、
+      从未启用）。保留函数名不改，是为避免六处调用点与文档锚点连带改写；重命名
+      （如 `aretrieve_evidence_entry`）列为冻结后清理项，须走 EFFECT_PLAN §6 新版本流程。
+    ★ 规则 verdict 仍在 `aretrieve_evidence` 内由 `_verify_fused` 写入 metadata，
+      本入口只透出，不二次 verify。
 
     ``preferred_layers``：候选池 top-up（Candidate Pool Recall），保证目标层进池。
     ``eligible_layers``：policy 认定的**合规语义层**（`TaskPolicy.eligible_semantic_layers()`）。
@@ -321,12 +262,6 @@ async def aretrieve_evidence_with_retry(
         query,
         collection_name,
         retry_metric_start=retry_metric_start,
-        current_kwargs=current_kwargs,
-        allowed=allowed,
-        preferred_layers=preferred_layers,
-        eligibility_where=filter,
-        max_retries=max_retries,
-        use_llm_verify=use_llm_verify,
     )
 
 

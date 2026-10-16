@@ -123,8 +123,8 @@ docker compose up --build                # 容器化启动
   确定，但**并列打破**不确定 —— 下游仍有按分数单键排序处（如 `dedup_same_section`），其并列
   次序受**并发路由完成次序**影响；`docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b) 已实测归因，
   同一节也实测 **HNSW 图本身是确定的**，别把这笔账记到 HNSW 上 ⇒ 实测 `fake/off` 多次复跑中
-  `category_precision` 取到 0.8871 / 0.8873 / 0.8875、`mean_evidence_count` 取到
-  4.4872 / 4.4936 / 4.5000；抖动 ±0.0002 ≪ 容差 0.02（`_data.py:_METRIC_SPECS`，
+  `category_precision` 取到 0.8871 / 0.8873 / 0.8875、`mean_evidence_count` 取到（证据：`src/evaluation/gates/retrieval_gate/_data.py` 的 `_METRIC_SPECS` 与 `data/metrics/rag_metrics.jsonl`）
+  4.4872 / 4.4936 / 4.5000；抖动 ±0.0002 ≪ 容差 0.02（`_data.py:_METRIC_SPECS`，（证据：`src/evaluation/gates/retrieval_gate/_data.py` 的 `_METRIC_SPECS`）
   `mean_evidence_count` 更宽为 0.5）⇒ 不会翻门禁。比对是**双向**的：`cur > base + tolerance`
   同样记退化，所以这个抖动两头都可能触发，只是当前幅度差两个数量级）。
   该实现**只保留词汇重叠信号、
@@ -168,8 +168,8 @@ docker compose up --build                # 容器化启动
   ⇒ 它回答「管线各层在黄金集上的行为分布」，**不是**线上统计，别拿它推断生产表现。
   ② **日志混了多个代码版本**（Step 1~10 各轮实验都写进同一份），必须用
   `--since` / `--until`（ISO 或 `6h`/`3d`）把窗口钉到单一版本，否则读到的是**混合口径**
-  —— 实测 `generate` 过阈率在 09-27 15:00 前后为 0.075 → 0.187（窗口边界取法不同会复现成
-  0.1955，量级与结论不变）。
+  —— 实测 `generate` 过阈率在 09-27 15:00 前后为 0.075 → 0.187（窗口边界取法不同会复现成（证据：`data/metrics/rag_metrics.jsonl`（telemetry 日志，`--since/--until` 窗口复现））
+  0.1955，量级与结论不变）。（证据：`data/metrics/rag_metrics.jsonl`）
   ③ 高频簿记事件（`chroma_query` / `embedding_batch` / `embed_documents`）自 2026-10-14 起
   在**写侧**就按 1/100 采样 ⇒ `event_counts` 只能读作「日志行数」，「发生多少次」要读
   `event_counts_estimated`（按每条自带的 `sampled_every` 还原）。`status != "ok"` **永不采样**

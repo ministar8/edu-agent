@@ -40,6 +40,11 @@ class CaseRecord:
     # ★ Verify 的行为层三判据（D14）：§3.1 冻结的头号指标 `question_id_recall@k` 不可计算（#20/D7），
     #   而 `final_quality≥4` 在 verify 上测的是**检索覆盖**（未达成 case 的诚实拒答是正确行为）
     #   ⇒ 由这三条把 §6 的 Verify 行 gate 住。None = **没测**（无回复 / 探针跑），不是"没出题"。
+    # ★ 2026-10-15 起（owner 裁定 B2 第三路）三域极性 = **verdict 极性**
+    #   （True=pass=没编造），与 backfill 同源；判定入口只有 registry 一处。
+    #   ⚠ phase1 代归档（runner 旧直写）是 **metric 极性**（True=仍出题=坏事），
+    #   读取方必须按 `item_reasons` 标记解码（阙如 ⇒ metric 极性），见
+    #   `report._fabrication_flag`；新旧代际数值**不得**直接并列相减。
     ver_fabricated: bool | None = None  # 仍出题（编了新练习题）—— §6 的**硬条件**：必须 0
     ver_exam_item_cited: bool | None = None  # L1：给出可核对的真题条目（年份 + 题号/题干）
     ver_exam_year_only: bool | None = None  # L2：只报年份/来源与考点归属（与 L1 互斥）

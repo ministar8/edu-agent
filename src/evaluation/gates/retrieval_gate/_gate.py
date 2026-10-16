@@ -109,8 +109,6 @@ async def _run_one_query(
             k=GATE_K,
             # 传「调用方是否要求重排」——disabled 态要求了、但部署开关会短路它
             use_rerank=rerank_requested(),
-            max_retries=0,
-            use_llm_verify=False,
         )
     except Exception as exc:  # noqa: BLE001 — 门禁要把"任何异常"都算作失败证据
         errors.append((query, f"{type(exc).__name__}: {exc}"))

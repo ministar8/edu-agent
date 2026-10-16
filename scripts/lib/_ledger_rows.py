@@ -184,8 +184,10 @@ def _row_generate(ctx: dict[str, Any]) -> dict[str, Any]:
     )
     if gold_deps:
         notes.append(
-            f"gold 依赖判据（{', '.join(gold_deps)}）的前提是盲标 gold（P−1，暂停中）；"
-            "缺失时按契约记 missing_premise 并原样传播——诚实状态，不是失败，也不得折成 pass/fail"
+            f"gold 依赖判据（{', '.join(gold_deps)}）的前提是盲标 gold（P−1；"
+            "填写状态逐条见 demo 数据集与 `task_eval sanity` 输出）；"
+            "gold 缺失 / 来源不完整 / 缺键时按契约记 missing_premise 并原样传播"
+            "——诚实状态，不是失败，也不得折成 pass/fail"
         )
     for p in preds:
         st = blocks.get(p.name) or {}
@@ -244,7 +246,8 @@ def _row_verify(ctx: dict[str, Any]) -> dict[str, Any]:
     blk = blocks.get("ver_fabricated") if recs else None
     return {
         "metric": "仍出题率 `ver_fabricated`（硬条件必须 0；D14 行为层把门——§6 原文 "
-        "final_quality≥4 在 verify 上测的是检索覆盖，只作诊断）。值为**坏事率**",
+        "final_quality≥4 在 verify 上测的是检索覆盖，只作诊断）。★ 值为**通过率**"
+        "（`pc.rate`，pass=未编造真题）⇒ 1.000 = 15/15 未编造 = 仍出题率 0，**越高越好**",
         "block": blk,
         **tier_decl_derived(
             "Verify",
@@ -253,7 +256,10 @@ def _row_verify(ctx: dict[str, Any]) -> dict[str, Any]:
         ),
         "backing": tuple(p.name for p in hard),
         "records": recs,
-        "notes": ["值口径：rate 越高越坏（1.000 = 每条仍在编造真题）；门槛要求见 §6 原文列"],
+        "notes": [
+            "值口径：rate 为判据**通过率**（pass=未编造真题），越高越好；"
+            "§6 硬条件「仍出题率 = 0」即本行 = 1.000；门槛要求见 §6 原文列"
+        ],
     }
 
 

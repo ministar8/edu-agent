@@ -129,8 +129,6 @@ async def probe_retrieval(
             k=candidate_k,
             use_rerank=use_rerank,
             filter=recall_filter,
-            max_retries=0,
-            use_llm_verify=False,
             preferred_layers=list(policy.preferred_layers),
             eligible_layers=policy.eligible_semantic_layers(),
         )

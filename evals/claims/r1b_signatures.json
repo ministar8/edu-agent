@@ -1,0 +1,58 @@
+{
+  "_signing_scope_note": "本文件为 R1-B 逐判据签署（EFFECT_PLAN.md §1.2 / §3.1）。签署口径 = registry 判据与 §3.1 冻结条文的**映射已审**，不是「已测」签署（owner 2026-10-15 裁定表第 7 项，原文：「A3 可签（注明是『映射已审』非『已测』）」）。判据的**实测状态**以 ledger 主表为准（Generate 两判据按 V0② option B 作 limitation 披露，见 docs/EXPERIMENTS.md §20.7.6④）；本签署不构成对未测判据的效果背书。授权留痕：evals/results/task_eval/FREEZE_CHECKLIST_20261015.md 第 7 项裁定 + §20.7.6⑦。",
+  "ver_fabricated": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1/§6 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "ver_exam_item_cited": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1/§6 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "ver_exam_year_only": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1/§6 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "gen_structure": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "gen_answerability": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "gen_coverage": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "gen_correctness": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "gen_difficulty": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "gen_answer_key_validity": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "gen_analysis_agreement": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  },
+  "memory_correct_use": {
+    "signed_at_version": "d1ce8df-dirty",
+    "signing_scope": "registry↔EFFECT_PLAN §3.1 映射已审；非「已测」",
+    "signed_by": "owner（2026-10-15 裁定表授权）"
+  }
+}

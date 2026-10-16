@@ -436,7 +436,17 @@ def difficulty_of(reply: str) -> str | None:
     """从生成题正文里抽难度档（`gen_difficulty` 的实际侧输入）。
 
     ★ 抽不出来 ⇒ 判据返回 `missing_premise` 而**不是** `fail`：解析器的失败不能记成
-      产品的失败。`_as_difficulty()`（:664）已负责把中文档名映射到 1–5，这里只做抽取。
+      产品的失败。
+    ★ 2026-10-15 owner 裁定 B6（选项②暂行登记 + 修 docstring）：原 docstring 声称
+      「`_as_difficulty()`（:664）已负责把中文档名映射到 1–5」是**假的** ——
+      ① 行号漂移（该函数已拆至 `_metrics_common.py`，metrics.py 无 :664）；
+      ② 映射表 `_metrics_common._DIFFICULTY_MAP` **只有英文项**
+      （basic/easy/medium/mid/hard/difficult），没有任何中文档名；
+      ③ 实测本批复归档抽到的档名是「理解」（14/15，认知层次动词）—— 它既不在
+      `_DIFFICULTY_LINE` 的抽取词表里、也不在任何映射表中 ⇒ `_as_difficulty` 恒 None
+      ⇒ `gen_difficulty` 结构性 missing_premise 15/15。补映射 = **判据口径变更**
+      （须同时定抽取词表与中文→1–5 映射取法，后果非唯一），owner 已裁定暂不补、
+      按「机械判据适用域不含中文难度行」披露；补法待 C 段后按 EFFECT_PLAN §6 流程。
     """
     m = _DIFFICULTY_LINE.search(str(reply or ""))
     return m.group(1) if m else None

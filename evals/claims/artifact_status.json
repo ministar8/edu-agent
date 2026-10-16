@@ -8,8 +8,8 @@
   {
     "path": "evals/results/task_eval/phase1_gen_anchor5_20261008.jsonl",
     "status": "superseded",
-    "superseded_by": "evals/results/task_eval/ec_r1_final_gate.jsonl",
-    "reason": "composite_na_semantics_changed"
+    "superseded_by": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
+    "reason": "gen_records_inherited_into_ec_r2_with_blindlabel_gold（原 superseded_by=ec_r1 系误挂：ec_r1 的 gen 为修复前回复，不承接 anchor5 的出题修复后记录，2026-10-15 改正）"
   },
   {
     "path": "evals/results/task_eval/phase0_baseline_final.report.md",
@@ -55,9 +55,9 @@
   },
   {
     "path": "evals/results/task_eval/ec_r1_final_gate.jsonl",
-    "status": "active",
-    "superseded_by": "",
-    "reason": ""
+    "status": "superseded",
+    "superseded_by": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
+    "reason": "gold_blindlabel_backfill_gen_from_anchor5"
   },
   {
     "path": "evals/baselines/retrieval_baseline.json",
@@ -97,6 +97,18 @@
   },
   {
     "path": "docs/EXPERIMENTS.md",
+    "status": "active",
+    "superseded_by": "",
+    "reason": ""
+  },
+  {
+    "path": "evals/results/task_eval/ec_r2_goldinjected_20261015.jsonl",
+    "status": "superseded",
+    "superseded_by": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
+    "reason": "backfill_recompute_predicates（gold 注入中间件，判据仍是旧值）"
+  },
+  {
+    "path": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
     "status": "active",
     "superseded_by": "",
     "reason": ""
