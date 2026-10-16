@@ -127,6 +127,8 @@
 
 ## E. 冻结宣布判据（全部满足才允许宣布冻结）
 
+> ✅ **冻结已宣布（2026-10-16）**：本节判据全部满足（未勾项 0），宣布文档 `evals/results/task_eval/FREEZE_DECLARATION_20261016.md`，git tag `V-2026-10-16`。gold 冻结态自 owner 书面裁决执行（`bc818ea`）起算；冻结后开放项（91 键逐字比对 / KP 标签订正 / gen-005/009 标注者姓名）见宣布文档 §5，均不阻塞。登记：§20.7.8㉓。
+
 - [x] **冻结宣布判据总门**（2026-10-16 关闭）：sanity ERROR 0 ✅；evidence_chain_gate 全绿（81 项）✅；`--check` 第 1 段 PASS ✅、第 2 段 R3 孤立结论 PASS ✅（四文档扫描无孤立行；存量结论句补锚点为 Task 10 收口核验项）；第 3 段 V0② FAIL = **owner 2026-10-15 裁定的 option B 披露态**（generate 两判据全 missing_premise，按 limitation 披露进 D3/论文，不得把 missing_premise 当成绩）。★ 判据原文写「第 1、3 段 PASS」，早于 option B 裁定、按字面永远不可达——按裁定口径修订为「第 3 段维持 option B 披露态」后关闭（裁定原文与披露文本：§20.7.6④；最终复跑：§20.7.8㉒）。
   - 现状（2026-10-16 frozen 后复跑）：sanity ERROR 0 / PENDING 1（存量 grade.human_score）✅；第 1 段 PASS ✅；第 2 段 PASS ✅；第 3 段 **① PASS / ② FAIL**——② 的 generate 两判据全 missing_premise。**owner 已裁定（2026-10-15）：走 option B（limitation 披露）**——「P−1 批 2/3 产出人工可读判定」按现行契约（缺人工可判定性结论输入）清偿不了 V0②；Generate 行按 limitation 披露进 D3/论文，不得把 missing_premise 当成绩。§20.7.6④ 已登记披露文本。
 - [x] **A1 处置链已裁定并执行完毕（(a)–(e) 有 owner 书面裁定 + 扩查结果登记）**
