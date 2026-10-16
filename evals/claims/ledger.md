@@ -68,7 +68,7 @@
 ## 判据级三态（registry 全量重算 · 诊断附表）
 
 > ★ `falsify=✓` 但「归档重算」n=0 有效测量（全 missing_premise，如 `gen_correctness`）时，状态词仍是「已测量未证明」——这来自**冻结公式**（brief Step 2 / `claims.derive_status`：只有 `not discriminating and not falsify_passed` 才判「未测量」），本表逐字执行、不改判。
-> ★ 该格里 mutation 取证测的是**判据对契约输入的敏感性**（取证夹具自带 gold ⇒ 能翻转），**不是主张的数值**；数值一侧在真实归档上仍全 missing_premise（P−1 盲标暂停中）。§1.1 表把「gold 前提不存在」列为未测量，与 Step 2 公式在这一格上口径不一致（证据：`docs/EVIDENCE_CHAIN.md` §1.1 ↔ 本 brief Step 2 冻结公式）—— 属计划级缺口，已登记，待 Task 10 文档收口。
+> ★ 该格里 mutation 取证测的是**判据对契约输入的敏感性**（取证夹具自带 gold ⇒ 能翻转），**不是主张的数值**；数值一侧在真实归档上仍全 missing_premise（P−1 盲标已由 2026-10-15 38 条审核 + 6 条 needs_fix 修复签署闭环为 reviewed 66/66，generate 的 gold 已填写——剩余未测根因是判据结构性不可测）。**§1.1 口径差已于 2026-10-16 Task 10 文档收口**（控制器裁定：改 §1.1 措辞对齐冻结公式、不动 `derive_status`）：现行判据以 `docs/EVIDENCE_CHAIN.md` §1.1 为准，本注记保留「mutation 敏感性 ≠ 主张数值」的区分依据；「与 §1.1 口径不一致 / 待 Task 10 收口」为历史指向。
 > ★ 债的可见性（Task 7 Step 4b）：`tier 依据` 列里的 `TIER-DEBT-task3` 是**债标记**、不是依据 —— 标着它的判据，其 tier 值与 §1.3 的证据种类**不符**（`fn` 是确定性字符串/字段比较，按定义应为 tier 0/1，却写着 2），已登记为 Task 3 遗留债、本轮只登记不改。护栏 `7g` 通过的语义是「债名单与登记一致」，**不是**「债务已清偿」；清偿（改 tier）时 `7g` 会红，必须同步删除这条登记。
 
 | 判据 | task | tier | tier 依据（白名单锚点／债标记） | 归档重算 | falsify | tier_ok | disc | prov | sign | 状态词 |
@@ -121,4 +121,5 @@ falsify_passed 逐判据读数（三条口径见页首）：
 | evals/claims/falsify_latest.json | active | — | — |
 | evals/datasets/demo/calibration_30.jsonl | active | — | — |
 
-> 本 ledger 当前只登记 active；历史归档的 superseded 标注由 Task 10 收尾。
+> 本表由 `--records` 传入的当代归档 + falsify 取证件 + calibration 集生成，故只出现 active 代工件。
+> **历史归档的 superseded 谱系完整登记于 `evals/claims/artifact_status.json`**（Task 10 A.1 已于 2026-10-08 收尾、2026-10-16 复核：13 条 superseded 的 `superseded_by` 全部指向在库工件、无悬空；`superseded` ≠ `invalidated`——被替代不代表原始记录无效）。

@@ -127,8 +127,8 @@
 
 ## E. 冻结宣布判据（全部满足才允许宣布冻结）
 
-- [ ] sanity ERROR 0；evidence_chain_gate 全绿；`--check` 第 1、3 段 PASS（第 2 段按 B4 裁定的存量披露）。
-  - 现状：sanity ERROR 0 ✅（A2 后复跑）；第 1 段 PASS ✅；第 3 段 **① PASS / ② FAIL**——② 的 generate 两判据全 missing_premise。**owner 已裁定（2026-10-15）：走 option B（limitation 披露）**——「P−1 批 2/3 产出人工可读判定」按现行契约（缺人工可判定性结论输入）清偿不了 V0②；Generate 行按 limitation 披露进 D3/论文，不得把 missing_premise 当成绩。§20.7.6④ 已登记披露文本。
+- [x] **冻结宣布判据总门**（2026-10-16 关闭）：sanity ERROR 0 ✅；evidence_chain_gate 全绿（81 项）✅；`--check` 第 1 段 PASS ✅、第 2 段 R3 孤立结论 PASS ✅（四文档扫描无孤立行；存量结论句补锚点为 Task 10 收口核验项）；第 3 段 V0② FAIL = **owner 2026-10-15 裁定的 option B 披露态**（generate 两判据全 missing_premise，按 limitation 披露进 D3/论文，不得把 missing_premise 当成绩）。★ 判据原文写「第 1、3 段 PASS」，早于 option B 裁定、按字面永远不可达——按裁定口径修订为「第 3 段维持 option B 披露态」后关闭（裁定原文与披露文本：§20.7.6④；最终复跑：§20.7.8㉒）。
+  - 现状（2026-10-16 frozen 后复跑）：sanity ERROR 0 / PENDING 1（存量 grade.human_score）✅；第 1 段 PASS ✅；第 2 段 PASS ✅；第 3 段 **① PASS / ② FAIL**——② 的 generate 两判据全 missing_premise。**owner 已裁定（2026-10-15）：走 option B（limitation 披露）**——「P−1 批 2/3 产出人工可读判定」按现行契约（缺人工可判定性结论输入）清偿不了 V0②；Generate 行按 limitation 披露进 D3/论文，不得把 missing_premise 当成绩。§20.7.6④ 已登记披露文本。
 - [x] **A1 处置链已裁定并执行完毕（(a)–(e) 有 owner 书面裁定 + 扩查结果登记）**
   - ✅ **裁定已落（2026-10-15，有条件采纳）**：(a) 已生效；(b) 采纳 + **carve-out**——grade 12/15 已独立核验的 gold 不受误伤（carve-out 口径：12 条 gold 值 10-14 已人工核验≠第 52 题核验的 12 条指针落层，两者在 §20.7.6⑤ 分开记账）；(c) 采纳但**成本订正 ≈4–5 人时**（原估 1.5–2 低估约 3 倍：七层各 ≈39–40 题，50% ≈140 条，扣已采 24 ⇒ **116 新增 + 相邻批次 10 = 126 条读数**）；(d) 采纳但**排在 (c) 之后**；(e) **现在与 (c) 一起预授权**。
   - ✅ **扩查执行完毕且已登记（§20.7.7）**：126 行读数入仓 + 机械复算 126/126 一致；(c) 的「错键确认」环节因读数为第三方页值（非原卷盲读）**未闭环**——78 条暂定不一致待正式原卷复核（优先队列：2011 十六条 + 78 清单；空键 13 条其中 10 条在 2009 已核实）。复核完成前 (d) 暂缓、(e) 未触发；复核仍现错键 ⇒ 按预授权即触发 exams 链暂停。
@@ -141,8 +141,8 @@
   - 📌 **[旧态存档·2026-10-16 修订前，已被上一行取代，不构成现行状态]** 原两条 A4 现状——「✅38 条审核执行并回填完毕……frozen 裁决未做……gold sha256 记入新归档 provenance」与「⏳ filled 工件待入仓核对……审完 + A1 扩查落地后才可裁决 frozen」——互相矛盾（后者判令已被前者及 §20.7.8⑭ 满足），且「gold sha256 记入新归档 provenance」有歧义（ec_r3 provenance 的 `golden_sha256`=检索黄金集 `sample_408.jsonl` `783e78ff…`，不覆盖 demo gold）。原文文本留档于 git 历史与 §20.7.8，本清单内以存档标记代存，不再作为现状陈述。
 - [x] **B1 归档代际裁定已由 owner 复核（2026-10-15）：维持 ec_r2 混合代际**（备选「保持 ec_r1 + V0 ① 留红至 C1」未采纳；依据 §20.7.5② 实测：同 case_id 题干不同 ⇒ 直接挂 gold = 假 gold）。
 - [x] **B2 ec_r1/ec_r2 `ver_fabricated` 分歧已修（owner 第三路：改 backfill 落盘口径）**：runner 统一走 registry 判据（两写入方同源同极性）+ report 凭 `item_reasons` 标记无歧义解码 + `cli._backfill` 覆盖已存值显式记账；ec_r2 边车重生 `ver_fabrication` 1.000→**0.000**（归档 jsonl 一字节未动，ledger 该行实时重算本就 0 假红仅边车）；`tests/test_verify_fabrication_polarity.py` 7 项回归。实测佐证「选项①修不了」：重 backfill 出的 ec_r1 v2 仍带 verdict 极性 True ⇒ 同病的是**极性**不是字段新鲜度。
-- [ ] §6 门槛行在全量口径下有读数；每一行要么达线，要么已按 limitation 披露——**不允许「已测量未证明」被当作成绩引用**（V0 ② 的红就是这个意思）。
-- [ ] provenance_match 与当前 `code_version`/`golden_sha256` 一致（C1 的直接目的）。
+- [x] §6 门槛行在全量口径下有读数；每一行要么达线，要么已按 limitation 披露——**不允许「已测量未证明」被当作成绩引用**（V0 ② 的红就是这个意思）。（✅ 2026-10-16 关闭：ec_r3 全量口径下 11 行门槛行**全部有读数**——ledger §6 状态词分布=已测量未证明 7 行 / 未测量 4 行；有读数未达「已证明」的行一律按「已测量未证明」引用纪律处理，未测量/不可判行已按 limitation 逐条披露（Generate N/A=V0② option B、Memory 有效 n=2 必带分母、Grade 两极 gold 改读 verdict_agreement、Docker/TEI 无归档证据源等，D3 核对 13/13 一致）。证据：`evals/claims/ledger.md` §6 表；`evals/results/task_eval/D1_D3_WRAPUP_20261016.md`。）
+- [x] provenance_match 与当前 `code_version`/`golden_sha256` 一致（C1 的直接目的）。（✅ 2026-10-16 按设计特性口径关闭：该布尔量比对**检查时** HEAD（`provenance.code_version()` = 实时 `git rev-parse` + CODE_PATHS dirty 检测）——C1 全量重跑在无后续提交的窗口内达成 **66/66 转正**（八键齐全且与当时 `code_version`/`golden_sha256` 一致，§20.7.8⑯）；此后任何提交都会使重算值归 0，这是固有形态而非失败/回归（ec_r2 历史稳定态同为 0 行）。特性登记 §20.7.8⑯⑥；ledger.md 按各 HEAD 重新生成保持段 1 PASS。**引用纪律**：provenance_match=True 只可在 C1 归档生成当时的语境声称；跨提交重算为 0 不得读成冻结质量问题。）
 - [x] D1/D2/D3 收口（✅ 2026-10-16 完成：`D1_D3_WRAPUP_20261016.md`；`artifact_status.json` ec_r3 active；论文引用的每个数字可经 ledger「复现」列当场重算）
 
 ## F. 冻结后纪律（禁止事项）

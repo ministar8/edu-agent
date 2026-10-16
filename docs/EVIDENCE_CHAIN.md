@@ -86,10 +86,16 @@ provenance 100%（§6）。断层的全部来源是这一句：
 > ① 读者看到「已测量未证明」配「已测 n=0」这一对时**仍然反直觉** —— 状态词说的是「判据有没有牙齿」，
 > 数值列说的是「归档里有没有数」，两者本来就在问不同的问题，但并排印出来就像矛盾；
 > ② `evals/claims/ledger.md` 判据级附表那条 ★ 注记**保留**（它给的是依据：冻结公式 + mutation 测的是
-> **判据对契约输入的敏感性、不是主张的数值**），★ 但它是 `scripts/lib/build_claim_ledger.py` 的渲染产出、
-> 本 Task 不改代码 ⇒ 注记里「与 §1.1 口径不一致 / 待 Task 10 文档收口」那半句在收口后要读作
-> **历史指向**（现行判据以本节为准）；把注记文本一起刷新需要一次动 `scripts/` 的小改；
+> **判据对契约输入的敏感性、不是主张的数值**）。**2026-10-16 Task 10 收口时已执行那次 `scripts/` 小改**
+> （`scripts/lib/_ledger_render.py` 两处注记文本刷新 + ledger.md 重生成，段 1 check PASS）：
+> 注记旧文本「与 §1.1 口径不一致 / 待 Task 10 文档收口」已刷新为收口表述，该半句现读作**历史指向**
+> （现行判据以本节为准）；ledger 尾部「只登记 active」注记同步刷新为指向 `artifact_status.json` 的
+> superseded 谱系说明（13 条 superseded 指向全部在库、无悬空，2026-10-16 复核）；
 > ③ 这一格**不因此变成「已证明」**，也不免除 V0 ② 对「required 判据全未测量」的拦截。
+> **Task 10 文档收尾状态（2026-10-16）**：A.1 superseded 标注完备性复核通过（22 条登记/13 superseded/
+> 9 active、`superseded_by` 全在库、`superseded` ≠ `invalidated` 口径保持）；A.2–A.4 措辞纪律由各轮
+> §20.7 偏离登记与 D3 13/13 局限核对承接；B 表开放项（9i、tier 债、并发语义、empty/failed 张力等）
+> **维持待处理登记**，不声称完成；C 清理项（差分 worktree、`tmp_*.py`）不在本次范围内。
 
 **工件状态**（artifact_status，历史数据用，不改写数值）：`active` / `superseded` / `invalidated`，
 `superseded` 必须带 `superseded_by` + `reason`（如 `predicate_semantics_changed`）。
