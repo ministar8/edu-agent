@@ -102,9 +102,10 @@
   - 命令：默认 / `GATE_RERANK_MODE=on` / `GATE_RERANK_MODE=disabled` / `GATE_USE_REAL_EMBEDDING=1`（+`GATE_USE_REAL_RERANK=1` 权威路由）；CI 只覆盖默认路由，**权威路由必须本机手跑**。
   - 红线：指标若动，`--update-baseline` 后按 §20.7 登记（`scripts/ops/check_baseline_diff_registration.py` 两向核对），**禁止静默重录**；`check_baseline_sanity` 内建防故障态写基线。
 
-- [ ] **C3 RAGAS 冻结集（仅必要时）**
-  - `evaluation.ragas.cli --dataset evals/datasets/golden/sample_408.jsonl`（黄金集口径已校正）；报告须带 `_meta.warnings`（假 embedding 警示）与 `dropped_metrics`（若有指标被摘）。
-  - 与 `metrics.json` n=20 锚点（V-2026-10-02）的可比性判定：`LLM_MODEL` 未动才可比，动了须登记。
+- [x] **C3 RAGAS 冻结集**（2026-10-16 完成，1h54m；登记 §20.7.8⑱）
+  - `evaluation.ragas.cli --dataset evals/datasets/golden/sample_408.jsonl --tag freeze20261016`（黄金集口径已校正：**全量 156 条**，code 32 / concept 60 / generate 32 / grade 32；真实 bge-m3 embedding、rerank 生效、judge=qwen3.8-flash）。
+  - 结果（引用必须带分母）：faithfulness 0.8109（n=112/156）、context_precision 0.7454（n=113/156）、context_recall 0.5963（n=108/156）、answer_relevancy 0.7217（n=111/156）；`_meta.warnings` 无、`dropped_metrics` 无。
+  - 与 `metrics.json` n=20 锚点（V-2026-10-02）的可比性判定：**五处口径全不同**（judge `qwen3.8-max-0902`→`qwen3.8-flash`、n=20 分层→156 全量、rerank 未生效→生效、golden `be98912a`→`783e78ff`、code `0479d6e`→`7220229`）⇒ **不可直接可比**，新旧读数只能并列披露、不得表述为改善/退化（已登记）。
 
 - [x] **C4 Memory 三个 gate（条件式）**（2026-10-16 执行，触发条件成立；登记 §20.7.8⑰②–⑤）
   - 触发条件核验：上次 Memory gate 之后写链/评测器**确有变更**（`67a672b` 改 runner/metrics/_runner_record；5df3e47/2ae5291 改门禁区）⇒ 三 gate 全跑，非「未改不需重跑」。

@@ -1,0 +1,83 @@
+{
+  "_meta": {
+    "n": 156,
+    "run_config": {
+      "dataset": "evals/datasets/golden/sample_408.jsonl",
+      "limit": null,
+      "generation_model": "dashscope:qwen3.7-flash",
+      "judge_model": "dashscope:qwen3.8-flash",
+      "sample_per_type": null,
+      "query_type_distribution": {
+        "code": 32,
+        "concept": 60,
+        "generate": 32,
+        "grade": 32
+      },
+      "retrieval_k": 5,
+      "requested_use_rerank": true,
+      "effective_rerank_enabled": true,
+      "embedding_fake": false,
+      "embedding_model": "BAAI/bge-m3",
+      "metrics_requested": [
+        "faithfulness",
+        "context_precision",
+        "context_recall",
+        "answer_relevancy"
+      ],
+      "ragas_run_config": {
+        "timeout": 120,
+        "max_retries": 1,
+        "max_wait": 3,
+        "max_workers": 2,
+        "batch_size": 2
+      },
+      "include_details": false,
+      "n_filled": 156,
+      "n_loaded": 156,
+      "generated_samples_path": "evals\\results\\generation\\ragas\\ragas_freeze20261016_samples.jsonl"
+    }
+  },
+  "faithfulness": {
+    "mean": 0.8109,
+    "n": 112
+  },
+  "context_precision": {
+    "mean": 0.7454,
+    "n": 113
+  },
+  "context_recall": {
+    "mean": 0.5963,
+    "n": 108
+  },
+  "answer_relevancy": {
+    "mean": 0.7217,
+    "n": 111
+  },
+  "recorded_at": "2026-10-16T09:01:57.971478+00:00",
+  "provenance": {
+    "recorded_at": "2026-10-16T09:01:57.971478+00:00",
+    "code_version": "7220229",
+    "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
+    "script": "src/evaluation/ragas/ragas_eval.py",
+    "argv": [
+      "--dataset",
+      "evals/datasets/golden/sample_408.jsonl",
+      "--tag",
+      "freeze20261016",
+      "--output-dir",
+      "evals/results/generation/ragas"
+    ],
+    "model_refs": {
+      "agent": "deepseek:deepseek-flash",
+      "rag_chain": "dashscope:qwen3.7-flash",
+      "judge": "dashscope:qwen3.8-flash"
+    },
+    "sampling": {
+      "temp_precise": 0.0,
+      "temp_creative": 0.3,
+      "temp_default": 0.3
+    },
+    "experiment_config_hash": "bf525126e8c3",
+    "dependency_lock_hash": "881607c7955b"
+  }
+}
