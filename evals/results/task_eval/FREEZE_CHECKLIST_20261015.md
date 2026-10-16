@@ -86,10 +86,11 @@
 
 > 次序红线：`gold_status`/`golden_sha256` 会随 gold 变，**先重跑等于把 draft 的数字再取一遍**——A/B 未完成不得开跑（HANDOVER ⑶）。
 
-- [ ] **C0 前置**
+- [x] **C0 前置**（2026-10-16 执行，三层冒烟全过；登记 §20.7.8⑮）
   - TEI 就绪：`docker start tei-embedding tei-rerank` + `PYTHONPATH=src uv run python scripts/ops/tei_ready.py`（`/health` 200 ≠ 模型就绪）。
   - 配置口径核对：agent=`deepseek:deepseek-flash` · judge=`dashscope:qwen3.8-flash` · RAG=`dashscope:qwen3.7-flash` · `STRUCTURED_OUTPUT_METHOD=function_calling`（PHASE0_FREEZE §一）；任何偏离须提前登记。
   - `task_eval sanity` ERROR 0（进 0B 级操作前必跑）。
+  - **冒烟测试（owner 批 token 的前置条件）**：零 token 层 `--limit 1 --no-agent` 全任务检索链 ✓；最小 LLM 层 `--limit 1` 真跑（n=5，QA/Grade/Memory 5.0 零失败；Generate/Verify 各 1 条 n=1 单样本内容层现象）；归档层 5 条 record provenance 9 键齐备 ✓。
 
 - [ ] **C1 §7.3 全量重跑 66 条**（`PYTHONPATH=src uv run python -m evaluation.task_eval run`；参照上轮 chat ≈453 次 + TEI embeddings ≈3665）
   - 通过判据：66 条归档带齐 provenance 八键、`code_version`/`golden_sha256` 与运行态一致（ledger `provenance_match` 从 0/66 转正）；§6 每行有「实测 vs 门槛」记录，不达照实写。
