@@ -10,7 +10,7 @@
 |---|---|---|
 | evidence_chain_gate | ✅ 81 项全绿 | `PYTHONPATH=src uv run python scripts/gates/evidence_chain_gate.py` |
 | ledger `--check` 第 1 段（文档==重算） | ✅ PASS | 见 B1 命令 |
-| ledger `--check` 第 2 段（R3 孤立结论） | ❌ FAIL（历史文档遗留，**非阻塞**，B4 收尾） | 同上 |
+| ledger `--check` 第 2 段（R3 孤立结论） | ✅ PASS（2026-10-16 B4 清零：254+2+4 条逐条回验挂锚） | 同上 |
 | ledger `--check` 第 3 段（V0 拦截） | 🟡 **① PASS / ② FAIL**（2026-10-15 A2 后定格）：① 4 组 ×15 缺键**已清零**（gold 快照注入 `ec_r2` 新归档）；② generate/`gen_answerability`+`gen_correctness` 仍全 missing_premise——**owner 已裁定走 option B（limitation 披露，§20.7.6④）：generate 两判据按现行契约缺「人工可判定性结论」输入，结构性不可机械清偿，不得把 missing_premise 当成绩** | 见 B1 命令 |
 | P−1 答案键抽查 | 🟡 **已核验 59/59，结论 fail**：错键 14/59 = **23.7%**；**扩查 126 行已执行（第三方页读数，暂定 35/78/13，机械复算 126/126 一致）**；错键确认环节待**正式原卷盲读复核**（读数为第三方页值 ⇒ (e) 未触发、(d) 暂缓）；明细 `P1_KEY_AUDIT_20261015.md` + §20.7.7 | `evals/claims/p1_key_audit_sample.json` · `evals/claims/p1_expanded_audit_20261015.json` |
 | R1-B 签署 | ✅ **已签（映射已审≠已测）**：`evals/claims/r1b_signatures.json` 11 判据在册 ⇒ ledger `signed=3` 行（Verify / Generate / Memory；QA / Grade 无 registry 判据照实未签） | ledger 主表「R1-B 签署」列 |
@@ -66,9 +66,9 @@
   - 事实：该行显示的是判据**通过率**，1.000 = 15/15 未编造（= §22 达线）；注记「rate 越高越坏（1.000 = 每条仍在编造真题）」写反，引用 ledger 时有误导风险。
   - ✅ **已完成（2026-10-15）**：修订 `scripts/lib/_ledger_rows.py` Verify 行 metric 文本与 notes（只改文本、不改判定，走 B16 路径）→ 重建 `evals/claims/ledger.md` → `--check` 第 1 段复跑 PASS；evidence_chain_gate 81 项仍全绿；ruff check/format 干净。遗留：`docs/EXPERIMENTS.md` 尚无该订正的登记行（随下一批文档收尾补 §20.5）。
 
-- [ ] **B4 清理 R3 孤立结论（`--check` 第 2 段）**
+- [x] **B4 清理 R3 孤立结论（`--check` 第 2 段）**（2026-10-16 ✅）
   - 动作：按第 2 段打印的行号（`docs/EXPERIMENTS.md` / `docs/README.md` / `CLAUDE.md`）逐条补来源锚点；补一条红名单消一条，不动代码。
-  - 通过判据：第 2 段 FAIL 条目收敛到 owner 认可的存量（本项非阻塞，可在 §7.3 收尾前完成）。
+  - 通过判据：第 2 段 FAIL 条目收敛到 owner 认可的存量（本项非阻塞，可在 §7.3 收尾前完成）。✅ **已清零**（§20.7.8⑬）：164 条挂现存归档（数值容差回验）+ 90 条 git log -S 溯源引入提交 + 4 条按被引对象挂锚。
 
 - [x] **B5 §7.1 dead code 三项裁定（2026-10-15 owner 裁定并已执行，§20.7.6②）**
   - 裁定与执行：① `asearch_episodes` = **登记**（已不在 `src/`，仅登记不存在事实）；② **verifier LLM 层已删**（`verifier.py` 的 `_arun_llm_relevance_check`/`llm_relevance` 权重分支、`retriever_retry.py` 的 `_llm_verify`/`_apply_retry_hints`、`retriever.py` 的 `_verify_with_optional_retry`/`use_llm_verify`/`max_retries` 参数链与 5 个调用点的显式 False 传参一并移除；规则层 verdict 路径不变）；③ `_sse` 回传过滤（`src/service/_sse.py`）= **带披露保留**（代码自述「没有活路径、有备无患」，登记于 §20.7.6②）。
@@ -134,7 +134,7 @@
 - [x] **B2 ec_r1/ec_r2 `ver_fabricated` 分歧已修（owner 第三路：改 backfill 落盘口径）**：runner 统一走 registry 判据（两写入方同源同极性）+ report 凭 `item_reasons` 标记无歧义解码 + `cli._backfill` 覆盖已存值显式记账；ec_r2 边车重生 `ver_fabrication` 1.000→**0.000**（归档 jsonl 一字节未动，ledger 该行实时重算本就 0 假红仅边车）；`tests/test_verify_fabrication_polarity.py` 7 项回归。实测佐证「选项①修不了」：重 backfill 出的 ec_r1 v2 仍带 verdict 极性 True ⇒ 同病的是**极性**不是字段新鲜度。
 - [ ] §6 门槛行在全量口径下有读数；每一行要么达线，要么已按 limitation 披露——**不允许「已测量未证明」被当作成绩引用**（V0 ② 的红就是这个意思）。
 - [ ] provenance_match 与当前 `code_version`/`golden_sha256` 一致（C1 的直接目的）。
-- [ ] D1/D2/D3 收口；全部工件已提交，`git status` 干净；论文引用的每个数字可经 ledger「复现」列当场重算。
+- [ ] D1/D2/D3 收口；全部工件已提交，`git status` 干净（✅ 2026-10-16 `67a672b` 已提交 45 个变更、工作树清零）；论文引用的每个数字可经 ledger「复现」列当场重算。
 
 ## F. 冻结后纪律（禁止事项）
 
