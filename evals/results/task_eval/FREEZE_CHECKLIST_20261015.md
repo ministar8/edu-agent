@@ -116,9 +116,9 @@
 
 ## D. 收尾一致性与登记
 
-- [ ] **D1 §7.2 一致性**：`evals/reports/paper_tables.md`（现仍标 V-2026-10-02）、`docs/EXPERIMENTS.md §22`、`evals/claims/ledger.md` 三处数字与 C1/C2 新归档对齐；引用旧读数一律带脚注（如 §20.5 #38 的 verdict_agreement 新旧口径），**旧档不回写**。
+- [x] **D1 §7.2 一致性**（2026-10-16 完成，收口记录 `evals/results/task_eval/D1_D3_WRAPUP_20261016.md`；登记 §20.7.8⑲）：`evals/reports/paper_tables.md`（表 1–6 保留 V-2026-10-02 + C2 复验脚注；**新增表 7 冻结代效果表 / 表 8 RAGAS 冻结版**）、`docs/EXPERIMENTS.md`（旧 §22/§22.1 不动；**新增 §22.2 冻结代复测**）、`evals/claims/ledger.md`（已切 ec_r3 重算）三处数字与 C1/C2 新归档对齐；引用旧读数一律带脚注，**旧档不回写**；`artifact_status.json` 同步（ec_r3 active、ec_r2/旧 metrics.json superseded）。
 - [x] **D2 工件登记**（ec_r2 代已完成；C1 后再登记最终代）：`evals/claims/artifact_status.json` 已登记 `ec_r2_final_gate_20261015.jsonl`（active）+ `ec_r1_final_gate.jsonl`（superseded，reason=`gold_blindlabel_backfill_gen_from_anchor5`）+ `ec_r2_goldinjected_20261015.jsonl`（superseded 中间件）；`phase1_gen_anchor5_20261008.jsonl` 的 `superseded_by` 由 ec_r1 **订正为 ec_r2**（原指针不承接 anchor5 的 gen 记录）。旧归档只标 superseded 不标 invalidated、数值未动；新归档按 A3 纳入版本控制，逐轮 `*.log` 仍不入库。
-- [ ] **D3 局限披露核对**：B1（Generate 三判据 missing_premise 的最终态——**已裁 option B 按 limitation 披露**，披露文本见 §20.7.6④；writeup 不得把 `0.000（已测 n=1, mp=14）` 读成「0/15 通过」）、B2（Grade 两极 gold）、#35/#36（题目正文丢失 / judge 不重算算术）、§20.7 基线抖动带、**B6（gen_difficulty 适用域不含中文难度行，映射取法非唯一 0.000/0.071/0.714）**、**A1（键可靠性：降级层 12/15 carve-out 的两种口径分开记账；扩查 78 条暂定不一致为第三方页读数、待正式原卷复核，论文引用必须带「暂定」口径；exams 链全 674 题自声明 third_party）**、Verify `final_quality≥4=0/15` 诊断行（检索覆盖口径）——逐条确认论文中的表述与登记一致。
+- [x] **D3 局限披露核对**（2026-10-16 完成）：B1（Generate 三判据 missing_premise 的最终态——**已裁 option B 按 limitation 披露**，披露文本见 §20.7.6④；writeup 不得把 `0.000（已测 n=1, mp=14）` 读成「0/15 通过」）、B2（Grade 两极 gold）、#35/#36（题目正文丢失 / judge 不重算算术）、§20.7 基线抖动带、**B6（gen_difficulty 适用域不含中文难度行，映射取法非唯一 0.000/0.071/0.714）**、**A1（键可靠性：降级层 12/15 carve-out 的两种口径分开记账；扩查 78 条已由 A1 正式复核落地 91 键 correct_key，论文引用带「第三方读数×公开答案表交叉确认、非同题性逐字验证」口径；exams 链全 674 题自声明 third_party）**、Verify `final_quality≥4` 诊断行（ec_r3 μ=1.067，检索覆盖口径）——**外加 C 链 5 项新增**（Memory 3 条 judge 抖动无效、RAGAS 不可比、provenance_match 设计特性、ec_r3 混合代际 3 条、C4 回归修复）逐条确认一致；**13/13 条论文口径与登记一致，无未登记新增局限**（逐条对照表见收口记录）。
 
 ---
 
@@ -140,7 +140,7 @@
 - [x] **B2 ec_r1/ec_r2 `ver_fabricated` 分歧已修（owner 第三路：改 backfill 落盘口径）**：runner 统一走 registry 判据（两写入方同源同极性）+ report 凭 `item_reasons` 标记无歧义解码 + `cli._backfill` 覆盖已存值显式记账；ec_r2 边车重生 `ver_fabrication` 1.000→**0.000**（归档 jsonl 一字节未动，ledger 该行实时重算本就 0 假红仅边车）；`tests/test_verify_fabrication_polarity.py` 7 项回归。实测佐证「选项①修不了」：重 backfill 出的 ec_r1 v2 仍带 verdict 极性 True ⇒ 同病的是**极性**不是字段新鲜度。
 - [ ] §6 门槛行在全量口径下有读数；每一行要么达线，要么已按 limitation 披露——**不允许「已测量未证明」被当作成绩引用**（V0 ② 的红就是这个意思）。
 - [ ] provenance_match 与当前 `code_version`/`golden_sha256` 一致（C1 的直接目的）。
-- [ ] D1/D2/D3 收口；全部工件已提交，`git status` 干净（✅ 2026-10-16 `67a672b` 已提交 45 个变更、工作树清零）；论文引用的每个数字可经 ledger「复现」列当场重算。
+- [x] D1/D2/D3 收口（✅ 2026-10-16 完成：`D1_D3_WRAPUP_20261016.md`；`artifact_status.json` ec_r3 active；论文引用的每个数字可经 ledger「复现」列当场重算）
 
 ## F. 冻结后纪律（禁止事项）
 

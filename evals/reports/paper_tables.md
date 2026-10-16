@@ -1,8 +1,16 @@
 # 论文实验表（可直接粘贴）
 
-> 数字来源：`evals/results/` **V-2026-10-02**（见 EXPERIMENTS.md §18）
+> 数字来源：表 1–表 6/F1/F2 为 `evals/results/` **V-2026-10-02**（见 EXPERIMENTS.md §18）
+> **表 7/表 8 为冻结代（2026-10-16）**：任务级效果来自 `ec_r3_freeze_20261016.jsonl`（§20.7.8⑯），
+> RAGAS 来自 `ragas_freeze20261016.json`（§20.7.8⑱）——两者与 V-2026-10-02 读数**口径不同**，
+> 按 D1 纪律并列引用、不回写旧表。
 > 完整论述见 `docs/EXPERIMENTS.md` · 问题诊断见 `evals/reports/rerun_summary.md`
 > 样本：黄金集前 60 条（检索）· 任务集 25 条 · 门禁 156 条
+
+> **旧表脚注（D1，2026-10-16）**：表 1–6 的检索读数在冻结期经 C2 六路由门禁复验
+> 「所有指标不低于基线」（§20.7.8⑰①）——基线文件因黄金集哈希变更（`be98912a`→`783e78ff`）
+> 已于 2026-10-14/15 做第三代重录（§20.7.4），重录后指标与旧读数同代际；
+> 检索表数字仍归 V-2026-10-02，论文引用时带本脚注即可，**不得**与表 7 混排同一张效果表。
 
 ## 表 1 基础 RAG 对比（§11，V-2026-10-02）
 
@@ -145,3 +153,43 @@ Task Policy ──► Retrieval Plan ──► Evidence Pack
    grade ──────── L3 优先 ──────── fallback legacy
    verify ─────── L3 优先 ──────── exclude 答案
 ```
+
+## 表 7 冻结代任务级效果表（2026-10-16，ec_r3_freeze_20261016；口径 = ledger §6 重算）
+
+> 来源：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`（66 条：qa/verify/generate/grade 各 15 + memory 6；
+> gold_status **reviewed 66/66**）。数字与 `evals/claims/ledger.md` §6 门槛行逐字同源（重算产物）。
+> **每个数字必须带分母**；n=1/2 的率不是能力率（D15）。
+
+| 维度 | 主指标（§6 口径） | 冻结代读数 | §6 门槛 | 达成判定 |
+|---|---|---|---|---|
+| QA | `final_quality≥4` case 占比 | **1.000**（已测 n=15） | ≥ 80% | 达成（judge 观点，tier 2 两前置未标定 ⇒「已测量未证明」） |
+| Generate | 五项完整交付率 `gen_case_pass`（registry 逐题复合） | **N/A**（已测 n=0，missing_premise 15/15） | ≥ 75% | **未测量**——gold 依赖判据结构性缺前提，按 option B 作 limitation 披露，**不得折成 0 或 1** |
+| Grade | `score_tolerance@±10` 头号；两极 gold ⇒ 行级改读 `verdict_agreement`（辅助位） | 头号 N/A（两极 gold 无判别力）；**verdict_agreement=0.933**（n=15） | ≥ 75% | 头号未测量；辅助位 0.933 只作披露 |
+| Verify | 仍出题率 `ver_fabricated`（硬条件必须 0；D14 行为层） | **仍出题率 0.000**（pass 15/15 = 1.000） | 必须 0 | **达成**（硬条件）；L1 真题条目 0.133 / L2 年份归属 0.333 作诊断 |
+| Memory | correct-use rate（正样本口径） | **1.000**（已测 n=2，missing_premise 4） | ≥ 80% | 数字达成但**分母极小**：正样本 3 条全不可测，可测 2 条均为负样本 ⇒ 按 D15 只作结构断言披露 |
+| Retrieval | `kp_hit` 率（全任务池化） | 0.967（已测 n=30, n/a=30） | 不低于 V-2026-10-02 | 池化诊断位；与基线对比由 C2 门禁承担（六路由全过） |
+| hard failure | `hard_fails` 非空占比（坏事率） | **0.000**（n=66） | < 5% | 达成 |
+| tool error | `failure_reason` 含 tool_error 占比（坏事率） | **0.000**（n=66） | < 5% | 达成 |
+| provenance | 八键齐全率 | **1.000**（n=66，从 0.000 转正） | 100% | 达成 |
+
+**读法红线**：① Generate 行写「主指标未测量（结构性缺前提）」，**禁止**写 0.733/0.750 之类的门槛比较；
+② Verify 的 `final_quality≥4`（μ=1.067）在 verify 上测的是检索覆盖，只作诊断，不得当通过判据（D14）；
+③ Memory 的 1.000 必须连同「n=2、正样本不可测」引用；④ 各任务失败分布（照实）：Generate
+generation_incomplete×8/generation_wrong×3/hallucination×1；Grade hallucination×1/generation_wrong×1；
+Verify generation_incomplete×9/refusal×2/generation_wrong×1；Memory memory_miss×2（+4 条 case 无效）。
+
+## 表 8 RAGAS 冻结版（2026-10-16，`ragas_freeze20261016.json`，全量黄金集 156 条）
+
+| 指标 | 冻结版读数（n/156） | V-2026-10-02 锚点（n=20） | 可比性 |
+|---|---|---|---|
+| faithfulness | 0.8109（n=112） | 0.7588（n=20） | **不可比**（见下） |
+| context_precision | 0.7454（n=113） | 0.684（n=20） | **不可比** |
+| context_recall | 0.5963（n=108） | 0.400（n=20） | **不可比** |
+| answer_relevancy | 0.7217（n=111） | 0.5994（n=20） | **不可比** |
+
+> 运行口径：156 条全量（code 32 / concept 60 / generate 32 / grade 32）、真实 `BAAI/bge-m3`
+> embedding（`embedding_fake=false`）、rerank 生效、judge=`dashscope:qwen3.8-flash`。
+> **五处口径与锚点全不同**：judge 模型（`qwen3.8-max-0902`→`qwen3.8-flash`）、样本（n=20 分层→156 全量）、
+> rerank（未生效→生效）、golden 哈希（`be98912a`→`783e78ff`）、代码代（`0479d6e`→`7220229`）。
+> ⇒ 论文中两代读数**只能并列披露**，不得表述为「RAGAS 指标改善/退化」；各指标 n<156（judge 不可判样本
+> 已剔除：faithfulness 缺 44、context_precision 缺 43、context_recall 缺 48、answer_relevancy 缺 45）。

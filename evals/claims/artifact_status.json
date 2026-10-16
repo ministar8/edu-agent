@@ -109,8 +109,26 @@
   },
   {
     "path": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
+    "status": "superseded",
+    "superseded_by": "evals/results/task_eval/ec_r3_freeze_20261016.jsonl",
+    "reason": "freeze_full_rerun_under_reviewed_gold（C1 §7.3 全量重跑：gold reviewed 66/66 后重测；ec_r2 的 generate 为 backfill 代读数、其余为 ec_r1 旧代码代）"
+  },
+  {
+    "path": "evals/results/task_eval/ec_r3_freeze_20261016.jsonl",
     "status": "active",
     "superseded_by": "",
-    "reason": ""
+    "reason": "freeze_rerun_20261016（C0–C4 链；provenance 八键 66/66；gold reviewed 66/66）"
+  },
+  {
+    "path": "evals/results/generation/ragas/metrics.json",
+    "status": "superseded",
+    "superseded_by": "evals/results/generation/ragas/ragas_freeze20261016.json",
+    "reason": "freeze_ragas_20261016（口径五处不同：judge 模型/n/rerank/golden/code；旧值保留作并列披露锚点）"
+  },
+  {
+    "path": "evals/results/generation/ragas/ragas_freeze20261016.json",
+    "status": "active",
+    "superseded_by": "",
+    "reason": "freeze_ragas_20261016（全量 156 条；与 V-2026-10-02 锚点不可直接可比，§20.7.8⑱）"
   }
 ]
