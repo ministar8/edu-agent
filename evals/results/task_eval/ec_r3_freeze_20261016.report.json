@@ -1,0 +1,494 @@
+{
+  "n_total": 66,
+  "gold_status": {
+    "reviewed": 66
+  },
+  "agent_models": [
+    "deepseek:deepseek-flash"
+  ],
+  "judges": [
+    "dashscope:qwen3.8-flash"
+  ],
+  "tasks": {
+    "qa": {
+      "task": "qa",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 5.0,
+      "quality_pass": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.0,
+      "invalid_n": 0,
+      "primary_failures": [],
+      "kp_hit": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 14,
+        "failed": 1,
+        "n": 15,
+        "n_a": 0
+      },
+      "category_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 5.0,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "generate": {
+      "task": "generate",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 3.733,
+      "quality_pass": {
+        "rate": 0.8,
+        "value": 0.8,
+        "passed": 12,
+        "failed": 3,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.8,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "generation_incomplete",
+          8
+        ],
+        [
+          "generation_wrong",
+          3
+        ],
+        [
+          "hallucination",
+          1
+        ]
+      ],
+      "kp_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "category_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 4.533,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {
+        "rate": null,
+        "n": 0,
+        "n_a_missing_premise": 15,
+        "n_a_not_applicable": 0
+      },
+      "gen_delivery": {
+        "rate": 1.0,
+        "n": 30,
+        "n_a_missing_premise": 30,
+        "n_a_not_applicable": 0
+      },
+      "gen_items": {
+        "gen_structure": {
+          "rate": 1.0,
+          "n": 15,
+          "n_a_missing_premise": 0,
+          "n_a_not_applicable": 0
+        },
+        "gen_answerability": {
+          "rate": null,
+          "n": 0,
+          "n_a_missing_premise": 15,
+          "n_a_not_applicable": 0
+        },
+        "gen_coverage": {
+          "rate": 1.0,
+          "n": 15,
+          "n_a_missing_premise": 0,
+          "n_a_not_applicable": 0
+        },
+        "gen_correctness": {
+          "rate": null,
+          "n": 0,
+          "n_a_missing_premise": 15,
+          "n_a_not_applicable": 0
+        },
+        "gen_difficulty": {
+          "rate": null,
+          "n": 0,
+          "n_a_missing_premise": 15,
+          "n_a_not_applicable": 0
+        },
+        "gen_answer_key_validity": {
+          "rate": null,
+          "n": 0,
+          "n_a_missing_premise": 15,
+          "n_a_not_applicable": 0
+        },
+        "gen_analysis_agreement": {
+          "rate": null,
+          "n": 0,
+          "n_a_missing_premise": 15,
+          "n_a_not_applicable": 0
+        }
+      },
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "grade": {
+      "task": "grade",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 4.467,
+      "quality_pass": {
+        "rate": 0.8667,
+        "value": 0.8667,
+        "passed": 13,
+        "failed": 2,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.1333,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "hallucination",
+          1
+        ],
+        [
+          "generation_wrong",
+          1
+        ]
+      ],
+      "kp_hit": {
+        "rate": null,
+        "value": null,
+        "passed": 0,
+        "failed": 0,
+        "n": 0,
+        "n_a": 15
+      },
+      "category_hit": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 14,
+        "failed": 1,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 4.8,
+      "score_tolerance": {
+        "rate": null,
+        "value": null,
+        "passed": 14,
+        "failed": 1,
+        "n": 15,
+        "n_a": 0,
+        "raw_rate": 0.9333,
+        "degenerate_gold": true,
+        "n_distinct_gold": 2
+      },
+      "verdict_agreement": {
+        "rate": 0.9333,
+        "value": 0.9333,
+        "passed": 14,
+        "failed": 1,
+        "n": 15,
+        "n_a": 0
+      },
+      "score_mae": 6.667,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "verify": {
+      "task": "verify",
+      "n": 15,
+      "judged_n": 15,
+      "mean_final_quality": 1.067,
+      "quality_pass": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "failure_rate": 0.8,
+      "invalid_n": 0,
+      "primary_failures": [
+        [
+          "generation_incomplete",
+          9
+        ],
+        [
+          "refusal",
+          2
+        ],
+        [
+          "generation_wrong",
+          1
+        ]
+      ],
+      "kp_hit": {
+        "rate": null,
+        "value": null,
+        "passed": 0,
+        "failed": 0,
+        "n": 0,
+        "n_a": 15
+      },
+      "category_hit": {
+        "rate": 0.7333,
+        "value": 0.7333,
+        "passed": 11,
+        "failed": 4,
+        "n": 15,
+        "n_a": 0
+      },
+      "exam_hit": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 15,
+        "failed": 0,
+        "n": 15,
+        "n_a": 0
+      },
+      "pack_nonempty_rate": 1.0,
+      "mean_evidence_count": 4.933,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {},
+      "memory_measure_scope": {},
+      "memory_traceability": {},
+      "ver_fabrication": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 15,
+        "n": 15,
+        "n_a": 0
+      },
+      "ver_item_cited": {
+        "rate": 0.1333,
+        "value": 0.1333,
+        "passed": 2,
+        "failed": 13,
+        "n": 15,
+        "n_a": 0
+      },
+      "ver_year_only": {
+        "rate": 0.3333,
+        "value": 0.3333,
+        "passed": 5,
+        "failed": 10,
+        "n": 15,
+        "n_a": 0
+      },
+      "memory_recalled": {},
+      "memory_used_rate": {},
+      "memory_correct_rate": {}
+    },
+    "memory": {
+      "task": "memory",
+      "n": 6,
+      "judged_n": 6,
+      "mean_final_quality": 1.0,
+      "quality_pass": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 6,
+        "n": 6,
+        "n_a": 0
+      },
+      "generation_ok": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 6,
+        "failed": 0,
+        "n": 6,
+        "n_a": 0
+      },
+      "failure_rate": 1.0,
+      "invalid_n": 4,
+      "primary_failures": [
+        [
+          "memory_miss",
+          2
+        ]
+      ],
+      "kp_hit": {},
+      "category_hit": {},
+      "exam_hit": {},
+      "pack_nonempty_rate": null,
+      "mean_evidence_count": null,
+      "score_tolerance": {},
+      "verdict_agreement": {},
+      "score_mae": null,
+      "gen_case_pass": {},
+      "gen_delivery": {},
+      "gen_items": {},
+      "memory_correct_use": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "n": 2,
+        "n_a": 4
+      },
+      "memory_measure_scope": {
+        "positives_total": 3,
+        "positives_valid": 0,
+        "positives_invalid": 3,
+        "positives_traceable": 0
+      },
+      "memory_traceability": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "n": 2,
+        "n_a": 4
+      },
+      "ver_fabrication": {},
+      "ver_item_cited": {},
+      "ver_year_only": {},
+      "memory_recalled": {
+        "rate": 1.0,
+        "value": 1.0,
+        "passed": 2,
+        "failed": 0,
+        "n": 2,
+        "n_a": 4
+      },
+      "memory_used_rate": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 2,
+        "n": 2,
+        "n_a": 4
+      },
+      "memory_correct_rate": {
+        "rate": 0.0,
+        "value": 0.0,
+        "passed": 0,
+        "failed": 2,
+        "n": 2,
+        "n_a": 4
+      }
+    }
+  }
+}

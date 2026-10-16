@@ -4,6 +4,7 @@
 > 前置：owner 2026-10-16 书面裁决「同意 frozen，按 `fc3ad81` 版 FREEZE_CHECKLIST 所列全部条款」；
 > `FREEZE_CHECKLIST_20261015.md` 未勾项 **0**（E 段「冻结宣布判据」全部满足）。
 > 版本锚点：git tag `V-2026-10-16`（annotated，指向本宣布所在提交）。
+> 项目级冻结（预冻结清理后）：见 §7，tag `P-2026-10-16`。
 
 ## 1. 冻结范围与状态
 
@@ -42,3 +43,17 @@ demo gold 四件套**只读**：任何变更须走新审核链 + owner 新裁决
 ## 6. 生效声明
 
 本宣布落盘即生效。gold 冻结态自 `bc818ea`（owner 裁决执行）起算；宣布文档固化全部判据与纪律。论文阶段自本宣布后启动。
+
+## 7. 项目级冻结（2026-10-16，预冻结清理后生效）
+
+owner 指示「清理垃圾后再冻结项目」。清理与固化记录：
+
+| 类别 | 处置 | 明细 |
+|---|---|---|
+| 可再生缓存 | **已删** | `__pycache__/`（全仓）、`.pytest_cache/`、`.ruff_cache/`——pytest/ruff 复跑即再生 |
+| 跑动残留 | **已删** | `checkpoints.db`（48M，21,898 行 LangGraph checkpoint）、`store.db`（5.2M）——2026-10-16 15:05 C1/RAGAS 跑动运行态；证据链以 jsonl 归档为准，无证据价值 |
+| 归档补登 | **已入库** | `ec_r3_freeze_20261016.report.json`（11KB）——与其余 11 份历史 report.json 一致（Task 10「数值工件入版本控制」）；内容为 C1 时点快照（gold_status=reviewed 66），按归档不可变纪律**不回写** |
+| 运行时资产 | **保留**（gitignored） | `.venv/`（1.1G 运行时）、`chroma_db/`（34M，retrieval gate 消费）、`data/metrics/rag_metrics.jsonl`（78M，probe/telemetry gate 消费）、`.env`（配置）、`edu_agent.db`（10 行 users 应用数据）、`.vscode/`、`.claude/`、`.workbuddy-ai/`（Agent 记忆） |
+| 跟踪文件 | **零删除** | `ledger_draft.md` 等历史草稿被 3 篇文档引用，按归档纪律留档 |
+
+清理后 `git status` 干净（无未跟踪、无修改）。项目级冻结锚点：git tag `P-2026-10-16`；远程备份判据：`git log origin/main..main` 为空且 `V-2026-10-16`/`P-2026-10-16` 在 `git ls-remote --tags origin` 在列。清理后全量复验与 §1 门禁终态逐项一致（证据：`docs/EXPERIMENTS.md` §20.7.8㉔）。
