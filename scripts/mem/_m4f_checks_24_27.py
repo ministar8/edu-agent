@@ -392,21 +392,35 @@ def _c26_runs(_drive26) -> None:
 
     rec_fab = _drive26(FAB)
     rec_cite = _drive26(CITE_TABLE)
+    # ★ 2026-10-16 C4 复跑订正（B2 第三路后极性已翻转）：registry 落盘是
+    #   **verdict 极性**（True=pass=没出题=好事），与 `report._fabrication_flag`
+    #   的解码一致；旧期望值（metric 极性）已整体反转。同时断言 `item_reasons`
+    #   标记在位——读取方靠它辨极性（阙如 ⇒ metric 极性），没标记 = 接线退回去。
     check(
-        "㉖f 接线：verify case 的三判据真的落进 record（仍出题 case ⇒ fabricated=True）",
-        rec_fab.ver_fabricated is True
+        "㉖f 接线：verify case 的三判据真的落进 record（仍出题 case ⇒ fail⇒False；"
+        "引用清单 case ⇒ pass⇒True，均带 item_reasons 极性标记）",
+        rec_fab.ver_fabricated is False
         and rec_fab.ver_exam_item_cited is False
-        and rec_cite.ver_fabricated is False
-        and rec_cite.ver_exam_item_cited is True,
+        and rec_cite.ver_fabricated is True
+        and rec_cite.ver_exam_item_cited is True
+        and all(
+            name in rec_fab.item_reasons and name in rec_cite.item_reasons
+            for name in ("ver_fabricated", "ver_exam_item_cited", "ver_exam_year_only")
+        ),
         f"出题={rec_fab.ver_fabricated}/{rec_fab.ver_exam_item_cited} "
-        f"引用={rec_cite.ver_fabricated}/{rec_cite.ver_exam_item_cited}",
+        f"引用={rec_cite.ver_fabricated}/{rec_cite.ver_exam_item_cited} "
+        f"标记={sorted(rec_fab.item_reasons)}",
     )
     rec_probe = _drive26("", run_agent=False)
     check(
         "㉖g ★ 没跑 agent（或空回复）⇒ 三条全是 None（N/A）——探针跑不得被读成「没出题」",
         rec_probe.ver_fabricated is None
         and rec_probe.ver_exam_item_cited is None
-        and rec_probe.ver_exam_year_only is None,
+        and rec_probe.ver_exam_year_only is None
+        and all(
+            rec_probe.item_reasons.get(n) == "missing_premise"
+            for n in ("ver_fabricated", "ver_exam_item_cited", "ver_exam_year_only")
+        ),
         f"{rec_probe.ver_fabricated}/{rec_probe.ver_exam_item_cited}/{rec_probe.ver_exam_year_only}",
     )
     rep26 = summarize_task(

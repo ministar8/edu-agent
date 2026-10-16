@@ -92,12 +92,13 @@
   - `task_eval sanity` ERROR 0（进 0B 级操作前必跑）。
   - **冒烟测试（owner 批 token 的前置条件）**：零 token 层 `--limit 1 --no-agent` 全任务检索链 ✓；最小 LLM 层 `--limit 1` 真跑（n=5，QA/Grade/Memory 5.0 零失败；Generate/Verify 各 1 条 n=1 单样本内容层现象）；归档层 5 条 record provenance 9 键齐备 ✓。
 
-- [ ] **C1 §7.3 全量重跑 66 条**（`PYTHONPATH=src uv run python -m evaluation.task_eval run`；参照上轮 chat ≈453 次 + TEI embeddings ≈3665）
-  - 通过判据：66 条归档带齐 provenance 八键、`code_version`/`golden_sha256` 与运行态一致（ledger `provenance_match` 从 0/66 转正）；§6 每行有「实测 vs 门槛」记录，不达照实写。
-  - 已知预期差：Generate 行需在**全量**口径下达标（锚点⑤单臂 13/15=0.867 不作数）；Grade 行按两极 gold 用 `verdict_agreement` 辅助位并披露。
+- [x] **C1 §7.3 全量重跑 66 条**（2026-10-16 完成，21m13s；登记 §20.7.8⑯；归档 `evals/results/task_eval/ec_r3_freeze_20261016.jsonl`，sha256 `ae1eca4b1333…`）（`PYTHONPATH=src uv run python -m evaluation.task_eval run`；参照上轮 chat ≈453 次 + TEI embeddings ≈3665）
+  - 通过判据：66 条归档带齐 provenance 八键 ✅（1.000，从 0.000 转正）、`code_version`/`golden_sha256` 与运行态一致（详见⑯⑥的设计特性披露与 mixed generation 自查）；§6 每行有「实测 vs 门槛」记录，不达照实写 ✅
+  - 已知预期差：Generate 行需在**全量**口径下达标（锚点⑤单臂 13/15=0.867 不作数）——**全量口径主指标 N/A(mp=15)**，V0② option B 披露态维持；Grade 行按两极 gold 用 `verdict_agreement` 辅助位并披露（0.933）。
 
-- [ ] **C2 检索门禁六路由逐条 + probe 门禁**
+- [x] **C2 检索门禁六路由逐条 + probe 门禁**（2026-10-16 执行，登记 §20.7.8⑰①）
   - ✅ **预检通过（2026-10-15，非冻结跑次）**：权威路由 `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1` 只读比对已登记基线 ⇒「门禁通过：所有指标不低于基线」（真实 TEI 在线、索引 21s / 检索 98.6s、未更基线、零 API 费用）。
+  - **冻结跑次（2026-10-16）**：六路由全部「门禁通过：所有指标不低于基线」——fake+off / fake+on / fake+disabled / real+off / real+disabled / real+on（权威）；无 diff ⇒ 未动任何基线文件；probe 门禁族随 `evidence_chain_gate` 81 项全绿。
   - 命令：默认 / `GATE_RERANK_MODE=on` / `GATE_RERANK_MODE=disabled` / `GATE_USE_REAL_EMBEDDING=1`（+`GATE_USE_REAL_RERANK=1` 权威路由）；CI 只覆盖默认路由，**权威路由必须本机手跑**。
   - 红线：指标若动，`--update-baseline` 后按 §20.7 登记（`scripts/ops/check_baseline_diff_registration.py` 两向核对），**禁止静默重录**；`check_baseline_sanity` 内建防故障态写基线。
 
@@ -105,8 +106,10 @@
   - `evaluation.ragas.cli --dataset evals/datasets/golden/sample_408.jsonl`（黄金集口径已校正）；报告须带 `_meta.warnings`（假 embedding 警示）与 `dropped_metrics`（若有指标被摘）。
   - 与 `metrics.json` n=20 锚点（V-2026-10-02）的可比性判定：`LLM_MODEL` 未动才可比，动了须登记。
 
-- [ ] **C4 Memory 三个 gate（条件式）**
-  - 触发条件：改过 Memory 写链或评测器才需重跑（`scripts/mem/memory_step2_gate.py` / `memory_step4fix_gate.py` / `memory_e5_probe.py --reanalyse --write`）。本轮未改代码 ⇒ 登记「未改不需重跑」即可；若改过，必须本机手跑（Windows 带 `PYTHONIOENCODING=utf-8`）。
+- [x] **C4 Memory 三个 gate（条件式）**（2026-10-16 执行，触发条件成立；登记 §20.7.8⑰②–⑤）
+  - 触发条件核验：上次 Memory gate 之后写链/评测器**确有变更**（`67a672b` 改 runner/metrics/_runner_record；5df3e47/2ae5291 改门禁区）⇒ 三 gate 全跑，非「未改不需重跑」。
+  - `memory_step2_gate.py` ✅ 产品链完整；`memory_e5_probe.py --reanalyse --write` 零 LLM 重析（kp_raw/kp_normalized 未动、仅刷新时间戳）；`memory_step4fix_gate.py` 首跑 **217 项 3 失败（㉖f/g/h）** ⇒ 定位为 B2 第三路引入的真回归（`_no_reply` 空串守卫缺失）并修复，复跑 **217/217 全过**。
+  - 若改过，必须本机手跑（Windows 带 `PYTHONIOENCODING=utf-8`）。
 
 ---
 

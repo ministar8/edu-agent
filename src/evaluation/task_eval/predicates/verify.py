@@ -12,7 +12,7 @@ from evaluation.task_eval.predicates.registry import Predicate, register
 
 
 def _no_reply(rec: dict) -> bool:
-    """探针没跑（无回复）或检索状态**证据缺席** ⇒ 判据无前提（`missing_premise`）。
+    """探针没跑（无回复/空回复）或检索状态**证据缺席** ⇒ 判据无前提（`missing_premise`）。
 
     ★ 修复批 Important-2（F6 裁定的镜像项，同包 `memory.py:36-43` 已落同样的区分）：
       旧写法 `rec.get("retrieval_status") == ""` 只把**空串**当未知 ——
@@ -21,8 +21,14 @@ def _no_reply(rec: dict) -> bool:
       这与 `predicates/common.py` 的「缺证据 ⇒ 保守取 `missing_premise`」直接矛盾。
     ★ `ok` / `error` / 空串三者的既有语义**不变**：`error` 仍属可测 ——
       reply 本身是可观测物证（tier-1），检索状态只说明证据等级，不使回复消失。
+    ★ 2026-10-16 C4 复跑抓到的回归（㉖g 护栏）：B2 第三路（67a672b）把写入方从
+      runner 直写（`reply.strip()` 前置守卫，空串 ⇒ None）换成 registry 判据后，
+      本函数只挡了 `reply is None`，**挡不住空串** —— 于是 `--no-agent` 探针跑
+      （reply="" 且 retrieval_status="ok"）被读成「没出题 = pass」，正是 2026-10-08
+      立护栏时防的「没测被读成测过」。现补空串（含纯空白）守卫：None / 缺键 /
+      空串一律 missing_premise；retrieval_status 键缺失同样保守处理。
     """
-    if rec.get("reply") is None:
+    if not str(rec.get("reply") or "").strip():
         return True
     if not has_path(rec, "retrieval_status"):
         return True  # 键缺失：这条归档从没记过检索状态 ⇒ 无从判定，按缺失前提处理
