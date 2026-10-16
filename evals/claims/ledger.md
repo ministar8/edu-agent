@@ -5,28 +5,28 @@
 > ★ `falsify_passed=True` = mutation 取证成功（判据对它声明的每个契约输入都敏感、无附带损伤、无抛异常），**不是**「主张被证伪」。
 > ★ falsify_latest.json 消费三口径（Task 5 披露）：① `all_flipped=False` 且基线全 pass ⇒ 读作 **partial**（形式覆盖、语义无操作，plan-mandated），不得当 full、不得算 proven；② 冻结名 `baselines_pass=False` 属**预期**（判据在归档上全 missing_premise ⇒ 基线本就是 missing_premise；缺前提的根因逐判据不同，见逐行注记）——不是失败，也不得算 proven；③ `inputs` 多 op 重复项已去重。
 > ★ missing_premise 全链原样传播（predicates → composite/rate → 本表）：缺前提的行显示 `N/A（rate=None; …）`并在注记点名缺哪个前提，绝不折成 pass/fail。
-> 本表汇总：已证明 0 行 / 已测量未证明 8 行 / 未测量 3 行；provenance_match=True 0 行；signed=True 3 行。
+> 本表汇总：已证明 0 行 / 已测量未证明 7 行 / 未测量 4 行；provenance_match=True 4 行；signed=True 3 行。
 
 ## §6 门槛行（EFFECT_PLAN.md §6 逐条）
 
 | 维度 | 主指标（口径 = 重算） | 数值或 N/A | 状态词 | 前置（tier_ok 依据） | 证据锚点 | 复现命令 | R1-B 签署 |
 |---|---|---|---|---|---|---|---|
-| QA | final_quality≥4 的 case 占比（唯一公式 `metrics.quality_pass`；judge 观点 ⇒ tier 2，两个前置见「前置」列）<br>§6 最低要求：≥ 80% case `final_quality ≥ 4` | 0.933（已测 n=15, n/a=0） | **已测量未证明**<br>falsify✗ tier✗ disc✓ prov✗ sign✗ | [literal] tier 2 为字面量，锚点 §1.3-tier2；tier 2 两前置：boundary_calibrated=False（calibration_30 真实 human_score 分布算出；门槛 final_quality≥4 两侧各需 ≥3 样本）；repeat_jitter 非空=False（同 case 跨 --records 多份归档的 final_quality 极差；单份归档 ⇒ {} = 未量化） | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
-| Generate | 五项完整交付率 `gen_case_pass`（registry 逐题复合，§3.1 冻结五项；机械替身 optional 项只作诊断、永不顶替冻结名进本行）<br>§6 最低要求：≥ 75% 五项完整交付 | 0.000（已测 n=1, missing_premise=14, not_applicable=0） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✓ | [registry] tier 1 派生自 registry 必需（非 optional）判据 max(tier)；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391；mutation 取证：`evals/claims/falsify_latest.json`@sha256:3ac958c22824 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 已签（7/7 判据；签署文件在册） |
-| Grade | `score_tolerance@±10`（EFFECT_PLAN §3.1 头号；两极 gold ⇒ 行级判据改读 verdict_agreement 且只作辅助披露）<br>§6 最低要求：≥ 75% `score_tolerance@±10` | N/A（rate=None；已测 n=15, n/a=0） | **未测量**<br>falsify✗ tier✓ disc✗ prov✗ sign✗ | [literal] tier 1 为字面量，锚点 §1.3-tier1+G1b-revoked+§7-②；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
-| Verify | 仍出题率 `ver_fabricated`（硬条件必须 0；D14 行为层把门——§6 原文 final_quality≥4 在 verify 上测的是检索覆盖，只作诊断）。★ 值为**通过率**（`pc.rate`，pass=未编造真题）⇒ 1.000 = 15/15 未编造 = 仍出题率 0，**越高越好**<br>§6 最低要求：≥ 80% `final_quality ≥ 4` | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✓ | [registry] tier 1 派生自 registry 硬条件（非 optional）判据 max(tier)；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391；mutation 取证：`evals/claims/falsify_latest.json`@sha256:3ac958c22824 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 已签（1/1 判据；签署文件在册） |
-| Memory | correct-use rate `memory_correct_use`（唯一公式 `metrics.memory_correct_use_from_record` 的 registry verdict 化）<br>§6 最低要求：≥ 80% correct-use rate | 0.800（已测 n=5, missing_premise=1, not_applicable=0） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✓ | [registry] tier 1 派生自 registry 该任务全部判据 max(tier)；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391；mutation 取证：`evals/claims/falsify_latest.json`@sha256:3ac958c22824 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 已签（1/1 判据；签署文件在册） |
-| Retrieval | kp_hit 率（tier 0 机械字段，全任务池化重算；Memory 除外——非知识检索任务）。§6「不低于 V-2026-10-02」需基线归档对比，未接入本 ledger ⇒ 不下该结论<br>§6 最低要求：**不低于 V-2026-10-02** | 0.966（已测 n=29, n/a=31） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
-| hard failure | `hard_fails` 非空的记录占比（**坏事率**，越低越好）<br>§6 最低要求：< 5% | 0.000（已测 n=66） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
-| tool error | `failure_reason` 含 `tool_error` 的记录占比（**坏事率**；判定唯一来源 `runner.mechanical_failures`，检索返空 `empty` 属 retrieval 口径、不计入本行）<br>§6 最低要求：< 5% | 0.000（已测 n=66） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
-| provenance | 嵌套 `provenance` 八键齐全的记录占比（§3；与当前版本是否一致另见 provenance_match 布尔量）<br>§6 最低要求：100% | 0.000（已测 n=66） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0+§3；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r2_final_gate_20261015.jsonl`@sha256:086ea5ee2391 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
-| Docker / TEI | 本 ledger 无该维度的归档证据源（需服务验收/演示记录接入后才可算）<br>§6 最低要求：一键启动成功 | N/A（无可算的归档证据） | **未测量**<br>falsify✗ tier✓ disc✗ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §6-no-archive；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：无归档证据源（该维度未被 task_eval 归档覆盖 ⇒ 未测量） | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
-| 四任务链 | 本 ledger 无该维度的归档证据源（需服务验收/演示记录接入后才可算）<br>§6 最低要求：全部可演示 | N/A（无可算的归档证据） | **未测量**<br>falsify✗ tier✓ disc✗ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §6-no-archive；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：无归档证据源（该维度未被 task_eval 归档覆盖 ⇒ 未测量） | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r2_final_gate_20261015.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| QA | final_quality≥4 的 case 占比（唯一公式 `metrics.quality_pass`；judge 观点 ⇒ tier 2，两个前置见「前置」列）<br>§6 最低要求：≥ 80% case `final_quality ≥ 4` | 1.000（已测 n=15, n/a=0） | **已测量未证明**<br>falsify✗ tier✗ disc✓ prov✗ sign✗ | [literal] tier 2 为字面量，锚点 §1.3-tier2；tier 2 两前置：boundary_calibrated=False（calibration_30 真实 human_score 分布算出；门槛 final_quality≥4 两侧各需 ≥3 样本）；repeat_jitter 非空=False（同 case 跨 --records 多份归档的 final_quality 极差；单份归档 ⇒ {} = 未量化） | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| Generate | 五项完整交付率 `gen_case_pass`（registry 逐题复合，§3.1 冻结五项；机械替身 optional 项只作诊断、永不顶替冻结名进本行）<br>§6 最低要求：≥ 75% 五项完整交付 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | **未测量**<br>falsify✗ tier✓ disc✗ prov✓ sign✓ | [registry] tier 1 派生自 registry 必需（非 optional）判据 max(tier)；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333；mutation 取证：`evals/claims/falsify_latest.json`@sha256:3ac958c22824 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 已签（7/7 判据；签署文件在册） |
+| Grade | `score_tolerance@±10`（EFFECT_PLAN §3.1 头号；两极 gold ⇒ 行级判据改读 verdict_agreement 且只作辅助披露）<br>§6 最低要求：≥ 75% `score_tolerance@±10` | N/A（rate=None；已测 n=15, n/a=0） | **未测量**<br>falsify✗ tier✓ disc✗ prov✓ sign✗ | [literal] tier 1 为字面量，锚点 §1.3-tier1+G1b-revoked+§7-②；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| Verify | 仍出题率 `ver_fabricated`（硬条件必须 0；D14 行为层把门——§6 原文 final_quality≥4 在 verify 上测的是检索覆盖，只作诊断）。★ 值为**通过率**（`pc.rate`，pass=未编造真题）⇒ 1.000 = 15/15 未编造 = 仍出题率 0，**越高越好**<br>§6 最低要求：≥ 80% `final_quality ≥ 4` | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✓ sign✓ | [registry] tier 1 派生自 registry 硬条件（非 optional）判据 max(tier)；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333；mutation 取证：`evals/claims/falsify_latest.json`@sha256:3ac958c22824 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 已签（1/1 判据；签署文件在册） |
+| Memory | correct-use rate `memory_correct_use`（唯一公式 `metrics.memory_correct_use_from_record` 的 registry verdict 化）<br>§6 最低要求：≥ 80% correct-use rate | 1.000（已测 n=2, missing_premise=4, not_applicable=0） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✓ sign✓ | [registry] tier 1 派生自 registry 该任务全部判据 max(tier)；tier 1（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333；mutation 取证：`evals/claims/falsify_latest.json`@sha256:3ac958c22824 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 已签（1/1 判据；签署文件在册） |
+| Retrieval | kp_hit 率（tier 0 机械字段，全任务池化重算；Memory 除外——非知识检索任务）。§6「不低于 V-2026-10-02」需基线归档对比，未接入本 ledger ⇒ 不下该结论<br>§6 最低要求：**不低于 V-2026-10-02** | 0.967（已测 n=30, n/a=30） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| hard failure | `hard_fails` 非空的记录占比（**坏事率**，越低越好）<br>§6 最低要求：< 5% | 0.000（已测 n=66） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| tool error | `failure_reason` 含 `tool_error` 的记录占比（**坏事率**；判定唯一来源 `runner.mechanical_failures`，检索返空 `empty` 属 retrieval 口径、不计入本行）<br>§6 最低要求：< 5% | 0.000（已测 n=66） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| provenance | 嵌套 `provenance` 八键齐全的记录占比（§3；与当前版本是否一致另见 provenance_match 布尔量）<br>§6 最低要求：100% | 1.000（已测 n=66） | **已测量未证明**<br>falsify✗ tier✓ disc✓ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §1.3-tier0+§3；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`@sha256:ae1eca4b1333 | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| Docker / TEI | 本 ledger 无该维度的归档证据源（需服务验收/演示记录接入后才可算）<br>§6 最低要求：一键启动成功 | N/A（无可算的归档证据） | **未测量**<br>falsify✗ tier✓ disc✗ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §6-no-archive；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：无归档证据源（该维度未被 task_eval 归档覆盖 ⇒ 未测量） | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
+| 四任务链 | 本 ledger 无该维度的归档证据源（需服务验收/演示记录接入后才可算）<br>§6 最低要求：全部可演示 | N/A（无可算的归档证据） | **未测量**<br>falsify✗ tier✓ disc✗ prov✗ sign✗ | [literal] tier 0 为字面量，锚点 §6-no-archive；tier 0（机械事实/可观测物证，不经 judge）⇒ 前置恒成立 | 证据：无归档证据源（该维度未被 task_eval 归档覆盖 ⇒ 未测量） | 复现：`PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl` | 未签署（该行无 registry 支撑判据 ⇒ R1-B 无签署对象，恒 False） |
 
 逐行注记（missing_premise 缺哪个前提、falsify 读数口径，全部在此点名）：
 
 - **QA**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
-- **QA**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/15 条；归档顶层 code_version=eb8112f（当前值由 `provenance.code_version()` 运行时算出）
+- **QA**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：12/15 条；归档顶层 code_version=0b2b6bd,c416f31（当前值由 `provenance.code_version()` 运行时算出）
 - **Generate**：gold 依赖判据（gen_answerability, gen_correctness, gen_coverage, gen_difficulty）的前提是盲标 gold（P−1；填写状态逐条见 demo 数据集与 `task_eval sanity` 输出）；gold 缺失 / 来源不完整 / 缺键时按契约记 missing_premise 并原样传播——诚实状态，不是失败，也不得折成 pass/fail
 - **Generate**：缺前提明细：gen_answerability missing_premise 15/15（契约输入：gold.gold_answer, gold.gold_source_ref.gold_answer, gold.gold_answer_status）
 - **Generate**：缺前提明细：gen_correctness missing_premise 15/15（契约输入：reply#answer, gold.gold_answer, gold.gold_source_ref.gold_answer, gold.gold_answer_status, reply#options_or_task）
@@ -40,25 +40,25 @@
 - **Generate**：gen_difficulty: all_flipped=False（基线本就 pass 不了，见 baselines_pass 注）；baselines_pass=False 属**预期**：该判据在归档上全 missing_premise（缺前提 ⇒ 基线本就 pass 不了；缺哪个前提见该判据 contract_inputs 与 ledger 缺前提明细），——不是失败，但不得算 proven
 - **Generate**：gen_answer_key_validity: all_flipped ∧ no_collateral ∧ no_raise ∧ baselines_pass ∧ 覆盖完整
 - **Generate**：gen_analysis_agreement: all_flipped=False ⇒ 读作 partial：部分声明 op 未翻转判据（形式覆盖、语义无操作，plan-mandated）——不得当 full，不得算 proven
-- **Generate**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/15 条；归档顶层 code_version=6610ef1（当前值由 `provenance.code_version()` 运行时算出）
-- **Grade**：退化 gold：human_score 仅 2 个不同取值 ⇒ ±10 容差无判别力（raw_rate=0.8667 仅诊断，不得当成绩；偏离登记 EVIDENCE_CHAIN §7 ②）
-- **Grade**：行级替身（**辅助位，非门槛值**）：verdict_agreement=0.867（已测 n=15, n/a=0）
+- **Generate**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：15/15 条；归档顶层 code_version=c416f31（当前值由 `provenance.code_version()` 运行时算出）
+- **Grade**：退化 gold：human_score 仅 2 个不同取值 ⇒ ±10 容差无判别力（raw_rate=0.9333 仅诊断，不得当成绩；偏离登记 EVIDENCE_CHAIN §7 ②）
+- **Grade**：行级替身（**辅助位，非门槛值**）：verdict_agreement=0.933（已测 n=15, n/a=0）
 - **Grade**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
-- **Grade**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/15 条；归档顶层 code_version=eb8112f（当前值由 `provenance.code_version()` 运行时算出）
+- **Grade**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：15/15 条；归档顶层 code_version=c416f31（当前值由 `provenance.code_version()` 运行时算出）
 - **Verify**：值口径：rate 为判据**通过率**（pass=未编造真题），越高越好；§6 硬条件「仍出题率 = 0」即本行 = 1.000；门槛要求见 §6 原文列
 - **Verify**：ver_fabricated: 无 mutation 取证行（取证矩阵未覆盖该判据）⇒ falsify_passed=False
-- **Verify**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/15 条；归档顶层 code_version=eb8112f（当前值由 `provenance.code_version()` 运行时算出）
-- **Memory**：分母摊开（D15）：正样本 3 条 ⇒ 前置成立 2 条（不可测 1 条）、证据链可查 2 条——n=1 的率不是能力率
+- **Verify**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：15/15 条；归档顶层 code_version=c416f31（当前值由 `provenance.code_version()` 运行时算出）
+- **Memory**：分母摊开（D15）：正样本 3 条 ⇒ 前置成立 0 条（不可测 3 条）、证据链可查 0 条——n=1 的率不是能力率
 - **Memory**：memory_correct_use: 无 mutation 取证行（取证矩阵未覆盖该判据）⇒ falsify_passed=False
-- **Memory**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/6 条；归档顶层 code_version=eb8112f（当前值由 `provenance.code_version()` 运行时算出）
+- **Memory**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：6/6 条；归档顶层 code_version=c416f31（当前值由 `provenance.code_version()` 运行时算出）
 - **Retrieval**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
-- **Retrieval**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/60 条；归档顶层 code_version=6610ef1,eb8112f（当前值由 `provenance.code_version()` 运行时算出）
+- **Retrieval**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：57/60 条；归档顶层 code_version=0b2b6bd,c416f31（当前值由 `provenance.code_version()` 运行时算出）
 - **hard failure**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
-- **hard failure**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/66 条；归档顶层 code_version=6610ef1,eb8112f（当前值由 `provenance.code_version()` 运行时算出）
+- **hard failure**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：63/66 条；归档顶层 code_version=0b2b6bd,c416f31（当前值由 `provenance.code_version()` 运行时算出）
 - **tool error**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
-- **tool error**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/66 条；归档顶层 code_version=6610ef1,eb8112f（当前值由 `provenance.code_version()` 运行时算出）
+- **tool error**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：63/66 条；归档顶层 code_version=0b2b6bd,c416f31（当前值由 `provenance.code_version()` 运行时算出）
 - **provenance**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
-- **provenance**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：0/66 条；归档顶层 code_version=6610ef1,eb8112f（当前值由 `provenance.code_version()` 运行时算出）
+- **provenance**：provenance_match：嵌套 provenance 齐全且与当前 code_version/golden_sha256 一致：63/66 条；归档顶层 code_version=0b2b6bd,c416f31（当前值由 `provenance.code_version()` 运行时算出）
 - **Docker / TEI**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
 - **Docker / TEI**：provenance_match：无归档记录可核对 ⇒ 保守判不符
 - **四任务链**：（无 registry 支撑判据 ⇒ 无 mutation 取证，falsify_passed 恒 False）
@@ -73,17 +73,17 @@
 
 | 判据 | task | tier | tier 依据（白名单锚点／债标记） | 归档重算 | falsify | tier_ok | disc | prov | sign | 状态词 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| gen_structure | generate | 1 | §1.3-tier1 | 0.933（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✗ | ✓ | 已测量未证明 |
-| gen_answerability | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✗ | ✓ | 未测量 |
-| gen_coverage | generate | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✗ | ✓ | 已测量未证明 |
-| gen_correctness | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✓ | ✗ | ✗ | ✓ | 已测量未证明 |
-| gen_difficulty | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✗ | ✓ | 未测量 |
-| gen_answer_key_validity | generate | 2 | TIER-DEBT-task3 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✗ | ✗ | ✗ | ✓ | 已测量未证明 |
-| gen_analysis_agreement | generate | 2 | TIER-DEBT-task3 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✗ | ✗ | ✗ | ✓ | 未测量 |
-| memory_correct_use | memory | 1 | §1.3-tier1 | 0.800（已测 n=5, missing_premise=1, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✓ | 已测量未证明 |
-| ver_fabricated | verify | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✓ | 已测量未证明 |
-| ver_exam_item_cited | verify | 1 | §1.3-tier1 | 0.467（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✓ | 已测量未证明 |
-| ver_exam_year_only | verify | 1 | §1.3-tier1 | 0.133（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✗ | ✓ | 已测量未证明 |
+| gen_structure | generate | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✓ | ✓ | 已证明 |
+| gen_answerability | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✓ | ✓ | 未测量 |
+| gen_coverage | generate | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✓ | ✓ | ✓ | ✓ | ✓ | 已证明 |
+| gen_correctness | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✓ | ✗ | ✓ | ✓ | 已测量未证明 |
+| gen_difficulty | generate | 1 | §1.3-tier1 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✓ | ✗ | ✓ | ✓ | 未测量 |
+| gen_answer_key_validity | generate | 2 | TIER-DEBT-task3 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✓ | ✗ | ✗ | ✓ | ✓ | 已测量未证明 |
+| gen_analysis_agreement | generate | 2 | TIER-DEBT-task3 | N/A（rate=None；已测 n=0, missing_premise=15, not_applicable=0） | ✗ | ✗ | ✗ | ✓ | ✓ | 未测量 |
+| memory_correct_use | memory | 1 | §1.3-tier1 | 1.000（已测 n=2, missing_premise=4, not_applicable=0） | ✗ | ✓ | ✓ | ✓ | ✓ | 已测量未证明 |
+| ver_fabricated | verify | 1 | §1.3-tier1 | 1.000（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✓ | ✓ | 已测量未证明 |
+| ver_exam_item_cited | verify | 1 | §1.3-tier1 | 0.133（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✓ | ✓ | 已测量未证明 |
+| ver_exam_year_only | verify | 1 | §1.3-tier1 | 0.333（已测 n=15, missing_premise=0, not_applicable=0） | ✗ | ✓ | ✓ | ✓ | ✓ | 已测量未证明 |
 
 falsify_passed 逐判据读数（三条口径见页首）：
 
@@ -117,7 +117,7 @@ falsify_passed 逐判据读数（三条口径见页首）：
 
 | path | status | superseded_by | reason |
 |---|---|---|---|
-| evals/results/task_eval/ec_r2_final_gate_20261015.jsonl | active | — | — |
+| evals/results/task_eval/ec_r3_freeze_20261016.jsonl | active | — | — |
 | evals/claims/falsify_latest.json | active | — | — |
 | evals/datasets/demo/calibration_30.jsonl | active | — | — |
 
