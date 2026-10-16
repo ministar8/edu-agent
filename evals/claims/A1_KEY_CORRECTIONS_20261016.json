@@ -1,0 +1,785 @@
+{
+  "artifact": "A1 正式原卷复核结果落地台账（2026-10-16）",
+  "owner_decision": "78 条与 13 条均「双落地」：exam_answer_corrections.json（评测侧覆盖）+ 本台账",
+  "source_report": {
+    "origin_path": "C:\\Users\\26452\\Downloads\\408_91%E9%A2%98%E5%8E%9F%E5%8D%B7%E4%BA%A4%E5%8F%89%E5%A4%8D%E6%A0%B8%E6%8A%A5%E5%91%8A.md",
+    "archived_as": "evals/results/task_eval/A1_REVIEW_REPORT_20261016.md",
+    "sha256": "7aafc4dab9ad5ea8e3fb0dc782ac6fce523d8539f9666148bbd56b41b4afae1e",
+    "author": "owner 组织的人工交叉复核（第三方读数 × 公开年度答案表）"
+  },
+  "worksheet": "evals/results/task_eval/A1_ORIGINAL_PAPER_REVIEW_20261016.md",
+  "disposition_rules": {
+    "rule_1": "原卷键 = 题库键 ⇒ 第三方读数错，题库不动，登记「一致」",
+    "rule_2": "原卷键 ≠ 题库键 ⇒ 题库键错，按 A1(d) 走 correct_key 订正（新字段追加、旧值不回写）",
+    "rule_3": "13 条无源键 ⇒ 以原卷补齐权威键后按 1/2 处置"
+  },
+  "mechanical_verification": {
+    "report_old_keys_vs_items_md": "78/78 一致",
+    "report_missing_keys_vs_items_md": "13/13 确认为 null",
+    "report_public_keys_vs_worksheet_third_party_readings": "91/91 一致（双来源交叉确认）",
+    "frozen_gold_blast_radius": "0（Grade 题干零命中；verify gold 仅题号；sanity 只查存在性；检索链不读修正表）"
+  },
+  "evidence_grade": {
+    "basis": "第三方网页读数与公开年度答案表逐项一致；题库旧键与 items.md 机械核对相符",
+    "limits": [
+      "公开答案表来源为高校资料存档页（厦门工学院历年 408 真题 PDF 存档 + 计算机考研杂货铺/PGCode 答案表），属参考答案，非教育考试主管部门官方标准答案",
+      "未逐字核对仓库 items.md 题干/选项与原卷，不能排除选项重排导致答案字母需重映射",
+      "correct_key 为订正台账值：items.md 旧值不回写、KB 不动，仅评测侧覆盖"
+    ]
+  },
+  "key_changes_78": [
+    {
+      "question_id": "2011-Q1",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q2",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q3",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q6",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q8",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q9",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q10",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q11",
+      "year": "2011",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q12",
+      "year": "2011",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q13",
+      "year": "2011",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q14",
+      "year": "2011",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q15",
+      "year": "2011",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q16",
+      "year": "2011",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q17",
+      "year": "2011",
+      "subject": "计算机组成原理",
+      "repo_old_key": "A",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2011-Q19",
+      "year": "2011",
+      "subject": "计算机组成原理",
+      "repo_old_key": "A",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q3",
+      "year": "2015",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q4",
+      "year": "2015",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q5",
+      "year": "2015",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q8",
+      "year": "2015",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q10",
+      "year": "2015",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q11",
+      "year": "2015",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q12",
+      "year": "2015",
+      "subject": "操作系统",
+      "repo_old_key": "D",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q13",
+      "year": "2015",
+      "subject": "计算机组成原理",
+      "repo_old_key": "D",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q14",
+      "year": "2015",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q16",
+      "year": "2015",
+      "subject": "计算机组成原理",
+      "repo_old_key": "D",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q18",
+      "year": "2015",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q19",
+      "year": "2015",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2015-Q20",
+      "year": "2015",
+      "subject": "操作系统",
+      "repo_old_key": "A",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q3",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q4",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q5",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q6",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q7",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q8",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q10",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q11",
+      "year": "2019",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q12",
+      "year": "2019",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q13",
+      "year": "2019",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q14",
+      "year": "2019",
+      "subject": "操作系统",
+      "repo_old_key": "A",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q17",
+      "year": "2019",
+      "subject": "计算机组成原理",
+      "repo_old_key": "D",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2019-Q18",
+      "year": "2019",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q4",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q5",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q6",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q7",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q8",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q9",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q10",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q11",
+      "year": "2021",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q14",
+      "year": "2021",
+      "subject": "计算机组成原理",
+      "repo_old_key": "D",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q15",
+      "year": "2021",
+      "subject": "计算机组成原理",
+      "repo_old_key": "A",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q16",
+      "year": "2021",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q17",
+      "year": "2021",
+      "subject": "计算机组成原理",
+      "repo_old_key": "A",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2021-Q18",
+      "year": "2021",
+      "subject": "计算机组成原理",
+      "repo_old_key": "D",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q2",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q4",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q5",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q6",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q7",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q8",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q9",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "A",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q11",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q14",
+      "year": "2024",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q15",
+      "year": "2024",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q17",
+      "year": "2024",
+      "subject": "计算机组成原理",
+      "repo_old_key": "D",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q18",
+      "year": "2024",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2024-Q19",
+      "year": "2024",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q2",
+      "year": "2025",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q4",
+      "year": "2025",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q5",
+      "year": "2025",
+      "subject": "数据结构",
+      "repo_old_key": "B",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q6",
+      "year": "2025",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q9",
+      "year": "2025",
+      "subject": "数据结构",
+      "repo_old_key": "C",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q11",
+      "year": "2025",
+      "subject": "数据结构",
+      "repo_old_key": "D",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q12",
+      "year": "2025",
+      "subject": "操作系统",
+      "repo_old_key": "A",
+      "authoritative_key": "D",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q16",
+      "year": "2025",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q17",
+      "year": "2025",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "C",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q18",
+      "year": "2025",
+      "subject": "计算机组成原理",
+      "repo_old_key": "C",
+      "authoritative_key": "B",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    },
+    {
+      "question_id": "2025-Q19",
+      "year": "2025",
+      "subject": "计算机组成原理",
+      "repo_old_key": "B",
+      "authoritative_key": "A",
+      "disposition": "correct_key（A1(d)：新字段追加、旧值不回写）"
+    }
+  ],
+  "key_fills_13": [
+    {
+      "question_id": "2009-Q3",
+      "year": "2009",
+      "subject": "数据结构",
+      "repo_old_key": null,
+      "authoritative_key": "D",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q6",
+      "year": "2009",
+      "subject": "数据结构",
+      "repo_old_key": null,
+      "authoritative_key": "B",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q8",
+      "year": "2009",
+      "subject": "数据结构",
+      "repo_old_key": null,
+      "authoritative_key": "D",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q10",
+      "year": "2009",
+      "subject": "数据结构",
+      "repo_old_key": null,
+      "authoritative_key": "B",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q13",
+      "year": "2009",
+      "subject": "计算机组成原理",
+      "repo_old_key": null,
+      "authoritative_key": "D",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q14",
+      "year": "2009",
+      "subject": "计算机组成原理",
+      "repo_old_key": null,
+      "authoritative_key": "C",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q15",
+      "year": "2009",
+      "subject": "计算机组成原理",
+      "repo_old_key": null,
+      "authoritative_key": "D",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q16",
+      "year": "2009",
+      "subject": "计算机组成原理",
+      "repo_old_key": null,
+      "authoritative_key": "C",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q18",
+      "year": "2009",
+      "subject": "计算机组成原理",
+      "repo_old_key": null,
+      "authoritative_key": "A",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2009-Q19",
+      "year": "2009",
+      "subject": "操作系统",
+      "repo_old_key": null,
+      "authoritative_key": "D",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2016-Q1",
+      "year": "2016",
+      "subject": "数据结构",
+      "repo_old_key": null,
+      "authoritative_key": "D",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2021-Q12",
+      "year": "2021",
+      "subject": "计算机组成原理",
+      "repo_old_key": null,
+      "authoritative_key": "D",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    },
+    {
+      "question_id": "2024-Q10",
+      "year": "2024",
+      "subject": "数据结构",
+      "repo_old_key": null,
+      "authoritative_key": "C",
+      "disposition": "评测侧补键（items.md 保持 null；审计分母口径不变——分母为审计台账手工计算）"
+    }
+  ],
+  "verify_confirmations": [
+    {
+      "question_id": "2009-Q11",
+      "repo_old_key": "D",
+      "report_key": "C",
+      "status": "已登记于 p1_key_audit_sample.json（fail, correct_key=C），报告确认一致，无新动作"
+    },
+    {
+      "question_id": "2011-Q5",
+      "repo_old_key": "B",
+      "report_key": "C",
+      "status": "已登记于 p1_key_audit_sample.json（fail, correct_key=C），报告确认一致，无新动作"
+    }
+  ],
+  "open_items": [
+    "ver-002 / ver-007 题号有效性（引用题是否真考 query 知识点）报告明示「另行判定」，尚未裁定",
+    "91 键的仓库题干/选项与原卷逐字比对未做（证据等级升级的前置）"
+  ],
+  "landing": {
+    "evaluation_override_file": "evals/datasets/exam_answer_corrections.json",
+    "entries_appended": 91,
+    "kb_files_touched": []
+  }
+}
