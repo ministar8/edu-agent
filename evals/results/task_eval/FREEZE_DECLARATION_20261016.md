@@ -56,4 +56,4 @@ owner 指示「清理垃圾后再冻结项目」。清理与固化记录：
 | 运行时资产 | **保留**（gitignored） | `.venv/`（1.1G 运行时）、`chroma_db/`（34M，retrieval gate 消费）、`data/metrics/rag_metrics.jsonl`（78M，probe/telemetry gate 消费）、`.env`（配置）、`edu_agent.db`（10 行 users 应用数据）、`.vscode/`、`.claude/`、`.workbuddy-ai/`（Agent 记忆） |
 | 跟踪文件 | **零删除** | `ledger_draft.md` 等历史草稿被 3 篇文档引用，按归档纪律留档 |
 
-清理后 `git status` 干净（无未跟踪、无修改）。项目级冻结锚点：git tag `P-2026-10-16`；远程备份判据：`git log origin/main..main` 为空且 `V-2026-10-16`/`P-2026-10-16` 在 `git ls-remote --tags origin` 在列。清理后全量复验与 §1 门禁终态逐项一致（证据：`docs/EXPERIMENTS.md` §20.7.8㉔）。
+清理后 `git status` 干净（无未跟踪、无修改）。项目级冻结锚点：git tag `P-2026-10-16`；远程备份判据：`git log origin/main..main` 为空且 `V-2026-10-16`/`P-2026-10-16` 在 `git ls-remote --tags origin` 在列。**远程备份已于 2026-10-17 执行完毕**：`origin/main` 已推进至 `583b856`（即 `P-2026-10-16` 所指向提交），两冻结标签均在远端在列，本地与远程同代。清理后全量复验与 §1 门禁终态逐项一致（证据：`docs/EXPERIMENTS.md` §20.7.8㉔）。
