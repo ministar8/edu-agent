@@ -1,0 +1,178 @@
+{
+  "recorded_at": "2026-11-04T15:08:47.412474+00:00",
+  "golden": "evals/datasets/golden/sample_408.jsonl",
+  "limit": null,
+  "config_snapshot": {
+    "full": {
+      "note": "完整系统（当前默认）"
+    },
+    "no_bm25": {
+      "skip_bm25": true,
+      "note": "去掉 BM25 路由"
+    },
+    "no_metadata": {
+      "skip_metadata_routes": true,
+      "note": "去掉元数据路由"
+    },
+    "no_decompose": {
+      "skip_decompose": true,
+      "note": "去掉查询分解"
+    },
+    "no_hyde": {
+      "hyde": false,
+      "note": "去掉 HyDE"
+    },
+    "vector_only": {
+      "skip_bm25": true,
+      "skip_metadata_routes": true,
+      "note": "仅语义向量（去 BM25+元数据）"
+    },
+    "plus_topup": {
+      "topup": true,
+      "note": "加 preferred 层 top-up"
+    }
+  },
+  "rows": [
+    {
+      "config": "full",
+      "note": "完整系统（当前默认）",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 270.1,
+      "category_hit_at_1": 0.8718,
+      "category_hit_at_k": 0.9423,
+      "category_mrr": 0.9003,
+      "category_precision": 0.8626,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.5513,
+      "kp_hit_at_k": 0.9231,
+      "kp_mrr": 0.8309,
+      "kp_annotated": 156.0
+    },
+    {
+      "config": "no_bm25",
+      "note": "去掉 BM25 路由",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 129.5,
+      "category_hit_at_1": 0.7885,
+      "category_hit_at_k": 0.8974,
+      "category_mrr": 0.8324,
+      "category_precision": 0.8482,
+      "empty_result_rate": 0.0449,
+      "mean_evidence_count": 4.3077,
+      "kp_hit_at_k": 0.8077,
+      "kp_mrr": 0.7403,
+      "kp_annotated": 156.0
+    },
+    {
+      "config": "no_metadata",
+      "note": "去掉元数据路由",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 61.3,
+      "category_hit_at_1": 0.8974,
+      "category_hit_at_k": 0.9679,
+      "category_mrr": 0.9252,
+      "category_precision": 0.8718,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.8013,
+      "kp_hit_at_k": 0.9679,
+      "kp_mrr": 0.8675,
+      "kp_annotated": 156.0
+    },
+    {
+      "config": "no_decompose",
+      "note": "去掉查询分解",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 53.7,
+      "category_hit_at_1": 0.8526,
+      "category_hit_at_k": 0.9487,
+      "category_mrr": 0.8902,
+      "category_precision": 0.8566,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.0064,
+      "kp_hit_at_k": 0.9359,
+      "kp_mrr": 0.8236,
+      "kp_annotated": 156.0
+    },
+    {
+      "config": "no_hyde",
+      "note": "去掉 HyDE",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 44.9,
+      "category_hit_at_1": 0.8718,
+      "category_hit_at_k": 0.9423,
+      "category_mrr": 0.9019,
+      "category_precision": 0.8664,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.5641,
+      "kp_hit_at_k": 0.9231,
+      "kp_mrr": 0.8347,
+      "kp_annotated": 156.0
+    },
+    {
+      "config": "vector_only",
+      "note": "仅语义向量（去 BM25+元数据）",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 60.1,
+      "category_hit_at_1": 0.8205,
+      "category_hit_at_k": 0.9167,
+      "category_mrr": 0.8632,
+      "category_precision": 0.8784,
+      "empty_result_rate": 0.0192,
+      "mean_evidence_count": 5.0064,
+      "kp_hit_at_k": 0.8782,
+      "kp_mrr": 0.801,
+      "kp_annotated": 156.0
+    },
+    {
+      "config": "plus_topup",
+      "note": "加 preferred 层 top-up",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 80.1,
+      "category_hit_at_1": 0.8718,
+      "category_hit_at_k": 0.9679,
+      "category_mrr": 0.9054,
+      "category_precision": 0.7303,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 6.9167,
+      "kp_hit_at_k": 0.9487,
+      "kp_mrr": 0.8365,
+      "kp_annotated": 156.0
+    }
+  ],
+  "provenance": {
+    "recorded_at": "2026-11-04T15:08:47.412474+00:00",
+    "code_version": "df0965b",
+    "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
+    "script": "scripts/lib/ablation_retrieval.py",
+    "argv": [
+      "--configs",
+      "full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup"
+    ],
+    "model_refs": {
+      "agent": "deepseek:deepseek-flash",
+      "rag_chain": "dashscope:deepseek-v4.1-flash",
+      "judge": "dashscope:deepseek-v4.1-flash"
+    },
+    "sampling": {
+      "temp_precise": 0.0,
+      "temp_creative": 0.3,
+      "temp_default": 0.3
+    },
+    "experiment_config_hash": "f92924f5741d",
+    "dependency_lock_hash": "881607c7955b"
+  }
+}

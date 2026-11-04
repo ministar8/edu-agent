@@ -67,38 +67,34 @@
 **触发**：§2 表（V-2026-10-02）是 **2026-10-10 语料换代之前**的读数（见 §18 抬头），不能与现行系统
 并列；RAG 结构收口（`3255d26`）后也需要一次同代际回归。
 
-**口径**：黄金集 `sample_408.jsonl`（sha256 `783e78ff…`）前 60 条（与 §2 同为 `--limit 60`）；
-生产索引（2026 chunk / 10 集合）；embedding = 真 TEI bge-m3；`RERANK_ENABLED=false`（部署开关）；
-RAG LLM = `dashscope:qwen3.8-flash`（2026-11-04 由 `qwen3.8-max-0902` 切换；本项目现行配置）。
+**口径**：黄金集 `sample_408.jsonl`（sha256 `783e78ff…`）**全量 156 条**；生产索引（2026 chunk / 10 集合）；
+embedding = 真 TEI bge-m3；`RERANK_ENABLED=false`（部署开关）；RAG LLM = `dashscope:deepseek-v4.1-flash`
+（2026-11-04 切换；千问额度用尽）。★ 查询 embedding 已加进程内缓存，只影响耗时、不改结果。
 
-★ **过渡跑说明**：期间 DashScope 账户欠费（`Arrearage`），首轮因 classify / decompose / HyDE 降级而作废；过渡读数曾用 `deepseek:deepseek-flash` 跑出，与下表结论一致；欠费解决并换 key 后以 qwen3.8-flash 重跑为准，过渡归档已于 2026-11-04 清理。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
+★ **历史口径（归档已清理，仅留记录）**：60 条子集 qwen3.8-flash 两轮（2026-11-04 过渡读数）已删除；全量首轮因路由超时 58 条作废，归档亦已删除。子集/过渡读数与全量在 BM25 与元数据方向上**不一致**，一律以本表全量为准；原始子集归档可从 `git show ed9f385:evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json` 取回。 （证据：`git show ed9f385:evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
 
-**归档**：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`；稳定性复跑
-`component_ablation_20261104_repeat_qwen38flash.json`：full / no_decompose / no_hyde **逐位相同**，仅 `no_bm25` 在 Δ −0.003 与 −0.007 之间抖动（噪声量级）。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_repeat_qwen38flash.json`）
+**归档**：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`；
+本轮 `real_fail=0`、`llm_fail=0`（少量瞬时超时均由重试兜住）。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`）
 
 | 配置 | kp_hit@k | kp_mrr | Δ kp_mrr | cat@1 | 证据数 |
 |---|---|---|---|---|---|
-| **full（基线）** | **1.000** | **0.9236** | — | 0.933 | 5.88 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
-| no_bm25 | 0.967 | 0.9167 | −0.007 | 0.900 | 5.83 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
-| no_metadata | 1.000 | 0.9194 | −0.004 | 0.950 | 6.03 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
-| no_decompose | 1.000 | 0.9361 | **+0.013** | 0.950 | 4.72 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
-| no_hyde | 1.000 | 0.9361 | **+0.013** | 0.950 | 5.82 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
-| vector_only | 0.983 | 0.9125 | −0.011 | 0.900 | 5.92 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
-| plus_topup | 1.000 | 0.9236 | 0.000 | 0.933 | 7.75 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
+| **full（基线）** | **0.923** | **0.8309** | — | 0.872 | 5.55 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`） |
+| no_bm25 | 0.808 | 0.7403 | **−0.091** | 0.789 | 4.31 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`） |
+| no_metadata | 0.968 | 0.8675 | **+0.037** | 0.897 | 5.80 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`） |
+| no_decompose | 0.936 | 0.8236 | −0.007 | 0.853 | 5.01 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`） |
+| no_hyde | 0.923 | 0.8347 | +0.004 | 0.872 | 5.56 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`） |
+| vector_only | 0.878 | 0.8010 | −0.030 | 0.821 | 5.01 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`） |
+| plus_topup | 0.949 | 0.8365 | +0.006 | 0.872 | 6.92 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`） |
 
 **与 §2 的结论差异（论文必须按新代际重写）**：
 
-1. **BM25 的边际贡献已落进噪声带**（qwen 两轮 −0.003 ~ −0.007；§6.3(b) 噪声地板 ±0.003），不再是 −0.062；元数据同理（−0.004）；多路召回的「正贡献」在本代际只在 `vector_only` 上还看得见（kp_mrr −0.011、cat@1 −0.033），幅度远小于旧代际。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
-2. **分解 / HyDE 从「零增益」变为「轻微负增益」**：去掉后 kp_mrr **+0.013**（约 4× 噪声地板），两轮逐位相同 —— 这是**结论反转**，不能再用「复杂度未兑现」带过。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
-3. **top-up 仍只增加覆盖**（证据数 5.88→7.75），不改排序指标 —— 与旧结论一致。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
-4. **绝对数值不可与 §2 行对行比较**：语料、黄金集 sha、LLM 三处都不同；可比的是**同一代际内的 Δ 结构**。
+1. **BM25 的正贡献恢复且很大**：去掉后 kp_mrr **−0.091**、kp_hit −0.115、cat@1 −0.083 —— 60 条子集里「落进噪声带」的结论**不成立**，那是样本量不足造成的。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`）
+2. **元数据路由是负贡献**：去掉后 kp_mrr **+0.037**、kp_hit +0.045、cat@1 +0.026。这是本轮最反直觉的结论，与 60 条子集的 −0.004 方向相反；全量样本下幅度远超噪声地板。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`）
+3. **分解 / HyDE 接近中性**（−0.007 / +0.004），不再是子集读数里的 +0.013「轻微负增益」。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`）
+4. **top-up 仍只增加覆盖**（证据数 5.55→6.92），不改排序指标。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`）
+5. **绝对数值不可与 §2 行对行比较**：语料、黄金集 sha、LLM 三处都不同；可比的是**同一代际内的 Δ 结构**。
 
-★ 复现：`PYTHONPATH=src python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
-
-★ **全量 156 条首轮作废（2026-11-04）**：消融跑的是生产索引、未走门禁的就绪屏障，跑动中出现 21 次
-`Async Chroma query failed`（full 6 / no_hyde 14 / plus_topup 1，no_metadata 0）。★ 组间故障次数不等
-⇒ 差值不能解释为组件效应；该轮归档已丢弃。**本表仍为 60 条子集读数**，全量复跑待做（或先把消融迁移到
-临时索引 + 就绪屏障，与 `retrieval_gate` 同一套仪器）。 （证据：`docs/ARCHITECTURE_RETRIEVAL.md` §6.3 的 HNSW 间歇故障记录；本轮临时日志已随运行时垃圾清理）
+★ 复现：`PYTHONPATH=src python scripts/lib/ablation_retrieval.py --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
 
 ---
 
