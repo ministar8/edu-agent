@@ -131,8 +131,8 @@ from rag.retrieval.api import retrieve_for_task
 bundle = await retrieve_for_task(query=..., k=...)
 
 # 测量路径：未裁剪包（门禁 / RAGAS / 诊断）
-from rag.retrieval.retriever import aretrieve_evidence_with_retry
-fused, verification = await aretrieve_evidence_with_retry(query=..., k=...)
+from rag.retrieval.retriever import aretrieve_evidence_raw
+fused, verification = await aretrieve_evidence_raw(query=..., k=...)
 ```
 
 | 阶段 | 事件名 | 阶段函数 | 做什么 |
@@ -163,7 +163,7 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=...)
 ### 4.2 检索链的模块边界（2026-11-04 收口）
 
 - **产品入口**：`rag.retrieval.api.retrieve_for_task`（检索 + finalize + release）。
-- **测量入口**：`rag.retrieval.retriever.aretrieve_evidence_with_retry`（未裁剪包）。
+- **测量入口**：`rag.retrieval.retriever.aretrieve_evidence_raw`（未裁剪包）。
 - **编排**：`retrieval/pipeline/`（`_orchestrator` 编排 + `_stages` 阶段 + `_helpers` 辅助 +
   `_internals` 常量/策略/结构）。
 - **门面**：只做缓存、指标与证据组装；classify/plan/decompose 由 pipeline 独占。

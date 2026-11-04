@@ -76,10 +76,10 @@ def test_backlink() -> list[str]:
 
 async def test_negative() -> list[str]:
     fails = []
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
 
     async def top(query: str, k: int = 5):
-        fused, _ = await aretrieve_evidence_with_retry(query=query, k=k)
+        fused, _ = await aretrieve_evidence_raw(query=query, k=k)
         return list(getattr(fused, "text_evidences", []) or [])
 
     def is_basic(ev) -> bool:

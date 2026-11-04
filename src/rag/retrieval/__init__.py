@@ -2,17 +2,17 @@
 
 两条显式入口（勿混）：
 - `retrieve_for_task`：产品路径，返回**已裁剪**的 `EvidenceBundle`。
-- `aretrieve_evidence_with_retry`：测量路径，返回**未裁剪**的检索包
+- `aretrieve_evidence_raw`：测量路径，返回**未裁剪**的检索包
   （检索门禁 / RAGAS / 诊断 / 消融实验用）。
 """
 
 from rag.retrieval.api import EvidenceBundle, retrieve_for_task
 from rag.retrieval.evidence import FusedEvidence
-from rag.retrieval.retriever import aretrieve_evidence_with_retry
+from rag.retrieval.retriever import aretrieve_evidence_raw
 
 __all__ = [
     "EvidenceBundle",
     "FusedEvidence",
-    "aretrieve_evidence_with_retry",
+    "aretrieve_evidence_raw",
     "retrieve_for_task",
 ]

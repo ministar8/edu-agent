@@ -42,7 +42,7 @@ STAGE_TARGETS: tuple[tuple[str, str], ...] = (
     # ⚠️ 但「patch 生效」≠「会被调用」：这三个目标只在**证据层**被走到，
     # 而追踪入口曾经是文档层的 `aretrieve_documents` → 它们恒为 0 次。
     # 故 `record_query` / `probe_query_stability` **必须**从
-    # `aretrieve_evidence_with_retry` 进入（见模块文档串）。
+    # `aretrieve_evidence_raw` 进入（见模块文档串）。
     # 这条依赖靠 `_stage_trigger_report` 的触发率表兜住：0 次会显式标出来。
     ("retrieve_evidence", "aretrieve_evidence"),
     ("fuse_documents", "fusion:afuse_documents"),
@@ -203,7 +203,7 @@ async def _retrieve_fused(query: str, *, k: int, use_rerank: bool):
     """
     import rag.retrieval.retriever as R
 
-    fused, _verdict = await R.aretrieve_evidence_with_retry(
+    fused, _verdict = await R.aretrieve_evidence_raw(
         query=query,
         k=k,
         use_rerank=use_rerank,

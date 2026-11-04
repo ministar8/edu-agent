@@ -19,7 +19,7 @@
 | 入口 | 用途 | 是否裁剪 |
 |---|---|---|
 | `retrieval.api.retrieve_for_task` | 产品路径（Agent） | ✅ finalize + apply |
-| `retrieval.retriever.aretrieve_evidence_with_retry` | 检索质量测量 / 实验 | ❌ 原始包 |
+| `retrieval.retriever.aretrieve_evidence_raw` | 检索质量测量 / 实验 | ❌ 原始包 |
 
 ## 命名对照（最容易混的三对）
 

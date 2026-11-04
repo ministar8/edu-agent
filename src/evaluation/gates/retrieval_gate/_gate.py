@@ -100,11 +100,11 @@ async def _run_one_query(
       每条都从第 1 条开始重复计数。`_query_failures` 是 append-only 的进程级列表，
       不 reset 就无法定位「到底是哪条 query 把集合查坏了」。
     """
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
 
     mgr.reset_query_failures()
     try:
-        fused, _verdict = await aretrieve_evidence_with_retry(
+        fused, _verdict = await aretrieve_evidence_raw(
             query=query,
             k=GATE_K,
             # 传「调用方是否要求重排」——disabled 态要求了、但部署开关会短路它

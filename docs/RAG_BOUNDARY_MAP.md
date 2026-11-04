@@ -11,7 +11,7 @@
 ```
 离线：docs → loader → clean → split → enhance → tag(kp) → Chroma 集合（6 分层）
 在线（产品）：TaskPolicy ─→ retrieve_for_task()（检索 → finalize → apply）─→ EvidenceBundle → Agent/前端溯源
-在线（测量）：aretrieve_evidence_with_retry()（未裁剪包）─→ 检索门禁 / RAGAS / 诊断
+在线（测量）：aretrieve_evidence_raw()（未裁剪包）─→ 检索门禁 / RAGAS / 诊断
 ```
 
 变更铁律：**两条链共享同一批集合、同一批集合名定义**。改任何一边先查 §5 的真源表。
@@ -21,7 +21,7 @@
 ## 1. 入口与调用方矩阵（谁在哪进链路）
 
 产品检索入口：`rag.retrieval.api.retrieve_for_task()`（含 finalize + apply）。
-测量检索入口：`rag.retrieval.retriever.aretrieve_evidence_with_retry()`（未裁剪包）。
+测量检索入口：`rag.retrieval.retriever.aretrieve_evidence_raw()`（未裁剪包）。
 （`aretrieve_evidence` 仍是底层实现；`retriever_retry` 已并入 `retriever.py`。）
 
 | # | 调用方 | 位置 | 性质 |
@@ -93,7 +93,7 @@
 这些地方的正确性**不靠编译器/类型保护，靠注释与人**保持一致：
 
 1. **两条入口已显式分开**：产品路径走 `retrieve_for_task()`（内部 finalize + apply）；测量路径走
-   `aretrieve_evidence_with_retry()`（原始包）。`finalize/apply` 仍在语义缓存**之上**，不得下移
+   `aretrieve_evidence_raw()`（原始包）。`finalize/apply` 仍在语义缓存**之上**，不得下移
    （`_semantic_cache_codec.py` 明文警告）。
 2. **`pack_blocked()` ↔ `apply_evidence_policy` 的 continue 条件**必须逐条一致（`evidence_policy.py` 内注释自证）。
 3. **单一编排**：classify→plan→decompose 只由 pipeline 执行（`_run_stages_early`）；门面通过
@@ -123,7 +123,7 @@
 
 > 我们把 RAG 整理成"一个产品入口、一个测量入口、两条链、三层策略、一个出口"。
 > Agent 走 `retrieve_for_task`（含 release），门禁/RAGAS/诊断走
-> `aretrieve_evidence_with_retry`（原始包）保证测量口径；离线按六个分层集合入库 Chroma，在线六步主路径；
+> `aretrieve_evidence_raw`（原始包）保证测量口径；离线按六个分层集合入库 Chroma，在线六步主路径；
 > 安全上 TaskPolicy 负责资格与披露，裁剪在 `apply_evidence_policy` 唯一出口发生；
 > 相似度换算全仓单点、每步带漏斗指标与溯源标记，且由检索门禁与 RAGAS 复用生产路径闭环验证。
 > 已知技术债（出口签约、文件粒度、门禁收口）已记入边界地图台账，属于工程收口问题，不影响架构正确性。

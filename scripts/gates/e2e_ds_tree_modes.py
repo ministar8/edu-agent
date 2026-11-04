@@ -18,7 +18,7 @@ from rag.retrieval.evidence_policy import (  # noqa: E402
     apply_evidence_policy,
     finalize_with_layer_ranking,
 )
-from rag.retrieval.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.retrieval.retriever import aretrieve_evidence_raw  # noqa: E402
 from rag.retrieval.task_policy import resolve_task_policy  # noqa: E402
 
 _QID_RE = re.compile(r"(?:19|20)\d{2}-Q\d+")
@@ -95,7 +95,7 @@ async def run_one(case: dict) -> list[str]:
             return fails
 
     filter_w = policy.eligibility_where()
-    fused, _ver = await aretrieve_evidence_with_retry(
+    fused, _ver = await aretrieve_evidence_raw(
         query=q,
         k=20,
         use_rerank=True,

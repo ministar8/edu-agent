@@ -53,7 +53,7 @@ from rag.retrieval.evidence_policy import (  # noqa: E402
     apply_evidence_policy,
     finalize_with_layer_ranking,
 )
-from rag.retrieval.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.retrieval.retriever import aretrieve_evidence_raw  # noqa: E402
 from rag.retrieval.task_policy import policy_for_mode  # noqa: E402
 from schema.task_policy import TaskPolicy  # noqa: E402
 
@@ -100,7 +100,7 @@ def _build_policy(mode: str, policy_id: str) -> TaskPolicy:
 
 
 async def run_one(query: str, mode: str, policy: TaskPolicy) -> dict[str, Any]:
-    fused, _ = await aretrieve_evidence_with_retry(
+    fused, _ = await aretrieve_evidence_raw(
         query=query,
         k=5,
         use_rerank=True,

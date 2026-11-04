@@ -28,7 +28,7 @@
 **验机制的入口 ≠ 录基线的入口**，两边都「通过」，却什么都没覆盖到。
 这类缺陷比「补一个指标」更危险：它看着像「已覆盖」，实为新的盲区。
 
-现在统一从 `aretrieve_evidence_with_retry` 进入（**与检索门禁同一个入口**），
+现在统一从 `aretrieve_evidence_raw` 进入（**与检索门禁同一个入口**），
 链路 = 文档层 8 阶段 + 门面层 3 步（`aretrieve_evidence` → `afuse_documents` →
 `averify_evidence`），是原先的**真超集**：`_stage_decompose_query` 在拿到预计算子查询时
 会跳过 `decompose`，但 `aretrieve_evidence` 自己会直接调用模块级 `decompose`，

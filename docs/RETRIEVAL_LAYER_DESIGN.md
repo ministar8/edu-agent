@@ -173,7 +173,7 @@ retrieval_policy:
 teaching_graph: START → load_memory → supervisor → END
 supervisor: knowledge_agent / question_agent / grading_agent
 tools: aknowledge_search / atext_search
-        → aretrieve_evidence_with_retry(query, depth, use_rerank)
+        → aretrieve_evidence_raw(query, depth, use_rerank)
 query_classifier: RetrievalDepth(shallow|standard|deep|code|text_only)
 ```
 

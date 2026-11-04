@@ -1,9 +1,9 @@
 """产品检索门面：检索 + 层排序 + 安全裁剪的唯一入口。
 
-与 `aretrieve_evidence_with_retry` 的分工（两条显式路径，勿混）：
+与 `aretrieve_evidence_raw` 的分工（两条显式路径，勿混）：
 
 - **本模块** = 产品路径：返回**已裁剪**的证据包，给 Agent 用。
-- **`aretrieve_evidence_with_retry`** = 测量路径：返回**未裁剪**的检索包，
+- **`aretrieve_evidence_raw`** = 测量路径：返回**未裁剪**的检索包，
   给检索门禁 / RAGAS / 诊断 / 消融实验用（它们测的是检索质量，不是披露）。
 
 ★ 为什么 release 放在这里、而不下移进 `aretrieve_evidence`：
@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from rag.retrieval.evidence import FusedEvidence
 from rag.retrieval.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
 from rag.retrieval.query_classifier import RetrievalDepth
-from rag.retrieval.retriever import StageSink, aretrieve_evidence_with_retry
+from rag.retrieval.retriever import StageSink, aretrieve_evidence_raw
 from rag.retrieval.task_policy import resolve_task_policy
 from rag.retrieval.verifier import VerificationResult
 from schema.task_policy import TaskMode
@@ -62,7 +62,7 @@ async def retrieve_for_task(
     recall_filter = merge_where_filters(None, policy.eligibility_where())
     # 多取候选 → layer 软加权 → 再截 top-k（否则 preferred 层进不了池）
     candidate_k = max(k * 3, 15)
-    fused, verdict = await aretrieve_evidence_with_retry(
+    fused, verdict = await aretrieve_evidence_raw(
         query=query,
         k=candidate_k,
         use_rerank=True,

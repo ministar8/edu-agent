@@ -10,7 +10,7 @@ from langchain_core.embeddings import Embeddings
 from core.llm import get_llm
 from evaluation.ragas.dataset import EvalSample
 from rag.retrieval.evidence import FusedEvidence, TextEvidence
-from rag.retrieval.retriever import aretrieve_evidence_with_retry
+from rag.retrieval.retriever import aretrieve_evidence_raw
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ async def retrieve_contexts(
     就是文本证据的拼接，证据为空则它必为空）；保留它只为防止 fusion 将来改口径时
     静默返回空列表。
     """
-    fused, _ver = await aretrieve_evidence_with_retry(
+    fused, _ver = await aretrieve_evidence_raw(
         query=query,
         k=k,
         use_rerank=use_rerank,

@@ -36,10 +36,12 @@ def _cache_key(
     **为什么不含也不出事**：本缓存只存 **`aretrieve_evidence` 返回的「纯检索结果」**，
     而所有 **policy 相关处理都在缓存之外**执行：
 
-        aretrieve_evidence_with_retry(...)   ← 缓存发生处（agents/tools.py）
-          ├─ _with_topup(...)                ← 缓存之后（preferred_layers / eligible_layers）
-          ├─ finalize_with_layer_ranking(...) ← 缓存之后（legacy 池策略 + 排序 + 截断）
-          └─ apply_evidence_policy(...)       ← 缓存之后（**release 裁剪，安全出口**）
+        aretrieve_evidence(...)                 ← 缓存读写发生处
+          ├─ _with_topup(...)                   ← 缓存之后（preferred_layers / eligible_layers）
+          ├─ finalize_with_layer_ranking(...)   ← 缓存之后（legacy 池策略 + 排序 + 截断）
+          └─ apply_evidence_policy(...)         ← 缓存之后（**release 裁剪，安全出口**）
+
+    调用链：`retrieve_for_task` / `aretrieve_evidence_raw` → `aretrieve_evidence`。
 
     且 `aretrieve_evidence` **不 import** `apply_evidence_policy`
     ⇒ 缓存命中**也无法绕过 release 裁剪**（每次都按当前 policy 重做）⇒ 无泄露。

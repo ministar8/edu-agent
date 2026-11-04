@@ -538,7 +538,7 @@ verify 的 `exam_resources.answer=forbidden` 被 top-up 绕过：top-up 只按 `
 **问题**：`preferred_layers=['exams']` 而 exams 不合规时，top-up 只按 `kb_depth=exams`
 找（被 where 挡空），且**不为合规层补**，主池可能只剩 legacy → 包被掏空。
 
-**修法**：`aretrieve_evidence_with_retry(..., eligible_layers=)`（新增可选参数）。
+**修法**：`aretrieve_evidence_raw(..., eligible_layers=)`（新增可选参数）。
 preferred 层**全部不合规**时收敛到 `eligible_layers`；生产 policy 恒一致，不影响默认行为。 （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`）
 资格真源：`TaskPolicy.eligible_semantic_layers()`（basic/advanced 恒允许；exams 需任一资源 allowed）。
 
@@ -2013,14 +2013,14 @@ gold 快照注入（走 `load_demo`+`asdict`，与 runner 落盘同一条代码�
   · `rag/retrieval/retriever_retry.py`：删 `_llm_verify`（use_llm=True 专用）与
     `_apply_retry_hints`（重试 hints 落地，仅 LLM verify 路径消费）；
   · `rag/retrieval/retriever.py`：删 `_verify_with_optional_retry`；`_finalize_evidence` 收敛为
-    默认路径（规则 verdict 透出，不再二次 verify / 不 retry）；`aretrieve_evidence_with_retry`
+    默认路径（规则 verdict 透出，不再二次 verify / 不 retry）；`aretrieve_evidence_raw`
     移除 `max_retries` / `use_llm_verify` 形参；
   · 五个调用点同步去参（`agents/tools.py`、`retrieval_gate/_gate.py`、`ragas/adapters.py`、
     `diagnostics/_stage_trace_core.py`、`task_eval/retrieval_probe.py`）；
     `retriever_io._verify_fused` 去 `use_llm=False`。
-- **函数名 `aretrieve_evidence_with_retry` 是历史误称**（已无 retry 语义）：保留不改名是避免六处
-  调用锚点与文档连带改写，**登记为冻结后清理项**（走 EFFECT_PLAN §6 新版本流程，类似 `_sse` 的
-  带披露保留模式）。
+- **函数名原为 `aretrieve_evidence_with_retry`，是历史误称**（B5 后已无 retry 语义）。
+  2026-11-04 已改名为 `aretrieve_evidence_raw`（15 个代码文件 + 8 份文档同步；
+  `raw` = 未裁剪，与产品入口 `retrieve_for_task` 对照）。
 - 删除后回归：pytest 26/26、ruff `src/` 全绿、默认路由检索门禁 exit 0（假 embedding）（复现：`pytest -q` · `ruff check src/` · 默认路由 `retrieval_gate`）。
 
 **③ B6 `gen_difficulty` 中文难度行（owner：暂行登记选项② + 修 docstring；选项①后果非唯一）**

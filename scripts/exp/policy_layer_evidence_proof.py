@@ -28,7 +28,7 @@ from rag.retrieval.evidence_policy import (  # noqa: E402
     apply_evidence_policy,
     finalize_with_layer_ranking,
 )
-from rag.retrieval.retriever import aretrieve_evidence_with_retry  # noqa: E402
+from rag.retrieval.retriever import aretrieve_evidence_raw  # noqa: E402
 from rag.retrieval.task_policy import resolve_task_policy  # noqa: E402
 
 BASELINE_PATH = ROOT / "evals" / "baselines" / "policy_layer_evidence_baseline.json"
@@ -100,7 +100,7 @@ async def probe_one(p: dict) -> dict:
     where = policy.eligibility_where()
 
     # 候选池：扩大 k，证明 preferred 层能进池（默认 ranking）
-    fused_raw, _ = await aretrieve_evidence_with_retry(
+    fused_raw, _ = await aretrieve_evidence_raw(
         query=q,
         k=20,
         use_rerank=True,

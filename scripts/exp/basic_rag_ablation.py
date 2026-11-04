@@ -51,7 +51,7 @@ async def run_retrieval_arm(arm: str, queries, limit: int | None) -> dict:
     from dataclasses import replace
 
     from rag.retrieval.query_classifier import RetrievalDepth
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
 
     basic = arm == "basic_rag"
     # baseline 用浅层策略：跳过分解/元数据/BM25/重排
@@ -72,7 +72,7 @@ async def run_retrieval_arm(arm: str, queries, limit: int | None) -> dict:
     for query, expected, expected_kps in queries:
         try:
             if basic:
-                fused, _ = await aretrieve_evidence_with_retry(
+                fused, _ = await aretrieve_evidence_raw(
                     query=query,
                     k=GATE_K,
                     use_rerank=False,
@@ -80,7 +80,7 @@ async def run_retrieval_arm(arm: str, queries, limit: int | None) -> dict:
                     filter={"kb_depth": {"$in": ["basic", "advanced", "exams"]}},
                 )
             else:
-                fused, _ = await aretrieve_evidence_with_retry(
+                fused, _ = await aretrieve_evidence_raw(
                     query=query,
                     k=GATE_K,
                     use_rerank=True,

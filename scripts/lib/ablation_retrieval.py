@@ -204,7 +204,7 @@ async def run_one_config(
     flags: dict[str, Any],
     queries: list[tuple[str, tuple[str, ...], tuple[str, ...]]],
 ) -> dict[str, Any]:
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
 
     use_topup = bool(flags.get("topup"))
     preferred = ["basic", "advanced", "exams"] if use_topup else None
@@ -217,7 +217,7 @@ async def run_one_config(
     with apply_config(flags):
         for query, expected, expected_kps in queries:
             try:
-                fused, _ = await aretrieve_evidence_with_retry(
+                fused, _ = await aretrieve_evidence_raw(
                     query=query,
                     k=k,
                     use_rerank=True,

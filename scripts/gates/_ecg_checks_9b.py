@@ -290,14 +290,14 @@ def _c9o() -> None:
     import asyncio
 
     # ── 9o（Important-3）：probe 读侧送达 —— 行为锁（hop ③，评审实证的零 IO 路线） ──
-    #   `aretrieve_evidence_with_retry` 换成返回**带 `rerank_status` 的 fused**（零 Chroma
+    #   `aretrieve_evidence_raw` 换成返回**带 `rerank_status` 的 fused**（零 Chroma
     #   零 TEI），四态 + 空串各跑一次**真实** `probe_retrieval`（policy/finalize/apply 真码），
     #   断言 `probe.rerank_status` 逐格等值 —— 缺省/未知不落任何冒充值。
     import rag.retrieval.retriever as _ret9o
     from evaluation.task_eval.retrieval_probe import probe_retrieval as _probe9o
     from rag.retrieval.evidence import FusedEvidence as _FE9o
 
-    _orig9o = _ret9o.aretrieve_evidence_with_retry
+    _orig9o = _ret9o.aretrieve_evidence_raw
     got9o: dict[str, object] = {}
     try:
         for _st9o in ("off", "success", "degraded", "failed", ""):
@@ -310,13 +310,13 @@ def _c9o() -> None:
 
                 return _fake_retry
 
-            _ret9o.aretrieve_evidence_with_retry = _mk9o(_st9o)
+            _ret9o.aretrieve_evidence_raw = _mk9o(_st9o)
             _p9o = asyncio.run(
                 _probe9o("数据结构怎么复习", task_mode="learn", k=3, use_rerank=False)
             )
             got9o[_st9o] = _p9o.rerank_status
     finally:
-        _ret9o.aretrieve_evidence_with_retry = _orig9o
+        _ret9o.aretrieve_evidence_raw = _orig9o
     check(
         "9o probe 读侧送达（行为）：fused.metadata.rerank_status ⇒ probe.rerank_status 五格等值（含未知不冒充）",
         all(got9o.get(st) == st for st in ("off", "success", "degraded", "failed", "")),

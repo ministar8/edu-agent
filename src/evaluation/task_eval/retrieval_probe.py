@@ -9,7 +9,7 @@
 这两者恰恰依赖上述元数据。故这里直接调用检索链拿 `FusedEvidence`（元数据完整），
 并**镜像 `tools._retrieve_payload` 的策略与后处理顺序**，保证口径与产品一致：
 
-    resolve_task_policy → aretrieve_evidence_with_retry
+    resolve_task_policy → aretrieve_evidence_raw
         → finalize_with_layer_ranking → apply_evidence_policy
 
 ★ 本模块**只读**，不修改产品行为；Phase 0 纪律：只测量、不修。
@@ -115,7 +115,7 @@ async def probe_retrieval(
     单条 case 的检索失败不该中断整轮 Phase 0。
     """
     from rag.retrieval.evidence_policy import apply_evidence_policy, finalize_with_layer_ranking
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
     from rag.retrieval.task_policy import resolve_task_policy
     from schema.task_policy import merge_where_filters
 
@@ -124,7 +124,7 @@ async def probe_retrieval(
         policy = resolve_task_policy(query, task_mode=task_mode)  # type: ignore[arg-type]
         recall_filter = merge_where_filters(None, policy.eligibility_where())
         candidate_k = max(k * 3, 15)  # 与 tools._retrieve_payload 同口径
-        fused, _ver = await aretrieve_evidence_with_retry(
+        fused, _ver = await aretrieve_evidence_raw(
             query=query,
             k=candidate_k,
             use_rerank=use_rerank,

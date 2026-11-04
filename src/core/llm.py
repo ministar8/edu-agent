@@ -196,7 +196,7 @@ def get_llm(
       用温度 0.3，于是"评测"结果每次不同且产生费用 —— 基线失去可复现性。
     - CI 无 key 时 → ``openai.OpenAIError: Missing credentials`` 直接抛出，
       实测 40 条门禁 query 里有 6 条因此崩溃（异常一路穿透到
-      ``aretrieve_evidence_with_retry`` 之外）。
+      ``aretrieve_evidence_raw`` 之外）。
 
     ``FakeToolModel`` 无法满足 structured output，因此 ``call_structured_*`` 会返回 None、
     检索链回落到规则路径 —— 这正是无外部依赖评测想要的行为。

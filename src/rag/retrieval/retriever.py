@@ -66,7 +66,7 @@ __all__ = [
     "StageSink",
     "aretrieve_documents",
     "aretrieve_evidence",
-    "aretrieve_evidence_with_retry",
+    "aretrieve_evidence_raw",
     "cache_stats",
     "warmup_query_cache",
 ]
@@ -249,7 +249,7 @@ async def _finalize_evidence(
     return fused, result
 
 
-async def aretrieve_evidence_with_retry(
+async def aretrieve_evidence_raw(
     query: str,
     collection_name: str = "",
     k: int = 5,
@@ -269,10 +269,9 @@ async def aretrieve_evidence_with_retry(
 
         retrieve → 规则 verify（在 aretrieve_evidence 内）→ 返回
 
-    ★ 函数名 `with_retry` 是**历史遗留**：原「可选 LLM verify + 最多一次 retry」分支
-      已随 LLM 校验层删除（owner 裁定 B5，2026-10-15；全调用点恒 `use_llm_verify=False`、
-      从未启用）。保留函数名不改，是为避免六处调用点与文档锚点连带改写；重命名
-      （如 `aretrieve_evidence_entry`）列为冻结后清理项，须走 EFFECT_PLAN §6 新版本流程。
+    ★ 命名：原名 `aretrieve_evidence_with_retry` 中的 retry 分支已随 LLM 校验层删除
+      （owner 裁定 B5，2026-10-15），名字与行为不符。2026-11-04 改名为 `_raw`，与产品
+      路径 `retrieve_for_task`（已裁剪）对照；`raw` 指**未经 release 裁剪**，不是「未 top-up」。
     ★ 规则 verdict 仍在 `aretrieve_evidence` 内由 `_verify_fused` 写入 metadata，
       本入口只透出，不二次 verify。
 

@@ -42,13 +42,13 @@ async def run_case(mode: str, preferred: list[str] | None) -> tuple[int, list[st
         finalize_with_layer_ranking,
         pack_blocked,
     )
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
     from rag.retrieval.task_policy import policy_for_mode
 
     policy = policy_for_mode(mode)  # type: ignore[arg-type]
     if preferred is not None:
         policy = policy.model_copy(update={"preferred_layers": preferred})
-    fused, _ = await aretrieve_evidence_with_retry(
+    fused, _ = await aretrieve_evidence_raw(
         query=QUERIES[mode],
         k=5,
         use_rerank=True,

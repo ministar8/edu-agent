@@ -83,7 +83,7 @@ from evaluation.provenance import build_provenance  # noqa: E402
 async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
     from lib.ablation_retrieval import CONFIGS, apply_config
 
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
 
     flags = CONFIGS[arm]
     outcomes: list[QueryOutcome] = []
@@ -93,7 +93,7 @@ async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
     with apply_config(flags), scale_threshold(scale), capture_fallback() as fb:
         t0 = time.perf_counter()
         for idx, (query, expected, expected_kps) in enumerate(queries):
-            fused, _ = await aretrieve_evidence_with_retry(
+            fused, _ = await aretrieve_evidence_raw(
                 query=query,
                 k=k,
                 use_rerank=True,

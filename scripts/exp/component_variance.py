@@ -85,7 +85,7 @@ async def run_one_run(run_id: int) -> dict[str, Any]:
     # 延迟 import：避免子进程启动路径差异
     from lib.ablation_retrieval import CONFIGS, apply_config
 
-    from rag.retrieval.retriever import aretrieve_evidence_with_retry
+    from rag.retrieval.retriever import aretrieve_evidence_raw
 
     queries = load_golden_queries(DEFAULT_GOLDEN_PATH, limit=60)
     from evaluation.gates.retrieval_gate import chapter_of_source
@@ -108,7 +108,7 @@ async def run_one_run(run_id: int) -> dict[str, Any]:
                 qid = f"q{idx:03d}"
                 err = ""
                 try:
-                    fused, _ = await aretrieve_evidence_with_retry(
+                    fused, _ = await aretrieve_evidence_raw(
                         query=query,
                         k=k,
                         use_rerank=True,
