@@ -6,13 +6,13 @@
 
 from __future__ import annotations
 
+import logging
 from typing import NamedTuple
 
 from langchain_core.documents import Document
 
 from rag.chunking.splitter._code import _looks_like_code_chunk
 from rag.chunking.splitter._heading import _extract_headings, _split_into_sections
-from rag.chunking.splitter._log import logger
 from rag.chunking.splitter._meta import (
     _append_chunk_metadata,
     _build_parent_window_text,
@@ -31,6 +31,8 @@ from rag.chunking.splitter._params import (
 from rag.chunking.splitter._qa import _ANSWER_RE, _extract_qa_fields
 from rag.chunking.splitter._text import _is_sentence_complete, _percentile
 from rag.common.metrics import metrics
+
+logger = logging.getLogger("rag.chunking.splitter")
 
 
 class _Hierarchy(NamedTuple):

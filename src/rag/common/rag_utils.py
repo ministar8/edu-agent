@@ -262,8 +262,3 @@ def detect_content_type(text: str, metadata: dict) -> str:
     if re.search(r"def |class |import |from .* import |if __name__ == ['\"]__main__['\"]", text):
         return "code_mixed"
     return "text"
-
-
-# ── LLM getter（已迁移至 core.llm） ────────
-
-from core.llm import get_llm  # noqa: E402, F401 — 向后兼容导出

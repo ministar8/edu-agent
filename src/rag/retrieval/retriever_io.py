@@ -40,9 +40,6 @@ def _emit_evidence_metric(
     fused,
     status: str = "ok",
     error_type: str = "",
-    retry_count: int = 0,
-    max_retries: int = 0,
-    use_llm_verify: bool = False,
 ) -> None:
     meta = getattr(fused, "metadata", {}) or {}
     verdict = meta.get("evidence_verdict") if isinstance(meta, dict) else {}
@@ -73,9 +70,6 @@ def _emit_evidence_metric(
             "verifier_used": bool(verdict),
             "evidence_verdict": verdict.get("verdict", ""),
             "evidence_score": verdict.get("overall_score", 0.0),
-            "retry_count": retry_count,
-            "max_retries": max_retries,
-            "use_llm_verify": use_llm_verify,
             "semantic_cache_hit": meta.get("semantic_cache_hit", False),
             "semantic_cache_similarity": meta.get("semantic_cache_similarity", 0.0),
             "error_type": error_type,

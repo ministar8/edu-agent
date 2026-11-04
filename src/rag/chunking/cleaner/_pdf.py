@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import Counter
 
 from langchain_core.documents import Document
 
-from rag.chunking.cleaner._log import logger
 from rag.chunking.cleaner._text import (
     _LINE_TRIM_RE,
     _MULTI_NEWLINE_RE,
@@ -15,6 +15,8 @@ from rag.chunking.cleaner._text import (
     _finalize_whitespace,
     _normalize_text,
 )
+
+logger = logging.getLogger("rag.chunking.cleaner")
 
 # PDF 页眉页脚：短行（<40字）且出现在文档开头/结尾的重复行
 _SHORT_LINE_RE = re.compile(r"^[^\n]{1,40}$", re.MULTILINE)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING
 
@@ -13,7 +14,6 @@ from rag.chunking.cleaner._exam import (
     _normalize_exam_question_headings,
     _remove_exam_web_noise,
 )
-from rag.chunking.cleaner._log import logger
 from rag.chunking.cleaner._pdf import _clean_pdf_text, _dedupe_pdf_edges, _pdf_source_key
 from rag.chunking.cleaner._text import _clean_plain_text, _get_source_ext, _get_source_path
 from rag.common.metrics import metrics
@@ -21,6 +21,8 @@ from rag.common.synonyms import normalize_synonyms
 
 if TYPE_CHECKING:
     from tools.anomaly import AnomalyRecord
+
+logger = logging.getLogger("rag.chunking.cleaner")
 
 
 def _dispatch_clean(

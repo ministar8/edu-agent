@@ -126,3 +126,5 @@ _e2e_artifacts/
 # `.workbuddy-ai/`：本机 Agent 的记忆与工作日志，是运行态、非项目配置。
 .scratch-astcmp/
 .workbuddy-ai/
+# `.tmp/`：本机跑门禁时给 TEMP/TMP/TMPDIR 的重定向目标（%TEMP% 不可写）。
+.tmp/
