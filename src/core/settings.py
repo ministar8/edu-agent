@@ -258,8 +258,9 @@ class Settings(BaseSettings):
     KNOWLEDGE_DIR: str = str(PROJECT_ROOT / "knowledge")
 
     # ── Database（checkpointer / store）────────────
-    SQLITE_DB_PATH: str = "checkpoints.db"
-    SQLITE_STORE_PATH: str = "store.db"
+    # 运行时本地库统一收在 data/sqlite/（data/ 已 gitignore），避免根目录平铺。
+    SQLITE_DB_PATH: str = "data/sqlite/checkpoints.db"
+    SQLITE_STORE_PATH: str = "data/sqlite/store.db"
 
     # ── 长期记忆写入 / weak_topics 派生 ────────────────
     MEMORY_WRITE_TIMEOUT: float = 1.5

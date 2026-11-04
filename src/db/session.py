@@ -9,7 +9,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DB_PATH = PROJECT_ROOT / "edu_agent.db"
+# 用户库与 checkpointer/store 同目录：data/sqlite/（gitignored 运行态）
+DB_PATH = PROJECT_ROOT / "data" / "sqlite" / "edu_agent.db"
 DATABASE_URL = f"sqlite:///{DB_PATH}"
 
 engine = create_engine(
