@@ -62,6 +62,39 @@
 4. **重排为弱正收益（+0.012）**，与更早的 −0.046 **符号相反**。 （证据：`git show 1cc69b39f:docs/EXPERIMENTS.md`）
    不宜写死「负优化」；准确表述：**在本黄金集上收益不稳定，默认关闭**。
 
+### 2.3 同代际复跑（2026-11-04，RAG 结构收口后）
+
+**触发**：§2 表（V-2026-10-02）是 **2026-10-10 语料换代之前**的读数（见 §18 抬头），不能与现行系统
+并列；RAG 结构收口（`3255d26`）后也需要一次同代际回归。
+
+**口径**：黄金集 `sample_408.jsonl`（sha256 `783e78ff…`）前 60 条（与 §2 同为 `--limit 60`）；
+生产索引（2026 chunk / 10 集合）；embedding = 真 TEI bge-m3；`RERANK_ENABLED=false`（部署开关）；
+RAG LLM = `deepseek:deepseek-flash`。★ **换网关的原因**：原 `qwen3.7-flash` 所在 DashScope 账户欠费
+（`Arrearage`），首轮 60 条里 11 次 classify / 4 次 decompose / 1 次 HyDE 调用失败并降级到规则兜底
+——那种基线会让「去掉分解/HyDE 无增益」变成同义反复；换到可用的 DeepSeek 网关后失败 0 次。
+
+**归档**：`evals/results/retrieval/ablation/component_ablation_20261104.json`；稳定性复跑
+`component_ablation_20261104_repeat.json` 与主跑**逐位相同**（full / no_bm25 / no_decompose / no_hyde 四行）。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_repeat.json`）
+
+| 配置 | kp_hit@k | kp_mrr | Δ kp_mrr | cat@1 | 证据数 |
+|---|---|---|---|---|---|
+| **full（基线）** | **1.000** | **0.9236** | — | 0.933 | 5.92 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+| no_bm25 | 0.983 | 0.9208 | −0.003 | 0.900 | 5.87 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+| no_metadata | 1.000 | 0.9194 | −0.004 | 0.950 | 6.15 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+| no_decompose | 1.000 | 0.9361 | **+0.013** | 0.950 | 4.67 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+| no_hyde | 1.000 | 0.9361 | **+0.013** | 0.950 | 5.85 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+| vector_only | 0.983 | 0.9125 | −0.011 | 0.900 | 5.85 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+| plus_topup | 1.000 | 0.9236 | 0.000 | 0.933 | 7.78 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+
+**与 §2 的结论差异（论文必须按新代际重写）**：
+
+1. **BM25 的边际贡献已落进噪声带**（−0.003；§6.3(b) 噪声地板 ±0.003），不再是 −0.062；元数据同理（−0.004）；多路召回的「正贡献」在本代际只在 `vector_only` 上还看得见（kp_mrr −0.011、cat@1 −0.033），幅度远小于旧代际。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`）
+2. **分解 / HyDE 从「零增益」变为「轻微负增益」**：去掉后 kp_mrr **+0.013**（约 4× 噪声地板）——这是**结论反转**，不能再用「复杂度未兑现」带过。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`）
+3. **top-up 仍只增加覆盖**（证据数 5.92→7.78），不改排序指标 —— 与旧结论一致。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`）
+4. **绝对数值不可与 §2 行对行比较**：语料、黄金集 sha、LLM 网关三处都不同；可比的是**同一代际内的 Δ 结构**。
+
+★ 复现：`LLM_MODEL=deepseek:deepseek-flash PYTHONPATH=src python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
+
 ---
 
 ## 3. Legacy 资产池策略（三策略对比）
