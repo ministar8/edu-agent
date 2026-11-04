@@ -7,9 +7,19 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      # 容器里必须监听 0.0.0.0，否则宿主机无法通过端口映射访问
+      HOST: 0.0.0.0
+      # 容器里的 localhost 指容器自己；TEI 跑在宿主机上
+      EMBEDDING_API_BASE: http://host.docker.internal:11435
+      RERANK_LOCAL_URL: http://host.docker.internal:11436
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./knowledge:/app/knowledge
       - ./chroma_db:/app/chroma_db
+      # SQLite（用户/会话/长期记忆）与遥测：不挂会在 down 后丢失
+      - ./data:/app/data
     healthcheck:
       test:
         - CMD
