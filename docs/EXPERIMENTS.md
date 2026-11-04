@@ -69,31 +69,34 @@
 
 **口径**：黄金集 `sample_408.jsonl`（sha256 `783e78ff…`）前 60 条（与 §2 同为 `--limit 60`）；
 生产索引（2026 chunk / 10 集合）；embedding = 真 TEI bge-m3；`RERANK_ENABLED=false`（部署开关）；
-RAG LLM = `deepseek:deepseek-flash`。★ **换网关的原因**：原 `qwen3.7-flash` 所在 DashScope 账户欠费
-（`Arrearage`），首轮 60 条里 11 次 classify / 4 次 decompose / 1 次 HyDE 调用失败并降级到规则兜底
-——那种基线会让「去掉分解/HyDE 无增益」变成同义反复；换到可用的 DeepSeek 网关后失败 0 次。
+RAG LLM = `dashscope:qwen3.8-flash`（2026-11-04 由 `qwen3.8-max-0902` 切换；本项目现行配置）。
 
-**归档**：`evals/results/retrieval/ablation/component_ablation_20261104.json`；稳定性复跑
-`component_ablation_20261104_repeat.json` 与主跑**逐位相同**（full / no_bm25 / no_decompose / no_hyde 四行）。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_repeat.json`）
+★ **过渡跑登记**：期间 DashScope 账户欠费（`Arrearage`），首轮 60 条里 11 次 classify / 4 次 decompose /
+1 次 HyDE 失败并降级到规则兜底 —— 那种基线会让「去掉分解/HyDE 无增益」变成同义反复。停用替代用的是
+`deepseek:deepseek-flash`（归档 `component_ablation_20261104.json` 与 `component_ablation_20261104_repeat.json`），
+结论与本表一致；欠费解决并换 key 后，以 qwen3.8-flash 重跑为准。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`）
+
+**归档**：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`；稳定性复跑
+`component_ablation_20261104_repeat_qwen38flash.json`：full / no_decompose / no_hyde **逐位相同**，仅 `no_bm25` 在 Δ −0.003 与 −0.007 之间抖动（噪声量级）。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_repeat_qwen38flash.json`）
 
 | 配置 | kp_hit@k | kp_mrr | Δ kp_mrr | cat@1 | 证据数 |
 |---|---|---|---|---|---|
-| **full（基线）** | **1.000** | **0.9236** | — | 0.933 | 5.92 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
-| no_bm25 | 0.983 | 0.9208 | −0.003 | 0.900 | 5.87 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
-| no_metadata | 1.000 | 0.9194 | −0.004 | 0.950 | 6.15 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
-| no_decompose | 1.000 | 0.9361 | **+0.013** | 0.950 | 4.67 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
-| no_hyde | 1.000 | 0.9361 | **+0.013** | 0.950 | 5.85 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
-| vector_only | 0.983 | 0.9125 | −0.011 | 0.900 | 5.85 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
-| plus_topup | 1.000 | 0.9236 | 0.000 | 0.933 | 7.78 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`） |
+| **full（基线）** | **1.000** | **0.9236** | — | 0.933 | 5.88 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
+| no_bm25 | 0.967 | 0.9167 | −0.007 | 0.900 | 5.83 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
+| no_metadata | 1.000 | 0.9194 | −0.004 | 0.950 | 6.03 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
+| no_decompose | 1.000 | 0.9361 | **+0.013** | 0.950 | 4.72 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
+| no_hyde | 1.000 | 0.9361 | **+0.013** | 0.950 | 5.82 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
+| vector_only | 0.983 | 0.9125 | −0.011 | 0.900 | 5.92 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
+| plus_topup | 1.000 | 0.9236 | 0.000 | 0.933 | 7.75 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`） |
 
 **与 §2 的结论差异（论文必须按新代际重写）**：
 
-1. **BM25 的边际贡献已落进噪声带**（−0.003；§6.3(b) 噪声地板 ±0.003），不再是 −0.062；元数据同理（−0.004）；多路召回的「正贡献」在本代际只在 `vector_only` 上还看得见（kp_mrr −0.011、cat@1 −0.033），幅度远小于旧代际。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`）
-2. **分解 / HyDE 从「零增益」变为「轻微负增益」**：去掉后 kp_mrr **+0.013**（约 4× 噪声地板）——这是**结论反转**，不能再用「复杂度未兑现」带过。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`）
-3. **top-up 仍只增加覆盖**（证据数 5.92→7.78），不改排序指标 —— 与旧结论一致。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104.json`）
-4. **绝对数值不可与 §2 行对行比较**：语料、黄金集 sha、LLM 网关三处都不同；可比的是**同一代际内的 Δ 结构**。
+1. **BM25 的边际贡献已落进噪声带**（qwen 两轮 −0.003 ~ −0.007；§6.3(b) 噪声地板 ±0.003），不再是 −0.062；元数据同理（−0.004）；多路召回的「正贡献」在本代际只在 `vector_only` 上还看得见（kp_mrr −0.011、cat@1 −0.033），幅度远小于旧代际。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
+2. **分解 / HyDE 从「零增益」变为「轻微负增益」**：去掉后 kp_mrr **+0.013**（约 4× 噪声地板），两轮逐位相同 —— 这是**结论反转**，不能再用「复杂度未兑现」带过。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
+3. **top-up 仍只增加覆盖**（证据数 5.88→7.75），不改排序指标 —— 与旧结论一致。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_qwen38flash.json`）
+4. **绝对数值不可与 §2 行对行比较**：语料、黄金集 sha、LLM 三处都不同；可比的是**同一代际内的 Δ 结构**。
 
-★ 复现：`LLM_MODEL=deepseek:deepseek-flash PYTHONPATH=src python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
+★ 复现：`PYTHONPATH=src python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
 
 ---
 
