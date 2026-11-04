@@ -263,6 +263,32 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 | no_legacy | 0.983 | 0.8988 | −0.064 | 0.0 （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`） |
 | legacy_only | 1.000 | 0.9450 | −0.018 | 0.0 （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`） |
 
+### 9.1b 同代际复跑（2026-11-05，全量 156）
+
+**口径**：黄金集全量 156；生产索引（2026 chunk / 10 集合）；真 TEI bge-m3；`RERANK_ENABLED=false`；
+RAG LLM `dashscope:deepseek-v4.1-flash`；code `3e01416`。
+**归档**：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`
+（本轮 `real_fail=0 / llm_fail=0`）。 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`）
+
+| 配置 | kp_hit@k | kp_mrr | Δ kp_mrr | empty |
+|---|---|---|---|---|
+| **full（基线）** | 0.9231 | **0.8174** | — | 0.000 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| no_l1 | 0.7115 | 0.6400 | **−0.177** | 0.000 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| no_l2 | 0.9359 | 0.8293 | +0.012 | 0.000 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| no_l3 | 0.9231 | 0.8225 | +0.005 | 0.000 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| l1_only | 0.9423 | **0.8678** | **+0.050** | 0.000 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| l2_only | 0.7115 | 0.6587 | −0.159 | 0.000 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| l3_only | 0.0000 | 0.0000 | −0.817 | **0.769** （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| no_legacy | 0.9295 | 0.8423 | +0.025 | 0.000 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+| legacy_only | 0.0256 | 0.0256 | −0.792 | **0.833** （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`） |
+
+**与 9.1 的差异**：
+
+1. **L1 主干作用更强**：no_l1 kp_mrr −0.177（旧体系 −0.007）；L1 是当前检索的主要语义来源。 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`）
+2. **L1 单层高于 full**（+0.050），且 no_l2 +0.012、no_l3 +0.005、no_legacy +0.025 均为正：L2/L3/legacy 在当前融合权重下对**知识点检索切片**有轻微稀释，但不等于对任务无用（见 9.2）。 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`）
+3. **L2/L3 单独覆盖不足**：l2_only 0.6587；l3_only 空 76.9%；legacy_only 空 83.3% —— 必须与 L1 组合。 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`）
+4. **两次 full 相差 0.013**（组件 0.8309 / 分层 0.8174），属 HyDE/分解的 LLM 非确定性；表内只用同轮 full 比较。 （证据：`evals/results/retrieval/ablation/component_ablation_20261104_full156_deepseek41.json`）
+
 ### 9.2 结论（任务导向，非单一指标）
 
 核心叙事：三层不是为了提升同一个检索指标，而是满足**不同任务下的证据组织与访问控制**。
