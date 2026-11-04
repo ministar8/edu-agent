@@ -390,6 +390,26 @@ RAG LLM `dashscope:deepseek-v4.1-flash`；code `3e01416`。
 
 > 论文「对比实验」主表：同黄金集、同指标、仅系统配置不同。
 
+### 11.4 同代际复跑（2026-11-05，60 条）
+
+**口径**：黄金集前 60 条；生产索引 2026 chunk / 10 集合；真 TEI bge-m3；`RERANK_ENABLED=false`；
+RAG LLM `dashscope:deepseek-v4.1-flash`。
+**归档**：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`
+（`real_fail=0 / llm_fail=0`）。 （证据：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`）
+
+| arm | kp_hit@k | kp_mrr | cat@1 | cat_mrr | 证据数 |
+|---|---|---|---|---|---|
+| basic_rag | 1.000 | 0.9417 | 0.933 | 0.9625 | 4.37 （证据：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`） |
+| **ours** | 1.000 | 0.9236 | 0.933 | 0.9597 | 5.88 （证据：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`） |
+| **Δ（ours−basic）** | 0.000 | **−0.018** | 0.000 | −0.003 | +1.52 （证据：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`） |
+
+任务口径：六模式 layer_hit 逐项相同，MACRO 0.944 / 0.944（Δ 0）。 （证据：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`）
+
+**与 11.1/11.2 的差异（论文必须如实写）**：
+
+1. **本代际 `ours` 在 kp_mrr 上不再优于朴素向量**（−0.018）；旧体系是 +0.0875，方向相反。与 §9.1b（L1 单层 +0.050）和 §2.3（元数据路由 −0.037）一致：多路/分层在当前权重下对 kp_mrr 有稀释。 （证据：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`）
+2. **任务层命中无差异**（0.944 vs 0.944）；本代际 `ours` 的增益只体现在证据数量（+1.52 条），而不是层命中或排序质量。 （证据：`evals/results/retrieval/ablation/basic_rag_compare_20261105_deepseek41.json`）
+
 ---
 
 ## 12. Task Mode × Layer Policy 交互实验
@@ -454,6 +474,30 @@ flat（全层）/ ours（任务映射）/ prefer_l1 / prefer_l2 / prefer_l3
 > 并在 access control 裁剪后掏空证据包（pack_nonempty_rate 可低至 0.25）；
 > 任务映射保持全任务非空证据包，在不损失命中的前提下提升包纯度，
 > 并与 legacy 池策略/access control 协同，形成任务条件下的证据组织。
+
+### 12.6 同代际复跑（2026-11-05，每模式 6 条）
+
+**口径**：每任务模式 6 条；生产索引 2026 chunk；真 TEI bge-m3；`RERANK_ENABLED=false`；
+RAG LLM `dashscope:deepseek-v4.1-flash`。
+**归档**：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`
+（`real_fail=0 / llm_fail=0`）。 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`）
+
+| policy | macro_layer_hit | 说明 |
+|---|---|---|
+| flat | 0.944 | 全层平铺（baseline） （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`） |
+| ours | **0.944** | 任务映射 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`） |
+| prefer_l1 | 0.778 | 固定偏 L1 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`） |
+| prefer_l2 | 0.778 | 固定偏 L2 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`） |
+| prefer_l3 | 0.944 | 固定偏 L3 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`） |
+
+逐模式要点：`grade` 在 flat/ours/prefer_l3 为 0.667、在 prefer_l1/l2 为 0；`explain` 在 prefer_l1/l2 为 0.667；`pack_nonempty_rate` 全任务 × 全策略 **1.000**。 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`）
+
+**与 12.1–12.4 的差异**：
+
+1. **`ours` 与 `flat` 的命中完全相同**（0.944）：旧结论「层偏好单独不抬 hit」在本代际复现。 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`）
+2. **错误层偏好的伤害仍在**：prefer_l1 / prefer_l2 的 MACRO 0.778 vs 0.944。 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`）
+3. **旧表的「verify 包纯度 0.333→0.417」本轮未复现**：`ours` 与 `flat` 均为 0.333。该项不应再作为卖点。 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`）
+4. 每模式仅 6 条，结论只作方向性；`grade` 的 0.667 是六条中四条命中。 （证据：`evals/results/retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json`）
 
 ---
 
@@ -543,6 +587,39 @@ flat（全层）/ ours（任务映射）/ prefer_l1 / prefer_l2 / prefer_l3
 - vector_only：目标已入池（rank 2）→ `dropped_by=rrf_threshold`（0.0857<0.088）→ 保底 top-1 错学科 （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`）
 - full：L1 目标全程 rank 1 存活；多路召回救回
 - **归因**：召回到了但被阈值滤掉；非召回失败
+
+### 14.5 同代际复跑（2026-11-05，60 条）
+
+**口径**：黄金集前 60 条；生产索引 2026 chunk；真 TEI bge-m3；`RERANK_ENABLED=false`；
+RAG LLM `dashscope:deepseek-v4.1-flash`。**归档**：
+`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json` 与
+`..._vector_only_20261105_deepseek41.json`。 （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`）
+
+**full**
+
+| scale | kp_hit | kp_mrr | cat@1 | n_ev | fallback | q052 |
+|---|---|---|---|---|---|---|
+| 1.00 | 1.000 | 0.9236 | 0.933 | 5.88 | 1 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`） |
+| 0.95 | 1.000 | 0.9236 | 0.933 | 5.88 | 1 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`） |
+| 0.90 | 1.000 | 0.9236 | 0.933 | 5.90 | 1 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`） |
+| 0.85 | 1.000 | **0.9361** | 0.950 | 5.85 | 0 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`） |
+| 0.00 | 1.000 | **0.9361** | 0.950 | 6.00 | 0 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`） |
+
+**vector_only**
+
+| scale | kp_hit | kp_mrr | cat@1 | n_ev | fallback | q052 |
+|---|---|---|---|---|---|---|
+| 1.00 | 0.983 | 0.9208 | 0.900 | 5.97 | 0 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json`） |
+| 0.95 | 0.983 | 0.9208 | 0.900 | 6.07 | 0 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json`） |
+| 0.90 | 0.983 | 0.9208 | 0.900 | 6.18 | 0 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json`） |
+| 0.85 | 0.983 | 0.9208 | 0.900 | 6.32 | 0 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json`） |
+| 0.00 | 0.983 | 0.9208 | 0.900 | 6.32 | 0 | ✅ （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json`） |
+
+**与 14.1–14.3 的差异**：
+
+1. **full 到 0.85× 才出现正收益**（kp_mrr 0.9236 → 0.9361，fallback 1→0）；旧体系是五档全同。 （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`）
+2. **vector_only 五档完全不变**（0.9208），q052 全程命中；旧体系 100% 档的 q052 失败在本代际 **未复现**。 （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json`）
+3. 结论不变：**不改默认阈值**；拐点在 0.85×，收益 +0.012，且不损 cat@1。 （证据：`evals/results/retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json`）
 
 ---
 

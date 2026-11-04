@@ -6,7 +6,7 @@
 > 按 D1 纪律并列引用、不回写旧表。
 > 完整论述见 `docs/EXPERIMENTS.md` · 问题诊断见 `evals/reports/rerun_summary.md`
 > **检索消融的完整数据（组件 + 分层，含口径与结论）见 [`rag_ablation.md`](rag_ablation.md)。**
-> 样本：检索 = 全量 156 条（表 2B / 4B）或前 60 条（旧表 1–6）· 任务集 25 条 · 门禁 156 条
+> 样本：检索 = 全量 156 条（表 2B / 4B）或前 60 条（表 1/1B/6/6B 与旧表）· 任务集 25 条 · 门禁 156 条
 
 > **旧表脚注（D1，2026-10-16）**：表 1–6 的检索读数在冻结期经 C2 六路由门禁复验
 > 「所有指标不低于基线」（§20.7.8⑰①）——基线文件因黄金集哈希变更（`be98912a`→`783e78ff`）
@@ -22,6 +22,24 @@
 | category_hit@1 | 0.917 | **0.983** | +0.067 |
 | category_mrr | 0.956 | **0.992** | +0.036 |
 | 平均证据数 | 4.73 | 5.67 | +0.93 |
+
+## 表 1B 基础 RAG 对比（现行代际，2026-11-05）
+
+> **口径**：黄金集前 60 条 · 生产索引 2026 chunk / 10 集合 · 真 TEI bge-m3 · `RERANK_ENABLED=false` ·
+> RAG LLM `dashscope:deepseek-v4.1-flash`。归档 `basic_rag_compare_20261105_deepseek41.json`。
+> ★ **不可与表 1 行对行比较**（旧表为 2026-10-02 旧语料体系）。
+
+| 指标 | basic_rag | ours | Δ（ours−basic） |
+|---|---|---|---|
+| kp_hit@k | 1.000 | 1.000 | 0.000 |
+| kp_mrr | 0.9417 | 0.9236 | **−0.018** |
+| cat@1 | 0.933 | 0.933 | 0.000 |
+| cat_mrr | 0.9625 | 0.9597 | −0.003 |
+| 平均证据数 | 4.37 | 5.88 | +1.52 |
+
+> **任务口径**：六模式 layer_hit 逐项相同，MACRO 0.944 / 0.944（Δ 0）。
+> **结论**：本代际 `ours` 在 kp_mrr 上**不再优于**朴素向量，增益只在证据数量。
+> 与表 2B（元数据负贡献）、表 4B（L1 单层最优）指同一现象：当前融合权重对 kp_mrr 有稀释。
 
 ## 表 2 检索组件消融（§2，V-2026-10-02）
 
@@ -163,6 +181,26 @@
 
 > **修复前** prefer_l3 空包（practice 0.25）；**sufficiency 兜底后全 1.000**。
 > 残余交互伤害由 prefer_l1（0.347）/ prefer_l2（0.528）体现——合规但错层。
+
+## 表 6B Task Mode × Layer Policy（现行代际，2026-11-05）
+
+> **口径**：每任务模式 6 条 · 生产索引 2026 chunk · 真 TEI bge-m3 · `RERANK_ENABLED=false` ·
+> RAG LLM `dashscope:deepseek-v4.1-flash`。归档
+> `task_mode_x_layer_policy_20261105_deepseek41.json`。安全字段冻结，只动 `preferred_layers`。
+> ★ **不可与表 6 行对行比较**。
+
+| policy | macro_layer_hit | 说明 |
+|---|---|---|
+| flat | 0.944 | 全层平铺（baseline） |
+| **ours** | **0.944** | 任务映射 |
+| prefer_l1 | 0.778 | 固定偏 L1 |
+| prefer_l2 | 0.778 | 固定偏 L2 |
+| prefer_l3 | 0.944 | 固定偏 L3 |
+
+> 逐模式：`grade` 0.667（flat/ours/prefer_l3）、0（prefer_l1/l2）；`explain` 0.667（prefer_l1/l2）；
+> `pack_nonempty_rate` 全任务 × 全策略 **1.000**。
+> **结论**：`ours` 与 `flat` 命中相同，层偏好单独不抬 hit；错误层偏好伤害仍在（0.778）。
+> 旧表「verify 包纯度 0.333→0.417」本轮**未复现**，不应再作卖点。
 
 ## 表 F1 失败案例归因（§14.4 / §16 / §18.2，V-2026-10-02）
 
