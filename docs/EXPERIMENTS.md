@@ -53,6 +53,24 @@
 | no_rerank | 0.9625 | 5.62 （证据：`evals/results/retrieval/ablation/rerank_compare.json`） |
 | **Δ（rerank 带来）** | **+0.012** | −1.59 （证据：`git show 3ff8519f7:docs/EXPERIMENTS.md`） |
 
+### 2.1b 同代际复跑（2026-11-05，全量 156）
+
+**口径**：全量 156；生产索引 2026 chunk / 10 集合；真 TEI bge-m3 + bge-reranker-v2-m3；
+`RERANK_ENABLED=true`；RAG LLM `dashscope:deepseek-v4.1-flash`。
+**归档**：`evals/results/retrieval/ablation/rerank_compare_20261105_deepseek41.json`
+（`real_fail=0 / llm_fail=0`）。 （证据：`evals/results/retrieval/ablation/rerank_compare_20261105_deepseek41.json`）
+
+| 配置 | kp_hit@k | kp_mrr | cat@1 | cat_mrr | 证据数 |
+|---|---|---|---|---|---|
+| full（rerank on） | 0.917 | 0.8287 | 0.904 | 0.927 | 2.99 （证据：`evals/results/retrieval/ablation/rerank_compare_20261105_deepseek41.json`） |
+| no_rerank | 0.936 | 0.8322 | 0.872 | 0.899 | 5.64 （证据：`evals/results/retrieval/ablation/rerank_compare_20261105_deepseek41.json`） |
+| **Δ（rerank 带来）** | −0.019 | −0.004 | **+0.032** | +0.028 | **−2.65** （证据：`evals/results/retrieval/ablation/rerank_compare_20261105_deepseek41.json`） |
+
+**与 2.1 的差异**：
+
+1. **kp_mrr / kp_hit 上重排略负**（−0.004 / −0.019），与旧体系 +0.012 符号相反——再次印证「收益不稳定」。 （证据：`evals/results/retrieval/ablation/rerank_compare_20261105_deepseek41.json`）
+2. **但 cat@1 明显正**（+0.032），代价是证据数从 5.64 砍到 2.99（−2.65）。因此论文可写「重排提升类别命中、压缩证据数，但知识点级排序收益不稳定」，**不默认开启**。 （证据：`evals/results/retrieval/ablation/rerank_compare_20261105_deepseek41.json`）
+
 ### 2.2 消融结论（论文可直接写）
 
 1. **多路召回正贡献**：vector_only 相对 full **kp_mrr −0.032**； （证据：`git show 1cc69b39f:docs/EXPERIMENTS.md`）
@@ -1557,6 +1575,9 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 `k=5`，5 条 probe 与基线**逐条相同**（`#4 survived` / `#9 survived` / `#17 section_dedup` /
 `#18 rerank_topn` / `#19 section_dedup`），口径校验通过、**基线未重录**。
 复现：`GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 PYTHONPATH=src python -m evaluation.gates.probe_gate`。
+
+★ **2026-11-05 复跑（HEAD `74b1702`，真 TEI 路由）**：口径同上，5 条 probe 与基线**逐条相同**，
+探针门禁通过、基线未重录。 （证据：`evals/baselines/probe_baseline.json`；复现命令同上）
 
 **核对方式**（`check_baseline_diff_registration.py` 已把「旧代 / 新代 / 登记节」三者参数化）：
 

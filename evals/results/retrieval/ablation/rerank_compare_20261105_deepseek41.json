@@ -1,0 +1,72 @@
+{
+  "recorded_at": "2026-11-04T16:17:32.875936+00:00",
+  "golden": "evals/datasets/golden/sample_408.jsonl",
+  "limit": null,
+  "config_snapshot": {
+    "full": {
+      "note": "完整系统（当前默认）"
+    },
+    "no_rerank": {
+      "rerank": false,
+      "note": "去掉重排"
+    }
+  },
+  "rows": [
+    {
+      "config": "full",
+      "note": "完整系统（当前默认）",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 300.6,
+      "category_hit_at_1": 0.9038,
+      "category_hit_at_k": 0.9551,
+      "category_mrr": 0.9274,
+      "category_precision": 0.9292,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 2.9872,
+      "kp_hit_at_k": 0.9167,
+      "kp_mrr": 0.8287,
+      "kp_annotated": 156.0
+    },
+    {
+      "config": "no_rerank",
+      "note": "去掉重排",
+      "n_queries": 156,
+      "n_errors": 0,
+      "errors": [],
+      "elapsed_s": 94.8,
+      "category_hit_at_1": 0.8718,
+      "category_hit_at_k": 0.9487,
+      "category_mrr": 0.8993,
+      "category_precision": 0.8705,
+      "empty_result_rate": 0.0,
+      "mean_evidence_count": 5.641,
+      "kp_hit_at_k": 0.9359,
+      "kp_mrr": 0.8322,
+      "kp_annotated": 156.0
+    }
+  ],
+  "provenance": {
+    "recorded_at": "2026-11-04T16:17:32.875936+00:00",
+    "code_version": "74b1702",
+    "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
+    "script": "scripts/lib/ablation_retrieval.py",
+    "argv": [
+      "--configs",
+      "full,no_rerank"
+    ],
+    "model_refs": {
+      "agent": "deepseek:deepseek-flash",
+      "rag_chain": "dashscope:deepseek-v4.1-flash",
+      "judge": "dashscope:deepseek-v4.1-flash"
+    },
+    "sampling": {
+      "temp_precise": 0.0,
+      "temp_creative": 0.3,
+      "temp_default": 0.3
+    },
+    "experiment_config_hash": "695750b3410b",
+    "dependency_lock_hash": "881607c7955b"
+  }
+}
