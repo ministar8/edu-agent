@@ -26,7 +26,7 @@
 
 | 子目录 | 内容 |
 |---|---|
-| `ragas/` | `raw.jsonl` 逐样本 · `metrics.json` 汇总 · `summary.md` 结论（**已完成 2026-10-01，n=20**） |
+| `ragas/` | `ragas_freeze20261016.json` + `_samples.jsonl` 现行读数 · `summary.md` 旧代际结论（旧原始数据已于 2026-11-04 清理） |
 
 ## system_validation/ 系统验证
 

@@ -78,7 +78,7 @@
 | `retrieval/ablation/` | 组件消融 · 重排对照 · Task-aware · 基础 RAG · 方差 · 阈值敏感度 · L2 归因 |
 | `retrieval/layer_policy/` | L1/L2/L3 分层消融 · Task × Layer 交互矩阵 |
 | `retrieval/legacy_runtime/` | legacy 三策略 |
-| `generation/ragas/` | `raw.jsonl` 逐样本 · `metrics.json` 汇总 · `summary.md` 结论 |
+| `generation/ragas/` | `ragas_freeze20261016.json` + `_samples.jsonl` 现行读数 · `summary.md` 旧代际结论（旧原始数据已清理） |
 | `system_validation/` | Agent 行为 · LangGraph State 闭环 |
 | **`task_eval/`** | **效果章全部证据**：`phase0_baseline_final.jsonl`（66 条**冻结、只读**）· `PHASE0_FREEZE.md` · `phase1_baseline_v2.jsonl` · `PHASE1_VERIFY.md` · Step 5 配对 `phase1_memory_step5_store_{on,off}.jsonl` + `PHASE1_MEMORY_STEP5_FINDINGS.md` · `phase1_e5_prompt_following.jsonl` · **`HANDOVER.md`（交接活文档）** · 本轮重录 `ec_r1_final_gate.jsonl` / `.report.json`。★ 该目录的**跟踪状态看命令、不看本文**（此前写死的「`git ls-files` = 0」作废：数字会漂、命令不会）——已跟踪 = `git ls-files evals/results/task_eval \| wc -l`，未跟踪 = `git status --short -- evals/results/task_eval \| grep -c '^??'` 的行数 ⇒ Task 10 起数值工件（`*.jsonl` / `*.report.json`）已入库，★ **逐轮 `*.log` 仍不入库**（单份可达 MB 级 ⇒ 沿用 D11 的取舍，剩余未跟踪名单现查 `git status --short -- evals/results/task_eval`），「冻结、只读」现在有版本控制兜着；旧读数与新一代的替代关系记在 `evals/claims/artifact_status.json`（标 `superseded`，**不删原文件、不改数值**） |
 | **`../claims/`** | **主张 ledger 与工件状态**：`ledger.md`（生成物，勿手改）· `ledger_draft.md`（Task 6/7 期间的草稿，留档）· `falsify_latest.json`（mutation 取证件）· `artifact_status.json`（旧工件的 `superseded` 标注 + `superseded_by` 指向）。★ **`ledger.md` 由脚本重算产出，本文只给索引**：生成 = `uv run python scripts/lib/build_claim_ledger.py --records` 加归档路径、`--check` 校验「文档 == 重算」；本目录**不含手写百分数** |

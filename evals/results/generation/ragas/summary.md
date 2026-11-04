@@ -1,5 +1,9 @@
 # RAGAS 生成质量评估（V-2026-10-02 · 全量 20 条）
 
+> ★ 2026-11-04 清理说明：本报告引用的原始数据文件（`metrics.json` / `raw.jsonl` /
+> `ragas_final.json` / `ragas_final_samples.jsonl`）已删除，仅保留本结论页；
+> 现行 RAGAS 读数见同目录 `ragas_freeze20261016.json`。
+
 ## 口径
 
 | 项 | 值 |

@@ -51,9 +51,8 @@
 生成质量实验：
 
 - `ragas/`
-  - `raw.jsonl` — 逐样本问答与得分
-  - `metrics.json` — 汇总指标
-  - `summary.md` — 实验结论
+  - `ragas_freeze20261016.json` / `_samples.jsonl` — 现行冻结版读数与样本
+  - `summary.md` — 旧代际结论（旧原始数据已于 2026-11-04 清理）
 
 #### system_validation
 
