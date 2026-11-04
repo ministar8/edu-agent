@@ -14,6 +14,34 @@ from rag.common.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
+# 单路查询失败后的重试预算：首次 + 1 次。读操作幂等，重试安全。
+# ★ 只对**瞬时故障**有效（embedding 服务抖动、连接被重置）；HNSW 段文件
+#   未落盘的 "Nothing found on disk" 不可在进程内恢复，重试后仍会失败并记账。
+_QUERY_ATTEMPTS = 2
+_QUERY_RETRY_BACKOFF_S = 0.2
+
+
+async def _retry_async(fn, *, attempts: int, backoff_s: float, on_error=None):
+    """按次数重试一个协程工厂；全部失败时抛出最后一个异常。
+
+    抽成模块级纯函数是为了可单测：预算（deadline）与失败记账由调用方负责。
+    ``CancelledError`` 继承 BaseException，不会被 `except Exception` 吞掉。
+    """
+    last_exc: BaseException | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return await fn()
+        except Exception as exc:
+            last_exc = exc
+            if on_error is not None:
+                on_error(attempt, exc)
+            if attempt >= attempts:
+                break
+            await asyncio.sleep(backoff_s)
+    if last_exc is None:
+        raise TimeoutError("retry budget exhausted")
+    raise last_exc
+
 
 class _QueryMixin(_VectorStoreBase):
     """向量检索：同步/异步相似度查询。"""
@@ -96,10 +124,17 @@ class _QueryMixin(_VectorStoreBase):
     ) -> list[tuple[Document, float]]:
         start = time.perf_counter()
         timeout = timeout or float(settings.TOOL_CALL_TIMEOUT or 30)
-        try:
-            embedding = await asyncio.wait_for(self.embeddings.aembed_query(query), timeout=timeout)
-            remaining_timeout = max(0.1, timeout - (time.perf_counter() - start))
-            results = await asyncio.wait_for(
+        deadline = start + timeout
+
+        async def _attempt() -> list[tuple[Document, float]]:
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                raise TimeoutError(f"query budget exhausted: {collection_name}")
+            embedding = await asyncio.wait_for(
+                self.embeddings.aembed_query(query), timeout=remaining
+            )
+            remaining = max(0.1, deadline - time.perf_counter())
+            return await asyncio.wait_for(
                 asyncio.to_thread(
                     self._similarity_search_by_embedding_sync,
                     collection_name,
@@ -107,21 +142,10 @@ class _QueryMixin(_VectorStoreBase):
                     k,
                     filter,
                 ),
-                timeout=remaining_timeout,
+                timeout=remaining,
             )
-            metrics.emit(
-                event="chroma_query",
-                stage="vectorstore",
-                duration_ms=round((time.perf_counter() - start) * 1000, 3),
-                tags={
-                    "collection": collection_name,
-                    "client_mode": self.client_mode,
-                    "query_mode": "query_embeddings",
-                },
-                values={"k": k, "result_count": len(results)},
-            )
-            return results
-        except Exception as e:
+
+        def _on_error(attempt: int, exc: Exception) -> None:
             metrics.emit(
                 event="chroma_query",
                 stage="vectorstore",
@@ -132,8 +156,43 @@ class _QueryMixin(_VectorStoreBase):
                     "client_mode": self.client_mode,
                     "query_mode": "query_embeddings",
                 },
-                values={"k": k, "error_type": e.__class__.__name__},
+                values={"k": k, "error_type": exc.__class__.__name__, "attempt": attempt},
             )
-            logger.warning("Async Chroma query failed for %s: %s", collection_name, e)
+            logger.warning(
+                "Async Chroma query failed for %s (attempt %d/%d): %s",
+                collection_name,
+                attempt,
+                _QUERY_ATTEMPTS,
+                exc,
+            )
+
+        try:
+            results = await _retry_async(
+                _attempt,
+                attempts=_QUERY_ATTEMPTS,
+                backoff_s=_QUERY_RETRY_BACKOFF_S,
+                on_error=_on_error,
+            )
+        except Exception as e:
+            # 重试耗尽才记账：一次故障 = 一条记录（record_query_failure 亦按异常身份去重）
+            logger.warning(
+                "Async Chroma query failed for %s after %d attempts: %s",
+                collection_name,
+                _QUERY_ATTEMPTS,
+                e,
+            )
             self.record_query_failure(f"{collection_name}: {e.__class__.__name__}", exc=e)
             return []
+
+        metrics.emit(
+            event="chroma_query",
+            stage="vectorstore",
+            duration_ms=round((time.perf_counter() - start) * 1000, 3),
+            tags={
+                "collection": collection_name,
+                "client_mode": self.client_mode,
+                "query_mode": "query_embeddings",
+            },
+            values={"k": k, "result_count": len(results)},
+        )
+        return results

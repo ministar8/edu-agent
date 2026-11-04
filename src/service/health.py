@@ -95,6 +95,24 @@ async def _probe_chromadb() -> dict[str, Any]:
     }
 
 
+def _query_failure_snapshot() -> dict[str, Any]:
+    """进程内检索查询失败的累计快照（只读，不构造向量库客户端）。
+
+    ★ 只报告、不参与 `status` 判定：一次瞬时故障会让计数长期 >0，
+    但 `/health` 的 status 语义仍是「依赖当前是否可用」。
+    """
+    try:
+        from rag.common import vectorstore as vs
+
+        manager = vs._vector_store_manager
+        if manager is None:
+            return {"total": 0, "recent": []}
+        failures = manager.query_failures
+        return {"total": len(failures), "recent": failures[-5:]}
+    except Exception as exc:  # 健康检查不允许抛
+        return {"total": None, "recent": [], "error": type(exc).__name__}
+
+
 def _probe_langsmith() -> dict[str, Any]:
     """只报告配置状态，不发网络请求（避免为健康检查产生额外配额与延迟）。"""
     if not settings.LANGCHAIN_TRACING_V2:
@@ -128,4 +146,5 @@ async def collect_health() -> dict[str, Any]:
         "status": "degraded" if degraded else "ok",
         "degraded": degraded,
         "dependencies": dependencies,
+        "query_failures": _query_failure_snapshot(),
     }

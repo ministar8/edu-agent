@@ -108,8 +108,11 @@ cp .env.example .env          # 必填：DASHSCOPE_API_KEY 或 DEEPSEEK_API_KEY�
 ### 4. 构建知识库
 
 ```bash
-uv run python -m rag.ingest            # 增量入库
-uv run python -m rag.ingest --rebuild  # 全量重建
+uv run python -m rag.ingest            # learning_paths 增量（其余层已迁到 ingest_layers）
+uv run python -m rag.ingest --rebuild  # 只重建 learning_paths，不是全量
+
+# 全量重建（四科 + exams + code + learning_paths）：先备份/删除 chroma_db，再按序跑六层
+PYTHONPATH=src uv run python -c "from rag.ingest_layers import basic,advanced,exams,exam_practice,code,learning_paths,_shared; kp=_shared.load_kp_ids(); basic.ingest(kp); advanced.ingest(kp); exams.ingest_all(kp); exam_practice.ingest(kp); code.ingest_all(kp); learning_paths.ingest()"
 ```
 
 > 需 `PYTHONPATH=src` 或在 `src/` 目录下运行。

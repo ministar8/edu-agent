@@ -59,8 +59,14 @@ PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_step2_gat
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_step4fix_gate.py
 PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_e5_probe.py --reanalyse --write  # 零 LLM 重析
 uv run python src/run_service.py         # 启动服务 → http://127.0.0.1:8000
-uv run python -m rag.ingest              # 知识库增量入库
-uv run python -m rag.ingest --rebuild    # 知识库全量重建
+# 知识库入库：`rag.ingest` 自 2026-10-10 起**只负责 learning_paths**
+# （四科 / exams / code 已迁到 `ingest_layers`，逐层脚本见 `scripts/ingest/`）
+uv run python -m rag.ingest              # learning_paths 增量
+uv run python -m rag.ingest --rebuild    # 只重建 learning_paths（≠ 全量重建）
+
+# 全量重建（四科 + exams + code + learning_paths）：先备份/删除 chroma_db，
+# 再按序调用六层 ingest()（与 retrieval_gate.build_index 同源）
+PYTHONPATH=src uv run python -c "from rag.ingest_layers import basic,advanced,exams,exam_practice,code,learning_paths,_shared; kp=_shared.load_kp_ids(); basic.ingest(kp); advanced.ingest(kp); exams.ingest_all(kp); exam_practice.ingest(kp); code.ingest_all(kp); learning_paths.ingest()"
 
 uv run ruff check src/                   # Lint
 uv run ruff format src/                  # 格式化
