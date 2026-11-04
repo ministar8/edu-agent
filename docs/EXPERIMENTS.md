@@ -98,6 +98,11 @@ RAG LLM = `dashscope:qwen3.8-flash`（2026-11-04 由 `qwen3.8-max-0902` 切换�
 
 ★ 复现：`PYTHONPATH=src python scripts/lib/ablation_retrieval.py --limit 60 --configs full,no_bm25,no_metadata,no_decompose,no_hyde,vector_only,plus_topup`
 
+★ **全量 156 条首轮作废（2026-11-04）**：消融跑的是生产索引、未走门禁的就绪屏障，跑动中出现 21 次
+`Async Chroma query failed`（full 6 / no_hyde 14 / plus_topup 1，no_metadata 0）。★ 组间故障次数不等
+⇒ 差值不能解释为组件效应；该轮归档已丢弃。**本表仍为 60 条子集读数**，全量复跑待做（或先把消融迁移到
+临时索引 + 就绪屏障，与 `retrieval_gate` 同一套仪器）。 （证据：`.tmp/ablation_156.log`（本机临时日志，未入库）；故障机理见 `docs/ARCHITECTURE_RETRIEVAL.md` §6.3）
+
 ---
 
 ## 3. Legacy 资产池策略（三策略对比）
