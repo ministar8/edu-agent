@@ -4,7 +4,9 @@ import asyncio
 import hashlib
 import logging
 import math
+import threading
 import time
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
@@ -25,6 +27,42 @@ MAX_TEXT_LENGTH = 3000
 
 # ★ §1.5 R4：距离→相似度的**唯一**换算点。未列出的 space 一律抛错，不静默回退成 cosine。
 SUPPORTED_SPACES: frozenset[str] = frozenset({"cosine", "l2", "ip"})
+
+# ── query embedding 缓存 ────────────────────────────────────────────────
+# 同一条用户查询会被多条向量路由各 embed 一次（subject 集合共享同一 route query），
+# 2026-11-04 的 156 条消融里这是 TEI 压力的主要来源，也是偶发超时的诱因。
+# 只缓存 **query**（不缓存 documents）：documents 基本唯一，缓存无收益且占内存。
+_QUERY_CACHE_MAX = 1024
+_query_cache: OrderedDict[tuple[str, str, str], list[float]] = OrderedDict()
+_query_cache_lock = threading.Lock()
+
+
+def _query_cache_get(key: tuple[str, str, str]) -> list[float] | None:
+    with _query_cache_lock:
+        vec = _query_cache.get(key)
+        if vec is not None:
+            _query_cache.move_to_end(key)
+        return vec
+
+
+def _query_cache_put(key: tuple[str, str, str], vec: list[float]) -> None:
+    with _query_cache_lock:
+        _query_cache[key] = vec
+        _query_cache.move_to_end(key)
+        while len(_query_cache) > _QUERY_CACHE_MAX:
+            _query_cache.popitem(last=False)
+
+
+def query_cache_stats() -> dict[str, int]:
+    """当前 query embedding 缓存条目数（观测/测试用）。"""
+    with _query_cache_lock:
+        return {"size": len(_query_cache), "max": _QUERY_CACHE_MAX}
+
+
+def clear_query_cache() -> None:
+    """清空缓存（测试与实验切换模型时用）。"""
+    with _query_cache_lock:
+        _query_cache.clear()
 
 
 def similarity_from_distance(distance: float, space: str) -> float:
@@ -320,13 +358,27 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
 
         return all_embeddings
 
+    def _query_cache_key(self, text: str) -> tuple[str, str, str]:
+        """模型/端点变化时缓存自然失效（key 含 base_url + model）。"""
+        return (self.base_url, self.model, str(text))
+
     def embed_query(self, text: str) -> list[float]:
-        result = self.embed_documents([str(text)])
-        return result[0]
+        key = self._query_cache_key(text)
+        cached = _query_cache_get(key)
+        if cached is not None:
+            return list(cached)
+        result = self.embed_documents([str(text)])[0]
+        _query_cache_put(key, result)
+        return list(result)
 
     async def aembed_query(self, text: str) -> list[float]:
-        result = await self.aembed_documents([str(text)])
-        return result[0]
+        key = self._query_cache_key(text)
+        cached = _query_cache_get(key)
+        if cached is not None:
+            return list(cached)
+        result = (await self.aembed_documents([str(text)]))[0]
+        _query_cache_put(key, result)
+        return list(result)
 
 
 class HashingEmbeddings(Embeddings):
