@@ -126,24 +126,44 @@ class _QueryMixin(_VectorStoreBase):
         timeout = timeout or float(settings.TOOL_CALL_TIMEOUT or 30)
         deadline = start + timeout
 
+        attempt_state = {"n": 0}
+
         async def _attempt() -> list[tuple[Document, float]]:
+            attempt_state["n"] += 1
+            # ★ 每次尝试只拿「剩余预算 / 剩余次数」，否则第一次超时会吃掉全部预算，
+            #   重试永远只会得到 "budget exhausted"（2026-11-04 实测 58 条全因此作废）。
+            left = _QUERY_ATTEMPTS - attempt_state["n"] + 1
             remaining = deadline - time.perf_counter()
             if remaining <= 0:
                 raise TimeoutError(f"query budget exhausted: {collection_name}")
-            embedding = await asyncio.wait_for(
-                self.embeddings.aembed_query(query), timeout=remaining
-            )
-            remaining = max(0.1, deadline - time.perf_counter())
-            return await asyncio.wait_for(
-                asyncio.to_thread(
-                    self._similarity_search_by_embedding_sync,
-                    collection_name,
-                    embedding,
-                    k,
-                    filter,
-                ),
-                timeout=remaining,
-            )
+            slice_s = max(0.1, remaining / left)
+            try:
+                embedding = await asyncio.wait_for(
+                    self.embeddings.aembed_query(query), timeout=slice_s
+                )
+            except TimeoutError as exc:
+                raise TimeoutError(
+                    f"embedding timeout ({slice_s:.1f}s): {collection_name}"
+                ) from exc
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                raise TimeoutError(f"query budget exhausted after embedding: {collection_name}")
+            thread_slice = max(0.1, remaining / max(1, left - 1))
+            try:
+                return await asyncio.wait_for(
+                    asyncio.to_thread(
+                        self._similarity_search_by_embedding_sync,
+                        collection_name,
+                        embedding,
+                        k,
+                        filter,
+                    ),
+                    timeout=thread_slice,
+                )
+            except TimeoutError as exc:
+                raise TimeoutError(
+                    f"chroma timeout ({thread_slice:.1f}s): {collection_name}"
+                ) from exc
 
         def _on_error(attempt: int, exc: Exception) -> None:
             metrics.emit(
