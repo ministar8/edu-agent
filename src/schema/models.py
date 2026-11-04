@@ -40,6 +40,7 @@ GATEWAY_MODELS: dict[Gateway, frozenset[str]] = {
             "qwen3.8-27b",
             "qwen3.7-flash",
             "deepseek-v4-flash",
+            "deepseek-v4.1-flash",
         }
     ),
     # DeepSeek 官方：只有自家模型
