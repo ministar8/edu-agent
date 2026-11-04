@@ -173,9 +173,18 @@ task_mode = 安全与披露
 两者必须独立
 ```
 
+**三层各管一件事**（2026-11-04 收敛，边界由 `tests/test_policy_layers.py` 锁定）：
+
+| 层 | 回答什么 | 真源 | 生效处 |
+|---|---|---|---|
+| 安全与披露 | 能不能进池、答案给不给 | `schema.task_policy.TaskPolicy` | `evidence_policy`（release 出口） |
+| 计算预算 | 取多少条、跳不跳分解/重排准备 | `rag.retrieval.query_classifier.RetrievalDepth` | pipeline 阶段 ③ |
+| 部署开关 | 环境是否**真执行**某项（如 rerank） | `core.settings` | reranker 调用点 |
+
 | 规则 | |
 |---|---|
-| policy 里的 `depth` | **默认值**，由 task_mode 套表 |
+| `TaskPolicy` | **不含** depth / k / use_rerank（三字段全仓无读取方，2026-11-04 删除） |
+| `RetrievalDepth` | depth / k / skip_* 的唯一真源，由 pipeline 阶段 ③ 解析 |
 | Retriever | 可按 **query complexity** **升级** depth（shallow→standard→deep） |
 | **禁止** | 为省算力把 depth **降到**突破安全语义（如 practice 变相扩大资源） |
 | **禁止** | depth 升级带动 `exam_resources` / `answer_policy` 等安全字段变化 |
@@ -194,8 +203,11 @@ practice · default depth=standard
 
 | 字段类 | 可否随复杂度调 | 谁定 |
 |---|---|---|
-| `depth` / `k` / `use_rerank` | **可升**（计算预算） | Retriever / query_classifier |
+| `depth` / `k` / `use_rerank` | **可升**（计算预算） | `RetrievalDepth`（query_classifier） |
 | `exam_resources` / `answer_policy` / `explanation_policy` / `allow_question_id_leak` / `related_exam_policy` | **锁死** | Task Classifier / policy 表 |
+
+第三层是**部署开关**（`settings.RERANK_ENABLED` / `USE_FAKE_RERANK`）：它不改变「要不要重排」的决策，
+只决定环境**是否真执行**——详见 `docs/RERANK_SWITCH_ANALYSIS.md`。
 
 ```text
 安全字段 ≠ 计算字段

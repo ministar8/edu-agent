@@ -1416,6 +1416,11 @@ KP 覆盖已达 **99.0–100%**（仅剩 10 条 basic 讲义 detail 块）——
 `02_数据表示与运算.md`）改指新语料（`basic/data_structure/08_search.md` 等），目标身份变了，
 属仪器变更而非退化。另：本代起每条观测多一个 `rerank_scored` 键，**只有 `5df3e47` 的代码才产出它**。
 
+★ **2026-11-04 复跑（RAG 结构收口 `3255d26` 之后，真 TEI 路由）**：口径 `embed=real rerank=on/real`
+`k=5`，5 条 probe 与基线**逐条相同**（`#4 survived` / `#9 survived` / `#17 section_dedup` /
+`#18 rerank_topn` / `#19 section_dedup`），口径校验通过、**基线未重录**。
+复现：`GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1 PYTHONPATH=src python -m evaluation.gates.probe_gate`。
+
 **核对方式**（`check_baseline_diff_registration.py` 已把「旧代 / 新代 / 登记节」三者参数化）：
 
 ```bash

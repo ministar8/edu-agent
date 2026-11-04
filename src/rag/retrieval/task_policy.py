@@ -6,6 +6,9 @@
 
 ★ 与 `retrieval_plan.py` 分工：本文件 → **策略**（TaskPolicy）；
   那边 → **计算预算**（RetrievalStrategy/depth 的 k、skip_*）。不要混称「Plan」。
+★ 三层勿混（`docs/RETRIEVAL_POLICY.md` §3.2）：安全/披露（TaskPolicy）·
+  计算预算（RetrievalDepth）· 部署开关（settings）。边界由
+  `tests/test_policy_layers.py` 锁定：本模块不接收、TaskPolicy 也不携带 depth/k/use_rerank。
 """
 
 from __future__ import annotations
@@ -15,7 +18,6 @@ import re
 from schema.task_policy import (
     ExamResources,
     LegacyPolicy,
-    RetrievalDepthName,
     TaskMode,
     TaskPolicy,
 )
@@ -185,28 +187,12 @@ def _preferred_layers(mode: TaskMode, query: str) -> list[str]:
 def policy_for_mode(
     task_mode: TaskMode,
     *,
-    depth: RetrievalDepthName | str = "standard",
     layer_policy_id: str = "default",
     query: str = "",
-    use_rerank: bool = True,
-    k: int | None = None,
 ) -> TaskPolicy:
     mode = task_mode
     exam_resources, answer_policy, explanation_policy, related = _resolve_mode_profile(mode)
     preferred = _preferred_layers(mode, query)
-
-    depth_name: RetrievalDepthName = (
-        depth
-        if depth
-        in (
-            "shallow",
-            "standard",
-            "deep",
-            "code",
-            "text_only",
-        )
-        else "standard"
-    )
 
     return TaskPolicy(
         task_mode=mode,
@@ -218,9 +204,6 @@ def policy_for_mode(
         related_exam_expansion="enabled" if related != "off" else "disabled",
         kp_expansion="enabled",
         graph_expansion="disabled",
-        depth=depth_name,
-        k=k,
-        use_rerank=use_rerank,
         allow_question_id_leak=(mode in ("grade", "explain", "verify")),
         legacy_policy=_LEGACY_POOL[mode],
         layer_policy_id=layer_policy_id,
@@ -231,22 +214,20 @@ def resolve_task_policy(
     query: str,
     task_mode: TaskMode | None = None,
     *,
-    depth: RetrievalDepthName | str = "standard",
     layer_policy_id: str = "default",
     context_mode: TaskMode | None = None,
     agent_prior: str = "",
-    use_rerank: bool = True,
-    k: int | None = None,
 ) -> TaskPolicy:
-    """入口：显式 task_mode 优先，否则按 §4.0 优先级分类。"""
+    """入口：显式 task_mode 优先，否则按 §4.0 优先级分类。
+
+    ★ 不接收 depth / k / use_rerank —— 算力预算是 `RetrievalDepth` 的职责，
+      策略解析不得顺手改写它（边界由 `tests/test_policy_layers.py` 锁定）。
+    """
     mode = task_mode or classify_task_mode(
         query, context_mode=context_mode, agent_prior=agent_prior
     )
     return policy_for_mode(
         mode,
-        depth=depth,
         layer_policy_id=layer_policy_id,
         query=query,
-        use_rerank=use_rerank,
-        k=k,
     )

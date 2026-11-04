@@ -34,7 +34,8 @@
 │ rag/task_policy.resolve_task_policy(query)                                │
 │   → schema/task_policy.TaskPolicy                                         │
 │   task_mode · preferred_layers · excluded_layers · legacy_policy          │
-│   exam_resources(资格) · answer_policy(披露) · depth · layer_policy_id     │
+│   exam_resources(资格) · answer_policy(披露) · layer_policy_id             │
+│   ★ 不含 depth/k/use_rerank —— 计算预算归 ② Retrieval Plan                 │
 │   ↓ 两个下游消费者：                                                       │
 │     eligibility_where()      → 召回侧 where（进不进候选池）                │
 │     eligible_semantic_layers() → top-up 可补哪些层                        │

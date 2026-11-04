@@ -200,7 +200,7 @@ LLM / 专家 Agent
 | LangGraph 位置 | 放什么 |
 |---|---|
 | `teaching_graph` 或 supervisor 入口 | Task Classifier → `retrieval_policy` 写入 state |
-| `agents/tools.py` `_retrieve_payload` | 读 policy：`depth` / eligibility / 图扩开关 |
+| `agents/tools.py` `_retrieve_payload` | 读 policy：eligibility / 图扩开关（`depth` 走 `retrieve_for_task(depth=)`，不来自 policy） |
 | `rag/retrieval/retriever.py` | 接受 policy（或已拆好的 eligibility+ranking 参数） |
 | Evidence Policy | 读 `answer_policy` / `explanation_policy` |
 
