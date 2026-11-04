@@ -105,8 +105,6 @@ async def probe_one(p: dict) -> dict:
         k=20,
         use_rerank=True,
         filter=where,
-        max_retries=0,
-        use_llm_verify=False,
         preferred_layers=list(policy.preferred_layers),
     )
     pool_layers = [_layer(e.metadata or {}) for e in (fused_raw.text_evidences or [])]

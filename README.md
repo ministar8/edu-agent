@@ -16,7 +16,7 @@ RAG 检索管线: 查询归一 → 分类 → 多路召回(语义 + BM25 + 元�
               → RRF 融合 → Reranker → HyDE → 语义缓存
 ```
 
-**存储**：ChromaDB（向量 + 语义缓存）｜SQLite：用户 `edu_agent.db`、会话 `checkpoints.db`、长期记忆 `store.db`
+**存储**：ChromaDB（向量 + 语义缓存）｜SQLite 运行库在 `data/sqlite/`：用户 `edu_agent.db`、会话 `checkpoints.db`、长期记忆 `store.db`
 
 **流式**：`/stream` 输出 token + message 双流，并支持 custom 事件。
 

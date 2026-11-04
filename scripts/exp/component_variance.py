@@ -112,8 +112,6 @@ async def run_one_run(run_id: int) -> dict[str, Any]:
                         query=query,
                         k=k,
                         use_rerank=True,
-                        max_retries=0,
-                        use_llm_verify=False,
                         preferred_layers=preferred,
                         filter=layer_filter,
                     )

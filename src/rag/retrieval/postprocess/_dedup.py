@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.documents import Document
 
-from rag.retrieval.postprocess._log import logger
+logger = logging.getLogger(__name__)
 
 # ── 同 section 去重 ────────────────────────────────────
 

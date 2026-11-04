@@ -76,8 +76,6 @@ async def run_retrieval_arm(arm: str, queries, limit: int | None) -> dict:
                     query=query,
                     k=GATE_K,
                     use_rerank=False,
-                    max_retries=0,
-                    use_llm_verify=False,
                     depth=depth,
                     filter={"kb_depth": {"$in": ["basic", "advanced", "exams"]}},
                 )
@@ -86,8 +84,6 @@ async def run_retrieval_arm(arm: str, queries, limit: int | None) -> dict:
                     query=query,
                     k=GATE_K,
                     use_rerank=True,
-                    max_retries=0,
-                    use_llm_verify=False,
                 )
         except Exception:  # noqa: BLE001
             outcomes.append(

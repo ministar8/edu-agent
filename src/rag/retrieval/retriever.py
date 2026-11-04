@@ -1,21 +1,36 @@
-"""RAG 检索门面（对外入口）。
+"""RAG 检索门面（对外唯一入口；命名 = retriever，不是 routes）。
 
-论文架构图 ↔ 代码文件：
-  查询理解  → query_classifier / query_decomposer / retrieval_plan
-  多路召回  → routes.py + recall.py
-  融合      → fusion.py
-  重排      → reranker.py
-  HyDE/窗口 → hyde.py / postprocess.py
-  流水线    → pipeline.py（classify→…→finalize）
-  证据出包  → evidence_policy.py / layer_recall.py
+主路径 6 步（与 `src/rag/README.md` / 论文第 3 章一致）：
+  ① 查询理解  normalize → classify → TaskPolicy + RetrievalPlan →（可选）decompose
+  ② 多路召回  routes 并发：semantic / BM25 / focus / expanded / 元数据
+  ③ 融合      postprocess 加权 RRF
+  ④ 过滤重排  去重 · 阈值 ·（可选）rerank · HyDE / 窗口 / top-up
+  ⑤ 出包      evidence_policy（release 唯一出口）→ FusedEvidence
+  ⑥ 缓存验证  semantic_cache + 规则 verifier + metrics
 
-**对外入口**（agent 经 `agents/tools.py` 调用）：
-  - aretrieve_evidence_with_retry() / aretrieve_evidence() / warmup_query_cache()
+职责边界：
+  - 本模块：编排门面、缓存读写、重试包装、指标
+  - 不做：单路检索细节（`routes`）、路由拼装（`recall`）、权限裁剪（`evidence_policy`）
 
-**参数 `use_rerank` 的语义**：它不是「是否重排」开关，而是「是否按重排口径准备候选」
-（决定 coarse_k）。真正重排判定见 `docs/RERANK_SWITCH_ANALYSIS.md`。
+策略三层（勿混）：
+  - TaskPolicy（`schema/task_policy`）：安全/披露——进不进池、包里能不能带答案
+  - RetrievalPlan/depth：计算预算——k、coarse_k、跳不跳分解/重排准备
+  - 部署开关（如 `settings.RERANK_ENABLED`）：环境是否真执行 rerank
 
-**参数 `k` 的语义**：目标条数，不是硬上限；分解路径最多返回 `2k`。
+★ 参数 `use_rerank` 的语义：**不是**「是否调用 rerank()」，而是「是否按重排口径
+  准备候选（影响 coarse_k）」。真正是否重排还取决于 `depth.skip_rerank` 与
+  `settings.RERANK_ENABLED`——细节见 `docs/RERANK_SWITCH_ANALYSIS.md`。
+
+★ 参数 `k`：目标条数，不是硬上限；分解路径最多可返回约 `2k`。
+
+论文架构图 ↔ 代码：
+  查询理解 → query_classifier / task_policy / retrieval_plan / query_decomposer
+  多路召回 → recall（拼）+ routes（跑）
+  融合     → postprocess（RRF）
+  重排     → reranker
+  HyDE/窗  → hyde / postprocess
+  流水线   → pipeline（classify→…→finalize）
+  证据出包 → evidence + evidence_policy + layer_recall
 """
 
 from __future__ import annotations
@@ -26,17 +41,15 @@ import time
 from collections.abc import Sequence
 
 from core.settings import settings
-from rag.common.rag_utils import extract_query_terms, normalize_query_text
 from rag.retrieval.evidence import FusedEvidence
 from rag.retrieval.pipeline import (  # noqa: F401  兼容评测脚本 `R._resolve_thresholds`
     SCORE_THRESHOLD,
     StageSink,
+    _PlanSink,
     _resolve_thresholds,
     aretrieve_documents,
 )
-from rag.retrieval.query_classifier import RetrievalDepth, aclassify_query
-from rag.retrieval.query_decomposer import decompose
-from rag.retrieval.retrieval_plan import resolve_retrieval_plan, strategy_from_depth
+from rag.retrieval.query_classifier import STANDARD_DEPTH, QueryCategory, RetrievalDepth
 from rag.retrieval.retriever_io import (
     _assemble_fused,
     _cache_signatures,
@@ -46,10 +59,6 @@ from rag.retrieval.retriever_io import (
     _store_cached,
     _verify_fused,
     _with_topup,
-)
-from rag.retrieval.retriever_retry import (
-    _evidence_kwargs,
-    _verdict_from,
 )
 from rag.retrieval.verifier import VerificationResult
 
@@ -86,65 +95,40 @@ _RERANK_EXPAND_FACTOR = settings.RERANK_EXPAND_FACTOR
 # ── 公开 API ──────────────────────────────────────────
 
 
-async def _resolve_evidence_plan(query: str, depth: RetrievalDepth | None, k: int) -> _EvidencePlan:
-    """阶段 1-2：分类 → 解析策略 → 查询分解，返回本次检索实际采用的计划。"""
-    terms = extract_query_terms(normalize_query_text(query))
-    cat = await aclassify_query(query, terms)
-    resolved_depth = depth
-    if resolved_depth is None:
-        strategy = resolve_retrieval_plan(cat)
-        resolved_depth = strategy.depth
-    else:
-        strategy = strategy_from_depth(resolved_depth)
-    effective_k = resolved_depth.k if k == 5 and resolved_depth.k != 5 else k
-
-    decompose_start = time.perf_counter()
-    if resolved_depth.skip_decompose:
-        sub_queries = [query]
-    else:
-        sub_queries = await decompose(query, cat=cat)
-    decompose_ms = round((time.perf_counter() - decompose_start) * 1000, 3)
-
-    return _EvidencePlan(
-        cat=cat,
-        depth=resolved_depth,
-        layer=strategy.layer,
-        route_type=strategy.route_type,
-        effective_k=effective_k,
-        sub_queries=sub_queries,
-        decompose_ms=decompose_ms,
-    )
-
-
 async def _run_retrieval(
     query: str,
     collection_name: str,
     score_threshold: float,
     use_rerank: bool,
     filter: dict | None,
-    plan: _EvidencePlan,
+    k: int,
+    depth: RetrievalDepth | None,
     on_stage: StageSink | None,
-) -> tuple[list, float, dict]:
-    """调底层检索；返回 (docs, 延迟 ms, rerank 状态旁路出参)。"""
+) -> tuple[list, float, dict, _PlanSink]:
+    """调底层检索；返回 (docs, 延迟 ms, rerank 状态旁路, 计划旁路)。
+
+    门面不再自己 classify/plan/decompose —— pipeline 是这些阶段的唯一所有者，
+    通过 `_PlanSink` 把解析结果带回（空包/异常同样送达）。
+    """
     stage_start = time.perf_counter()
     # ★ 修复批 Important-3（B2 送达断链）：空包时没有文档可挂 `_rerank_status`，
     #   改由 `rerank_status_out` 这个**旁路出参**把 `_stage_rerank` 已算出的状态带回桥接处。
     rerank_status_bridge: dict[str, str] = {}
+    plan_out = _PlanSink()
     docs = await aretrieve_documents(
         query=query,
         collection_name=collection_name,
-        k=plan.effective_k,
+        k=k,
         score_threshold=score_threshold,
         use_rerank=use_rerank,
         filter=filter,
-        depth=plan.depth,
-        cat=plan.cat,
-        precomputed_sub_queries=plan.sub_queries,
+        depth=depth,
         on_stage=on_stage,
         rerank_status_out=rerank_status_bridge,
+        plan_out=plan_out,
     )
     latency_ms = round((time.perf_counter() - stage_start) * 1000, 3)
-    return docs, latency_ms, rerank_status_bridge
+    return docs, latency_ms, rerank_status_bridge, plan_out
 
 
 async def aretrieve_evidence(
@@ -168,9 +152,19 @@ async def aretrieve_evidence(
         return cached
 
     metric_start = time.perf_counter()
-    plan = await _resolve_evidence_plan(query, depth, k)
-    docs, latency_ms, rerank_bridge = await _run_retrieval(
-        query, collection_name, score_threshold, use_rerank, filter, plan, on_stage
+    docs, latency_ms, rerank_bridge, plan_out = await _run_retrieval(
+        query, collection_name, score_threshold, use_rerank, filter, k, depth, on_stage
+    )
+    if plan_out.depth is None:
+        logger.warning("plan_out 未填充 depth，回退 STANDARD_DEPTH（检查 pipeline 旁路）")
+    plan = _EvidencePlan(
+        cat=plan_out.cat or QueryCategory(source="rule"),
+        depth=plan_out.depth or STANDARD_DEPTH,
+        layer=plan_out.retrieval_layer,
+        route_type=plan_out.route_type,
+        effective_k=plan_out.k or k,
+        sub_queries=plan_out.sub_queries or [query],
+        decompose_ms=plan_out.decompose_ms,
     )
     fused = await _assemble_fused(
         docs,
@@ -192,6 +186,44 @@ async def aretrieve_evidence(
         fused=fused,
     )
     return fused
+
+
+def _verdict_from(fused: FusedEvidence) -> VerificationResult:
+    """取 aretrieve_evidence 已写入的规则 verdict；缺失时兜底 PASS。"""
+    from rag.retrieval.verifier import Verdict, VerificationResult
+
+    raw = fused.metadata.get("evidence_verdict")
+    if raw:
+        try:
+            return VerificationResult.model_validate(raw)
+        except Exception as e:
+            logger.debug("evidence_verdict 解析失败，按 PASS 兜底: %s", e)
+    return VerificationResult(verdict=Verdict.PASS, overall_score=1.0)
+
+
+def _evidence_kwargs(
+    query: str,
+    collection_name: str,
+    k: int,
+    score_threshold: float,
+    use_rerank: bool,
+    filter: dict | None,
+    max_tokens: int,
+    depth: RetrievalDepth | None,
+    on_stage: StageSink | None,
+) -> dict:
+    """`aretrieve_evidence` 的调用参数字典（重试时按 hints 就地改）。"""
+    return {
+        "query": query,
+        "collection_name": collection_name,
+        "k": k,
+        "score_threshold": score_threshold,
+        "use_rerank": use_rerank,
+        "filter": filter,
+        "max_tokens": max_tokens,
+        "depth": depth,
+        "on_stage": on_stage,
+    }
 
 
 async def _finalize_evidence(

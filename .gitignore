@@ -12,6 +12,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+# 本地运行时产物
+jieba.cache
+pytest-of-star/
+.pre-commit-cache/
 .coverage
 # 覆盖率数据文件的**自定义名**：本机 safe-delete 层会拦截 pytest-cov 删除默认 `.coverage`，
 # 已验证的绕法是 `COVERAGE_FILE=./_cov_x`（指向新路径，无需删除）。

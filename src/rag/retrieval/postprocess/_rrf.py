@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import math
 
 from langchain_core.documents import Document
 
-from rag.retrieval.postprocess._log import logger
 from rag.retrieval.query_classifier import QueryCategory
+
+logger = logging.getLogger(__name__)
 
 # RRF 常数 k 基准值（RAG 场景每路 5-20 条结果，k=20 平衡排名区分度与多路融合）
 _RRF_K_BASE = 20
@@ -109,36 +111,31 @@ def _accumulate_route_merge(
     k: int,
     scale: float,
     cat: QueryCategory | None,
-) -> dict[str, tuple[Document, float, set[str], dict[str, float]]]:
+) -> dict[str, tuple[Document, float, set[str]]]:
     """按路由把文档累加进 `merged`（键 = 集合 + 内容哈希，防跨集合同名误合并）。"""
     from rag.retrieval.recall import get_route_weight
 
-    merged: dict[str, tuple[Document, float, set[str], dict[str, float]]] = {}
+    merged: dict[str, tuple[Document, float, set[str]]] = {}
     for route_name, results in route_results:
         w = get_route_weight(_base_route_name(route_name), cat)
-        for rank, (doc, original_score) in enumerate(results, 1):
+        for rank, (doc, _original_score) in enumerate(results, 1):
             key = _dedup_key(doc)
             rrf_contribution = w / (k + rank) * scale
 
             existing = merged.get(key)
             if existing is None:
                 copied = Document(page_content=doc.page_content, metadata=dict(doc.metadata))
-                merged[key] = (copied, rrf_contribution, {route_name}, {route_name: original_score})
+                merged[key] = (copied, rrf_contribution, {route_name})
             else:
-                doc_obj, prev_score, routes, route_scores = existing
-                merged[key] = (
-                    doc_obj,
-                    prev_score + rrf_contribution,
-                    routes | {route_name},
-                    {**route_scores, route_name: original_score},
-                )
+                doc_obj, prev_score, routes = existing
+                merged[key] = (doc_obj, prev_score + rrf_contribution, routes | {route_name})
     return merged
 
 
 def _finalize_route_merge(
-    merged: dict[str, tuple[Document, float, set[str], dict[str, float]]],
+    merged: dict[str, tuple[Document, float, set[str]]],
 ) -> list[tuple[Document, float]]:
-    """写回 `recall_*` 元数据，并按确定序排序。
+    """写回 `recall_score` / `recall_routes`，并按确定序排序。
 
     排序必须**完全确定**：RRF 分数并列时若沿用插入顺序，而插入顺序又来自
     ThreadPoolExecutor.as_completed 的完成次序，同一 query 每次运行都会得到
@@ -147,12 +144,9 @@ def _finalize_route_merge(
     用 _dedup_key 作次级键：merged 就是以它为键，故唯一且确定。
     """
     ranked: list[tuple[Document, float]] = []
-    for doc, rrf_score, routes, route_scores in merged.values():
+    for doc, rrf_score, routes in merged.values():
         doc.metadata["recall_score"] = round(rrf_score, 6)
         doc.metadata["recall_routes"] = ", ".join(sorted(routes))
-        doc.metadata["recall_route_count"] = len(routes)
-        for rn, rs in route_scores.items():
-            doc.metadata[f"recall_{rn}_score"] = round(float(rs), 6)
         ranked.append((doc, rrf_score))
     ranked.sort(key=lambda item: (-item[1], _dedup_key(item[0])))
     return ranked
@@ -186,7 +180,7 @@ def merge_route_results(
         sum(len(results) for _, results in route_results),
         len(ranked),
         ranked[0][1] if ranked else 0,
-        sum(1 for _, _, routes, _ in merged.values() if len(routes) >= 2),
+        sum(1 for _, _, routes in merged.values() if len(routes) >= 2),
     )
     return ranked
 
@@ -200,11 +194,11 @@ def _accumulate_weighted_merge(
     k: int,
     scale: float,
     cat: QueryCategory | None,
-) -> dict[str, tuple[Document, float, set[str]]]:
+) -> dict[str, tuple[Document, float]]:
     """按来源把文档累加进 `merged`，含 route 级加权（从 recall_routes 元数据提取）。"""
     from rag.retrieval.recall import get_route_weight
 
-    merged: dict[str, tuple[Document, float, set[str]]] = {}
+    merged: dict[str, tuple[Document, float]] = {}
     for label, results in grouped_results:
         w_source = weights.get(label, 1.0)
         for rank, (doc, _original_score) in enumerate(results, 1):
@@ -222,22 +216,20 @@ def _accumulate_weighted_merge(
             existing = merged.get(key)
             if existing is None:
                 copied = Document(page_content=doc.page_content, metadata=dict(doc.metadata))
-                copied.metadata["_decompose_weight"] = w_source
-                merged[key] = (copied, rrf_contribution, {label})
+                merged[key] = (copied, rrf_contribution)
             else:
-                doc_obj, prev_score, labels = existing
-                merged[key] = (doc_obj, prev_score + rrf_contribution, labels | {label})
+                doc_obj, prev_score = existing
+                merged[key] = (doc_obj, prev_score + rrf_contribution)
     return merged
 
 
 def _finalize_weighted_merge(
-    merged: dict[str, tuple[Document, float, set[str]]],
+    merged: dict[str, tuple[Document, float]],
 ) -> list[tuple[Document, float]]:
-    """写回 `recall_score` / `_decompose_labels`，并按确定性次序排序。"""
+    """写回 `recall_score`，并按确定性次序排序。"""
     ranked: list[tuple[Document, float]] = []
-    for doc, rrf_score, labels in merged.values():
+    for doc, rrf_score in merged.values():
         doc.metadata["recall_score"] = round(rrf_score, 6)
-        doc.metadata["_decompose_labels"] = ", ".join(sorted(labels))
         ranked.append((doc, rrf_score))
     # 同 merge_route_results：并列分数必须用确定性的次级键，否则结果不可复现
     ranked.sort(key=lambda item: (-item[1], _dedup_key(item[0])))

@@ -1,12 +1,15 @@
-"""Evidence Policy：release 唯一出口（设计定稿 §5）。
+"""Evidence Policy：release 唯一出口（主路径 ⑤；设计定稿 §5）。
 
-职责：
+职责（只在这里做「给不给」）：
 - 按 TaskPolicy 裁 FusedEvidence（exam_answer / 答案字段 / 题号）
 - 置 release flags，供 Agent 约束
 
 禁止：
 - 在 BM25/RRF/Reranker 内做权限判断
 - 从索引删除答案（只裁 Pack）
+
+与 `evidence.py` 分工：那边是**数据契约**（FusedEvidence 长什么样）；
+这边是**披露策略**（包里允许出现什么）。资格 eligibility 与披露 release 分离。
 """
 
 from __future__ import annotations

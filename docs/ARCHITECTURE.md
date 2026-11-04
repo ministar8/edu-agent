@@ -90,7 +90,7 @@
         └─ grading_agent    批改     → agrade_answer
         │
         ▼
-⑤  专家需要知识时 → tools.py → aretrieve_evidence_with_retry（见 §4）
+⑤  专家需要知识时 → tools.py → retrieve_for_task（见 §4）
         │
         ▼
 ⑥  专家产出闭环输出 → supervisor 用 Command(goto=END) 短路，回到外层图
@@ -123,11 +123,16 @@ LangGraph 的 `add_messages` reducer 对**同 ID** 消息做替换。若每轮�
 
 ## 4. 论文核心：8 阶段检索链
 
-入口函数（**生产与评测共用同一个**）：
+入口（**产品与测量分开**）：
 
 ```python
+# 产品路径：检索 + 层排序 + 安全裁剪
+from rag.retrieval.api import retrieve_for_task
+bundle = await retrieve_for_task(query=..., k=...)
+
+# 测量路径：未裁剪包（门禁 / RAGAS / 诊断）
 from rag.retrieval.retriever import aretrieve_evidence_with_retry
-fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_rerank=...)
+fused, verification = await aretrieve_evidence_with_retry(query=..., k=...)
 ```
 
 | 阶段 | 事件名 | 阶段函数 | 做什么 |
@@ -141,10 +146,9 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 | 7 | `hyde` | `_stage_hyde` | HyDE：用假设性答案补召回 |
 | 8 | `expand` | `_stage_expand_windows` | 窗口扩展：补回被切碎的上下文 |
 
-阶段顺序在 `pipeline.py` 的 `aretrieve_evidence()` 内由 `_emit_stage(...)` 显式标注
-（8 次调用，**可被 SSE 实时上报**，`StageSink`），所以前端能看到「正在重排」这类中间状态。
-> 注：M1 拆分后阶段函数已从 `retriever.py` 移入 `pipeline.py`；入口仍是
-> `rag.retrieval.retriever.aretrieve_evidence_with_retry`（门面）。
+阶段顺序在 `retrieval/pipeline/_orchestrator.aretrieve_documents()` 内由 `_emit_stage(...)`
+显式标注（可被 SSE 实时上报，`StageSink`），所以前端能看到「正在重排」这类中间状态。
+> 注：classify/plan/decompose 由 pipeline 独占；门面只负责缓存、指标与证据组装。
 
 ### 4.1 输出：`FusedEvidence`
 
@@ -156,19 +160,17 @@ fused, verification = await aretrieve_evidence_with_retry(query=..., k=..., use_
 
 **这个区分很重要**，评测口径就建立在它上面（见 §6.1）。
 
-### 4.2 检索链的规模问题（已知，诚实记录）
+### 4.2 检索链的模块边界（2026-11-04 收口）
 
-M1 拆分后，`retriever.py` 已收敛为**门面（465 行）**，对外只暴露 3 个入口：
-`aretrieve_evidence` / `aretrieve_evidence_with_retry` / `warmup_query_cache`
-（`aretrieve_documents` 与 `_resolve_thresholds` 由 `retriever.py` 从 `pipeline.py` **再导出**，
-保持 `import rag.retrieval.retriever as R` 的旧调用方式兼容；同步入口 `retrieve_documents` 已删除）。
+- **产品入口**：`rag.retrieval.api.retrieve_for_task`（检索 + finalize + release）。
+- **测量入口**：`rag.retrieval.retriever.aretrieve_evidence_with_retry`（未裁剪包）。
+- **编排**：`retrieval/pipeline/`（`_orchestrator` 编排 + `_stages` 阶段 + `_helpers` 辅助 +
+  `_internals` 常量/策略/结构）。
+- **门面**：只做缓存、指标与证据组装；classify/plan/decompose 由 pipeline 独占。
 
-**剩余问题**：8 个阶段函数（`_stage_classify_query` … `_stage_expand_windows`）与
-`aretrieve_documents` 编排都集中在 `pipeline.py`（**1,139 行**），阶段实现与编排同处一文件；
-且 `_stage_hyde`（139 行）与专门的 `hyde.py`（58 行）存在职责重叠。
-这是「先跑通、后整理」留下的形态，**不影响正确性，但影响可读性**。
-重构方向是把阶段函数继续下沉到各自模块（`hyde.py` / `query_decomposer.py` …），
-`pipeline.py` 只留编排。**尚未做**，因为重构检索链必须重跑评测门禁（见 §7）。
+阶段函数仍与编排同处 `pipeline/` 包内（`_stages.py` 约 530 行），但已按职责拆成
+`_orchestrator` / `_stages` / `_helpers` / `_internals` 四个文件；文件数与职责边界
+见 `docs/RAG_BOUNDARY_MAP.md` 的债务台账（T3）。
 
 ---
 
@@ -304,9 +306,9 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 | 存储 | 路径 | 内容 | 由谁读写 |
 |---|---|---|---|
 | **向量库** | `chroma_db/` | 41 篇知识文档的向量索引 | `rag/common/vectorstore.py`、`rag/retrieval/semantic_cache.py` |
-| **会话状态** | `checkpoints.db` | LangGraph checkpoint（thread 级对话状态） | `SQLITE_DB_PATH` |
-| **长期记忆** | `store.db` | Store 向量索引（学生画像、错题） | `memory/sqlite.py`（`SQLITE_STORE_PATH`） |
-| **业务库** | `edu_agent.db` | 用户、认证 | `db/session.py`（SQLAlchemy） |
+| **会话状态** | `data/sqlite/checkpoints.db` | LangGraph checkpoint（thread 级对话状态） | `SQLITE_DB_PATH` |
+| **长期记忆** | `data/sqlite/store.db` | Store 向量索引（学生画像、错题） | `memory/sqlite.py`（`SQLITE_STORE_PATH`） |
+| **业务库** | `data/sqlite/edu_agent.db` | 用户、认证 | `db/session.py`（SQLAlchemy） |
 
 **四个库分开是刻意的**：生命周期完全不同 —— 向量库随知识库重建，
 会话状态随对话增长，长期记忆按学生累积，业务库最稳定。

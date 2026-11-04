@@ -59,7 +59,7 @@ CMD ["python", "src/run_service.py"]
 `.dockerignore` 里排除 `chroma_db` / `*.db` **与** compose 挂载它们并不矛盾：
 前者是「不烤进镜像层」，后者是「运行时挂载」。数据不该固化进镜像。
 
-SQLite 库（`edu_agent.db` / `checkpoints.db` / `store.db`）默认在容器内生成。
+SQLite 库（`data/sqlite/` 下的 `edu_agent.db` / `checkpoints.db` / `store.db`）默认在容器内生成。
 **若希望持久化，需自行加 volume 挂载**，否则 `docker compose down` 后会话与用户数据会丢失。
 
 ## 环境变量

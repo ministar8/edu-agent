@@ -369,7 +369,7 @@ cache_key ⊇ {query, task_mode, depth, layer_policy_id, policy_version}
 ```text
 teaching_graph: load_memory → supervisor
 supervisor: knowledge | question | grading
-tools._retrieve_payload → aretrieve_evidence_with_retry
+tools._retrieve_payload → api.retrieve_for_task
 ```
 
 | 步骤 | 建议 |

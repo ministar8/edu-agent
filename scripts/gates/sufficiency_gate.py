@@ -52,8 +52,6 @@ async def run_case(mode: str, preferred: list[str] | None) -> tuple[int, list[st
         query=QUERIES[mode],
         k=5,
         use_rerank=True,
-        max_retries=0,
-        use_llm_verify=False,
         filter=policy.eligibility_where(),
         preferred_layers=list(policy.preferred_layers),
         eligible_layers=policy.eligible_semantic_layers(),

@@ -61,8 +61,6 @@ async def run_case(name: str, mode: str, query: str) -> list[str]:
         query=query,
         k=5,
         use_rerank=True,
-        max_retries=0,
-        use_llm_verify=False,
         filter=policy.eligibility_where(),
         preferred_layers=list(policy.preferred_layers),
     )

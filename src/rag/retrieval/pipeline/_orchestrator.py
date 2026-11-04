@@ -15,9 +15,16 @@ from rag.retrieval.query_classifier import QueryCategory, RetrievalDepth
 from rag.retrieval.routes import _cache_stats_fields
 
 from . import _stages
-from ._constants import SCORE_THRESHOLD, StageSink
-from ._support import _emit_stage
-from ._types import _RecallRequest, _RetrievalContext, _RetrievalCounters, _RunState
+from ._internals import (
+    SCORE_THRESHOLD,
+    StageSink,
+    _emit_stage,
+    _PlanSink,
+    _RecallRequest,
+    _RetrievalContext,
+    _RetrievalCounters,
+    _RunState,
+)
 
 
 async def _run_stages_early(
@@ -170,23 +177,28 @@ def _build_context(
 def _tag_evidence_provenance(filtered: list[Document], ctx: _RetrievalContext) -> None:
     """给证据打溯源标记，随证据流向生成阶段（回答"这条证据是怎么来的"）。"""
     for doc in filtered:
-        doc.metadata["_retrieval_depth"] = ctx.depth.depth if ctx.depth else ""
-        doc.metadata["_retrieval_layer"] = ctx.retrieval_layer
-        doc.metadata["_route_type"] = ctx.route_type
-        doc.metadata["_effective_k"] = ctx.k
-        doc.metadata["_coarse_k"] = ctx.coarse_k
-        # 供上层（aretrieve_evidence → fused.metadata）与门禁断言读取：
-        # 「本次重排的真实状态」+ 由其**派生**的「是否真的执行了重排」。
-        # ★ `rerank_used` 不再是独立自报布尔，唯一真源是 `rerank_status`；仅 success ⇒ True。
-        doc.metadata["_rerank_status"] = ctx.rerank_status
-        doc.metadata["_rerank_used"] = ctx.rerank_status == "success"
+        # 一次写入：溯源是同一份事实，不再散成 6 个扁平键。
+        doc.metadata["retrieval_trace"] = {
+            "depth": ctx.depth.depth if ctx.depth else "",
+            "layer": ctx.retrieval_layer,
+            "route_type": ctx.route_type,
+            "k": ctx.k,
+            "coarse_k": ctx.coarse_k,
+            "rerank_status": ctx.rerank_status,
+        }
 
 
 def _retrieve_summary_values(
     ctx: _RetrievalContext, filtered: list[Document], stage_ms: dict[str, float]
 ) -> dict:
     """构建检索摘要指标（各阶段计数 + 有效性信号）。"""
-    window_expanded_count = sum(1 for doc in filtered if doc.metadata.get("_window_merged"))
+    window_expanded_count = sum(
+        int(doc.metadata.get("window_merged_count") or 0) for doc in filtered
+    )
+    origin_counts = {"main": 0, "window": 0, "parent": 0, "hyde": 0, "topup": 0}
+    for doc in filtered:
+        origin = str(doc.metadata.get("evidence_origin") or "main")
+        origin_counts[origin] = origin_counts.get(origin, 0) + 1
     context_chars = sum(len(doc.page_content or "") for doc in filtered)
     role_counts = {
         "detail": sum(1 for doc in filtered if doc.metadata.get("section.chunk_role") == "detail"),
@@ -224,6 +236,7 @@ def _retrieve_summary_values(
         "after_window": ctx.counters.after_window,
         "window_added": ctx.counters.window_added,
         "window_expanded_count": window_expanded_count,
+        "evidence_origin_counts": origin_counts,
         "hit": bool(filtered),
         "context_chars": context_chars,
         "top_rerank_score": top_rerank_score,
@@ -302,7 +315,8 @@ def _emit_error_metrics(
 
 # ★ ``rerank_status_out``（修复批 Important-3，B2 送达断链的堵点）：非 None 时，
 #   本函数**无论结果包是否为空**，都会把最终 ``rerank_status`` 写进这个调用方传入的
-#   dict。此前状态只经 ``doc.metadata["_rerank_status"]`` 逐文档携带 —— 包空时没有文档可挂，
+#   dict。此前状态只经逐文档 metadata 携带（现收敛为 ``doc.metadata["retrieval_trace"]``）
+#   —— 包空时没有文档可挂，
 #   ``_stage_rerank`` 已算出的 ``off``/``degraded``/``failed`` 在 retriever 桥接这一跳被
 #   **整包丢弃**。异常发生在重排阶段**之前** ⇒ 写入 ``""``（未知，不回填）。
 #   写入点放在 `finally` ⇒ 异常路径同样要送达（回归锁见 `evidence_chain_gate.py` 的 `9m`）。
@@ -318,6 +332,7 @@ async def aretrieve_documents(
     precomputed_sub_queries: list[str] | None = None,
     on_stage: StageSink | None = None,
     rerank_status_out: dict[str, str] | None = None,
+    plan_out: _PlanSink | None = None,
 ) -> list[Document]:
     """异步底层检索。``use_rerank`` 语义见模块文档串（**不是**「是否重排」的开关）；
     ``rerank_status_out`` 的送达语义见本函数上方注释。
@@ -365,3 +380,15 @@ async def aretrieve_documents(
     finally:
         if rerank_status_out is not None:
             rerank_status_out["rerank_status"] = state.rerank_status
+        # 旁路送达：空包/异常路径也要把已解析的计划带回门面（同一 finally 语义）。
+        if plan_out is not None:
+            plan_out.depth = state.depth
+            plan_out.k = state.k
+            plan_out.coarse_k = state.coarse_k
+            plan_out.effective_threshold = state.effective_threshold
+            plan_out.retrieval_layer = state.retrieval_layer
+            plan_out.route_type = state.route_type
+            plan_out.cat = state.cat
+            plan_out.sub_queries = list(state.sub_queries)
+            plan_out.decomposed = state.decomposed
+            plan_out.decompose_ms = float(stage_ms.get("decompose_ms", 0.0))

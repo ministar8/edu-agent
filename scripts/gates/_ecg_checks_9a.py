@@ -171,7 +171,8 @@ def _c9h() -> None:
     import pathlib as _pl9
 
     # ── 9h（B2 全链路**名称配对**结构锁）：`rerank_status` 要跨三跳改名才落到归档 ──────
-    #   pipeline 写 `doc.metadata["_rerank_status"]` → retriever 桥接成 `fused.metadata["rerank_status"]`
+    #   pipeline 写 `doc.metadata["retrieval_trace"]["rerank_status"]` → retriever 桥接成
+    #   `fused.metadata["rerank_status"]`
     #   → retrieval_probe 读该键 → runner 落 `record.rerank_status`（`rerank_used` 由它派生）。
     #   ★ 为什么这条只能走结构：桥接发生在 `aretrieve_documents` 内部（要碰 Chroma），
     #     纯内存行为测试拿不到它；而每一跳都带 `""` 掩盖默认值 ⇒ 任何一侧改名都会让下游
@@ -196,8 +197,9 @@ def _c9h() -> None:
     #   ⇒ 读 `*runner*.py` 整组，否则 ④ 的 `self.rerank_status == "success"` 查找假红。
     _run9 = _read9glob("src/evaluation/task_eval/*runner*.py")
     hops = {
-        "①pipeline 写 _rerank_status": 'metadata["_rerank_status"] = ' in _pipe9,
-        "②retriever 读 _rerank_status": '"_rerank_status"' in _ret9,
+        "①pipeline 写 retrieval_trace": 'metadata["retrieval_trace"] = ' in _pipe9,
+        "①trace 含 rerank_status": '"rerank_status": ctx.rerank_status' in _pipe9,
+        "②retriever 读 trace.rerank_status": 'trace.get("rerank_status"' in _ret9,
         "②retriever 写 rerank_status": 'metadata["rerank_status"] = ' in _ret9,
         "③probe 读 rerank_status": 'get("rerank_status"' in _probe9,
         "④runner 落 record.rerank_status": "record.rerank_status = " in _run9,

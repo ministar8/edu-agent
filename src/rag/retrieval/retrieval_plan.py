@@ -1,3 +1,10 @@
+"""RetrievalPlan：计算预算（主路径 ① 的「Plan」；不是 TaskPolicy）。
+
+产出 `RetrievalStrategy{layer, route_type, depth}`：depth 决定 k / coarse_k /
+skip_decompose / skip_rerank 等**算力**参数，不决定答案能不能进包。
+安全与披露见 `task_policy.py` + `schema/task_policy.py`。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

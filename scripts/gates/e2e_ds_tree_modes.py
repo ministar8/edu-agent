@@ -100,8 +100,6 @@ async def run_one(case: dict) -> list[str]:
         k=20,
         use_rerank=True,
         filter=filter_w,
-        max_retries=0,
-        use_llm_verify=False,
         preferred_layers=list(policy.preferred_layers),
     )
     fused = finalize_with_layer_ranking(fused, policy, keep=8)

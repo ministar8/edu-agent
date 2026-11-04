@@ -146,7 +146,7 @@ def _top_rerank_score(docs: list[Document]) -> float:
 
 
 def _merge_hyde_docs(
-    filtered: list[Document], hyde_docs: list[Document], hyde_query: str, k: int, query: str
+    filtered: list[Document], hyde_docs: list[Document], k: int, query: str
 ) -> tuple[list[Document], int]:
     """给 HyDE 文档打标、按内容键去重后并入；返回 ``(新的 filtered, 净增条数)``。
 
@@ -154,8 +154,7 @@ def _merge_hyde_docs(
     若记候选数，「候选 20 条但结果仍是 5 条」会被记成 +20，语义失真。
     """
     for doc in hyde_docs:
-        doc.metadata["_hyde_fallback"] = True
-        doc.metadata["_hyde_query"] = hyde_query[:120]
+        doc.metadata["evidence_origin"] = "hyde"
 
     existing_keys = {content_key(doc) for doc in filtered}
     merged_hyde_docs = []

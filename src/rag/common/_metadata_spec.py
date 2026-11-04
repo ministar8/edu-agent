@@ -140,6 +140,16 @@ FIELDS: list[tuple[str, str, str, str]] = [
     ("recall_score", "float", "召回评分", "retriever"),
     ("recall_routes", "str", "召回路径", "retriever"),
     ("rerank_score", "float", "重排序评分", "reranker"),
+    # 证据来源与量化信号（运行时，不入库）：替代原先分散的 5 个布尔标志。
+    ("evidence_origin", "str", "证据来源: main/window/parent/hyde/topup", "retriever"),
+    ("window_merged_count", "int", "锚点吸收的窗口 chunk 数", "retriever"),
+    ("topic_relevance", "float", "层 top-up 的主题相关度", "layer_recall"),
+    (
+        "retrieval_trace",
+        "dict",
+        "检索溯源: depth/layer/route_type/k/coarse_k/rerank_status",
+        "retriever",
+    ),
     # ── 内部审计（不入 Chroma） ──
     ("_impute_log", "list", "填充审计日志", "imputer"),
     ("_content_anomaly_log", "list", "内容异常日志", "anomaly"),

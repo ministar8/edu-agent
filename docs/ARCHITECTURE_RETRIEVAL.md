@@ -1,10 +1,26 @@
 # 检索架构总览（as-built · V-2026-10-02）
 
 > **本文定位**：**现状总览**，供论文第 3 章与代码定位使用。
+> **读码入口**：先看包内 [`src/rag/README.md`](../src/rag/README.md)（主路径 6 步 + 命名对照 + 三层策略），再回本文 §1–§5。
 > **不重复设计论证** —— 设计依据见 `RETRIEVAL_LAYER_DESIGN.md`（分层设计）、
 > `RETRIEVAL_POLICY.md`（策略契约）；执行方案与实测见 `RETRIEVAL_PLAN.md`；
 > 「不做清单」见 `RETRIEVAL_ROADMAP.md`。
 > 实验数字见 `EXPERIMENTS.md`（§1–§19），可追溯锚点见 §18.0 / 标签 `V-2026-10-02`。
+
+---
+
+## 0. 主路径 6 步（与代码 `src/rag/README.md` 同一套说法）
+
+```text
+① 查询理解   normalize → classify → TaskPolicy + RetrievalPlan →（可选）decompose
+② 多路召回   recall 拼路由 + routes 并发执行（semantic/BM25/focus/expanded/元数据）
+③ 融合       postprocess 加权 RRF
+④ 过滤重排   去重 · 阈值 ·（可选）rerank · HyDE / 窗口 / top-up
+⑤ 出包       finalize 层排序 → apply_evidence_policy（release 唯一出口）→ Evidence Pack
+⑥ 缓存验证   semantic_cache + 规则 verifier + metrics
+```
+
+易混命名：**retriever**=门面 · **routes**=跑路由 · **recall**=拼路由 · **TaskPolicy**=安全披露 · **RetrievalPlan**=计算预算。`use_rerank` 参数 ≠ 是否执行 `rerank()`（见 `RERANK_SWITCH_ANALYSIS.md`）。
 
 ---
 

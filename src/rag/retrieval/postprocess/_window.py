@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
+
 from langchain_core.documents import Document
 
 from rag.common.rag_utils import estimate_tokens as _estimate_tokens
 from rag.common.rag_utils import extract_query_terms as _extract_query_terms
-from rag.retrieval.postprocess._log import logger
+
+logger = logging.getLogger(__name__)
 
 # ── Sentence Window 上下文展开 ──────────────────────────
 
@@ -45,7 +48,7 @@ def _parent_window_expand(docs: list[Document], global_budget: int) -> list[Docu
             continue
 
         parent_meta = dict(doc.metadata)
-        parent_meta["_parent_expanded"] = True
+        parent_meta["evidence_origin"] = "parent"
         parent_meta["_parent_anchor_chunk_id"] = str(doc.metadata.get("section.chunk_id") or "")
         parent_meta["section.chunk_role"] = "parent_window"
         parent_doc = Document(page_content=parent_text, metadata=parent_meta)
@@ -81,9 +84,9 @@ def sentence_window_expand(
 
     执行顺序:
     1. sentence window (primary): 从 ChromaDB 查同 section 相邻 detail chunk，
-       以锚点为中心取 window_size 窗口，标记 _window_expanded
+       以锚点为中心取 window_size 窗口，标记 evidence_origin="window"
     2. parent window (fallback): 对 sentence window 未覆盖的 section，
-       用 section.parent_text 补充完整 section 上下文，标记 _parent_expanded
+       用 section.parent_text 补充完整 section 上下文，标记 evidence_origin="parent"
 
     Args:
         docs: 检索命中的文档列表（已排序）
@@ -122,7 +125,7 @@ def _merge_parent_fallbacks(
     sw_sections = {
         str(d.metadata["section.id"])
         for d in result
-        if d.metadata.get("_window_expanded") and d.metadata.get("section.id")
+        if d.metadata.get("evidence_origin") == "window" and d.metadata.get("section.id")
     }
     needs_parent = [
         doc for doc in docs if str(doc.metadata.get("section.id") or "") not in sw_sections
@@ -137,7 +140,7 @@ def _merge_parent_fallbacks(
     existing_keys = {str(d.metadata.get("section.chunk_id") or d.page_content[:80]) for d in result}
     current_tokens = sum(_estimate_tokens(d.page_content) for d in result)
     for doc in parent_added:
-        if not doc.metadata.get("_parent_expanded"):
+        if doc.metadata.get("evidence_origin") != "parent":
             continue
         key = "parent:" + str(doc.metadata.get("_parent_anchor_chunk_id") or doc.page_content[:80])
         if key in existing_keys:
@@ -233,13 +236,13 @@ def _append_window_chunks(
     hi: int,
     anchor_doc: Document,
 ) -> int:
-    """把窗口内**尚未出现过**的 chunk 追加进 result（标 `_window_expanded`），返回新增数。"""
+    """把窗口内**尚未出现过**的 chunk 追加进 result（标 `evidence_origin="window"`），返回新增数。"""
     added = 0
     for _idx, d in all_details[lo : hi + 1]:
         chunk_id = str(d.metadata.get("section.chunk_id") or "")
         if chunk_id in seen_chunk_ids:
             continue
-        d.metadata["_window_expanded"] = True
+        d.metadata["evidence_origin"] = "window"
         d.metadata["_window_anchor_chunk_id"] = str(
             anchor_doc.metadata.get("section.chunk_id") or ""
         )
@@ -311,7 +314,7 @@ _NOISE_PENALTY_FACTOR = 0.5  # fusion 评分惩罚系数（越低排越后）
 
 def _is_window_chunk(doc: Document) -> bool:
     """是否为窗口展开带进来的 chunk（sentence window 或 parent window）。"""
-    return bool(doc.metadata.get("_window_expanded") or doc.metadata.get("_parent_expanded"))
+    return doc.metadata.get("evidence_origin") in ("window", "parent")
 
 
 def _noise_coverage(doc: Document, term_set: set[str]) -> float:
@@ -335,11 +338,7 @@ def _mark_window_noise(docs: list[Document], term_set: set[str], min_coverage: f
         if coverage < min_coverage:
             doc.metadata["_noise_downgraded"] = True
             doc.metadata["_noise_downgrade_factor"] = _NOISE_PENALTY_FACTOR
-            doc.metadata["_noise_coverage"] = round(coverage, 3)
             downgraded += 1
-        else:
-            # 相关的 window chunk，保留并标记覆盖率供诊断
-            doc.metadata["_noise_coverage"] = round(coverage, 3)
     return downgraded
 
 
@@ -404,7 +403,8 @@ def merge_window_into_anchors(docs: list[Document]) -> list[Document]:
     处理规则：
     - 被 `downgrade_window_noise` 判为噪声的窗口 chunk（_noise_downgraded=True）直接丢弃；
     - 其余窗口 chunk 的内容追加到其锚点 chunk 的 page_content 末尾（锚点由
-      _window_anchor_chunk_id / _parent_anchor_chunk_id 指向），窗口 chunk 本身移除；
+      _window_anchor_chunk_id / _parent_anchor_chunk_id 指向），窗口 chunk 本身移除，
+      并在锚点上累加 `window_merged_count`（可量化：每条证据吸收了多少窗口 chunk）；
     - 找不到锚点（锚点已在前序阶段被过滤）的孤儿窗口 chunk 直接丢弃。
     """
     # 只索引非窗口 chunk 作为锚点。窗口 chunk 的 section.chunk_id 可能复制自锚点
@@ -434,6 +434,8 @@ def merge_window_into_anchors(docs: list[Document]) -> list[Document]:
         if anchor is None:
             continue  # 孤儿窗口丢弃
         anchor.page_content = anchor.page_content + "\n\n" + d.page_content
-        anchor.metadata["_window_merged"] = True
+        anchor.metadata["window_merged_count"] = (
+            int(anchor.metadata.get("window_merged_count") or 0) + 1
+        )
 
     return result

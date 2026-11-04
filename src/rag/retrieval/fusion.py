@@ -46,12 +46,10 @@ def _score_text_evidence(ev: TextEvidence) -> float:
         score = float(ev.score or 0.0)
     if score == 0.0:
         score = 0.01
-    if (
-        ev.metadata.get("_parent_expanded")
-        or ev.metadata.get("section.chunk_role") == "parent_window"
-    ):
+    origin = ev.origin
+    if origin == "parent" or ev.metadata.get("section.chunk_role") == "parent_window":
         score *= _PARENT_WINDOW_BONUS
-    if ev.metadata.get("_hyde_fallback"):
+    if origin == "hyde":
         score *= _HYDE_PENALTY
     if ev.metadata.get("_noise_downgraded"):
         score *= ev.metadata.get("_noise_downgrade_factor", _NOISE_DOWNGRADE_PENALTY)

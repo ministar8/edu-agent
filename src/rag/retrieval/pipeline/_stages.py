@@ -34,7 +34,6 @@ from rag.retrieval.routes import (
     _safe_to_thread,
 )
 
-from ._constants import _COMPACT_SUBQUERY_ROUTES, _RERANK_UNSET
 from ._helpers import (
     _apply_rerank_threshold,
     _empty_result_fallback,
@@ -44,8 +43,17 @@ from ._helpers import (
     _top_rerank_score,
     _warn_rerank_disabled_once,
 )
-from ._support import _derive_rerank_status, _resolve_thresholds
-from ._types import _HydeContext, _HydeOutcome, _RecallRequest, _RetrievalPlan, _WindowOutcome
+from ._internals import (
+    _COMPACT_SUBQUERY_ROUTES,
+    _RERANK_UNSET,
+    _derive_rerank_status,
+    _HydeContext,
+    _HydeOutcome,
+    _RecallRequest,
+    _resolve_thresholds,
+    _RetrievalPlan,
+    _WindowOutcome,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -412,7 +420,7 @@ async def _run_hyde_fallback(
         hyde_docs, rerank_status = await _hyde_recall_and_rerank(
             hyde_query, query, ctx, rerank_status
         )
-        filtered, added_count = _merge_hyde_docs(filtered, hyde_docs, hyde_query, ctx.k, query)
+        filtered, added_count = _merge_hyde_docs(filtered, hyde_docs, ctx.k, query)
         return filtered, added_count, "", rerank_status
     except Exception as e:  # 兜底机制失败不该影响已经拿到的正常结果
         logger.warning("Async HyDE fallback retrieval failed: %s", e)
@@ -512,12 +520,10 @@ async def _stage_expand_windows(
     )
     # 把窗口 chunk 合并回锚点，消除 score=0 独立证据对 top-k 的污染
     window_before = sum(
-        1
-        for d in expanded
-        if d.metadata.get("_window_expanded") or d.metadata.get("_parent_expanded")
+        1 for d in expanded if d.metadata.get("evidence_origin") in ("window", "parent")
     )
     expanded = merge_window_into_anchors(expanded)
-    window_merged = sum(1 for d in expanded if d.metadata.get("_window_merged"))
+    window_merged = sum(int(d.metadata.get("window_merged_count") or 0) for d in expanded)
     if window_before:
         logger.debug(
             "Window merge: before=%d merged=%d dropped=%d",

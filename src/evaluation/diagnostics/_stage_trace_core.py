@@ -19,17 +19,19 @@ logger = logging.getLogger(__name__)
 
 
 STAGE_TARGETS: tuple[tuple[str, str], ...] = (
-    ("resolve_strategy", "resolve_retrieval_plan"),
-    ("resolve_policy", "_resolve_thresholds"),
-    ("decompose", "decompose"),
-    ("recall_multi_route_async", "_amulti_route_search"),
+    # 阶段 1-3 由 pipeline 独占后，裸名（解析到 `rag.retrieval.retriever`）会取不到；
+    # 必须显式指向 `_stages` —— 那里持有这些函数的模块级引用。
+    ("resolve_strategy", "retrieval.pipeline._stages:resolve_retrieval_plan"),
+    ("resolve_policy", "retrieval.pipeline._stages:_resolve_thresholds"),
+    ("decompose", "retrieval.pipeline._stages:decompose"),
+    ("recall_multi_route_async", "retrieval.pipeline._stages:_amulti_route_search"),
     # RRF 融合有**两个入口**，此前只追踪了分解用的那个，导致主 RRF 成为观测盲区：
     #   - `weighted_rrf_merge`  仅**查询分解**时走（原始查询 1.5 : 子查询 1.0 加权）
     #   - `merge_route_results` **所有查询**都走（主 RRF，加权 RRF 公式）
     # 后果：实测 `fuse_rrf` 只出现 9/40，看着像「RRF 大部分时候没跑」，
     # 实际是主路径没被追踪（9 恰等于 decomposed 的条数）。补上 `fuse_rrf_main` 消除该误读。
-    ("fuse_rrf", "weighted_rrf_merge"),
-    ("fuse_rrf_main", "merge_route_results"),
+    ("fuse_rrf", "retrieval.pipeline._stages:weighted_rrf_merge"),
+    ("fuse_rrf_main", "retrieval.routes:merge_route_results"),
     # ── 门面层三步（此前是观测盲区）────────────────────────────────
     # `afuse_documents` / `averify_evidence` 在 `aretrieve_evidence` 里是**函数内局部导入**
     # （`from rag.retrieval.fusion import afuse_documents`），因此**不是** `rag.retrieval.retriever` 的模块级属性，
@@ -45,11 +47,11 @@ STAGE_TARGETS: tuple[tuple[str, str], ...] = (
     ("retrieve_evidence", "aretrieve_evidence"),
     ("fuse_documents", "fusion:afuse_documents"),
     ("verify", "verifier:averify_evidence"),
-    ("dedup_section", "dedup_same_section"),
-    ("rerank", "rerank"),
-    ("apply_threshold", "_apply_rerank_threshold"),
-    ("should_hyde", "should_trigger_hyde"),
-    ("expand_window", "sentence_window_expand"),
+    ("dedup_section", "retrieval.pipeline._stages:dedup_same_section"),
+    ("rerank", "retrieval.pipeline._stages:rerank"),
+    ("apply_threshold", "retrieval.pipeline._stages:_apply_rerank_threshold"),
+    ("should_hyde", "retrieval.pipeline._stages:should_trigger_hyde"),
+    ("expand_window", "retrieval.pipeline._helpers:sentence_window_expand"),
 )
 
 

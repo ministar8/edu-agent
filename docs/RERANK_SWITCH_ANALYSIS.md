@@ -73,8 +73,8 @@ rerank 是否真正执行，由 **3 个输入**经 **3 道闸**决定。问题�
 | 职责 | 位置 | 说明 |
 |---|---|---|
 | ① 是否执行重排 | `pipeline/_stages.py`（`_stage_rerank` / `_hyde_apply_rerank`） | 名副其实 |
-| ② **候选池开多大** | `pipeline/_support.py`（`_resolve_coarse_k`） | **名不副实** |
-| ③ 阈值推导的输入 | `pipeline/_support.py`（`_resolve_coarse_k`） | 与 ② 同源 |
+| ② **候选池开多大** | `pipeline/_internals.py`（`_resolve_coarse_k`） | **名不副实** |
+| ③ 阈值推导的输入 | `pipeline/_internals.py`（`_resolve_coarse_k`） | 与 ② 同源 |
 
 ### 职责 ② 的量化影响（实测）
 

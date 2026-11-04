@@ -17,14 +17,10 @@ from langgraph.config import get_stream_writer
 
 from agents.utils import CustomData
 from rag.common.errors import RetrievalUnavailable, classify_retrieval_error
+from rag.retrieval.api import retrieve_for_task
 from rag.retrieval.evidence import FusedEvidence
-from rag.retrieval.evidence_policy import (
-    apply_evidence_policy,
-    finalize_with_layer_ranking,
-)
 from rag.retrieval.query_classifier import TEXT_ONLY_DEPTH
-from rag.retrieval.retriever import StageSink, aretrieve_evidence_with_retry
-from rag.retrieval.task_policy import resolve_task_policy
+from rag.retrieval.retriever import StageSink
 from rag.retrieval.verifier import VerificationResult
 from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
 
@@ -44,6 +40,7 @@ def _evidence_docs(fused: FusedEvidence) -> list[EvidenceDoc]:
             source=ev.source,
             section_path=ev.section_path,
             chunk_id=ev.chunk_id,
+            origin=ev.origin,
             score=ev.score,
             rerank_score=ev.rerank_score,
             knowledge_points=list(ev.knowledge_points),
@@ -242,42 +239,27 @@ async def _retrieve_payload(
     catch-all 只允许出现在这类**最外层边界**（见 §2.2 规范 2），
     且必须分级处理 —— 具体分级见 `_retrieval_error_payload`。
 
-    策略解析（RETRIEVAL_POLICY §4）：
-      conversation context → explicit query signal → agent_prior → default learn
-    工具一般传 `agent_prior` 而不是硬绑 task_mode，让 query 信号可覆盖。
+    策略解析与安全裁剪在 `rag.retrieval.api.retrieve_for_task`；本函数只负责
+    异常分级、SSE 回调注入与对外载荷映射。工具一般传 `agent_prior` 而不是
+    硬绑 task_mode，让 query 信号可覆盖。
     """
     # 多轮上下文（LangGraph / Store / ContextVar）
     context_mode = _resolve_context_mode(context_mode)
 
-    policy = resolve_task_policy(
-        query,
-        task_mode=task_mode,  # type: ignore[arg-type]
-        context_mode=context_mode,  # type: ignore[arg-type]
-        agent_prior=agent_prior,
-    )
-    # eligibility：召回阶段 where 前置（安全），与 Evidence Policy 双保险
-    from schema.task_policy import merge_where_filters
-
-    recall_filter = merge_where_filters(None, policy.eligibility_where())
-    # 多取候选 → layer 软加权 → 再截 top-k（否则 preferred 层进不了池）
-    candidate_k = max(k * 3, 15)
     try:
-        fused, verification = await aretrieve_evidence_with_retry(
-            query=query,
-            k=candidate_k,
-            use_rerank=True,
+        bundle = await retrieve_for_task(
+            query,
+            task_mode=task_mode,  # type: ignore[arg-type]
             depth=depth,
-            filter=recall_filter,
+            k=k,
+            context_mode=context_mode,  # type: ignore[arg-type]
+            agent_prior=agent_prior,
             on_stage=_stage_sink(),
-            preferred_layers=list(policy.preferred_layers),
-            eligible_layers=policy.eligible_semantic_layers(),
         )
     except Exception as e:
         return _retrieval_error_payload(query, e)
 
-    fused = finalize_with_layer_ranking(fused, policy, keep=k)
-    fused, _flags = apply_evidence_policy(fused, policy)
-    result = build_retrieval_result(query=query, fused=fused, verification=verification)
+    result = build_retrieval_result(query=query, fused=bundle.pack, verification=bundle.verdict)
     # 引用溯源：把来源文档下发到前端（拿不到 stream writer 时是 no-op）
     emit_docs = _docs_sink()
     if emit_docs is not None:

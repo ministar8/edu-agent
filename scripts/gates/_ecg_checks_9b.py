@@ -200,19 +200,11 @@ def _c9m_bridge() -> dict:
     from rag.retrieval.retrieval_plan import L2_STANDARD as _L2_9m
 
     _orig9m_ret = (
-        _ret9m.aclassify_query,
-        _ret9m.decompose,
         _ret9m.aretrieve_documents,
         _sc9m.get_semantic_cache,
     )
 
-    # B：真实 `aretrieve_evidence` 桥接（只换掉 IO：分类/分解/召回/缓存）
-    async def _p_aclassify9mb(query, terms):
-        return None
-
-    async def _p_adecompose9mb(query, cat=None):
-        return [query]
-
+    # B：真实 `aretrieve_evidence` 桥接（只换掉 IO：召回 + 缓存）
     class _NoCache9m:
         async def alookup(self, *a, **k):
             raise RuntimeError("9m 缓存关闭")
@@ -225,14 +217,21 @@ def _c9m_bridge() -> dict:
             _sink = kw["rerank_status_out"]  # retriever 忘传出参 ⇒ KeyError ⇒ 行为锁红
             if status is not None:
                 _sink["rerank_status"] = status
+            _plan = kw.get("plan_out")
+            if _plan is not None:
+                # 门面用 plan_out 组装空包 metadata；桩必须按真实 pipeline 的契约填最小字段
+                _plan.depth = _L2_9m.depth
+                _plan.k = kw.get("k", 3)
+                _plan.coarse_k = _plan.k
+                _plan.effective_threshold = 0.0
+                _plan.retrieval_layer = _L2_9m.layer
+                _plan.route_type = _L2_9m.route_type
             return []
 
         return _p_aretdocs9mb
 
     results9mb: dict[object, object] = {}
     try:
-        _ret9m.aclassify_query = _p_aclassify9mb
-        _ret9m.decompose = _p_adecompose9mb
         _sc9m.get_semantic_cache = lambda: _NoCache9m()
         for _st9mb in ("off", "degraded", "failed", "success", None):
             _ret9m.aretrieve_documents = _mk_aretdocs(_st9mb)
@@ -242,8 +241,6 @@ def _c9m_bridge() -> dict:
             results9mb[_st9mb] = _fused9mb.metadata.get("rerank_status", "<键缺失>")
     finally:
         (
-            _ret9m.aclassify_query,
-            _ret9m.decompose,
             _ret9m.aretrieve_documents,
             _sc9m.get_semantic_cache,
         ) = _orig9m_ret

@@ -14,7 +14,8 @@
 | `ADVANCED_DESIGN.md` | L2 细节 | 写/改 Advanced |
 | `EXAMS_DESIGN.md` | L3 细节（D0–D6 决策） | 写/改 Exams |
 | `ARCHITECTURE.md` | 分层与调用链（L0~L3 分层、检索/生成/护栏） | 理解系统结构 |
-| **`ARCHITECTURE_RETRIEVAL.md`** | **检索架构总览（as-built）+ 术语表 + 模块索引 + 已知局限** | **写论文第 3 章 / 定位代码** |
+| **`ARCHITECTURE_RETRIEVAL.md`** | **检索架构总览（as-built）+ 术语表 + 模块索引 + 已知局限** | **写论文第 3 章 / 定位代码**（读码前先看包内 `src/rag/README.md` 主路径 6 步） |
+| **`RAG_BOUNDARY_MAP.md`** | **RAG 边界地图**（停靠点表 / 数据真源表 / 7 条不变量 / 人肉同步点 / 技术债台账 T1–T8 + 答辩三十秒版本） | **答辩提问 / 判断"这个职责挂在哪"**——与检索架构总览互补：那边讲设计论证，这边只讲"代码在哪、约定在哪、哪里靠注释不靠类型" |
 | **`RETRIEVAL_PLAN.md`** | **当前执行方案**（Step 1~6 + 实测数据 + 已否决项） | **动手改检索前** |
 | `RETRIEVAL_ROADMAP.md` | 效果路线图；**含「不做清单」（同类改动有负收益先例）** | **动手改检索前** |
 | **`EFFECT_PLAN.md`** | **效果完整度提升方案**（Phase 0 体检 → 任务级评测 → 闸门 → 验收；四张任务表 + rubric + 退出条件） | **补效果 / 写论文效果章前**。★ **定稿 v1.0 = 冻结件**：口径若与代码不一致，只登记偏离（见 `EXPERIMENTS.md` §20.5），**不改写本文件** |（证据：`docs/EFFECT_PLAN.md`，冻结件 v1.0）

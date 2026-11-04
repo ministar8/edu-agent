@@ -129,7 +129,7 @@ REPORT_COLS = (
 @contextmanager
 def apply_config(flags: dict[str, Any]):
     """按配置临时开关组件；退出时恢复。"""
-    import rag.retrieval.pipeline as pipeline
+    import rag.retrieval.pipeline._stages as pipeline_stages
     import rag.retrieval.routes as routes
     from core import settings
 
@@ -184,14 +184,14 @@ def apply_config(flags: dict[str, Any]):
             async def expand_off(filtered, **kw: Any):
                 return _WindowOutcome(filtered, 0.0)
 
-            _patch(pipeline, "_stage_expand_windows", expand_off)
+            _patch(pipeline_stages, "_stage_expand_windows", expand_off)
 
         if flags.get("skip_decompose"):
 
             async def decomp_off(query: str, cat: QueryCategory | None = None, **kw: Any):
                 return [query]
 
-            _patch(pipeline, "decompose", decomp_off)
+            _patch(pipeline_stages, "decompose", decomp_off)
 
         yield
     finally:
@@ -221,8 +221,6 @@ async def run_one_config(
                     query=query,
                     k=k,
                     use_rerank=True,
-                    max_retries=0,
-                    use_llm_verify=False,
                     preferred_layers=preferred,
                     filter=layer_filter,
                 )

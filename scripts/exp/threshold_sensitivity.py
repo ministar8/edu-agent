@@ -97,8 +97,6 @@ async def run_scale(scale: float, queries, arm: str = "full") -> dict[str, Any]:
                 query=query,
                 k=k,
                 use_rerank=True,
-                max_retries=0,
-                use_llm_verify=False,
             )
             docs = fused.text_evidences or []
             hit_cats = []

@@ -26,6 +26,10 @@ class EvidenceDoc(BaseModel):
     source: str = Field(default="unknown", description="来源文件名")
     section_path: str = Field(default="", description="章节路径")
     chunk_id: str = Field(default="", description="chunk ID（引用定位）")
+    origin: str = Field(
+        default="main",
+        description="证据来源：main=主召回 / window=窗口展开 / parent=父窗口 / hyde=HyDE 兜底 / topup=层补齐",
+    )
     score: float = Field(
         default=0.0,
         description=(

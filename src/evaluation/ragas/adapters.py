@@ -18,16 +18,24 @@ logger = logging.getLogger(__name__)
 _DETAIL_META_KEYS = (
     "category",
     "content_type",
-    "_retrieval_layer",
-    "_route_type",
     "recall_routes",
-    "_hyde_fallback",
-    "_window_expanded",
+)
+# 溯源已收敛为 `retrieval_trace` 嵌套字典；输出仍保留历史工件里的扁平键名。
+_TRACE_KEYS = (
+    ("_retrieval_layer", "layer"),
+    ("_route_type", "route_type"),
 )
 
 
 def _evidence_detail(index: int, ev: TextEvidence) -> dict[str, object]:
     """把一条 evidence 抽成 RAGAS 的逐条溯源明细（来源 / 章节 / 分数 / 白名单元数据）。"""
+    detail_meta = {
+        key: ev.metadata.get(key) for key in _DETAIL_META_KEYS if ev.metadata.get(key) is not None
+    }
+    trace = ev.metadata.get("retrieval_trace") or {}
+    for out_key, trace_key in _TRACE_KEYS:
+        if trace.get(trace_key) is not None:
+            detail_meta[out_key] = trace[trace_key]
     return {
         "context_index": index,
         "source": ev.source,
@@ -35,14 +43,11 @@ def _evidence_detail(index: int, ev: TextEvidence) -> dict[str, object]:
         "chunk_id": ev.chunk_id,
         "parent_id": ev.parent_id,
         "collection": ev.collection,
+        "origin": ev.origin,
         "score": ev.score,
         "recall_score": ev.recall_score,
         "rerank_score": ev.rerank_score,
-        "metadata": {
-            key: ev.metadata.get(key)
-            for key in _DETAIL_META_KEYS
-            if ev.metadata.get(key) is not None
-        },
+        "metadata": detail_meta,
     }
 
 

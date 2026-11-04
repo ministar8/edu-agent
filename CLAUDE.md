@@ -19,14 +19,14 @@
                  → RRF 融合 → Reranker → HyDE → 语义缓存
 ```
 
-**存储**：ChromaDB（向量检索 + 语义缓存）｜SQLite（用户 `edu_agent.db` + 会话 `checkpoints.db` + 长期记忆 `store.db`）
+**存储**：ChromaDB（向量检索 + 语义缓存）｜SQLite（`data/sqlite/` 下：用户 `edu_agent.db` + 会话 `checkpoints.db` + 长期记忆 `store.db`）
 
 ## 目录职责
 
 | 路径 | 职责 |
 |---|---|
 | `src/agents/` | `supervisor.py` + 专业 agent（`factory.build_agent`）+ `tools.py` + 出题/批改真源 `*_core.py` + `temperature.py` |
-| `src/rag/` | 检索流水线：`retriever.py`（门面）、`postprocess.py`（RRF）、`fusion.py`（证据融合）、`reranker.py`、`hyde.py`、`semantic_cache.py`、`ingest.py` |
+| `src/rag/` | 检索流水线：`api.py`（产品门面，含 release）、`retriever.py`（测量入口/门面）、`pipeline/`（编排+阶段）、`postprocess/`（RRF/去重/窗口）、`fusion.py`（证据融合）、`reranker.py`、`hyde.py`、`semantic_cache.py`、`ingest.py` |
 | `src/core/` | `settings.py`（配置单例）、`llm.py`（`get_model` / `get_llm` 工厂） |
 | `src/prompts/` | 提示词集中管理（agents 的 system prompt / supervisor 分派 / rag 单轮模板 / service 出题批改模板），import 期校验变量与花括号 |
 | `src/service/` | FastAPI：`service.py`（路由 + SSE）、`auth.py`（JWT）、`threads.py`（会话列表）、`utils.py` |

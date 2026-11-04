@@ -1,7 +1,11 @@
-"""Retrieval Policy 解析入口（tools 使用）。
+"""TaskPolicy 解析入口（主路径 ① 的「策略」这一半）。
 
-模型真源：`schema.task_policy`；分类/构建规则见 docs/RETRIEVAL_POLICY.md §4。
+模型真源：`schema.task_policy.TaskPolicy`（安全/披露：进不进池、答案给不给）。
+分类/构建规则见 `docs/RETRIEVAL_POLICY.md` §4。
 本模块保持 `resolve_task_policy` / `classify_task_mode` 兼容 API。
+
+★ 与 `retrieval_plan.py` 分工：本文件 → **策略**（TaskPolicy）；
+  那边 → **计算预算**（RetrievalStrategy/depth 的 k、skip_*）。不要混称「Plan」。
 """
 
 from __future__ import annotations

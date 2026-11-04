@@ -38,6 +38,7 @@ def _doc_to_evidence(doc, score: float, collection: str) -> TextEvidence:
         source=str(meta.get("source") or meta.get("source_file") or collection),
         score=float(score),
         collection=collection,
+        origin="topup",
         chunk_id=chunk_id,
         section_path=str(meta.get("section_path") or meta.get("heading") or ""),
         knowledge_points=[],
@@ -100,7 +101,6 @@ async def _collect_topup_candidates(
                 existing_ids.add(key)
                 ev.metadata = {
                     **(ev.metadata or {}),
-                    "layer_topup": True,
                     "topic_relevance": round(rel, 3),
                 }
                 candidates.append(ev)
@@ -122,11 +122,6 @@ def _merge_topup_into_fused(
 
     out = fused.model_copy(deep=True)
     out.text_evidences = list(fused.text_evidences or []) + added
-    out.metadata = {
-        **(fused.metadata or {}),
-        "layer_topup_added": len(added),
-        "layer_topup_layers": missing,
-    }
     return out
 
 

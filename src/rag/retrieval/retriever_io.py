@@ -189,6 +189,7 @@ def _empty_fused(
             #   被整包丢弃（实测 28 份归档 / 433 条记录、9 份基线含该字段 = 0）。
             #   桥接处异常早于重排 ⇒ 出参没写 ⇒ 落 `""`（未知，不回填，与非空分支同律）。
             "rerank_status": rerank_bridge.get("rerank_status", ""),
+            "rerank_used": rerank_bridge.get("rerank_status", "") == "success",
         },
     )
 
@@ -219,19 +220,19 @@ async def _assemble_fused(
     fused.metadata["query"] = query
     fused.metadata["collection"] = collection_name
     fused.metadata["result_count"] = len(docs)
-    fused.metadata["k"] = docs[0].metadata.get("_effective_k", plan.effective_k)
+    trace = dict(docs[0].metadata.get("retrieval_trace") or {})
+    fused.metadata["k"] = trace.get("k", plan.effective_k)
     fused.metadata["use_rerank"] = use_rerank
     # 「实际是否重排」与「调用方是否要求重排」是两件事（部署开关可能否决后者）。
     # 门禁的 disabled 路由靠它断言 rerank_used 未被谎报。
-    # ★ B2：新增 tier-0 `rerank_status`（off/success/degraded/failed），
-    #   `rerank_used` 由 pipeline 侧从 `rerank_status == "success"` **派生**后传下来；
-    #   这里读新字段缺 ⇒ ""（未知，按旧口径处理，**不回填**）。
-    fused.metadata["rerank_status"] = docs[0].metadata.get("_rerank_status", "")
-    fused.metadata["rerank_used"] = docs[0].metadata.get("_rerank_used")
-    fused.metadata["retrieval_depth"] = docs[0].metadata.get("_retrieval_depth", plan.depth.depth)
-    fused.metadata["retrieval_layer"] = docs[0].metadata.get("_retrieval_layer")
-    fused.metadata["route_type"] = docs[0].metadata.get("_route_type")
-    fused.metadata["coarse_k"] = docs[0].metadata.get("_coarse_k")
+    # 唯一真源是 `retrieval_trace.rerank_status`（tier-0 四态）；
+    # `rerank_used` 在读取侧现算，缺失 ⇒ ""（未知，不回填）。
+    fused.metadata["rerank_status"] = trace.get("rerank_status", "")
+    fused.metadata["rerank_used"] = fused.metadata["rerank_status"] == "success"
+    fused.metadata["retrieval_depth"] = trace.get("depth", plan.depth.depth)
+    fused.metadata["retrieval_layer"] = trace.get("layer")
+    fused.metadata["route_type"] = trace.get("route_type")
+    fused.metadata["coarse_k"] = trace.get("coarse_k")
     fused.metadata["score_threshold"] = score_threshold
     fused.metadata["source_count"] = len(fused.sources)
     fused.metadata["async_decompose_ms"] = plan.decompose_ms

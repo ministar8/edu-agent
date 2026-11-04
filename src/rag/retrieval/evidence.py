@@ -1,14 +1,22 @@
+"""证据数据契约：`TextEvidence` / `FusedEvidence`（Evidence Pack 的类型定义）。
+
+主路径 ⑤ 的「包长什么样」；「包里允许有什么」见 `evidence_policy.py`。
+score 契约：**越高越相似**（距离→相似度只在 `embeddings.similarity_from_distance` 换算）。
+"""
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-from typing import Any
+from typing import Any, Literal, cast
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+Origin = Literal["main", "window", "parent", "hyde", "topup"]
 
 
 class TextEvidence(BaseModel):
@@ -26,6 +34,10 @@ class TextEvidence(BaseModel):
     rerank_score: float = Field(default=0.0)
     recall_score: float = Field(default=0.0)
     collection: str = Field(default="")
+    # 证据是怎么进来的：主召回 / 窗口展开 / 父窗口 / HyDE 兜底 / 层 top-up。
+    # 单一真源 = metadata["evidence_origin"]；此字段是它的**类型化投影**，
+    # 供指标与论文做「证据来源构成」统计，避免下游再从 5 个布尔标志里反推。
+    origin: Origin = Field(default="main")
     section_path: str = Field(default="")
     chunk_id: str = Field(default="")
     parent_id: str = Field(default="")
@@ -73,8 +85,20 @@ def parse_knowledge_points(value: Any) -> list[str]:
     return []
 
 
+_ORIGINS = frozenset({"main", "window", "parent", "hyde", "topup"})
+
+
+def _origin_of(meta: dict[str, Any]) -> Origin:
+    """把 metadata 里的来源标记收敛到五个合法值；缺失/未知一律视为主召回。"""
+    value = str(meta.get("evidence_origin") or "main")
+    return cast(Origin, value if value in _ORIGINS else "main")
+
+
 def text_evidence_from_document(doc: Document, fallback_score: float = 0.0) -> TextEvidence:
     meta = dict(doc.metadata or {})
+    # 来源只保留在类型字段 `origin` 上；metadata 里不再存副本，避免双源。
+    origin = _origin_of(meta)
+    meta.pop("evidence_origin", None)
     content = doc.page_content or ""
     recall_score = (
         float(meta["recall_score"]) if "recall_score" in meta else (fallback_score or 0.0)
@@ -98,6 +122,7 @@ def text_evidence_from_document(doc: Document, fallback_score: float = 0.0) -> T
         rerank_score=rerank_score,
         recall_score=recall_score,
         collection=str(meta.get("_collection") or ""),
+        origin=origin,
         section_path=str(meta.get("section.path") or meta.get("heading_path") or ""),
         chunk_id=chunk_id,
         parent_id=str(meta.get("section.parent_id_index") or meta.get("section.id") or ""),
