@@ -38,7 +38,7 @@ def load(p: Path):
 
 def check_code_state() -> None:
     print("=" * 96)
-    print("① 代码状态（V-2026-10-02 是否可定位到不可变引用）")
+    print("① 代码状态（V-2026-11-05 是否可定位到不可变引用）")
     print(f"  HEAD            : {git('rev-parse', '--short', 'HEAD')}")
     print(f"  HEAD 提交信息    : {git('log', '-1', '--format=%s')}")
     dirty = git("status", "--porcelain")
@@ -86,7 +86,7 @@ def check_archives_traceability() -> None:
         "retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json",
         "retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json",
         "retrieval/ablation/l2_coverage_20261105_deepseek41.json",
-        "generation/ragas/ragas_freeze20261016.json",
+        "generation/ragas/ragas_freeze20261105.json",
     ]
     hdr = f"  {'归档':<56}{'ts':<4}{'cfg':<5}{'golden':<8}{'code':<6}{'脚本'}"
     print(hdr)
@@ -99,7 +99,10 @@ def check_archives_traceability() -> None:
         cfg = ("config_snapshot" in d) or ("design" in d)
         golden = ("sample_408" in blob) or ("golden" in blob) or ("golden_hash" in blob)
         code = ("code_version" in blob) or ("commit" in blob) or ("git_sha" in blob)
-        script = "scripts/" in blob
+        # ★ 2026-11-05 修：原判据只认 `scripts/` 目录，漏掉 `src/` 下的产出脚本
+        #   （实测 RAGAS 归档 `provenance.script = src/evaluation/ragas/ragas_eval.py`
+        #   被判成「无脚本」）。改为认 provenance 的 `script` 键或任意 `.py` 路径。
+        script = ('"script"' in blob) or ("scripts/" in blob) or (".py" in blob)
         print(
             f"  {rel:<56}{'Y' if ts else '-':<4}{'Y' if cfg else '-':<5}"
             f"{'Y' if golden else '-':<8}{'Y' if code else '-':<6}{'Y' if script else '-'}"
