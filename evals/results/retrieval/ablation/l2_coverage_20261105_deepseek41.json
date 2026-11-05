@@ -1,0 +1,175 @@
+{
+  "l2_total": 98,
+  "l2_by_subject": {
+    "data_structure": 38,
+    "computer_organization": 20,
+    "operating_system": 21,
+    "computer_network": 19
+  },
+  "l2_by_chapter": {
+    "线性表": 7,
+    "栈和队列": 4,
+    "树与二叉树": 8,
+    "图": 5,
+    "查找": 6,
+    "排序": 5,
+    "代码实现": 19,
+    "数据表示与运算": 4,
+    "存储系统": 5,
+    "体系结构": 3,
+    "输入输出系统": 3,
+    "进程管理": 7,
+    "内存管理": 4,
+    "文件管理": 8,
+    "数据链路层": 4,
+    "网络层": 3,
+    "传输层": 3
+  },
+  "method_queries": [
+    {
+      "query": "BST 删除时双支结点怎么处理？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/data_structure/03_tree.md",
+        "knowledge/advanced/data_structure/03_tree.md",
+        "knowledge/advanced/data_structure/05_search.md",
+        "knowledge/advanced/data_structure/06_sort.md"
+      ],
+      "pack_chapters": [
+        "树与二叉树",
+        "树与二叉树",
+        "树与二叉树",
+        "查找",
+        "排序"
+      ]
+    },
+    {
+      "query": "如何用银行家算法避免死锁？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        1,
+        4
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/operating_system/01_process_sync.md",
+        "knowledge/advanced/operating_system/01_process_sync.md"
+      ],
+      "pack_chapters": [
+        "进程管理",
+        "进程管理",
+        "进程管理",
+        "进程管理",
+        "内存管理"
+      ]
+    },
+    {
+      "query": "页面置换算法 LRU 怎么实现？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        2
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/operating_system/02_memory.md"
+      ],
+      "pack_chapters": [
+        "内存管理",
+        "内存管理",
+        "内存管理",
+        "进程管理"
+      ]
+    },
+    {
+      "query": "Dijkstra 算法的步骤是什么？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        1,
+        3,
+        4,
+        5
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/data_structure/04_graph.md",
+        "knowledge/advanced/data_structure/05_search.md",
+        "knowledge/advanced/data_structure/06_sort.md",
+        "knowledge/advanced/data_structure/03_tree.md"
+      ],
+      "pack_chapters": [
+        "图",
+        "树与二叉树",
+        "查找",
+        "排序",
+        "树与二叉树"
+      ]
+    },
+    {
+      "query": "如何判断一个二叉树是平衡二叉树？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        2,
+        5
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/data_structure/03_tree.md",
+        "knowledge/advanced/data_structure/03_tree.md"
+      ],
+      "pack_chapters": [
+        "树与二叉树",
+        "树与二叉树",
+        "树与二叉树",
+        "查找",
+        "树与二叉树"
+      ]
+    },
+    {
+      "query": "TCP 拥塞控制怎么实现？",
+      "l2_in_pool": true,
+      "l2_pool_ranks": [
+        3,
+        4
+      ],
+      "l2_in_pack": true,
+      "l2_pack_sources": [
+        "knowledge/advanced/computer_network/03_transport.md",
+        "knowledge/advanced/computer_network/04_comprehensive.md"
+      ],
+      "pack_chapters": [
+        "传输层",
+        "传输层",
+        "传输层",
+        "代码实现",
+        "数据链路层"
+      ]
+    }
+  ],
+  "recorded_at": "2026-11-05T05:05:59.233180+00:00",
+  "provenance": {
+    "recorded_at": "2026-11-05T05:05:59.233180+00:00",
+    "code_version": "ef0e0e3-dirty",
+    "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
+    "script": "scripts/l2_coverage_analysis.py",
+    "argv": [],
+    "model_refs": {
+      "agent": "deepseek:deepseek-flash",
+      "rag_chain": "dashscope:deepseek-v4.1-flash",
+      "judge": "dashscope:deepseek-v4.1-flash"
+    },
+    "sampling": {
+      "temp_precise": 0.0,
+      "temp_creative": 0.3,
+      "temp_default": 0.3
+    },
+    "experiment_config_hash": "f92924f5741d",
+    "dependency_lock_hash": "881607c7955b"
+  }
+}

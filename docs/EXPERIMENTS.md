@@ -130,6 +130,25 @@ embedding = 真 TEI bge-m3；`RERANK_ENABLED=false`（部署开关）；RAG LLM 
 **结论**：调权重治不了数据治理问题；**真删 legacy 后层精度 → 1.000**。 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime.json`）
 采用 `legacy_policy=exclude`（learn/method/practice/verify）+ `fallback`（grade/explain）。
 
+### 3.1 同代际复跑（2026-11-05）
+
+**口径**：6 条 probe；生产索引 2026 chunk / 10 集合；真 TEI bge-m3；`RERANK_ENABLED=false`；
+RAG LLM `dashscope:deepseek-v4.1-flash`。
+**归档**：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`
+（`real_fail=0 / llm_fail=0`）。 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`）
+
+| 策略 | recall@pack | prec@pack | legacy 进包 |
+|---|---|---|---|
+| keep | 1.000 | 1.000 | 0 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`） |
+| downrank | 1.000 | 1.000 | 0 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`） |
+| drop | 1.000 | 1.000 | 0 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`） |
+
+**与上表的差异**：
+
+1. **三种策略完全不可区分**，`legacy_in_pack` 全为 0：现行索引由 `ingest_layers` 六层全量重建，
+   已不含 legacy 资产，策略没有可作用的对象。 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`）
+2. 旧结论「drop 后层精度 1.000」在当前语料下**不是策略效应**，而是 legacy 池不存在；该对比不能再作为「exclude 优于 keep/downrank」的证据。§3 保留为旧体系结论。 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`）
+
 ---
 
 ## 4. 检索质量门禁基线（156 条全集）
@@ -770,6 +789,23 @@ leakage / mode_layer / retrieval_gate / topup_eligibility_gate 全过。
 5. **影响面与「修不修」输入**见 `evals/reports/l2_impact_analysis.md`（V-2026-10-02）：
    污染伤的是**证据包纯度与 `l2_only`**（0.7194），full 仅 −0.011；任务侧 （证据：`evals/reports/l2_impact_analysis.md`）
    `layer_hit` **对学科盲**，不能当 L2 质量证据。生成侧是否受影响**未测**。
+
+### 16.5 同代际复跑（2026-11-05）
+
+**口径**：6 条 method query；生产索引 2026 chunk；真 TEI bge-m3；`RERANK_ENABLED=false`；
+RAG LLM `dashscope:deepseek-v4.1-flash`。
+**归档**：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`
+（`real_fail=0 / llm_fail=0`）。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
+
+- L2 总 chunk **98**（DS 38 / OS 21 / CO 20 / CN 19），与旧体系一致。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
+- method 6 条：**6/6 L2 进池且进包（B1:OK）**；旧体系 4/6「召回不到」。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
+- pack 中 L2 chunk **12 条，错学科 0 条，污染率 0.0%**（旧 4/10 = 40.0%）。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
+
+**与 16.4 的差异**：
+
+1. 「不是召回失败」仍成立，但归因变化：本代际 6/6 进包，旧体系 4/6 召不到。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
+2. **跨学科污染未复现**（0/12）：L2 的覆盖率与纯度在当前索引下不再是短板。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
+3. `l2_only kp_mrr` 仍偏低（§9.1b：0.6587），但原因不再是污染，需从 L2 池规模/排序继续分析。 （证据：`evals/results/retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json`）
 
 ---
 

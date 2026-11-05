@@ -142,6 +142,11 @@
 | downrank | 0.438 |
 | **exclude（采用）** | **1.000** |
 
+> ★ **现行代际复跑（2026-11-05）**：keep / downrank / drop 三策略 **不可区分**（recall/prec 均 1.000、
+> legacy 进包全为 0）——现行索引由 `ingest_layers` 六层重建，**已不含 legacy 资产**。
+> 表 5 是旧体系结论，仅作历史锚点；论文不应再用它证明「exclude 优于 keep/downrank」。
+> 归档 `legacy_runtime_20261105_deepseek41.json`；详见 `docs/EXPERIMENTS.md` §3.1。
+
 ## 表 6 Task Mode × Layer Policy（§12，主表，2026-10-01 P0' 后）
 
 > 只动 `preferred_layers`；安全字段冻结。  
@@ -216,11 +221,11 @@
 | verify 真题 | 答案先注入后被裁空 | top-up 只按 `kb_depth` 找，未继承 `eligibility_where` | **已修**：top-up 与主检索共用 where | `rag/layer_recall.py` · `rag/retriever.py`（§15） |
 | practice 任务 | 空证据包 | ① preferred 层不合规时 top-up 空转 ② 包被裁空无兜底 | **已修**：层回退 + `pack_blocked()` 回填 | `schema/task_policy.py` · `rag/evidence_policy.py`；pack_nonempty **1.000**（§12.3） |
 | 「滑动窗口协议」 | kp_hit 掉分 | **golden 单标签口径**：同主题 L38 标传输层 / L163 标数据链路层 | **已修**：补第二标签（纯数据修正） | `sample_408.jsonl` L38 → `["数据链路层","传输层"]`（§18.2 #4） |
-| LRU / 平衡二叉树 / TCP 拥塞控制 | 进包 L2 错学科 | `preferred_layers` 提升**所有** advanced；L2 池小（98），错学科靠通用词面挤进 pack | **未修**（§F2） | 污染 **4/10 = 40.0%**（§16.3） |
+| LRU / 平衡二叉树 / TCP 拥塞控制 | 进包 L2 错学科 | `preferred_layers` 提升**所有** advanced；L2 池小（98），错学科靠通用词面挤进 pack | **本代际未复现**：12 条 L2 进包、0 错学科；6/6 method query B1 OK | 污染 **0/12**（§16.5） |
 | q052 vector_only | 目标被阈值滤掉 | 召回到了（rank 2）但 `rrf_threshold` 0.0857 < 0.088 → `dropped_by=rrf_threshold` | **未修**（属不做清单） | §14.4；非召回失败 |
 
-**读法**：7 例中 5 例已修，且集中于**排序方向 / 资格边界 / 标注口径**三类根因；
-2 例未修均为**策略层取舍**（跨学科过滤、阈值标定），不是实现 bug。
+**读法**：7 例中 5 例已修，集中于**排序方向 / 资格边界 / 标注口径**三类根因；
+1 例（L2 跨学科污染）在现行代际**未复现**（§16.5）；1 例（阈值标定）未修，属策略层取舍。
 
 ## 表 F2 已知局限与处置（§18.4 / §19.2，V-2026-10-02）
 
