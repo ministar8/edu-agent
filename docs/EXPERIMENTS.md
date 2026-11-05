@@ -2484,10 +2484,21 @@ ERROR 0 / PENDING 1（存量 grade.human_score）；ledger 第 1 段 PASS、新�
 - RAGAS：生成 `dashscope:qwen3.8-max-0902`；judge `deepseek:deepseek-flash`；rerank off；
   `answer_relevancy.strictness=1`（DeepSeek 仅支持 n=1）。
 
-**归档**：`evals/results/task_eval/ec_r4_20261105.jsonl`（66 条，gold frozen 66/66）；
-`evals/results/generation/ragas/ragas_freeze20261105.json`（156 条）。 （证据：`evals/results/task_eval/ec_r4_20261105.jsonl`；`evals/results/generation/ragas/ragas_freeze20261105.json`）
+**归档**：`evals/results/task_eval/ec_r5_20261105.jsonl`（主；66 条，gold frozen 66/66，`code_version=fa76f48`）；
+`evals/results/task_eval/ec_r4_20261105.jsonl`（复跑对照；`code_version=2ce9c71-dirty`）；
+`evals/results/generation/ragas/ragas_freeze20261105.json`（156 条，`code_version=cd6a871-dirty`）。 （证据：`evals/results/task_eval/ec_r5_20261105.jsonl`；`evals/results/task_eval/ec_r4_20261105.jsonl`；`evals/results/generation/ragas/ragas_freeze20261105.json`）
 
-**task_eval**：QA 1.000（15/15，μ4.933）；Generate 0.667（10/15）；Grade `verdict_agreement` 1.000（15/15；`quality_pass` 0.467 仅反映 judge 严格度）；Verify 仍出题率 0.000（15/15）；Memory correct-use 0.800（4/5，n_a=1，2 条 case_invalid）。 （证据：`evals/results/task_eval/ec_r4_20261105.report.json`）
+**task_eval（主读数 ec_r5）**：QA 1.000（15/15，μ4.933）；Generate 0.800（12/15，μ4.333）；Grade `verdict_agreement` 0.929（13/14，1 条 N/A；`quality_pass` 0.467 仅反映 judge 严格度）；Verify 仍出题率 0.000（15/15，μ1.200）；Memory correct-use 0.800（4/5，n_a=1，3 条 case_invalid：mem-004/005/006）；hard failure 0.000（66）；tool error 0.061（4/66）。 （证据：`evals/results/task_eval/ec_r5_20261105.report.json`）
+
+**同配置复跑（重复性证据 · §21.1）**：第二次运行 `ec_r4` 与主读数逐项对照 —— QA 1.000 / Generate **0.667–0.800** / Grade `verdict_agreement` **0.929–1.000** / Verify 0.000 / Memory 0.800 / tool error 0.045–0.061。两次运行的代码差异仅 `fa76f48`（移除 `/api/questions/*` 专用 HTTP API 与前端）；该提交对 `src/agents`、`src/prompts`、`src/memory` 的改动全是 docstring / 注释 ⇒ **效果链行为等价**，差异来自生成侧采样：66 条中 65 条回复文本不同、`hard_fails` 差异 0、`memory_*` 判定差异 0。翻转逐条可定位：`gen-006/008/015`（2→5）、`grd-009`（模型分 15→100，人类 0）、`grd-012`（回复解析不出分数 ⇒ N/A）。 ⇒ **n=15 时一条 case = 6.7 pp**，论文正文引用主读数 + 区间，禁止单点断言「Grade 完美」。 （证据：`evals/results/task_eval/ec_r4_20261105.jsonl`；`git diff 2ce9c71..fa76f48 -- src/agents src/prompts src/memory`）
+
+★ **锚点纪律**：`fa76f48` 之前的效果归档（`ec_r4`、`ragas_freeze20261105`）记录的是运行当时的工作区状态（`-dirty`），不是缺陷；
+按归档不可变纪律**不回写**。引用数字时锚点随读数一起标注。
+
+★ **ledger 的 `provenance_match` 会随提交归 0（设计特性，不是回归）**：该布尔量比对的是「归档记录的 `code_version`」与「**检查时** HEAD」
+（`scripts/lib/_ledger_rows.py::provenance_match_for`）⇒ 效果跑完之后只要再有任何提交（含本节这类文档/数据提交），重算必然归 0。
+`ledger.md` 里 `prov✓` 是**生成时点**（HEAD=`fa76f48`）的快照；此后重算读到 `✗` 属预期。
+判读规则同 §20.7.8⑯⑥：看归档自身的 `provenance.code_version`，不看这个实时布尔量。
 
 **RAGAS**：faithfulness 0.7238 · context_precision 0.7405 · context_recall 0.4764 · answer_relevancy 0.6598（均 n=156，无 dropped metrics）。 （证据：`evals/results/generation/ragas/ragas_freeze20261105.json`）
 

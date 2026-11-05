@@ -90,9 +90,14 @@
     "reason": "freeze_ragas_20261016（口径五处不同：judge 模型/n/rerank/golden/code；旧值保留作并列披露锚点）"
   },
   {
+    "path": "evals/results/task_eval/ec_r5_20261105.jsonl",
+    "status": "active",
+    "reason": "V-2026-11-05 主归档（干净锚点 fa76f48；judge=qwen3.8-max-0902）"
+  },
+  {
     "path": "evals/results/task_eval/ec_r4_20261105.jsonl",
     "status": "active",
-    "reason": "V-2026-11-05 效果重跑（judge=qwen3.8-max-0902）"
+    "reason": "V-2026-11-05 同配置复跑对照（锚点 2ce9c71-dirty；重复性证据，见 EXPERIMENTS §21.1）"
   },
   {
     "path": "evals/results/generation/ragas/ragas_freeze20261105.json",

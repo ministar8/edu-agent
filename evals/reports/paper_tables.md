@@ -211,25 +211,49 @@ Task Policy ──► Retrieval Plan ──► Evidence Pack
 
 ---
 
-## 表 6 任务级效果表（2026-11-05，现行）
+## 表 6 任务级效果表（2026-11-05，现行 · 干净锚点 `fa76f48`）
 
-> 来源 `evals/results/task_eval/ec_r4_20261105.jsonl`（66 条：qa/verify/generate/grade 各 15 + memory 6；
-> gold **frozen 66/66**）。生成 agent `deepseek:deepseek-flash`；judge `dashscope:qwen3.8-max-0902`；
-> 检索 rerank off。★ 与 2026-10-16 旧版**不可直接比较**（judge 与生成口径均变）。
+> 来源 `evals/results/task_eval/ec_r5_20261105.jsonl`（66 条：qa/verify/generate/grade 各 15 + memory 6；
+> gold **frozen 66/66**）；`provenance.code_version = fa76f48`（工作区干净、无 `-dirty`）。
+> 生成 agent `deepseek:deepseek-flash`；judge `dashscope:qwen3.8-max-0902`；检索 rerank off。
+> ★ 与 2026-10-16 旧版**不可直接比较**（judge 与生成口径均变）。
 > **每个数字必须带分母**；n=1/2 的率不是能力率（D15）。
 
 | 维度 | 主指标 | 读数 | 备注 |
 |---|---|---|---|
-| QA | `final_quality≥4` | **1.000**（15/15） | μ4.933；失败率 0.067 |
-| Generate | `quality_pass` | **0.667**（10/15） | μ3.933；失败率 0.4 |
-| Grade | `verdict_agreement` | **1.000**（15/15） | `quality_pass` 0.467 仅反映 judge 严格度 |
-| Verify | 仍出题率（硬条件） | **0.000**（15/15） | μ1.533；`quality_pass` 0.067 |
-| Memory | correct-use rate | **0.800**（4/5，n_a=1） | 2 条 `case_invalid`；正样本 3/3 有效 |
+| QA | `final_quality≥4` | **1.000**（15/15） | μ4.933；失败率 0.000 |
+| Generate | `quality_pass` | **0.800**（12/15） | μ4.333；失败率 0.200（generation_wrong×3） |
+| Grade | `verdict_agreement` | **0.929**（13/14） | μ3.400；1 条判 N/A（回复解析不出分数）；`quality_pass` 0.467 仅反映 judge 严格度 |
+| Verify | 仍出题率（硬条件） | **0.000**（15/15） | μ1.200；`quality_pass` 0.000（generation_incomplete×8、refusal×2、generation_wrong×2、hallucination×1） |
+| Memory | correct-use rate | **0.800**（4/5，n_a=1） | 3 条 `case_invalid`（mem-004/005/006）；正样本 3/3 有效 |
 | hard failure | `hard_fails` 非空 | **0.000**（66） | |
-| tool error | `failure_reason` 含 tool_error | 0.045（3/66） | grd-002 / mem-005 / mem-006，均为副标签，`hard_fails` 为空 |
+| tool error | `failure_reason` 含 tool_error | 0.061（4/66） | grd-011 / mem-004 / mem-005 / mem-006，均为副标签，`hard_fails` 为空 |
+
+### 6.1 同配置复跑（重复性证据）
+
+> 复跑归档 `evals/results/task_eval/ec_r4_20261105.jsonl`（`code_version=2ce9c71-dirty`）。
+> 两次运行的代码差异仅 `fa76f48` 一个提交（移除 `/api/questions/*` 专用 HTTP API 与前端入口）；
+> 该提交对 `src/agents`、`src/prompts`、`src/memory` 的改动**全是 docstring / 注释**，
+> 删掉的端点在 service 层 ⇒ 效果链**行为等价**。
+> 差异全部来自生成侧采样随机性：66 条中 65 条回复文本不同，`hard_fails` 差异 **0**，
+> `memory_*` 判定差异 **0**。
+
+| 维度 | ec_r4（复跑） | ec_r5（主） | 复跑区间 |
+|---|---|---|---|
+| QA `quality_pass` | 1.000（15/15） | 1.000（15/15） | 1.000 |
+| Generate `quality_pass` | 0.667（10/15） | 0.800（12/15） | **0.667–0.800** |
+| Grade `verdict_agreement` | 1.000（15/15） | 0.929（13/14） | **0.929–1.000** |
+| Verify 仍出题率 | 0.000（15/15） | 0.000（15/15） | 0.000 |
+| Memory correct-use | 0.800（4/5） | 0.800（4/5） | 0.800 |
+| tool error | 0.045（3/66） | 0.061（4/66） | 0.045–0.061 |
+
+> **读法**：n=15 时**一条 case = 6.7 个百分点**。翻转都发生在单条上——
+> `gen-006/008/015`（2→5，judge 分）、`grd-009`（模型分 15→100，人类 0）、`grd-012`（回复解析不出分数）；
+> 不是系统能力变化，是采样抖动。论文正文引用主读数 + 本区间，**不要**单点断言「Grade 完美」。
 
 **读法红线**：① Grade 看 `verdict_agreement`，`quality_pass` 会随 judge 变严而下降，不能当系统退化；
-② Memory 的 0.800 必须连同「n=5、2 条 case_invalid」引用；③ 与旧冻结版不可混排。
+② Memory 的 0.800 必须连同「n=5、3 条 case_invalid」引用；③ 与旧冻结版不可混排；
+④ 表 6 的数字引用**必须**同时标注锚点 `fa76f48`（复跑读数标 `2ce9c71-dirty`）。
 
 ---
 
