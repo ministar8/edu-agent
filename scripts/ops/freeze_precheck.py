@@ -111,6 +111,35 @@ def check_archives_traceability() -> None:
         "\n  列说明：ts=有时间戳  cfg=有参数快照  golden=记录了黄金集  code=记录了代码版本  脚本=记录了生成脚本"
     )
 
+    # ★ 2026-11-05 补：上面那一列只证明「归档里**写了**脚本路径」，不证明「那个脚本还在库」。
+    #   实测两张表（5.3 L2 覆盖 / 5.4 legacy 池策略）的产出脚本是当时的临时脚本、已不在仓库 ⇒
+    #   归档自描述齐全，但数字**无法按记载复现**。冻结前必须把这类缺口显式列出来。
+    print("  脚本存在性（provenance.script 是否在库）：")
+    missing: list[str] = []
+    moved: list[str] = []
+    for rel in targets:
+        d = load(R / rel) or {}
+        inner = (d.get("provenance") or {}).get("provenance") or d.get("provenance") or {}
+        sp = str(inner.get("script") or "")
+        if not sp:
+            continue
+        repo = Path(__file__).resolve().parents[2]
+        if (repo / sp).exists():
+            continue
+        candidates = list(repo.glob(f"scripts/**/{Path(sp).name}")) + list(
+            repo.glob(f"src/**/{Path(sp).name}")
+        )
+        if candidates:
+            moved.append(f"{sp} → {candidates[0].relative_to(repo).as_posix()}（{rel}）")
+        else:
+            missing.append(f"{sp}（{rel}）")
+    if not missing and not moved:
+        print("    全部在库")
+    for m in missing:
+        print(f"    ✗ 缺失 {m}")
+    for m in moved:
+        print(f"    ~ 路径已迁移 {m}")
+
 
 def check_doc_to_json() -> None:
     print("\n" + "=" * 96)
