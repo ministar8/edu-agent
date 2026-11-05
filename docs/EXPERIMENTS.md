@@ -2502,4 +2502,10 @@ ERROR 0 / PENDING 1（存量 grade.human_score）；ledger 第 1 段 PASS、新�
 
 **RAGAS**：faithfulness 0.7238 · context_precision 0.7405 · context_recall 0.4764 · answer_relevancy 0.6598（均 n=156，无 dropped metrics）。 （证据：`evals/results/generation/ragas/ragas_freeze20261105.json`）
 
+★ **RAGAS 不重跑的理由（锚点 `cd6a871-dirty`，已核对可引用）**：该次运行的工作区脏内容即提交 `fa76f48`；
+`git diff cd6a871..fa76f48 --name-only` 显示 **`src/rag`、`src/evaluation/ragas`、`src/core` 零改动**，
+只有 `src/prompts/service.py`（出题/批改模板，RAG 链不读）与 `src/schema/questions.py`（被删除的请求/响应模型）。
+⇒ RAGAS 四条指标所经的代码路径与该次提交**不相交**，数字不受影响，按本页口径直接引用；
+不为此重跑生成 + judge（约 50 分钟、按 token 计费）。
+
 **与 §20 的关系**：旧读数（ec_r3 / ragas_freeze20261016）与本节**不可直接比较**；旧归档已按 owner 指示删除。引用前先核对本节口径。 （证据：`evals/results/generation/ragas/ragas_freeze20261105.json`）

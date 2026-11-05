@@ -271,3 +271,6 @@ Task Policy ──► Retrieval Plan ──► Evidence Pack
 | answer_relevancy | **0.6598** |
 
 > ★ 与 2026-10-16 旧版不可直接比较：生成模型、judge、rerank、strictness 四处口径全变。
+> ★ 归档锚点为 `cd6a871-dirty`（运行当时工作区未提交）；该脏内容即后续提交 `fa76f48`，
+> 而 `cd6a871..fa76f48` **未触碰 `src/rag` / `src/evaluation/ragas` / `src/core`** ⇒ RAGAS 口径不受影响，无需重跑。
+> 详见 `docs/EXPERIMENTS.md` §21。
