@@ -2509,3 +2509,37 @@ ERROR 0 / PENDING 1（存量 grade.human_score）；ledger 第 1 段 PASS、新�
 不为此重跑生成 + judge（约 50 分钟、按 token 计费）。
 
 **与 §20 的关系**：旧读数（ec_r3 / ragas_freeze20261016）与本节**不可直接比较**；旧归档已按 owner 指示删除。引用前先核对本节口径。 （证据：`evals/results/generation/ragas/ragas_freeze20261105.json`）
+
+### 21.1 门禁复跑（2026-11-05，HEAD `6be453c`）
+
+**触发**：11-04/05 检索链与评测器均有改动（`_gate.py`、单路失败重试与预算拆分、query embedding 缓存、
+`aretrieve_evidence_raw` 改名、`freeze_precheck`），上次门禁是 10-16，按 CLAUDE.md 必须重跑。
+
+**检索门禁 · 六路由全过**（`python -m evaluation.gates.retrieval_gate`）：
+
+| 路由 | 索引 | 检索 | 判定 |
+|---|---|---|---|
+| fake + off（CI 默认） | 9.9s | 11.3s | 通过 |
+| fake + on | 8.9s | 13.7s | 通过 |
+| fake + disabled | 8.9s | 14.9s | 通过 |
+| real + off | 17.4s | 43.1s | 通过 |
+| real + disabled | 17.5s | 43.7s | 通过 |
+| **real + on/real（权威）** | 19.1s | 70.0s | 通过 |
+
+**探针门禁**：`embed=real rerank=on/real`，5 条 probe 的 `dropped_by` 与基线**逐条相同**（#4/#9 survived，
+#17/#19 section_dedup，#18 rerank_topn）⇒ 通过。
+
+**链路门禁**：`scripts/gates/evidence_chain_gate.py` **81 项全绿**。
+
+**Memory 三 gate**：`memory_step2_gate` ✅ 产品链完整；`memory_step4fix_gate` **217/217**（失败 0、未执行 0）；
+`memory_e5_probe --reanalyse --write` 重析完成（Δ 词级跟随率 +0.602）。
+
+★ **两个操作前提（踩过，别再踩）**：
+
+1. **`%TEMP%` 不可写会让 chromadb 建库失败**：现象是 `InternalError: ... (code: 14) unable to open database file`，
+   且**能打开已存在的库、不能建新库、不能删集合**（极易误判成 chromadb 坏了或 HNSW 段缺失）。
+   根因是 SQLite 建库/压实要写临时文件，而本机 `C:\Users\star\AppData\Local\Temp` 不可写（连 `mkdir` 都 `WinError 5`）。
+   处置：跑任何建临时索引的门禁前设 `TMPDIR/TEMP/TMP/SQLITE_TMPDIR` 到可写目录（如 `data/tmp`）。
+2. **Memory 门禁依赖 11 份 phase0/phase1 归档**：它们在 `aaf3b18`「删除旧效果数据」时被一并删掉 ⇒
+   11 项判据变成「未执行」、`㉔d` 因可比对 0 条直接红。这些文件是**门禁夹具**（不是论文数字），
+   已从 `aaf3b18^` 恢复并单独提交；删它们等于让 Memory 门禁失去证据源。

@@ -205,3 +205,13 @@ docker compose up --build                # 容器化启动
   ④ **gold 一律用可接受集**（`expected_any`）并**逐题查 `kp_index`** ——
   `堆` 不在表里、`排序` 与 `快速排序` 是并存两个节点，单值 gold 必产生假阴性。
   ★ ①~④ 分别由 `memory_step4fix_gate.py` 的 **③j / ③i / ③d~③h** 锁定，不是靠文档自觉。
+- **建临时索引前必须把临时目录指到可写路径**（2026-11-05 实测）：本机 `%TEMP%`
+  （`C:\Users\star\AppData\Local\Temp`）**不可写**，而 SQLite 建库/压实要写临时文件 ⇒
+  `retrieval_gate` / `probe_gate` 建临时索引时报
+  `chromadb.errors.InternalError: ... (code: 14) unable to open database file`。
+  迷惑点是**能打开已存在的库、不能建新库、不能删集合**，极易误判成 chromadb 坏或 HNSW 段缺失。
+  处置：先 `export TMPDIR=$PWD/data/tmp TEMP=... TMP=... SQLITE_TMPDIR=$PWD/data/tmp` 再跑。
+- **Memory 三 gate 依赖 11 份 phase0/phase1 归档**（`phase0_baseline_final.jsonl`、
+  `phase1_baseline_v2.jsonl`、`phase1_e5_prompt_following.jsonl`、
+  `phase1_memory_step5_store_{on,off}.jsonl`、`*_step9_{d8,d8b,kp}.jsonl`）。它们是**门禁夹具**不是论文数字：
+  删掉后 `memory_step4fix_gate` 的 11 项判据变「未执行」、`㉔d` 直接红。清理旧效果数据时**不要**连带删除。
