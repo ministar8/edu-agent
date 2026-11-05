@@ -37,4 +37,7 @@ class EvaluationConfig:
     # ★ judge 只支持 n=1 时（如 DeepSeek 官网）必须设为 1，否则 400：
     #   "Invalid n value (currently only n = 1 is supported)"。
     answer_relevancy_strictness: int = 3
+    # 复用已生成的 samples.jsonl：跳过检索+生成，只跑 judge。
+    # 用途：生成阶段个别样本超时/中断时，补生成后不必重跑全部 156 条。
+    reuse_samples_path: str = ""
     include_details: bool = False

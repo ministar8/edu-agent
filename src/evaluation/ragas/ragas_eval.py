@@ -433,23 +433,55 @@ def _write_report(report: dict[str, Any], cfg: EvaluationConfig) -> None:
     logger.info("RAGAS 报告已写入 %s", path)
 
 
+def _load_generated_samples(path: str) -> list[EvalSample]:
+    """从已生成的 samples.jsonl 还原 EvalSample（用于只跑 judge）。"""
+    from evaluation.ragas.dataset import EvalSample
+
+    samples: list[EvalSample] = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            samples.append(
+                EvalSample(
+                    query=d.get("query", ""),
+                    reference=d.get("reference", ""),
+                    metadata=d.get("metadata") or {},
+                    contexts=list(d.get("contexts") or []),
+                    answer=d.get("answer", ""),
+                    retrieval_details=list(d.get("retrieval") or []),
+                )
+            )
+    return samples
+
+
 async def run_rag_evaluation(cfg: EvaluationConfig) -> dict[str, Any]:
     """加载数据集 → 检索+生成 → RAGAS → 写 JSON 报告。"""
     from evaluation.ragas.dataset import load_dataset
 
-    samples = load_dataset(
-        cfg.dataset_path,
-        limit=cfg.dataset_limit,
-        sample_per_type=cfg.sample_per_type,
-    )
-    if not samples:
-        return {"_meta": {"error": f"empty dataset: {cfg.dataset_path}"}}
+    if cfg.reuse_samples_path:
+        filled = _load_generated_samples(cfg.reuse_samples_path)
+        if not filled:
+            return {"_meta": {"error": f"empty samples: {cfg.reuse_samples_path}"}}
+        samples = filled
+        samples_path = cfg.reuse_samples_path
+        logger.info("复用已生成样本：%s（n=%d），跳过检索+生成", samples_path, len(filled))
+    else:
+        samples = load_dataset(
+            cfg.dataset_path,
+            limit=cfg.dataset_limit,
+            sample_per_type=cfg.sample_per_type,
+        )
+        if not samples:
+            return {"_meta": {"error": f"empty dataset: {cfg.dataset_path}"}}
 
-    filled = await prepare_samples(samples, cfg)
-    # 先落盘生成产物：judge 失败不浪费已花的生成成本
-    samples_path = _dump_generated_samples(filled, cfg)
-    if samples_path:
-        logger.info("生成样本已落盘（judge 失败可复用）：%s", samples_path)
+        filled = await prepare_samples(samples, cfg)
+        # 先落盘生成产物：judge 失败不浪费已花的生成成本
+        samples_path = _dump_generated_samples(filled, cfg)
+        if samples_path:
+            logger.info("生成样本已落盘（judge 失败可复用）：%s", samples_path)
     report = run_ragas_on_samples(filled, cfg)
 
     _guard_all_metrics_failed(report, cfg)

@@ -151,6 +151,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="answer_relevancy 的 strictness（默认 3；judge 只支持 n=1 时设为 1）",
     )
     parser.add_argument(
+        "--reuse-samples",
+        default="",
+        help="复用已生成的 samples.jsonl，跳过检索+生成，只跑 judge",
+    )
+    parser.add_argument(
         "--include-details",
         action="store_true",
         help="保存逐条 query、上下文、来源和 RAGAS 分数明细",
@@ -180,6 +185,7 @@ def _config_from_args(args: argparse.Namespace) -> EvaluationConfig:
         ragas_max_workers=args.ragas_max_workers,
         ragas_batch_size=args.ragas_batch_size,
         answer_relevancy_strictness=args.answer_relevancy_strictness,
+        reuse_samples_path=args.reuse_samples,
         include_details=args.include_details,
     )
 
