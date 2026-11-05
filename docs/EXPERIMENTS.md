@@ -182,10 +182,10 @@ k=5 · `--no-rerank`（与冻结检索版本同口径）；真实 bge-m3。
 
 **复现**：`PYTHONPATH=src uv run python -m evaluation.ragas.cli --dataset evals/datasets/ragas/ragas_paired20.jsonl --sample-per-type 5 --no-rerank --include-details --tag final`
 **整理**：`uv run python scripts/ops/ragas_report.py --tag final`
-**归档**：`evals/results/generation/ragas/summary.md`（旧 `raw.jsonl` / `metrics.json` / `ragas_final*`
-已于 2026-11-04 清理；现行读数见 `ragas_freeze20261016.json`）。
+**归档**：旧 RAGAS 数据与 `summary.md` 已于 2026-11-05 删除；现行读数见 **§21** 与
+`evals/results/generation/ragas/ragas_freeze20261105.json`。
 ★ 代际：本节数字属 10-10 换代前的旧体系（含当时的生产索引），理由见 §18 抬头的代际脚注；
-原始数据已清理，数字以上表与 `git show V-2026-10-02:docs/EXPERIMENTS.md` 为准。
+原始数据已删除，数字以 `git show V-2026-10-02:docs/EXPERIMENTS.md` 为准。
 
 ### 5.1 总体（四项均 n=20，无 judge 掉样）
 
@@ -2471,3 +2471,24 @@ ERROR 0 / PENDING 1（存量 grade.human_score）；ledger 第 1 段 PASS、新�
 **㉑ A4 frozen 裁决落行 + gold 冻结执行（2026-10-16）**：owner 书面裁决——「**同意 frozen，按 `fc3ad81` 版清单所列全部条款**」（对象=四数据集全部 66 条 gold：qa 15 / verify 15 / generate 15 / grade 15 / memory 6，逐 case_id 由文件机械枚举；生效日=2026-10-16；接受条款=人工前置全链闭环留痕、两个非阻断未决项（ver-002/007 题号有效性、91 键题干逐字比对）维持披露、frozen 边界=冻 gold 不冻指标）。机械执行：`gold_review_apply.py --ids-file <66 ids> --status frozen --apply`（先 dry-run 出全量 diff——拟写 66 条、五文件指纹逐一预演；再落盘）——**三条硬不变量**（除 gold_status 外逐字段相等 / 注释行逐字节不变 / CRLF 不变）工具内断言通过，落盘后原子复验 frozen 66/66、CRLF 与 HEAD 逐行一致（`grep -c` 每文件 CR 数=行数；git 的 LF/CRLF 警告为 autocrlf 常规提示、非真实行尾变更）。**新数据集 sha256**（§20.0 效果集指纹已同步）：`qa fede59a4ce8e872a` · `verify 51273aa6a3b194c3` · `generate 31a421dbe2c3c7eb` · `grade 3aa9f22a02610b99` · `memory fcd790441fe36666`——reviewed 代值与 frozen 代值之间仅 gold_status 一字段不同。**语义变化**：report 抬头对 frozen gold 标注「✅ 已冻结（frozen），可用于论文数字」（此前 reviewed 为「已人工审核」）；`gold_status` 随 case 进归档 record（`runner.py`）⇒ 冻结后新跑的效果归档一律带 frozen 标记。**边界披露**：frozen 的是 gold 不是指标——Generate V0② missing_premise、Grade 两极 gold、Memory 有效 n=2 三条局限照常披露；ec_r1/ec_r2/ec_r3 历史归档内嵌 gold_status 为各自时点快照（reviewed），按归档不可变纪律不动、不回写。**冻结后纪律（清单 §F）生效**：demo gold 四件套只读，再变更须走新审核链 + owner 新裁决。复验：sanity ERROR 0 / PENDING 1（存量）；ledger 段1/段2 PASS、段3 V0② 预期红；ecg 81 全绿；pytest 26/26（含 gold_review_apply 硬不变量回归 ㉚）；ruff 全过。清单 A4/E 段同步标 [x]。
 **㉒ Task 10 文档收尾完成 + E 段三门按裁定口径关闭（2026-10-16）**：owner 指示「一次性做完」剩余销账。① **§1.1 口径差收口**（EVIDENCE_CHAIN_PLAN Task 10 B 表最后一条，控制器裁定路径=改 §1.1 措辞、不动 `derive_status`）：执行那次 `scripts/` 小改——`scripts/lib/_ledger_render.py` 两处渲染注记刷新（判据级附表 ★ 注记的「与 §1.1 口径不一致 / 待 Task 10 文档收口」改为收口表述+历史指向；工件状态表尾部「只登记 active」改为指向 `artifact_status.json` 的 superseded 谱系说明），ledger.md 重生成后段 1 PASS；`docs/EVIDENCE_CHAIN.md` §1.1 ② 点同步刷新（注记文本已刷新的留痕 + Task 10 状态总述）。② **A.1 superseded 登记复核**：artifact_status.json 22 条（13 superseded / 9 active），`superseded_by` 全部指向在库工件、无悬空，`superseded` ≠ `invalidated` 口径保持；Task 10 C 清理项核查：差分 worktree `edu-attr-HEADminus` 与 `tmp_final_table.py`/`tmp_probe_err.py` 均已不存在（git worktree 仅 main），无可清理项。③ **E 段三门关闭**（判据早于相关裁定、按字面不可达，按裁定后口径重写）：总门（sanity ERROR 0/ecg 81 全绿/段 1 段 2 PASS 现成，段 3 V0② FAIL=option B 披露态）；§6 门槛行门（ec_r3 全量 11 行有读数，未证明行按引用纪律、未测量行按 D3 13/13 披露）；provenance_match 门（C1 时点 66/66 转正留痕 + 比对实时 HEAD 的设计特性登记 §20.7.8⑯⑥，跨提交归 0 不读成失败）。④ 存量未决项维持披露不销账：ver-002/007 题号有效性、91 键题干逐字比对、gen-005/009 标注者姓名补登。复验：sanity ERROR 0 / PENDING 1（存量）；ledger 段 1/段 2 PASS、段 3 V0② 预期红；ecg 81 全绿；pytest 26/26；ruff 全过。（证据：`evals/claims/ledger.md` 与 `evals/claims/artifact_status.json`；复现：`PYTHONIOENCODING=utf-8 uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl --check`）
 **㉓ 剩余任务收尾 + 冻结宣布（2026-10-16，owner 指示「先把剩余任务做完，再冻结」）**：① **ver-002/007 题号有效性裁定（内容层）**——15/15 题号有效；gold 预期集与全库 `kp_ids` 反查**双向机械一致**（漏 0、多 0）；ver-002 三题内容与冯·诺依曼考点全一致；ver-007 十二题中 **7 条内容确证**树森林转换、**4 条标签与 KP 权威定义不符**（2009-Q3/2011-Q5=遍历、2011-Q4=完全二叉树、2025-Q3=顺序存储）、**1 条边界**（2016-Q5=森林构成计数）。裁定：gold 不动（frozen + 对标签机械忠实，改 gold 会使测试度量人工重标）、KB 不回写（A1(d) 纪律），4+1 条登记为 KB 标签订正工作单（口径待 owner 裁）；文档 `evals/results/task_eval/VER_002_007_RULING_20261016.md` + `evals/results/task_eval/KP_LABEL_CORRECTION_WORKSHEET_20261016.md`。② **91 键逐字比对工作单生成**（原卷不在仓库、`papers-rebuild/` 缺失 ⇒ 该项机械侧全部预制、只待人工比对）：`evals/results/task_eval/A1_KEY_STEM_VERBATIM_WORKSHEET_20261016.md`（sha256 `067a55c24b51bc89…`；91/91 题干+选项从 items.md 机械抽取、无缺失；判定规则 verbatim/reorder/drift/mismatch 四态，`reorder` 触发答案字母重映射子流程）。③ **冻结宣布**：`evals/results/task_eval/FREEZE_DECLARATION_20261016.md`（范围/证据链/引用纪律/开放项/生效声明）+ git tag `V-2026-10-16`；清单 E 段头记录宣布；开放项 3 条（91 键比对、KP 标签、gen-005/009 标注者姓名）均不阻塞。④ **事故记录**：b606489 提交后工作区 FREEZE_CHECKLIST 被外部编辑器以旧缓冲区保存覆盖（内容回退到 b606489 前 + 表格重排），已从 HEAD 完整恢复（`git checkout HEAD -- <file>`）、未丢任何已提交内容；复核对 0 未勾项、三门关闭态在位。**㉔ 预冻结清理 + 项目级冻结（2026-10-16，纯运行态处置，零数据/归档变动）**：owner 指示「清理垃圾后再冻结项目」。处置：① 删可再生缓存 `__pycache__/`（全仓）、`.pytest_cache/`、`.ruff_cache/`；② 删当日跑动残留 `checkpoints.db`（48M，21,898 行 LangGraph checkpoint）与 `store.db`（5.2M）——均为 2026-10-16 15:05 C1/RAGAS 跑动的运行态，证据链以 jsonl 归档为准、无证据价值；③ `ec_r3_freeze_20261016.report.json`（11KB）**补入库**——与其余 11 份历史 report.json 一致（Task 10「数值工件入版本控制」，888f206），此前遗漏致 git status 常驻未跟踪项；内容为 C1 时点快照（gold_status=reviewed 66），按归档不可变纪律**不回写** frozen；④ 保留并登记的 gitignored 运行时资产：`.venv/`（1.1G）、`chroma_db/`（34M，retrieval gate 消费）、`data/metrics/rag_metrics.jsonl`（78M，probe/telemetry gate 消费）、`.env`（配置）、`edu_agent.db`（10 行 users 应用数据）、`.vscode/`、`.claude/`、`.workbuddy-ai/`（Agent 记忆）；跟踪文件零删除（`ledger_draft.md` 等历史草稿被 3 篇文档引用，按归档纪律留档）。项目级冻结 tag `P-2026-10-16`；推送 `origin/main`（含此前 20 个本地提交）+ 标签使远程与本地对齐。清理后复验：sanity ERROR 0 / PENDING 1（存量）；ledger 段 1/段 2 PASS、段 3 V0② 预期红；ecg 81 全绿；pytest 26/26；ruff 全过；`git status` 干净（证据：`evals/results/task_eval/FREEZE_DECLARATION_20261016.md` §7；复现：`PYTHONIOENCODING=utf-8 uv run python scripts/lib/build_claim_ledger.py --records evals/results/task_eval/ec_r3_freeze_20261016.jsonl --check`）
+
+---
+
+## 21. 效果版本锚点 · V-2026-11-05（现行 · 替代 §20）
+
+**触发**：2026-11-05 按新模型重跑效果章（生成 / judge / rerank 均为新口径）。
+
+**口径**：
+
+- task_eval：生成 agent `deepseek:deepseek-flash`；judge `dashscope:qwen3.8-max-0902`；检索 rerank off。
+- RAGAS：生成 `dashscope:qwen3.8-max-0902`；judge `deepseek:deepseek-flash`；rerank off；
+  `answer_relevancy.strictness=1`（DeepSeek 仅支持 n=1）。
+
+**归档**：`evals/results/task_eval/ec_r4_20261105.jsonl`（66 条，gold frozen 66/66）；
+`evals/results/generation/ragas/ragas_freeze20261105.json`（156 条）。 （证据：`evals/results/task_eval/ec_r4_20261105.jsonl`；`evals/results/generation/ragas/ragas_freeze20261105.json`）
+
+**task_eval**：QA 1.000（15/15，μ4.933）；Generate 0.667（10/15）；Grade `verdict_agreement` 1.000（15/15；`quality_pass` 0.467 仅反映 judge 严格度）；Verify 仍出题率 0.000（15/15）；Memory correct-use 0.800（4/5，n_a=1，2 条 case_invalid）。 （证据：`evals/results/task_eval/ec_r4_20261105.report.json`）
+
+**RAGAS**：faithfulness 0.7238 · context_precision 0.7405 · context_recall 0.4764 · answer_relevancy 0.6598（均 n=156，无 dropped metrics）。 （证据：`evals/results/generation/ragas/ragas_freeze20261105.json`）
+
+**与 §20 的关系**：旧读数（ec_r3 / ragas_freeze20261016）与本节**不可直接比较**；旧归档已按 owner 指示删除。引用前先核对本节口径。 （证据：`evals/results/generation/ragas/ragas_freeze20261105.json`）

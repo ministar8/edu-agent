@@ -1,12 +1,12 @@
 # 论文实验表（可直接粘贴）
 
-> **检索表（表 1–5）为现行代际**：2026-11-04/05，全量 156 或前 60 条黄金集，
-> 生产索引 2026 chunk / 10 集合，真 TEI bge-m3，`RERANK_ENABLED=false`，
-> RAG LLM `dashscope:deepseek-v4.1-flash`。
-> **表 7/表 8 为效果章**（2026-10-16 冻结口径，judge/generator 仍为 qwen），
-> 尚未按新模型重跑——**不得与检索表混称同一代际**。
+> **全部表均为现行代际（2026-11-04/05）**。
+> 检索：全量 156 或前 60 条黄金集 · 生产索引 2026 chunk / 10 集合 · 真 TEI bge-m3 ·
+> `RERANK_ENABLED=false` · RAG LLM `dashscope:deepseek-v4.1-flash`。
+> 效果：task_eval 生成 `deepseek:deepseek-flash` + judge `qwen3.8-max-0902`；
+> RAGAS 生成 `qwen3.8-max-0902` + judge `deepseek:deepseek-flash`（strictness=1）。
 > 检索消融完整数据与口径见 [`rag_ablation.md`](rag_ablation.md)。
-> 样本：检索 = 全量 156（表 2/3）或前 60（表 1/4/5）· 任务集 25 条 · 门禁 156 条
+> 样本：检索 = 全量 156（表 2/3）或前 60（表 1/4/5）· 任务集 66 条 · 门禁 156 条
 
 ---
 
@@ -211,42 +211,39 @@ Task Policy ──► Retrieval Plan ──► Evidence Pack
 
 ---
 
-## 表 6 任务级效果表（2026-10-16 冻结口径，**待按新模型重跑**）
+## 表 6 任务级效果表（2026-11-05，现行）
 
-> 来源：`evals/results/task_eval/ec_r3_freeze_20261016.jsonl`（66 条：qa/verify/generate/grade 各 15 + memory 6；
-> gold_status **reviewed 66/66**）。数字与 `evals/claims/ledger.md` §6 门槛行逐字同源（重算产物）。
-> ★ **该表 judge/generator 仍为 qwen 口径**，与检索表的 `deepseek-v4.1-flash` 不同代；
-> 重跑前只能作为「旧口径效果读数」披露，**不得与表 1–5 混称同一代际**。
+> 来源 `evals/results/task_eval/ec_r4_20261105.jsonl`（66 条：qa/verify/generate/grade 各 15 + memory 6；
+> gold **frozen 66/66**）。生成 agent `deepseek:deepseek-flash`；judge `dashscope:qwen3.8-max-0902`；
+> 检索 rerank off。★ 与 2026-10-16 旧版**不可直接比较**（judge 与生成口径均变）。
 > **每个数字必须带分母**；n=1/2 的率不是能力率（D15）。
 
-| 维度 | 主指标（§6 口径） | 冻结代读数 | §6 门槛 | 达成判定 |
-|---|---|---|---|---|
-| QA | `final_quality≥4` case 占比 | **1.000**（已测 n=15） | ≥ 80% | 达成（judge 观点，tier 2 两前置未标定 ⇒「已测量未证明」） |
-| Generate | 五项完整交付率 `gen_case_pass`（registry 逐题复合） | **N/A**（已测 n=0，missing_premise 15/15） | ≥ 75% | **未测量**——gold 依赖判据结构性缺前提，按 option B 作 limitation 披露，**不得折成 0 或 1** |
-| Grade | `score_tolerance@±10` 头号；两极 gold ⇒ 行级改读 `verdict_agreement`（辅助位） | 头号 N/A（两极 gold 无判别力）；**verdict_agreement=0.933**（n=15） | ≥ 75% | 头号未测量；辅助位 0.933 只作披露 |
-| Verify | 仍出题率 `ver_fabricated`（硬条件必须 0；D14 行为层） | **仍出题率 0.000**（pass 15/15 = 1.000） | 必须 0 | **达成**（硬条件）；L1 真题条目 0.133 / L2 年份归属 0.333 作诊断 |
-| Memory | correct-use rate（正样本口径） | **1.000**（已测 n=2，missing_premise 4） | ≥ 80% | 数字达成但**分母极小**：正样本 3 条全不可测，可测 2 条均为负样本 ⇒ 按 D15 只作结构断言披露 |
-| Retrieval | `kp_hit` 率（全任务池化） | 0.967（已测 n=30, n/a=30） | 不低于 V-2026-10-02 | 池化诊断位 |
-| hard failure | `hard_fails` 非空占比（坏事率） | **0.000**（n=66） | < 5% | 达成 |
-| tool error | `failure_reason` 含 tool_error 占比（坏事率） | **0.000**（n=66） | < 5% | 达成 |
-| provenance | 八键齐全率 | **1.000**（n=66） | 100% | 达成 |
+| 维度 | 主指标 | 读数 | 备注 |
+|---|---|---|---|
+| QA | `final_quality≥4` | **1.000**（15/15） | μ4.933；失败率 0.067 |
+| Generate | `quality_pass` | **0.667**（10/15） | μ3.933；失败率 0.4 |
+| Grade | `verdict_agreement` | **1.000**（15/15） | `quality_pass` 0.467 仅反映 judge 严格度 |
+| Verify | 仍出题率（硬条件） | **0.000**（15/15） | μ1.533；`quality_pass` 0.067 |
+| Memory | correct-use rate | **0.800**（4/5，n_a=1） | 2 条 `case_invalid`；正样本 3/3 有效 |
+| hard failure | `hard_fails` 非空 | **0.000**（66） | |
+| tool error | `failure_reason` 含 tool_error | 0.045（3/66） | grd-002 / mem-005 / mem-006，均为副标签，`hard_fails` 为空 |
 
-**读法红线**：① Generate 行写「主指标未测量（结构性缺前提）」，**禁止**写门槛比较；
-② Verify 的 `final_quality≥4`（μ=1.067）只作诊断，不得当通过判据（D14）；
-③ Memory 的 1.000 必须连同「n=2、正样本不可测」引用。
+**读法红线**：① Grade 看 `verdict_agreement`，`quality_pass` 会随 judge 变严而下降，不能当系统退化；
+② Memory 的 0.800 必须连同「n=5、2 条 case_invalid」引用；③ 与旧冻结版不可混排。
 
 ---
 
-## 表 7 RAGAS 冻结版（2026-10-16，**待按新模型重跑**）
+## 表 7 RAGAS（2026-11-05，现行）
 
-> 来源 `ragas_freeze20261016.json`，全量 156 条；judge=`dashscope:qwen3.8-flash`。
-> ★ 与检索表不同代（LLM 不同），重跑前只作旧口径披露。
+> 生成 `dashscope:qwen3.8-max-0902`；judge `deepseek:deepseek-flash`；rerank off；
+> `answer_relevancy.strictness=1`（DeepSeek 仅支持 n=1）。全量 156 条，四指标 n=156，无 dropped metrics。
+> 归档 `ragas_freeze20261105.json` + `_samples.jsonl`。
 
-| 指标 | 冻结版读数（n/156） |
+| 指标 | 读数（n/156） |
 |---|---|
-| faithfulness | 0.8109（n=112） |
-| context_precision | 0.7454（n=113） |
-| context_recall | 0.5963（n=108） |
-| answer_relevancy | 0.7217（n=111） |
+| faithfulness | **0.7238** |
+| context_precision | **0.7405** |
+| context_recall | **0.4764** |
+| answer_relevancy | **0.6598** |
 
-> 各指标 n<156（judge 不可判样本已剔除）；引用必须带分母。
+> ★ 与 2026-10-16 旧版不可直接比较：生成模型、judge、rerank、strictness 四处口径全变。

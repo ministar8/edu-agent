@@ -26,7 +26,7 @@
 
 | 子目录 | 内容 |
 |---|---|
-| `ragas/` | `ragas_freeze20261016.json` + `_samples.jsonl` 现行读数 · `summary.md` 旧代际结论（旧原始数据已于 2026-11-04 清理） |
+| `ragas/` | `ragas_freeze20261105.json` + `_samples.jsonl` 现行读数（2026-11-05，旧数据与 summary 已删除） |
 
 ## system_validation/ 系统验证
 

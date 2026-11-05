@@ -51,8 +51,8 @@
 生成质量实验：
 
 - `ragas/`
-  - `ragas_freeze20261016.json` / `_samples.jsonl` — 现行冻结版读数与样本
-  - `summary.md` — 旧代际结论（旧原始数据已于 2026-11-04 清理）
+  - `ragas_freeze20261105.json` / `_samples.jsonl` — 现行读数与样本（2026-11-05）
+  - 旧代际数据与 `summary.md` 已于 2026-11-05 删除
 
 #### system_validation
 
