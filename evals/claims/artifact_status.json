@@ -1,17 +1,5 @@
 [
   {
-    "path": "evals/results/task_eval/phase1_final_gate_20261008.jsonl",
-    "status": "superseded",
-    "superseded_by": "evals/results/task_eval/ec_r1_final_gate.jsonl",
-    "reason": "composite_na_semantics_changed"
-  },
-  {
-    "path": "evals/results/task_eval/phase1_gen_anchor5_20261008.jsonl",
-    "status": "superseded",
-    "superseded_by": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
-    "reason": "gen_records_inherited_into_ec_r2_with_blindlabel_gold（原 superseded_by=ec_r1 系误挂：ec_r1 的 gen 为修复前回复，不承接 anchor5 的出题修复后记录，2026-10-15 改正）"
-  },
-  {
     "path": "evals/results/task_eval/phase0_baseline_final.report.md",
     "status": "superseded",
     "superseded_by": "docs/EXPERIMENTS.md",
@@ -54,12 +42,6 @@
     "reason": "task9_baseline_rerecord_after_b1_b2"
   },
   {
-    "path": "evals/results/task_eval/ec_r1_final_gate.jsonl",
-    "status": "superseded",
-    "superseded_by": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
-    "reason": "gold_blindlabel_backfill_gen_from_anchor5"
-  },
-  {
     "path": "evals/baselines/retrieval_baseline.json",
     "status": "active",
     "superseded_by": "",
@@ -100,18 +82,6 @@
     "status": "active",
     "superseded_by": "",
     "reason": ""
-  },
-  {
-    "path": "evals/results/task_eval/ec_r2_goldinjected_20261015.jsonl",
-    "status": "superseded",
-    "superseded_by": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
-    "reason": "backfill_recompute_predicates（gold 注入中间件，判据仍是旧值）"
-  },
-  {
-    "path": "evals/results/task_eval/ec_r2_final_gate_20261015.jsonl",
-    "status": "superseded",
-    "superseded_by": "evals/results/task_eval/ec_r3_freeze_20261016.jsonl",
-    "reason": "freeze_full_rerun_under_reviewed_gold（C1 §7.3 全量重跑：gold reviewed 66/66 后重测；ec_r2 的 generate 为 backfill 代读数、其余为 ec_r1 旧代码代）"
   },
   {
     "path": "evals/results/generation/ragas/metrics.json",
