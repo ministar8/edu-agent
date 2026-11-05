@@ -570,11 +570,36 @@ RAG LLM `dashscope:deepseek-v4.1-flash`。
 1. **消融非常稳**：full/no_bm25/no_metadata 的 kp_mrr std=0；仅 vector_only 有非零 std（±0.013）。 （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`）
 2. 论文表 2 可写 `mean±std`；**贡献排序：BM25 > vector_only > metadata**。
 3. 方差实验**解释不了**旧表 −0.113→−0.021 的跨轮漂移（那是跨代码/跨索引差异，不是随机抖动）。 （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`）
-4. **vector_only 是唯一有抖动的配置**（kp_hit ±0.010、kp_mrr ±0.013）—— （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`）
-   其单轮数值不宜与其它配置等量齐观，跨批次比较时须看本节的 std。
+4. **vector_only 是唯一有抖动的配置**（kp_hit ±0.010、kp_mrr ±0.013）——其单轮数值不宜与其它配置等量齐观，跨批次比较时须看本节的 std。 （证据：`git show V-2026-10-02:docs/EXPERIMENTS.md`）
 
 > 脚注：n=3 独立进程；std 为运行间系统非确定性，不作为统计显著性检验。
 
+### 13.4 同代际复跑（2026-11-05）
+
+**口径**：3 个独立进程 × 4 配置 × 60 条；生产索引 2026 chunk；真 TEI bge-m3；
+`RERANK_ENABLED=false`；RAG LLM `dashscope:deepseek-v4.1-flash`。
+**归档**：`evals/results/retrieval/ablation/component_variance/`（`run{1,2,3}.json` + `summary.json`，
+本轮 `real_fail=0 / llm_fail=0`）。 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`）
+
+| config | kp_hit | kp_mrr | cat@1 | cat_mrr | evidence |
+|---|---|---|---|---|---|
+| full | 1.000±0.000 | 0.9236±0.000 | 0.933±0.000 | 0.960±0.000 | 5.850±0.029 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| no_bm25 | 0.983±0.000 | 0.922±0.001 | 0.900±0.000 | 0.947±0.001 | 5.800±0.029 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| no_metadata | 1.000±0.000 | 0.919±0.000 | 0.950±0.000 | 0.972±0.000 | 6.083±0.029 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| vector_only | 0.983±0.000 | 0.915±0.005 | 0.900±0.000 | 0.946±0.000 | 5.911±0.035 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+
+**配对 Δ vs full**：
+
+| Δ | kp_hit | kp_mrr | cat@1 | cat_mrr | evidence |
+|---|---|---|---|---|---|
+| no_bm25 | −0.017±0.000 | −0.002±0.001 | −0.033±0.000 | −0.013±0.001 | −0.050±0.000 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| no_metadata | +0.000±0.000 | −0.004±0.000 | +0.017±0.000 | +0.013±0.000 | +0.233±0.000 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| vector_only | −0.017±0.000 | −0.008±0.005 | −0.033±0.000 | −0.014±0.000 | +0.061±0.010 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+
+**结论**：
+
+1. **系统仍然很稳**：三跑 std ≤ 0.005（最大为 vector_only 的 kp_mrr ±0.005）。 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`）
+2. **本节只回答「稳不稳」，不回答「组件贡献多大」**：60 条子集上的 Δ（BM25 −0.002、metadata −0.004、vector_only −0.008）与 §2.3 全量 156（−0.091 / +0.037 / −0.030）量级和方向都不同；组件贡献一律以 §2.3 为准。 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`）
 ---
 
 ## 14. E-next · RRF Threshold Sensitivity（2026-09-30）
