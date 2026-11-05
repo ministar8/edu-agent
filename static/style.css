@@ -810,118 +810,16 @@ input:focus, select:focus, textarea:focus {
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ═══════════════════════════════════════════════════════════════
-   出题 / 批改
-   ═══════════════════════════════════════════════════════════════ */
-.practice {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.practice-form { display: flex; gap: 10px; flex-wrap: wrap; }
-.practice-form input { flex: 1; min-width: 160px; }
-
-.question-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 18px;
-  background: var(--surface);
-  box-shadow: var(--shadow-sm);
-}
-.question-meta { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
-.question-stem {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 12px;
-  white-space: pre-wrap;
-  line-height: 1.7;
-}
-.answer-input { width: 100%; min-height: 84px; resize: vertical; line-height: 1.6; }
-
-/* 提交按钮此前靠内联 margin-top，现改为类 */
-.question-submit { margin-top: 10px; }
-
-.reference-box { margin-top: 10px; font-size: 13px; color: var(--muted); }
-.reference-box summary { cursor: pointer; }
-.reference-box > div { margin-top: 6px; line-height: 1.7; }
-
-.grade-result {
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--subtle);
-  font-size: 14px;
-  line-height: 1.7;
-}
-/* ── 评分可视化：数值 + 档位标签 + 进度条 ── */
-.score-block { margin-bottom: 10px; }
-.score-head { display: flex; align-items: baseline; gap: 5px; }
-.score-value { font-size: 26px; font-weight: 600; line-height: 1; color: var(--accent-text); }
-.score-unit { font-size: 12px; color: var(--hint); }
-.score-level {
-  margin-left: auto;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  border: 1px solid var(--border);
-  background: var(--subtle);
-  color: var(--muted);
-}
-.score-level[data-level="high"] {
-  background: var(--score-high-bg);
-  border-color: var(--score-high-bg);
-  color: var(--score-high-fg);
-}
-.score-level[data-level="mid"] {
-  background: var(--score-mid-bg);
-  border-color: var(--score-mid-bg);
-  color: var(--score-mid-fg);
-}
-.score-level[data-level="low"] {
-  background: var(--score-low-bg);
-  border-color: var(--score-low-bg);
-  color: var(--score-low-fg);
-}
-.score-bar {
-  margin-top: 9px;
-  height: 6px;
-  border-radius: 3px;
-  background: var(--border);
-  overflow: hidden;
-}
-.score-fill {
-  height: 100%;
-  border-radius: 3px;
-  background: var(--accent);
-  transition: width 0.4s ease;
-}
-.score-fill[data-level="high"] { background: var(--score-high-fg); }
-.score-fill[data-level="mid"] { background: var(--score-mid-fg); }
-.score-fill[data-level="low"] { background: var(--score-low-fg); }
-@media (prefers-reduced-motion: reduce) {
-  .score-fill { transition: none; }
-}
-/* 错因分析：此前由 app.js 内联写死 #7c3aed，现收进令牌 */
-.error-analysis { margin-top: 8px; color: var(--info); }
-
-/* ═══════════════════════════════════════════════════════════════
    滚动条（Webkit）
    ═══════════════════════════════════════════════════════════════ */
-.messages::-webkit-scrollbar,
-.practice::-webkit-scrollbar { width: 10px; }
-.messages::-webkit-scrollbar-track,
-.practice::-webkit-scrollbar-track { background: transparent; }
-.messages::-webkit-scrollbar-thumb,
-.practice::-webkit-scrollbar-thumb {
+.messages::-webkit-scrollbar { width: 10px; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb {
   background: var(--border-strong);
   border-radius: 5px;
   border: 3px solid var(--surface);
 }
-.messages::-webkit-scrollbar-thumb:hover,
-.practice::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+.messages::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* 侧边栏会话列表：更细的滚动条 */
 .thread-list::-webkit-scrollbar { width: 6px; }
@@ -940,7 +838,7 @@ input:focus, select:focus, textarea:focus {
 @media (max-width: 900px) {
   .app { padding: 10px; gap: 10px; }
   .sidebar { width: 196px; padding: 14px; }
-  .messages, .practice { padding: 18px; }
+  .messages { padding: 18px; }
   .main-header, .input-bar { padding-left: 18px; padding-right: 18px; }
   .msg-row { max-width: 90%; }
 }
@@ -981,7 +879,7 @@ input:focus, select:focus, textarea:focus {
   .side-actions { flex-shrink: 0; }
   .logout { flex-shrink: 0; padding: 9px 12px; }
   .main { flex: 1 1 auto; min-height: 70vh; }
-  .messages, .practice { padding: 14px; }
+  .messages { padding: 14px; }
   .main-header, .input-bar { padding-left: 14px; padding-right: 14px; }
   .msg-row { max-width: 94%; }
   .avatar { width: 24px; height: 24px; font-size: 11px; }

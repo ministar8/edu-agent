@@ -1,9 +1,7 @@
-"""service 层（HTTP 端点）的出题与批改模板。
+"""出题与批改的领域模板（`question_core` / `grading_core` 使用）。
 
-层级提醒：这两个模板属于**端点直调**，经 `agents.question_core` / `agents.grading_core`
-使用，与 `prompts/agents.py` 里聊天专家的 system prompt 是两套东西。
-`/api/questions/grade` 走 `GRADE_PROMPT` + `grading_core`，**不经过 grading_agent**，
-因此 `GRADING_AGENT_SYSTEM_PROMPT` 在该路径上不生效。
+层级提醒：与 `prompts/agents.py` 里聊天专家的 system prompt 是两套东西。
+聊天专家经工具调用 core；core 内部用这里的模板做结构化生成/评分。
 """
 
 from langchain_core.prompts import ChatPromptTemplate

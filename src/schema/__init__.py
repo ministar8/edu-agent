@@ -9,7 +9,7 @@ from schema.models import (
     model_refs_for,
     parse_model_ref,
 )
-from schema.questions import GradeRequest, GradeResponse, QuestionRequest, QuestionResponse
+from schema.questions import GeneratedQuestion, GeneratedQuestionSet
 from schema.schema import (
     AgentInfo,
     ChatHistory,
@@ -40,12 +40,10 @@ __all__ = [
     "GATEWAY_DEFAULT_MODEL",
     "GATEWAY_MODELS",
     "Gateway",
-    "GradeRequest",
-    "GradeResponse",
+    "GeneratedQuestion",
+    "GeneratedQuestionSet",
     "GradingResult",
     "LoginRequest",
-    "QuestionRequest",
-    "QuestionResponse",
     "RegisterRequest",
     "TaskPolicy",
     "RetrievalResult",

@@ -10,8 +10,6 @@ const API = {
   stream: "/api/stream",
   history: "/api/history",
   threads: "/api/threads",
-  questionsGenerate: "/api/questions/generate",
-  questionsGrade: "/api/questions/grade",
 };
 
 /** 从 API 错误响应提取可展示文案（兼容 detail 字符串或 {code,message}）。 */

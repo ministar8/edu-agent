@@ -19,8 +19,6 @@ CODE_FORBIDDEN = "forbidden"
 CODE_BAD_REQUEST = "bad_request"
 CODE_USERNAME_TAKEN = "username_taken"
 CODE_INTERNAL = "internal_error"
-CODE_GENERATE_FAILED = "generate_failed"
-CODE_GRADE_FAILED = "grade_failed"
 CODE_AUTH_CONFIG = "auth_config_error"
 
 

@@ -125,6 +125,22 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 
 浏览器访问 `http://127.0.0.1:8000/`（静态前端由 FastAPI 提供服务）。
 
+### 6. E2E 聊天演示（工程表「跑通」）
+
+```bash
+# 服务已在 8000 时：完整预检（含 TEI embedding）
+.venv/Scripts/python.exe scripts/ops/e2e_chat_demo.py
+
+# TEI 未就绪 / 只验 HTTP+SSE+Agent 图：
+.venv/Scripts/python.exe scripts/ops/e2e_chat_demo.py --skip-tei
+
+# 服务未起时自动拉起：
+.venv/Scripts/python.exe scripts/ops/e2e_chat_demo.py --start-service --skip-tei
+```
+
+覆盖：注册登录 → `POST /api/stream` 三场景（讲解 / 出题 / 批改）→ 有终答回复 → `/api/history`。  
+退出码 0 = PASS。**只求跑通，不求效果数字**（效果用 `task_eval`）。
+
 ## API
 
 | 方法 | 路径 | 说明 |
@@ -136,8 +152,6 @@ uv run python src/run_service.py       # http://127.0.0.1:8000
 | POST | `/api/stream` 或 `/api/{agent_id}/stream` | 流式问答（SSE：token + message） |
 | POST | `/api/history` 或 `/api/{agent_id}/history` | 会话历史 |
 | GET | `/api/threads` 或 `/api/{agent_id}/threads` | 会话线程列表 |
-| POST | `/api/questions/generate` | 结构化出题（题干 / 标准答案 / 解析分字段） |
-| POST | `/api/questions/grade` | 单题批改（题干 + 学生作答 + 可选标准答案） |
 | GET | `/health` | 健康检查（外部依赖状态） |
 
 请求体可选 `model`：形如 `dashscope:qwen3.8-max` / `deepseek:deepseek-v4-flash`，经运行时中间件生效。

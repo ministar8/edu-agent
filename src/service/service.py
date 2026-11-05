@@ -1,4 +1,4 @@
-"""FastAPI 服务：暴露多 Agent 问答（token/message 双流式）、出题/批改与 JWT 认证。"""
+"""FastAPI 服务：暴露多 Agent 问答（token/message 双流式）与 JWT 认证。"""
 
 import json
 import logging
@@ -26,12 +26,9 @@ from langgraph.types import Command
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
 from agents import agents as agent_registry
-from agents.grading_core import agrade_answer
-from agents.question_core import agenerate_question_set
 from core import settings
 from db import User, init_db
 from memory import initialize_database, initialize_store
-from memory.remember import record_grade, record_question
 from memory.retention import acleanup_all_student_episodes
 from memory.runtime import set_store
 from memory.safe import safe_remember
@@ -40,10 +37,6 @@ from schema import (
     ChatHistory,
     ChatHistoryInput,
     ChatMessage,
-    GradeRequest,
-    GradeResponse,
-    QuestionRequest,
-    QuestionResponse,
     ServiceMetadata,
     StreamInput,
     UserInput,
@@ -62,8 +55,6 @@ from service._sse import (  # noqa: F401  供 stream 路由与本模块使用
 from service.auth import get_current_user
 from service.auth import router as auth_router
 from service.errors import (
-    CODE_GENERATE_FAILED,
-    CODE_GRADE_FAILED,
     CODE_INVALID_CONFIG,
     CODE_THREAD_NOT_FOUND,
     CODE_UNKNOWN_AGENT,
@@ -440,72 +431,6 @@ async def threads(
         logger.error("Threads failed: %s", e)
         raise internal_error("Unexpected error") from e
     return UserThreads(threads=summaries)
-
-
-@router.post("/questions/generate", response_model=QuestionResponse)
-async def generate_questions(
-    req: QuestionRequest, current_user: User = Depends(get_current_user)
-) -> QuestionResponse:
-    """出题：基于题库与知识库生成**结构化**练习题。
-
-    返回结构化而非整页 Markdown，是为了让前端把「单题题干 + 该题标准答案」原样交给
-    批改端点 —— 否则批改只能拿到一份含答案的整页文本。
-
-    生成核心与聊天出题共用 `agenerate_question_set`（HTTP 契约不变）。
-    """
-    try:
-        result = await agenerate_question_set(
-            topic=req.topic, count=req.count, difficulty=req.difficulty
-        )
-    except Exception as e:
-        logger.error("Question generation failed: %s", e)
-        raise internal_error("出题失败", CODE_GENERATE_FAILED) from e
-    batch_id = str(uuid4())
-    await record_question(
-        user_id=str(current_user.id),
-        topic=req.topic,
-        agent_path="api_question",
-        count=req.count,
-        batch_id=batch_id,
-    )
-    return QuestionResponse(questions=result.questions, batch_id=batch_id)
-
-
-@router.post("/questions/grade", response_model=GradeResponse)
-async def grade_question(
-    req: GradeRequest, current_user: User = Depends(get_current_user)
-) -> GradeResponse:
-    """批改：基于题干与标准答案给出评分与反馈。
-
-    评分实现见 `agents.grading_core`；本路由只做 HTTP 映射（契约不变）。
-    """
-    try:
-        result = await agrade_answer(
-            stem=req.stem,
-            user_answer=req.user_answer,
-            standard_answer=req.standard_answer or "",
-        )
-    except Exception as e:
-        logger.error("Grading failed: %s", e)
-        raise internal_error("批改失败", CODE_GRADE_FAILED) from e
-    await record_grade(
-        user_id=str(current_user.id),
-        topic=req.stem[:80],
-        score=float(result.score),
-        error_analysis=result.error_analysis or "",
-        stem=req.stem,
-        # ★ 必须透传：缺它 ⇒ 本路径的 episode KP 恒空 ⇒ `compute_weak_topics`
-        #   只能退回题干前 80 字（legacy fallback），薄弱点就变成"某道题的开头"。
-        knowledge_points=list(result.knowledge_points or []),
-        agent_path="api_grade",
-        batch_id=req.batch_id,
-        question_id=req.question_id,
-    )
-    return GradeResponse(
-        score=float(result.score),
-        feedback=result.feedback,
-        error_analysis=result.error_analysis or "",
-    )
 
 
 @app.get("/health")

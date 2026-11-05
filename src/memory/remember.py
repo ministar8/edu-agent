@@ -119,7 +119,7 @@ async def record_question(
 ) -> tuple[str | None, str]:
     """写入出题 episode；返回 (episode_id, batch_id)。
 
-    batch_id 未传则生成，应与 QuestionResponse.batch_id 一致，供后续 grade 外键引用。
+    batch_id 未传则生成，供后续 grade 外键引用。
     """
     bid = batch_id or uuid.uuid4().hex
     eid = await _record_episode(

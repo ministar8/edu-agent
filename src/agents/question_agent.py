@@ -1,7 +1,4 @@
-"""出题 Agent（聊天路径）：经共享工具调用结构化真源，只做对话修饰。
-
-专用出题 API 见 `agents.question_core` / `service.generate_questions`。
-"""
+"""出题 Agent（聊天路径）：经共享工具调用结构化真源，只做对话修饰。"""
 
 from typing import Any
 

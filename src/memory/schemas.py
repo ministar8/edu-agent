@@ -81,9 +81,7 @@ class Episode(BaseModel):
     knowledge_points: list[str] = Field(default_factory=list)
     agent_path: AgentPath = "other"
     # ── 显式外键（闭环关联）────────────────────────
-    batch_id: str = Field(
-        default="", description="出题批次 ID（与 API QuestionResponse.batch_id 对齐）"
-    )
+    batch_id: str = Field(default="", description="出题批次 ID（同一次出题的题目共用，供批改关联）")
     question_id: str = Field(default="", description="单题 ID（可选）")
     ref_episode_id: str = Field(
         default="",

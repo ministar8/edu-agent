@@ -333,27 +333,29 @@ def _c3_parse() -> None:
 
 def _c3_service() -> None:
 
-    # ③u API 批改端点必须把 knowledge_points 透传给 record_grade
+    # ③u 聊天批改工具必须把 knowledge_points 透传给 record_grade
     #   ★ 这是**静态**检查（执行它要完整 app + DB）；"执行式"的端到端验证在
     #     `scripts/mem/memory_e2e_fallback_probe.py`（注入假 LLM 驱动真实 `call_structured`）。
+    #   专用 /api/questions/grade 已删除（2026-11）：批改只剩聊天路径
+    #     `agents.tools.agrade_student_answer` → `record_grade(agent_path="chat_grade")`。
     #   用 AST 定位调用节点的 keywords，**不是搜源码子串** —— 注释里提一句该参数
     #   就能骗过子串搜索（⑨f 的教训）。
     from pathlib import Path as _P
 
-    _tree = ast.parse((_P(ROOT) / "src" / "service" / "service.py").read_text(encoding="utf-8"))
+    _tree = ast.parse((_P(ROOT) / "src" / "agents" / "tools.py").read_text(encoding="utf-8"))
     grade_calls = [
         n
         for n in ast.walk(_tree)
         if isinstance(n, ast.Call)
         and getattr(n.func, "id", "") == "record_grade"
         and any(
-            k.arg == "agent_path" and getattr(k.value, "value", None) == "api_grade"
+            k.arg == "agent_path" and getattr(k.value, "value", None) == "chat_grade"
             for k in n.keywords
         )
     ]
     check(
-        "③u /api/questions/grade 的 record_grade 传了 knowledge_points",
+        "③u 聊天批改 record_grade 传了 knowledge_points",
         len(grade_calls) == 1 and any(k.arg == "knowledge_points" for k in grade_calls[0].keywords),
-        f"api_grade 调用 {len(grade_calls)} 处；"
+        f"chat_grade 调用 {len(grade_calls)} 处；"
         f"keywords={sorted(str(k.arg) for k in grade_calls[0].keywords) if grade_calls else []}",
     )

@@ -1,7 +1,4 @@
-"""批改 Agent（聊天路径）：经 grading_core 真源打分，只做对话修饰。
-
-专用批改 API 见 `agents.grading_core` / `service.grade_question`。
-"""
+"""批改 Agent（聊天路径）：经 grading_core 真源打分，只做对话修饰。"""
 
 from typing import Any
 
