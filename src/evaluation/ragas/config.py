@@ -33,4 +33,8 @@ class EvaluationConfig:
     ragas_max_wait: int = 3
     ragas_max_workers: int = 2
     ragas_batch_size: int = 2
+    # answer_relevancy 的 strictness（默认 3 = 每条样本生成 3 个问题取平均）。
+    # ★ judge 只支持 n=1 时（如 DeepSeek 官网）必须设为 1，否则 400：
+    #   "Invalid n value (currently only n = 1 is supported)"。
+    answer_relevancy_strictness: int = 3
     include_details: bool = False

@@ -145,6 +145,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ragas-max-workers", type=int, default=2, help="judge 最大并发数")
     parser.add_argument("--ragas-batch-size", type=int, default=2, help="分批提交的样本数")
     parser.add_argument(
+        "--answer-relevancy-strictness",
+        type=int,
+        default=3,
+        help="answer_relevancy 的 strictness（默认 3；judge 只支持 n=1 时设为 1）",
+    )
+    parser.add_argument(
         "--include-details",
         action="store_true",
         help="保存逐条 query、上下文、来源和 RAGAS 分数明细",
@@ -173,6 +179,7 @@ def _config_from_args(args: argparse.Namespace) -> EvaluationConfig:
         ragas_max_wait=args.ragas_max_wait,
         ragas_max_workers=args.ragas_max_workers,
         ragas_batch_size=args.ragas_batch_size,
+        answer_relevancy_strictness=args.answer_relevancy_strictness,
         include_details=args.include_details,
     )
 

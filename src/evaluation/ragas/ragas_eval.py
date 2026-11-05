@@ -286,6 +286,11 @@ def run_ragas_on_samples(samples: list[EvalSample], cfg: EvaluationConfig) -> di
 
     judge = build_judge_llm(timeout=cfg.ragas_timeout)
     _inject_judge_llm(metrics, judge)
+    # answer_relevancy 默认 strictness=3（每条样本请求 n=3）；DeepSeek 官网只支持 n=1，
+    # 不降会导致 400 "Invalid n value"。是否降级由显式参数决定并写入报告。
+    for m in metrics:
+        if getattr(m, "name", "") == "answer_relevancy" and hasattr(m, "strictness"):
+            m.strictness = int(cfg.answer_relevancy_strictness)
     metrics, dropped, metric_warnings = _inject_relevancy_embeddings(metrics)
 
     try:
@@ -407,6 +412,7 @@ def _build_run_config_meta(
             "max_wait": cfg.ragas_max_wait,
             "max_workers": cfg.ragas_max_workers,
             "batch_size": cfg.ragas_batch_size,
+            "answer_relevancy_strictness": cfg.answer_relevancy_strictness,
         },
         "include_details": cfg.include_details,
         "n_filled": len(filled),
