@@ -76,17 +76,17 @@ def check_archives_traceability() -> None:
     print("\n" + "=" * 96)
     print("③ 归档 JSON 自描述性（能否反查到脚本 / 参数 / 代码版本）")
     targets = [
-        "retrieval/ablation/component_ablation.json",
-        "retrieval/ablation/rerank_compare.json",
-        "retrieval/layer_policy/layer_ablation.json",
-        "retrieval/ablation/task_layer_ablation.json",
-        "retrieval/ablation/basic_rag_compare.json",
-        "retrieval/layer_policy/task_mode_x_layer_policy.json",
-        "retrieval/legacy_runtime/legacy_runtime.json",
+        "retrieval/ablation/component_ablation_20261104_full156_deepseek41.json",
+        "retrieval/ablation/rerank_compare_20261105_deepseek41.json",
+        "retrieval/layer_policy/layer_ablation_20261105_full156_deepseek41_withfull.json",
+        "retrieval/ablation/basic_rag_compare_20261105_deepseek41.json",
+        "retrieval/layer_policy/task_mode_x_layer_policy_20261105_deepseek41.json",
+        "retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json",
         "retrieval/ablation/component_variance/summary.json",
-        "retrieval/ablation/threshold_sensitivity/threshold_sensitivity.json",
-        "retrieval/ablation/l2_coverage.json",
-        "generation/ragas/metrics.json",
+        "retrieval/ablation/threshold_sensitivity/threshold_sensitivity_full_20261105_deepseek41.json",
+        "retrieval/ablation/threshold_sensitivity/threshold_sensitivity_vector_only_20261105_deepseek41.json",
+        "retrieval/ablation/l2_coverage_20261105_deepseek41.json",
+        "generation/ragas/ragas_freeze20261016.json",
     ]
     hdr = f"  {'归档':<56}{'ts':<4}{'cfg':<5}{'golden':<8}{'code':<6}{'脚本'}"
     print(hdr)
@@ -112,10 +112,10 @@ def check_archives_traceability() -> None:
 def check_doc_to_json() -> None:
     print("\n" + "=" * 96)
     print("④ 文档数字 → JSON 抽样反查（论文表 2 的 full 行）")
-    d = load(R / "retrieval/ablation/component_ablation.json") or {}
+    d = load(R / "retrieval/ablation/component_ablation_20261104_full156_deepseek41.json") or {}
     row = next((r for r in d.get("rows", []) if r["config"] == "full"), None)
-    print("  paper_tables 表 2 full kp_mrr 应为 0.9625")
-    print(f"  component_ablation.json full → {row}")
+    print("  paper_tables 表 2 full kp_mrr 应为 0.8309")
+    print(f"  component_ablation_20261104_full156_deepseek41.json full → {row}")
     print(f"  该 JSON 的 config_snapshot.full = {(d.get('config_snapshot') or {}).get('full')}")
     print(f"  该 JSON 的 golden / limit      = {d.get('golden')} / {d.get('limit')}")
 
