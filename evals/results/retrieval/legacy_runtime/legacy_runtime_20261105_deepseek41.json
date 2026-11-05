@@ -1,6 +1,6 @@
 {
   "_meta": {
-    "recorded_at": "2026-11-05T05:05:29.869397+00:00",
+    "recorded_at": "2026-11-05T15:28:36.508195+00:00",
     "note": "Legacy 运行时三策略；不改索引、不改 layer_weight 数字",
     "probes": [
       "method-tree-build",
@@ -101,10 +101,10 @@
             "exams",
             "basic",
             "basic",
-            "advanced",
             "basic",
             "advanced",
-            "advanced"
+            "basic",
+            "basic"
           ]
         },
         {
@@ -223,10 +223,10 @@
             "exams",
             "basic",
             "basic",
-            "advanced",
             "basic",
             "advanced",
-            "advanced"
+            "basic",
+            "basic"
           ]
         },
         {
@@ -345,10 +345,10 @@
             "exams",
             "basic",
             "basic",
-            "advanced",
             "basic",
             "advanced",
-            "advanced"
+            "basic",
+            "basic"
           ]
         },
         {
@@ -379,10 +379,10 @@
       }
     }
   ],
-  "recorded_at": "2026-11-05T05:05:29.869397+00:00",
+  "recorded_at": "2026-11-05T15:28:36.508195+00:00",
   "provenance": {
-    "recorded_at": "2026-11-05T05:05:29.869397+00:00",
-    "code_version": "ef0e0e3-dirty",
+    "recorded_at": "2026-11-05T15:28:36.508195+00:00",
+    "code_version": "305ced3",
     "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
     "script": "scripts/legacy_runtime_compare.py",
     "argv": [],

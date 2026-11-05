@@ -149,6 +149,9 @@ RAG LLM `dashscope:deepseek-v4.1-flash`。
    已不含 legacy 资产，策略没有可作用的对象。 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`）
 2. 旧结论「drop 后层精度 1.000」在当前语料下**不是策略效应**，而是 legacy 池不存在；该对比不能再作为「exclude 优于 keep/downrank」的证据。§3 保留为旧体系结论。 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`）
 
+★ **2026-11-05 重跑（干净锚点 `305ced3`）**：三策略读数逐项不变（1.000 / 1.000 / 0），
+且产出脚本 `scripts/legacy_runtime_compare.py` 已恢复到库（原先被 `0cac1d4` 删除，归档指向不存在的脚本）。 （证据：`evals/results/retrieval/legacy_runtime/legacy_runtime_20261105_deepseek41.json`）
+
 ---
 
 ## 4. 检索质量门禁基线（156 条全集）
@@ -583,10 +586,18 @@ RAG LLM `dashscope:deepseek-v4.1-flash`。
 
 | config | kp_hit | kp_mrr | cat@1 | cat_mrr | evidence |
 |---|---|---|---|---|---|
-| full | 1.000±0.000 | 0.9236±0.000 | 0.933±0.000 | 0.960±0.000 | 5.850±0.029 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
-| no_bm25 | 0.983±0.000 | 0.922±0.001 | 0.900±0.000 | 0.947±0.001 | 5.800±0.029 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
-| no_metadata | 1.000±0.000 | 0.919±0.000 | 0.950±0.000 | 0.972±0.000 | 6.083±0.029 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
-| vector_only | 0.983±0.000 | 0.915±0.005 | 0.900±0.000 | 0.946±0.000 | 5.911±0.035 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| full | 1.000±0.000 | 0.9319±0.0072 | 0.944±0.010 | 0.968±0.007 | 5.861±0.048 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| no_bm25 | 0.972±0.010 | 0.9181±0.0024 | 0.900±0.000 | 0.943±0.002 | 5.811±0.048 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| no_metadata | 1.000±0.000 | 0.9222±0.0048 | 0.950±0.000 | 0.972±0.000 | 6.100±0.058 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+| vector_only | 0.983±0.000 | 0.9208±0.000 | 0.900±0.000 | 0.946±0.000 | 5.906±0.026 （证据：`evals/results/retrieval/ablation/component_variance/summary.json`） |
+
+★ **2026-11-05 重跑（干净锚点 `305ced3`）推翻了旧的「std ≤ 0.005」表述**：同一配置三跑的 `kp_mrr`
+本轮取到 **0.9236 / 0.9361 / 0.9361（极差 0.0125，std 0.0072）**，`cat@1` std 0.0096。
+旧读数（三次同值）是**同一并列打破次序的偶然结果**，不是稳定性的证据。
+根因同 `docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b)：60 条子集上多条 query 落在分数并列边界，
+下游单键排序（如 `dedup_same_section`）的次序受并发路由完成次序影响；`src/rag` 自实验以来零改动，
+可排除代码变化。 ⇒ **稳定性表述改为「三跑 std ≤ 0.010」**；组件贡献仍一律以表 2（全量 156）为准。
+（证据：`evals/results/retrieval/ablation/component_variance/summary.json`）
 
 **配对 Δ vs full**：
 
@@ -824,7 +835,9 @@ RAG LLM `dashscope:deepseek-v4.1-flash`。
 
 - L2 总 chunk **98**（DS 38 / OS 21 / CO 20 / CN 19），与旧体系一致。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
 - method 6 条：**6/6 L2 进池且进包（B1:OK）**；旧体系 4/6「召回不到」。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
-- pack 中 L2 chunk **12 条，错学科 0 条，污染率 0.0%**（旧 4/10 = 40.0%）。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
+- pack 中 L2 chunk **15 条（本轮），错学科 0 条，污染率 0.0%**（旧 4/10 = 40.0%）。
+  ★ 该计数**对并列打破敏感**：同配置三次运行分别取到 12 / 14 / 15（`src/rag` 自实验以来零改动，
+  差异来自 §6.3(b) 的排序次序）⇒ 引用时写**区间 12–15**，不要单点引 12。 （证据：`evals/results/retrieval/ablation/l2_coverage_20261105_deepseek41.json`）
 
 **与 16.4 的差异**：
 

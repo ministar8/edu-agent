@@ -1,6 +1,6 @@
 {
   "run_id": 2,
-  "recorded_at": "2026-11-05T05:16:05.171258+00:00",
+  "recorded_at": "2026-11-05T15:31:22.993064+00:00",
   "golden": "evals/datasets/golden/sample_408.jsonl",
   "limit": 60,
   "configs": [
@@ -9,18 +9,18 @@
     "no_metadata",
     "vector_only"
   ],
-  "elapsed_s": 66.9,
+  "elapsed_s": 67.7,
   "config_metrics": {
     "full": {
       "n_queries": 60,
-      "category_hit_at_1": 0.9333,
+      "category_hit_at_1": 0.95,
       "category_hit_at_k": 1.0,
-      "category_mrr": 0.9597,
-      "category_precision": 0.9348,
+      "category_mrr": 0.9722,
+      "category_precision": 0.9465,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.8833,
+      "mean_evidence_count": 5.9167,
       "kp_hit_at_k": 1.0,
-      "kp_mrr": 0.9236,
+      "kp_mrr": 0.9361,
       "kp_annotated": 60.0,
       "n_errors": 0,
       "errors": []
@@ -28,13 +28,13 @@
     "no_bm25": {
       "n_queries": 60,
       "category_hit_at_1": 0.9,
-      "category_hit_at_k": 1.0,
-      "category_mrr": 0.9472,
-      "category_precision": 0.9286,
+      "category_hit_at_k": 0.9833,
+      "category_mrr": 0.9417,
+      "category_precision": 0.9205,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.8333,
-      "kp_hit_at_k": 0.9833,
-      "kp_mrr": 0.9222,
+      "mean_evidence_count": 5.8667,
+      "kp_hit_at_k": 0.9667,
+      "kp_mrr": 0.9167,
       "kp_annotated": 60.0,
       "n_errors": 0,
       "errors": []
@@ -44,9 +44,9 @@
       "category_hit_at_1": 0.95,
       "category_hit_at_k": 1.0,
       "category_mrr": 0.9722,
-      "category_precision": 0.9183,
+      "category_precision": 0.9189,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 6.1167,
+      "mean_evidence_count": 6.1667,
       "kp_hit_at_k": 1.0,
       "kp_mrr": 0.9194,
       "kp_annotated": 60.0,
@@ -58,11 +58,11 @@
       "category_hit_at_1": 0.9,
       "category_hit_at_k": 1.0,
       "category_mrr": 0.9458,
-      "category_precision": 0.9356,
+      "category_precision": 0.9354,
       "empty_result_rate": 0.0,
-      "mean_evidence_count": 5.95,
+      "mean_evidence_count": 5.9333,
       "kp_hit_at_k": 0.9833,
-      "kp_mrr": 0.9125,
+      "kp_mrr": 0.9208,
       "kp_annotated": 60.0,
       "n_errors": 0,
       "errors": []
@@ -664,7 +664,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 8,
+      "evidence_count": 10,
       "infra_error": ""
     },
     {
@@ -752,9 +752,9 @@
       "query": "目录项与索引结点（inode）的关系是什么？",
       "kp_annotated": true,
       "kp_hit": 1,
-      "kp_mrr": 0.25,
-      "cat_hit_at_1": 0,
-      "cat_mrr": 0.25,
+      "kp_mrr": 1.0,
+      "cat_hit_at_1": 1,
+      "cat_mrr": 1.0,
       "evidence_count": 5,
       "infra_error": ""
     },
@@ -1444,7 +1444,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 8,
+      "evidence_count": 10,
       "infra_error": ""
     },
     {
@@ -1557,10 +1557,10 @@
       "query_id": "q054",
       "query": "局部性原理包括哪两个方面？它与虚拟存储是什么关系？",
       "kp_annotated": true,
-      "kp_hit": 1,
-      "kp_mrr": 0.3333333333333333,
+      "kp_hit": 0,
+      "kp_mrr": 0.0,
       "cat_hit_at_1": 0,
-      "cat_mrr": 0.3333333333333333,
+      "cat_mrr": 0.0,
       "evidence_count": 5,
       "infra_error": ""
     },
@@ -1782,7 +1782,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 9,
+      "evidence_count": 10,
       "infra_error": ""
     },
     {
@@ -2224,7 +2224,7 @@
       "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 8,
+      "evidence_count": 10,
       "infra_error": ""
     },
     {
@@ -2624,10 +2624,10 @@
       "query": "顺序表和链表各有什么优缺点？",
       "kp_annotated": true,
       "kp_hit": 1,
-      "kp_mrr": 0.5,
+      "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
-      "evidence_count": 10,
+      "evidence_count": 9,
       "infra_error": ""
     },
     {
@@ -3191,8 +3191,8 @@
     }
   ],
   "provenance": {
-    "recorded_at": "2026-11-05T05:16:05.171258+00:00",
-    "code_version": "0c93c1e-dirty",
+    "recorded_at": "2026-11-05T15:31:22.993064+00:00",
+    "code_version": "305ced3",
     "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
     "script": "scripts/exp/component_variance.py",
     "argv": [

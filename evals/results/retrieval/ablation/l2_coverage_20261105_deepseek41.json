@@ -115,8 +115,8 @@
       "query": "如何判断一个二叉树是平衡二叉树？",
       "l2_in_pool": true,
       "l2_pool_ranks": [
-        2,
-        5
+        4,
+        6
       ],
       "l2_in_pack": true,
       "l2_pack_sources": [
@@ -127,7 +127,6 @@
         "树与二叉树",
         "树与二叉树",
         "树与二叉树",
-        "查找",
         "树与二叉树"
       ]
     },
@@ -152,10 +151,10 @@
       ]
     }
   ],
-  "recorded_at": "2026-11-05T05:05:59.233180+00:00",
+  "recorded_at": "2026-11-05T15:28:33.266937+00:00",
   "provenance": {
-    "recorded_at": "2026-11-05T05:05:59.233180+00:00",
-    "code_version": "ef0e0e3-dirty",
+    "recorded_at": "2026-11-05T15:28:33.266937+00:00",
+    "code_version": "305ced3",
     "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
     "script": "scripts/l2_coverage_analysis.py",
     "argv": [],

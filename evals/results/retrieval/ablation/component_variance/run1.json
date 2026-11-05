@@ -1,6 +1,6 @@
 {
   "run_id": 1,
-  "recorded_at": "2026-11-05T05:14:55.329467+00:00",
+  "recorded_at": "2026-11-05T15:30:12.036772+00:00",
   "golden": "evals/datasets/golden/sample_408.jsonl",
   "limit": 60,
   "configs": [
@@ -9,7 +9,7 @@
     "no_metadata",
     "vector_only"
   ],
-  "elapsed_s": 62.2,
+  "elapsed_s": 69.9,
   "config_metrics": {
     "full": {
       "n_queries": 60,
@@ -48,7 +48,7 @@
       "empty_result_rate": 0.0,
       "mean_evidence_count": 6.0667,
       "kp_hit_at_k": 1.0,
-      "kp_mrr": 0.9194,
+      "kp_mrr": 0.9278,
       "kp_annotated": 60.0,
       "n_errors": 0,
       "errors": []
@@ -62,7 +62,7 @@
       "empty_result_rate": 0.0,
       "mean_evidence_count": 5.8833,
       "kp_hit_at_k": 0.9833,
-      "kp_mrr": 0.9125,
+      "kp_mrr": 0.9208,
       "kp_annotated": 60.0,
       "n_errors": 0,
       "errors": []
@@ -1844,7 +1844,7 @@
       "query": "顺序表和链表各有什么优缺点？",
       "kp_annotated": true,
       "kp_hit": 1,
-      "kp_mrr": 0.5,
+      "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
       "evidence_count": 10,
@@ -2624,7 +2624,7 @@
       "query": "顺序表和链表各有什么优缺点？",
       "kp_annotated": true,
       "kp_hit": 1,
-      "kp_mrr": 0.5,
+      "kp_mrr": 1.0,
       "cat_hit_at_1": 1,
       "cat_mrr": 1.0,
       "evidence_count": 10,
@@ -3191,8 +3191,8 @@
     }
   ],
   "provenance": {
-    "recorded_at": "2026-11-05T05:14:55.329467+00:00",
-    "code_version": "0c93c1e-dirty",
+    "recorded_at": "2026-11-05T15:30:12.036772+00:00",
+    "code_version": "305ced3",
     "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
     "script": "scripts/exp/component_variance.py",
     "argv": [
