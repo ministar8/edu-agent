@@ -1,6 +1,8 @@
 """Agent 构建工厂：统一创建 LangChain agent 图。
 
 图对象直接传给 create_supervisor；工厂只负责装配，不维护未被消费的元信息副本。
+
+system_prompt 应为纯字符串（第1层提示词），由 create_agent 直接使用。
 """
 
 from __future__ import annotations
@@ -48,13 +50,14 @@ def build_agent(
 ) -> Any:
     """创建 LangChain agent 图。
 
-    默认挂 RuntimeModelMiddleware：API 层写入的 configurable.model 在调用时生效。
+    system_prompt 应为纯字符串（第1层提示词），由 create_agent 直接使用。
     """
     from agents.runtime_model import runtime_model_middleware
     from core import get_model, settings
 
     resolved_model = model_ref if model_ref is not None else settings.DEFAULT_MODEL
     model = get_model(resolved_model, temperature=temperature)
+
     kwargs: dict[str, Any] = {
         "model": model,
         "tools": tools,

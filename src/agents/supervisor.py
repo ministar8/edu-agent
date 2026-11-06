@@ -38,7 +38,7 @@ from agents.knowledge_agent import knowledge_agent
 from agents.question_agent import question_agent
 from agents.temperature import TEMPERATURE_SUPERVISOR
 from core import get_model, settings
-from prompts import SUPERVISOR_PROMPT
+from prompts.templates import SUPERVISOR_PROMPT_TEMPLATE as SUPERVISOR_PROMPT
 
 _SPECIALISTS = (knowledge_agent, question_agent, grading_agent)
 

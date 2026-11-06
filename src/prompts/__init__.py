@@ -1,16 +1,20 @@
 """提示词统一入口：集中导出 + import 期校验。
 
+顶层 __init__.py 的三个职责：
+  1. 收集所有最终 Prompt（supervisor、agents、rag、service 等）。
+  2. 调用 _validate.py 完成启动期校验：模板变量写错或纯字符串提示词里混进
+     花括号，都会让服务启动失败，而不是等第一个请求打到那条路径才炸。
+  3. 计算 PROMPT_SET_VERSION —— 全部提示词内容的 hash，随 trace metadata 上报，
+     用于把「输出质量变化」归因到「提示词变化」。
+
 按消费方分模块：
-  - `agents.py`     三个专业 agent 的 system prompt（纯 str，供 create_agent）
-  - `supervisor.py` 多 agent 分派 prompt（纯 str，供 create_supervisor）
-  - `rag.py`        RAG 层单轮任务模板（ChatPromptTemplate）
-  - `service.py`    service 层出题与批改模板（ChatPromptTemplate）
-
-**导入本包即触发校验**（见 `_validate.py`）：模板变量写错或纯字符串提示词里混进
-花括号，都会让服务启动失败，而不是等第一个请求打到那条路径才炸。
-
-另外导出 `PROMPT_SET_VERSION` —— 全部提示词内容的 hash，随 trace metadata 上报，
-用于把「输出质量变化」归因到「提示词变化」。
+  - `prompts.supervisor`  Supervisor Prompt（路由主管，第1层纯字符串）
+  - `prompts.agents`      三个专业 Agent Prompt（第1层纯字符串）
+  - `prompts.templates`   Supervisor Prompt 模板（第2层 ChatPromptTemplate）
+  - `prompts.rag`         RAG 层单轮任务模板（ChatPromptTemplate）
+  - `prompts.service`     service 层出题与批改模板（ChatPromptTemplate）
+  - `prompts.common`      公共行为规则（各 Prompt 自行按需导入，不强制统一拼接）
+  - `prompts.structure`   统一结构规范（5 字段骨架 + 统一组装函数）
 """
 
 import hashlib
@@ -18,20 +22,31 @@ import hashlib
 from langchain_core.prompts import ChatPromptTemplate
 
 from prompts._validate import validate_static_prompt, validate_template
+from prompts.common import (
+    SAFETY_RULES,
+    OUTPUT_FORMAT_RULES,
+    LENGTH_LIMIT_RULE,
+    STRUCTURED_OUTPUT_RULE,
+    JSON_ONLY_RULE,
+)
+from prompts.supervisor import SUPERVISOR_PROMPT
 from prompts.agents import (
-    GRADING_AGENT_SYSTEM_PROMPT,
     KNOWLEDGE_AGENT_SYSTEM_PROMPT,
     QUESTION_AGENT_SYSTEM_PROMPT,
-    QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
+    GRADING_AGENT_SYSTEM_PROMPT,
 )
+from prompts.templates import SUPERVISOR_PROMPT_TEMPLATE
 from prompts.rag import CLASSIFY_PROMPT, DECOMPOSE_PROMPT, HYDE_PROMPT, RELEVANCE_PROMPT
-from prompts.service import GRADE_PROMPT, QUESTION_GEN_PROMPT
-from prompts.supervisor import SUPERVISOR_PROMPT
+from prompts.service import GRADE_PROMPT, QUESTION_GEN_PROMPT, QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
 
 __all__ = [
+    "SAFETY_RULES",
+    "OUTPUT_FORMAT_RULES",
+    "LENGTH_LIMIT_RULE",
+    "STRUCTURED_OUTPUT_RULE",
+    "JSON_ONLY_RULE",
     "CLASSIFY_PROMPT",
     "DECOMPOSE_PROMPT",
-    "GRADE_PROMPT",
     "GRADING_AGENT_SYSTEM_PROMPT",
     "HYDE_PROMPT",
     "KNOWLEDGE_AGENT_SYSTEM_PROMPT",
@@ -41,6 +56,7 @@ __all__ = [
     "QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT",
     "RELEVANCE_PROMPT",
     "SUPERVISOR_PROMPT",
+    "SUPERVISOR_PROMPT_TEMPLATE",
 ]
 
 # 纯字符串提示词：无变量，但必须确保没人往里写了花括号（不会被格式化）
@@ -48,12 +64,12 @@ _STATIC_PROMPTS = {
     "prompts.agents.KNOWLEDGE_AGENT_SYSTEM_PROMPT": KNOWLEDGE_AGENT_SYSTEM_PROMPT,
     "prompts.agents.GRADING_AGENT_SYSTEM_PROMPT": GRADING_AGENT_SYSTEM_PROMPT,
     "prompts.agents.QUESTION_AGENT_SYSTEM_PROMPT": QUESTION_AGENT_SYSTEM_PROMPT,
-    "prompts.agents.QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT": QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
+    "prompts.service.QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT": QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
     "prompts.supervisor.SUPERVISOR_PROMPT": SUPERVISOR_PROMPT,
 }
 
 # 带变量的模板 → 期望变量（集中登记；改模板必须同步这里）
-_TEMPLATES: dict[str, tuple[ChatPromptTemplate, set[str]]] = {
+_TEMPLATES: dict = {
     "prompts.rag.HYDE_PROMPT": (HYDE_PROMPT, {"query", "max_chars"}),
     "prompts.rag.CLASSIFY_PROMPT": (CLASSIFY_PROMPT, {"query"}),
     "prompts.rag.DECOMPOSE_PROMPT": (DECOMPOSE_PROMPT, {"query", "max_subs"}),
@@ -66,9 +82,13 @@ _TEMPLATES: dict[str, tuple[ChatPromptTemplate, set[str]]] = {
         QUESTION_GEN_PROMPT,
         {"count", "topic", "difficulty"},
     ),
+    "prompts.templates.SUPERVISOR_PROMPT_TEMPLATE": (
+        SUPERVISOR_PROMPT_TEMPLATE,
+        {"messages"},
+    ),
 }
 
-# ── 集中校验：写错 → import 期直接报错 ──────────────────────
+# ── 职责 2：调用 _validate.py 完成启动期校验 ──────────────────────
 for _name, _text in _STATIC_PROMPTS.items():
     validate_static_prompt(_text, name=_name)
 
@@ -93,4 +113,5 @@ def _compute_prompt_set_version() -> str:
     return digest[:12]
 
 
+# 职责 3：计算 PROMPT_SET_VERSION
 PROMPT_SET_VERSION = _compute_prompt_set_version()

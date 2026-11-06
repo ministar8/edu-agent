@@ -7,9 +7,24 @@
 调用点是否更新仍靠人；但模板一改，登记表不匹配就会在 import 期直接报错，不会静默。
 """
 
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 _DRY_RUN_VALUE = "x"
+
+
+def _dry_run_values(variables: set[str]) -> dict:
+    """为模板变量生成干运行值。
+
+    MessagesPlaceholder 变量需要传入消息列表，普通字符串变量传入占位符字符串。
+    """
+    values = {}
+    for var in variables:
+        if var == "messages":
+            values[var] = [HumanMessage(content="dry run message")]
+        else:
+            values[var] = _DRY_RUN_VALUE
+    return values
 
 
 def validate_template(
@@ -28,7 +43,7 @@ def validate_template(
             f"{name} 的变量与登记不一致：模板需要 {sorted(actual)}，登记为 {sorted(variables)}。"
             " 改模板后请同步调用点与本登记处。"
         )
-    template.format_messages(**dict.fromkeys(actual, _DRY_RUN_VALUE))
+    template.format_messages(**_dry_run_values(variables))
 
 
 def validate_static_prompt(text: str, *, name: str) -> None:

@@ -5,7 +5,7 @@ from typing import Any
 from agents.factory import build_agent
 from agents.temperature import TEMPERATURE_KNOWLEDGE
 from agents.tools import aknowledge_search, atext_search
-from prompts import KNOWLEDGE_AGENT_SYSTEM_PROMPT
+from prompts.agents.knowledge import KNOWLEDGE_AGENT_SYSTEM_PROMPT
 
 knowledge_agent: Any = build_agent(
     name="knowledge_agent",

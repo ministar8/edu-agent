@@ -5,7 +5,7 @@ from typing import Any
 from agents.factory import build_agent
 from agents.temperature import TEMPERATURE_GRADING
 from agents.tools import agrade_student_answer, asearch_standard_answer
-from prompts import GRADING_AGENT_SYSTEM_PROMPT
+from prompts.agents.grading import GRADING_AGENT_SYSTEM_PROMPT
 
 grading_agent: Any = build_agent(
     name="grading_agent",
