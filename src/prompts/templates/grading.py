@@ -64,8 +64,9 @@ GRADE_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
             "system",
-            "批改 408 考研题目作答并输出结构化结果。\n"
+            "批改 408 考研题目作答并输出结构化 JSON 结果。\n"
             "评分 0-100；若学生答错（score<60）需填写 error_analysis 分析错因与改进建议。\n"
+            "输出字段：score、feedback、is_wrong（score<60 为 true）、error_analysis、knowledge_points。\n"
             # ★ 2026-10-06（Step 5 实测）：feedback 超长会让整个批改**硬失败**。
             #   `GradingResult.feedback` 此前是 `max_length=800`（Pydantic 强校验），
             #   实测模型输出 >800 字符 ⇒ `ValidationError` ⇒ `call_structured` 返回 None

@@ -256,7 +256,16 @@ async def invoke(
     kwargs, run_id = await _handle_input(user_input, agent, agent_id, str(current_user.id))
     try:
         response_events: list[tuple[str, Any]] = await agent.ainvoke(**kwargs, stream_mode=["updates", "values"])  # type: ignore[no-matching-overload]  # fmt: skip
-        response_type, response = response_events[-1]
+        # Supervisor 分派给子 Agent 时，最后一条事件可能是 updates 类型（仅含节点级更新），
+        # 而非 values 类型（含完整 messages）。需从后向前找到最后一条 values 事件。
+        response_type, response = None, None
+        for rt, r in reversed(response_events):
+            if rt == "values":
+                response_type, response = rt, r
+                break
+        if response_type is None:
+            # 兜底：使用最后一条事件
+            response_type, response = response_events[-1]
         if "__interrupt__" in response:
             output = langchain_to_chat_message(
                 AIMessage(content=response["__interrupt__"][0].value)
