@@ -36,6 +36,7 @@ from langgraph_supervisor import create_supervisor
 from agents.grading_agent import grading_agent
 from agents.knowledge_agent import knowledge_agent
 from agents.question_agent import question_agent
+from agents.state import SupervisorState
 from agents.temperature import TEMPERATURE_SUPERVISOR
 from core import get_model, settings
 from prompts.templates import SUPERVISOR_PROMPT_TEMPLATE as SUPERVISOR_PROMPT
@@ -181,6 +182,9 @@ workflow = create_supervisor(
     list(_SPECIALISTS),
     model=get_model(settings.DEFAULT_MODEL, temperature=TEMPERATURE_SUPERVISOR),
     prompt=SUPERVISOR_PROMPT,
+    # 内层 State 独立定义：必须继承 prebuilt AgentState（含 remaining_steps），
+    # 否则 create_react_agent 在构造期直接 ValueError。
+    state_schema=SupervisorState,
     # 只保留子 agent 最后一条回答，避免 full_history 把中间检索/重复内容透传给前端
     output_mode="last_message",
     # transfer_to_* 的分派控制消息（AI tool_call + ToolMessage 对）不写入消息历史：

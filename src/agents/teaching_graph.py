@@ -1,4 +1,8 @@
-"""教学图：入口写入工作记忆（以 SystemMessage 形态进 messages），再进 supervisor。
+"""教学图：任务初始化 → 写入工作记忆 → supervisor → 收尾。
+
+管线：``prepare_task → load_memory → supervisor → finalize``。
+``prepare_task`` 负责 task_id / context_mode；``load_memory`` 只写记忆卡；
+``supervisor`` 做边界 A 的白名单搬运并推断执行者；``finalize`` 判定业务结果。
 
 记忆卡以一条 SystemMessage 让专家可见，service 流式侧过滤 system 消息，避免污染 SSE。
 
@@ -11,14 +15,16 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from typing import Any
 
 from langchain_core.messages import RemoveMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import MessagesState
 from langgraph.store.base import BaseStore
 
+from agents.lifecycle import finalize, prepare_task
+from agents.state import TeachingState, infer_execution
 from agents.supervisor import inner_supervisor
-from agents.task_context import load_thread_context, remember_query_mode
+from agents.task_context import set_context_mode
 from core import settings
 from memory.runtime import get_store
 from memory.safe import safe_remember_status
@@ -31,9 +37,11 @@ logger = logging.getLogger(__name__)
 MEMORY_CARD_MESSAGE_ID = "edu_memory_card"
 
 # ── B4 的可观测出口：本轮读链的**状态**（`memory_read_status` 的原料）──────
-#   ★ 为什么放在模块级、而不是塞进 graph state：`MessagesState` 只有 `messages` 一个
-#     channel，节点返回的其它键会被 LangGraph **静默丢弃**（实测：`{"messages": [], "x": 1}`
-#     ⇒ updates 流与最终 state 里都没有 `x`）。走 state 等于把状态写进黑洞。
+#   ★ 为什么放在模块级、而不是塞进 graph state：这是**取证**通道（一个评测单元有多条
+#     明细、由边界统一 reset），不是业务状态。写进 checkpoint 会随线程永久累积，
+#     而 reset 只发生在取证单元边界（产品侧没人调）。
+#     （历史上 `MessagesState` 只有 messages 一个 channel、节点返回的其它键会被静默丢弃；
+#      现在 `TeachingState` 已有业务字段，但这条通道的用途没变：只服务四态归因。）
 #   ★ 与 `vectorstore._query_failures` 同构：append-only + `reset` 由取证单元在开跑前调，
 #     消费方（`task_eval.runner.run_case`）在跑完后聚合成四态之一。
 #   ★ 产品侧不读它 —— 它只服务「把 0.5 是不是 Store 挂了变成有证据可答」。
@@ -115,7 +123,7 @@ async def abuild_card_with_status(
     return (card or ""), ("success" if card else "empty")
 
 
-async def load_memory(state: MessagesState, config=None) -> dict:
+async def load_memory(state: TeachingState, config=None) -> dict:
     """读 Store 生成记忆卡（超时/失败则空），以固定 ID SystemMessage 注入 messages。
     同时清理历史 checkpoint 里累积的旧 SystemMessage（旧版本无固定 ID，
     每轮追加一张卡），保证 state 里至多存在一张当前卡。
@@ -146,41 +154,47 @@ async def load_memory(state: MessagesState, config=None) -> dict:
     elif removes:
         updates["messages"] = removes
 
-    # 多轮 task_mode：载入线程上下文，并记住本轮用户 query 的 mode
-    try:
-        conf = (config or {}).get("configurable") or {}
-        tid = str(conf.get("thread_id") or "")
-        load_thread_context(tid, config)
-        last_user = ""
-        for m in reversed(state.get("messages") or []):
-            if getattr(m, "type", "") == "human" or m.__class__.__name__ == "HumanMessage":
-                last_user = str(getattr(m, "content", "") or "")
-                break
-        if last_user:
-            remember_query_mode(last_user, thread_id=tid, config=config)
-    except Exception:
-        logger.debug("task_context track failed", exc_info=True)
-
     return updates
 
 
-async def run_supervisor(state: MessagesState, config=None) -> dict:
+# 边界 A 的入参白名单：外层 TeachingState → 内层 SupervisorState。
+# 不进 payload 的字段，内层就是拿不到（刻意用白名单，新增字段时才会被迫显式决定）。
+_INBOUND_KEYS = ("task_context", "context_mode")
+
+
+async def run_supervisor(state: TeachingState, config=None) -> dict:
     raw = state.get("messages") or []
     # 只裁剪「本轮送给模型的输入」；state/checkpointer 仍保留完整历史
     trimmed = trim_conversation(raw, max_messages=settings.MEMORY_HISTORY_MAX_MESSAGES)
-    result = await inner_supervisor.ainvoke({"messages": trimmed}, config=config)
-    if isinstance(result, dict):
-        return {"messages": result.get("messages") or []}
-    return {}
+    payload: dict[str, Any] = {"messages": trimmed}
+    payload.update({k: state[k] for k in _INBOUND_KEYS if k in state})
+
+    # ContextVar 未必能跨嵌套图传播：这里再设一次，兜住检索链里的同步读取。
+    set_context_mode(state.get("context_mode"))
+
+    result = await inner_supervisor.ainvoke(payload, config=config)
+    if not isinstance(result, dict):
+        return {}
+
+    # active_agent / task_mode 独立推断；异常路径不会走到这里（异常直接上抛）。
+    inferred = infer_execution(result.get("messages") or [], run_ok=True)
+    return {
+        "messages": result.get("messages") or [],
+        **inferred,
+    }
 
 
 def build_teaching_graph():
-    builder: StateGraph = StateGraph(MessagesState)
+    builder: StateGraph = StateGraph(TeachingState)
+    builder.add_node("prepare_task", prepare_task)
     builder.add_node("load_memory", load_memory)
     builder.add_node("supervisor", run_supervisor)
-    builder.add_edge(START, "load_memory")
+    builder.add_node("finalize", finalize)
+    builder.add_edge(START, "prepare_task")
+    builder.add_edge("prepare_task", "load_memory")
     builder.add_edge("load_memory", "supervisor")
-    builder.add_edge("supervisor", END)
+    builder.add_edge("supervisor", "finalize")
+    builder.add_edge("finalize", END)
     return builder.compile()
 
 

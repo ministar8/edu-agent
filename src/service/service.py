@@ -1,5 +1,6 @@
 """FastAPI 服务：暴露多 Agent 问答（token/message 双流式）与 JWT 认证。"""
 
+import asyncio
 import json
 import logging
 import warnings
@@ -195,18 +196,28 @@ def _check_thread_owner(
 
 async def _handle_input(
     user_input: UserInput, agent: Any, agent_id: str, user_id: str
-) -> tuple[dict[str, Any], str]:
-    """组装 agent 调用参数，并处理 interrupt 恢复；返回 (kwargs, run_id)。"""
+) -> tuple[dict[str, Any], str, str]:
+    """组装 agent 调用参数，并处理 interrupt 恢复；返回 (kwargs, run_id, task_id)。
+
+    ``request_id`` 由服务端生成并写入 ``configurable``：MVP 不做客户端幂等，
+    但它让 ``prepare_task`` 能算出稳定 task_id，供失败守卫使用。
+    """
     run_id = uuid4()
     thread_id = user_input.thread_id or str(uuid4())
+    request_id = str(uuid4())
+    task_id = f"{thread_id}:{request_id}"
 
-    configurable: dict[str, Any] = {"thread_id": thread_id, "user_id": user_id}
+    configurable: dict[str, Any] = {
+        "thread_id": thread_id,
+        "user_id": user_id,
+        "request_id": request_id,
+    }
     if user_input.model is not None:
         ensure_model_available(user_input.model)
         configurable["model"] = user_input.model
 
     if user_input.agent_config:
-        reserved_keys = {"thread_id", "user_id", "model"}
+        reserved_keys = {"thread_id", "user_id", "model", "request_id"}
         if overlap := reserved_keys & user_input.agent_config.keys():
             raise bad_request(
                 CODE_INVALID_CONFIG, f"agent_config contains reserved keys: {overlap}"
@@ -238,7 +249,41 @@ async def _handle_input(
     else:
         input = {"messages": [HumanMessage(content=user_input.message)]}
 
-    return {"input": input, "config": config}, str(run_id)
+    return {"input": input, "config": config}, str(run_id), task_id
+
+
+async def _mark_failed(agent: Any, config: RunnableConfig, task_id: str, exc: Exception) -> None:
+    """把未闭环的任务标记为 failed。
+
+    两道守卫（缺一不可）：
+    ① ``task_id`` —— 同 thread 并发时，读到的可能是另一个请求的 State；
+    ② ``task_status`` —— 已经 completed 的任务，不能被响应/传输层异常改写。
+
+    图内节点抛异常时它返回的 update 不会提交，所以只能由图外的服务层写。
+    """
+    try:
+        current = await agent.aget_state(config=config)
+        values = current.values or {}
+        if values.get("task_id") != task_id:
+            return
+        if values.get("task_status") in ("completed", "failed"):
+            return
+        await agent.aupdate_state(
+            config,
+            {
+                "task_status": "failed",
+                "error": {
+                    "code": "GRAPH_RUN_FAILED",
+                    "message": str(exc)[:500],
+                    # MVP 只有三段：prepare / finalize 由节点自写，服务层兜底记 supervisor
+                    "stage": "supervisor",
+                    "recoverable": False,
+                },
+            },
+        )
+    except Exception:
+        # 标记失败本身失败时不能掩盖原始异常：只记日志
+        logger.error("mark task failed unsuccessful: task_id=%s", task_id, exc_info=True)
 
 
 @router.post("/{agent_id}/invoke", operation_id="invoke_with_agent_id")
@@ -253,12 +298,22 @@ async def invoke(
     未指定 agent_id 时使用默认 agent；路径形式为 `/{agent_id}/invoke`。
     """
     agent = _resolve_agent(agent_id)
-    kwargs, run_id = await _handle_input(user_input, agent, agent_id, str(current_user.id))
+    kwargs, run_id, task_id = await _handle_input(user_input, agent, agent_id, str(current_user.id))
     try:
         response_events: list[tuple[str, Any]] = await agent.ainvoke(**kwargs, stream_mode=["updates", "values"])  # type: ignore[no-matching-overload]  # fmt: skip
+    except asyncio.CancelledError:
+        raise  # 客户端断开 ≠ 任务失败
+    except Exception as e:
+        # 只包图调用：之后的响应构建/序列化失败不属于任务失败
+        await _mark_failed(agent, kwargs["config"], task_id, e)
+        logger.error("Invoke failed: %s", e)
+        raise internal_error("Unexpected error") from e
+
+    try:
         # Supervisor 分派给子 Agent 时，最后一条事件可能是 updates 类型（仅含节点级更新），
         # 而非 values 类型（含完整 messages）。需从后向前找到最后一条 values 事件。
-        response_type, response = None, None
+        response_type: str | None = None
+        response: Any = None
         for rt, r in reversed(response_events):
             if rt == "values":
                 response_type, response = rt, r
@@ -277,12 +332,16 @@ async def invoke(
         output.run_id = run_id
         return output
     except Exception as e:
-        logger.error("Invoke failed: %s", e)
+        logger.error("Invoke response build failed: %s", e)
         raise internal_error("Unexpected error") from e
 
 
 async def message_generator(
-    user_input: StreamInput, agent: Any, kwargs: dict[str, Any], run_id: str
+    user_input: StreamInput,
+    agent: Any,
+    kwargs: dict[str, Any],
+    run_id: str,
+    task_id: str,
 ) -> AsyncGenerator[str, None]:
     """SSE 消息生成器：区分 token 流与 message 流。
 
@@ -329,6 +388,8 @@ async def message_generator(
                 for frame in _token_sse(event, user_input):
                     yield frame
     except Exception as e:
+        # 终态守卫在 _mark_failed 里：finalize 已写 completed 的不会被改写。
+        await _mark_failed(agent, kwargs["config"], task_id, e)
         logger.error("Error in message generator: %s", e)
         yield f"data: {json.dumps({'type': 'error', 'content': 'Internal server error'})}\n\n"
     finally:
@@ -367,9 +428,9 @@ async def stream(
     """
     agent = _resolve_agent(agent_id)
     # 先解析参数（含归属校验），再开始流，保证错误以 4xx 返回而非流中断
-    kwargs, run_id = await _handle_input(user_input, agent, agent_id, str(current_user.id))
+    kwargs, run_id, task_id = await _handle_input(user_input, agent, agent_id, str(current_user.id))
     return StreamingResponse(
-        message_generator(user_input, agent, kwargs, run_id),
+        message_generator(user_input, agent, kwargs, run_id, task_id),
         media_type="text/event-stream",
     )
 
