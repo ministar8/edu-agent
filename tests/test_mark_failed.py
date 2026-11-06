@@ -32,9 +32,10 @@ async def test_mark_failed_skips_when_task_id_mismatch() -> None:
     assert agent.updated is None
 
 
+@pytest.mark.parametrize("status", ["completed", "failed"])
 @pytest.mark.asyncio
-async def test_mark_failed_skips_terminal_task() -> None:
-    agent = _StubAgent({"task_id": "mine:r", "task_status": "completed"})
+async def test_mark_failed_skips_terminal_task(status: str) -> None:
+    agent = _StubAgent({"task_id": "mine:r", "task_status": status})
     await _mark_failed(agent, {}, "mine:r", RuntimeError("boom"))
     assert agent.updated is None
 

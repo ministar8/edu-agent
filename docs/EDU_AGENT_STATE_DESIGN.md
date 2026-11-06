@@ -1228,7 +1228,7 @@ ChatPromptValue → 子图 messages
 
 | 项 | 结果 |
 |----|------|
-| `pytest` | 76 passed, 1 skipped（新增 18 例：状态推断 / 生命周期 / 失败守卫 / 端到端烟雾） |
+| `pytest` | 82 passed, 1 skipped（新增 24 例：状态推断 / 生命周期 / 失败守卫 / 边界契约 / 端到端烟雾） |
 | 端到端 invoke | `task_id` 正确、`task_mode="chat"`、`active_agent=None`、`task_status="completed"` |
 | 同 thread 两次 invoke | `task_id` 每轮刷新、`messages` 2 → 4、`context_mode` 保留 |
 | `astream(subgraphs=True)` | `messages` 与 `updates` 两种流均正常 |
@@ -1242,6 +1242,20 @@ ChatPromptValue → 子图 messages
    `None` 与 `"supervisor"`。
 2. **ContextVar 不跨节点传播**：在 `prepare_task` 里 `set_context_mode` 后续节点读不到；
    必须在 `run_supervisor` 中、`ainvoke` 之前设置。已按实测调整（§11.1）。
+
+### 12.4 冻结契约（2026-11-06）
+
+**"冻结"的含义**：这三条是已实施并被测试锁定的不变量。后续改动破坏它们会在
+`pytest` 里直接红；不是"以后不许改"，而是"要改必须同时改测试并说明理由"。
+
+| # | 契约 | 不变量 | 锁定测试 |
+|---|------|--------|---------|
+| 1 | **`task_id` 守卫** | `_mark_failed` 只标记「本请求 + 未闭环」的任务；`completed` / `failed` 永不被覆盖 | `tests/test_mark_failed.py`（4 例） |
+| 2 | **`context_mode` 持久** | 新一轮 `prepare_task` 从旧 checkpoint 读上一轮值；`practice → 答案是 A → grade` 能复现 | `tests/test_state_contracts.py::test_context_mode_survives_checkpoint` |
+| 3 | **Schema 边界** | 边界 A 入参 = `messages` / `task_context` / `context_mode`；出参 = `messages` / `active_agent` / `task_mode`；`SupervisorState` 必含 `messages` + `remaining_steps` | `tests/test_state_contracts.py`（4 例） |
+
+> 契约 3 的两个方向都有测试：入参用替身内层图捕获 payload（多一个字段就红），
+> 出参用替身返回值断言键集合（少一个字段就红）。
 
 ---
 
