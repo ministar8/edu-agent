@@ -16,7 +16,7 @@ _SRC = Path(__file__).resolve().parents[2] / "src"
 
 # 模板符号 → 必须出现该符号的运行时文件（相对 src/）
 EXPECTED_CALLERS = {
-    "SUPERVISOR_PROMPT_TEMPLATE": "agents/supervisor.py",
+    "SUPERVISOR_PROMPT_TEMPLATE": "agents/orchestration/supervisor.py",
     "GRADE_PROMPT": "prompts/service/prompt_service.py",
     "QUESTION_GEN_PROMPT": "prompts/service/prompt_service.py",
 }
@@ -41,12 +41,12 @@ def test_grading_and_question_are_reached_via_prompt_service():
     assert "GRADE_PROMPT.format_messages" in service
     assert "QUESTION_GEN_PROMPT.format_messages" in service
 
-    grading_core = (_SRC / "agents/grading_core.py").read_text(encoding="utf-8")
-    question_core = (_SRC / "agents/question_core.py").read_text(encoding="utf-8")
+    grading_core = (_SRC / "agents/specialists/grading.py").read_text(encoding="utf-8")
+    question_core = (_SRC / "agents/specialists/question.py").read_text(encoding="utf-8")
     assert "build_grade_messages" in grading_core
     assert "build_question_gen_messages" in question_core
 
 
 def test_supervisor_template_passed_to_create_supervisor():
-    supervisor = (_SRC / "agents/supervisor.py").read_text(encoding="utf-8")
+    supervisor = (_SRC / "agents/orchestration/supervisor.py").read_text(encoding="utf-8")
     assert "prompt=SUPERVISOR_PROMPT" in supervisor

@@ -240,7 +240,7 @@ class TeachingState(TypedDict):
 > MVP 阶段专家继续用 `langchain.agents.AgentState`，不改 `build_agent`。
 
 ```python
-# src/agents/state.py
+# src/agents/orchestration/state.py
 from typing import Annotated, Any, Literal, NotRequired, TypedDict
 
 from langchain.agents import AgentState as SpecialistBase          # messages / jump_to / structured_response
@@ -347,10 +347,10 @@ HTTP POST /invoke
 
 | 环节 | 位置 |
 |------|------|
-| 外层图装配 | `src/agents/teaching_graph.py:177` |
-| 外层节点 `run_supervisor` | `src/agents/teaching_graph.py:167` |
-| 内层 supervisor 装配 | `src/agents/supervisor.py:180` |
-| 专家终答短路 | `src/agents/supervisor.py:103` |
+| 外层图装配 | `src/agents/orchestration/teaching_graph.py:177` |
+| 外层节点 `run_supervisor` | `src/agents/orchestration/teaching_graph.py:167` |
+| 内层 supervisor 装配 | `src/agents/orchestration/supervisor.py:180` |
+| 专家终答短路 | `src/agents/orchestration/supervisor.py:103` |
 | 服务层入口 | `src/service/service.py:196` |
 
 ### 3.2 边界 A：`TeachingState` ↔ `SupervisorState` —— 普通函数调用
@@ -661,8 +661,10 @@ ErrorStage = Literal[
 | `specialist` | `run_supervisor` | 捕获到专家异常（含 `UnclosedSpecialistOutput`）时包成 `SpecialistRunError(stage="specialist")` 再抛 |
 | `service` | 服务层自身 | 直接构造 |
 
-> **MVP 只实现 `prepare` / `supervisor` / `finalize`**：`memory` / `specialist` / `service`
-> 需要节点级捕获或异常包装机制，随 §12.2 后置。
+> **`specialist` 已于 P1 实施（2026-11-06 后）**：`run_supervisor` 把
+> `UnclosedSpecialistOutput` 包成 `SpecialistRunError(stage="specialist")`、
+> 其余内层失败包成 `SupervisorRunError(stage="supervisor")`；服务层
+> `_mark_failed` 经 `stage_of(exc)` 写入。`memory` / `service` 仍暂缓。
 
 > **为什么需要包装**：异常从内层图冒出来后，服务层已经分不清是 supervisor 还是专家出的错。
 > `run_supervisor` 是唯一同时能看到两层的节点，由它给异常打 `stage` 标签，
@@ -1145,12 +1147,12 @@ ChatPromptValue → 子图 messages
 
 | 现位置 | 当前做法 | v5 改动 |
 |--------|---------|---------|
-| `src/agents/teaching_graph.py:177` | `StateGraph(MessagesState)` | 改 `StateGraph(TeachingState)`，新增 `prepare_task` / `finalize` |
-| `src/agents/teaching_graph.py:167` | 只传/只返回 `messages` | 按 §3.2 白名单显式搬运 |
-| `src/agents/supervisor.py:180` | `create_supervisor(...)` 无 `state_schema` | 加 `state_schema=SupervisorState`（**继承 prebuilt `AgentState`**） |
-| `src/agents/factory.py:42` | 无 `state_schema` / `context_schema` | 加 `state_schema=SpecialistState`；L3 走 `context_schema=AgentContext` |
-| `src/agents/tools.py:363` / `:413` | 工具返回字符串 | 改 `Command(update={...})`（先冒烟，§4.6） |
-| `src/agents/task_context.py:77` `_THREAD_MODE` | 进程级 dict，无界，重启丢失 | **移除**；迁入 `TeachingState.context_mode`（线程生命周期） |
+| `src/agents/orchestration/teaching_graph.py:177` | `StateGraph(MessagesState)` | 改 `StateGraph(TeachingState)`，新增 `prepare_task` / `finalize` |
+| `src/agents/orchestration/teaching_graph.py:167` | 只传/只返回 `messages` | 按 §3.2 白名单显式搬运 |
+| `src/agents/orchestration/supervisor.py:180` | `create_supervisor(...)` 无 `state_schema` | 加 `state_schema=SupervisorState`（**继承 prebuilt `AgentState`**） |
+| `src/agents/runtime/factory.py:42` | 无 `state_schema` / `context_schema` | 加 `state_schema=SpecialistState`；L3 走 `context_schema=AgentContext` |
+| `src/agents/runtime/tools.py:363` / `:413` | 工具返回字符串 | 改 `Command(update={...})`（先冒烟，§4.6） |
+| `src/agents/orchestration/task_context.py:77` `_THREAD_MODE` | 进程级 dict，无界，重启丢失 | **移除**；迁入 `TeachingState.context_mode`（线程生命周期） |
 | `src/service/service.py:196` | 构造 `{"messages": [...]}`，返回 `(kwargs, run_id)` | 加 `request_id` 保留键；HumanMessage 用稳定 ID；额外返回 `task_id` 供 `_mark_failed` 守卫（§5.3 / §5.4） |
 | `src/service/service.py:258` / `:295` | 异常直接 500 / yield error | 先 `aget_state` 判终态，再写 `failed`（§5.4） |
 | `src/schema/schema.py` `UserInput` | 无幂等字段 | 加 `request_id: str \| None` |
@@ -1220,7 +1222,7 @@ ChatPromptValue → 子图 messages
 
 | 步骤 | 状态 | 落点 |
 |------|------|------|
-| M1 | ✅ | `src/agents/state.py`（`TeachingState`）、`src/agents/teaching_graph.py`（`prepare_task` / `finalize` + 图装配） |
+| M1 | ✅ | `src/agents/orchestration/state.py`（`TeachingState`）、`src/agents/orchestration/teaching_graph.py`（`prepare_task` / `finalize` + 图装配） |
 | M2 | ✅ | `SupervisorState` + `create_supervisor(state_schema=...)` + `run_supervisor` 白名单 + `infer_execution()` |
 | M3 | ✅ | 删除 `_THREAD_MODE` / `remember_query_mode` / `load_thread_context`；`_mark_failed` 的 task_id + 终态双守卫 |
 

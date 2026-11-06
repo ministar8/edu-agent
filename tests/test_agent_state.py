@@ -13,8 +13,13 @@ import asyncio
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from agents.state import SupervisorState, TeachingState, has_final_answer, infer_execution
-from agents.teaching_graph import finalize, prepare_task
+from agents.orchestration.state import (
+    SupervisorState,
+    TeachingState,
+    has_final_answer,
+    infer_execution,
+)
+from agents.orchestration.teaching_graph import finalize, prepare_task
 
 
 def _human(text: str = "什么是进程调度？") -> HumanMessage:
@@ -121,7 +126,7 @@ async def test_prepare_task_generates_task_id_without_request_id() -> None:
 @pytest.mark.asyncio
 async def test_teaching_graph_smoke() -> None:
     """端到端接线：prepare → load_memory → supervisor → finalize（假模型，不联网）。"""
-    from agents.teaching_graph import edu_supervisor
+    from agents.orchestration.teaching_graph import edu_supervisor
 
     config = {"configurable": {"thread_id": "smoke", "user_id": "1", "request_id": "r1"}}
     out = await edu_supervisor.ainvoke({"messages": [_human("你好")]}, config=config)
@@ -184,10 +189,10 @@ def _state(**overrides):
 
 @pytest.mark.asyncio
 async def test_run_supervisor_inbound_whitelist(monkeypatch) -> None:
-    from agents.teaching_graph import run_supervisor
+    from agents.orchestration.teaching_graph import run_supervisor
 
     stub = _StubSupervisor({"messages": [AIMessage(content="答")]})
-    monkeypatch.setattr("agents.teaching_graph.inner_supervisor", stub)
+    monkeypatch.setattr("agents.orchestration.teaching_graph.inner_supervisor", stub)
 
     await run_supervisor(_state(), {"configurable": {}})
 
@@ -199,7 +204,7 @@ async def test_run_supervisor_inbound_whitelist(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_run_supervisor_outbound_mapping(monkeypatch) -> None:
-    from agents.teaching_graph import run_supervisor
+    from agents.orchestration.teaching_graph import run_supervisor
 
     stub = _StubSupervisor(
         {
@@ -210,7 +215,7 @@ async def test_run_supervisor_outbound_mapping(monkeypatch) -> None:
             "task_context": {"kp": "不应回传"},
         }
     )
-    monkeypatch.setattr("agents.teaching_graph.inner_supervisor", stub)
+    monkeypatch.setattr("agents.orchestration.teaching_graph.inner_supervisor", stub)
 
     out = await run_supervisor(_state(), {"configurable": {}})
 
@@ -240,7 +245,7 @@ async def test_context_mode_survives_checkpoint() -> None:
     """上一轮 practice + 本轮"答案是 A" ⇒ grade；证明读到了 checkpoint 里的旧值。"""
     from langgraph.checkpoint.memory import InMemorySaver
 
-    from agents.teaching_graph import build_teaching_graph
+    from agents.orchestration.teaching_graph import build_teaching_graph
 
     graph = build_teaching_graph()
     graph.checkpointer = InMemorySaver()

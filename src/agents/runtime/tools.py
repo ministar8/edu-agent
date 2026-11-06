@@ -15,7 +15,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
-from agents.utils import CustomData
+from agents.runtime.utils import CustomData
 from rag.common.errors import RetrievalUnavailable, classify_retrieval_error
 from rag.retrieval.api import retrieve_for_task
 from rag.retrieval.evidence import FusedEvidence
@@ -218,7 +218,7 @@ def _resolve_context_mode(context_mode: str | None) -> str | None:
     if context_mode is not None:
         return context_mode
     try:
-        from agents.task_context import get_context_mode
+        from agents.orchestration.task_context import get_context_mode
 
         return get_context_mode()
     except Exception:
@@ -340,7 +340,7 @@ async def agenerate_practice_questions(
     difficulty: basic | medium | hard | mixed
     """
     # 延迟导入：question_core 依赖本模块的 asearch_question_templates
-    from agents.question_core import agenerate_question_set, format_questions_for_chat
+    from agents.specialists.question import agenerate_question_set, format_questions_for_chat
     from memory.remember import record_question, thread_id_from_config, user_id_from_config
 
     try:
@@ -376,7 +376,7 @@ async def agrade_student_answer(
     standard_answer 可空：为空时会先用题干检索知识库作为评分依据。
     返回已排版的评分/反馈文本，不要自行编造分数。
     """
-    from agents.grading_core import agrade_answer, format_grading_for_chat
+    from agents.specialists.grading import agrade_answer, format_grading_for_chat
     from memory.remember import (
         batch_id_from_config,
         record_grade,

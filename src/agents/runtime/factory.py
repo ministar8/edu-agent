@@ -52,7 +52,7 @@ def build_agent(
 
     system_prompt 应为纯字符串（第1层提示词），由 create_agent 直接使用。
     """
-    from agents.runtime_model import runtime_model_middleware
+    from agents.runtime.runtime_model import runtime_model_middleware
     from core import get_model, settings
 
     resolved_model = model_ref if model_ref is not None else settings.DEFAULT_MODEL

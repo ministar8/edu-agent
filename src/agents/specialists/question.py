@@ -1,17 +1,27 @@
-"""出题结构化真源：专用 API 与聊天工具共用。
+"""出题专家：结构化真源 + 聊天路径薄壳（同一模块、职责分离）。
 
-`question_gen_agent` 是唯一 `response_format` 实例；聊天路径通过
-`agents.tools.generate_practice_questions` 调用本模块，再做对话修饰。
+- **真源**（业务函数，不塞进 Agent 构建）：
+  ``agenerate_question_set`` / ``format_questions_for_chat`` /
+  ``question_gen_agent``（唯一 ``response_format`` 实例）。
+- **薄壳**：``question_agent`` 只接线聊天工具与 system prompt。
+
+两层可在同文件，但业务逻辑保持独立函数；core 增长到数百行时再拆
+``question/{agent,core}.py``，现在不必。
 """
 
 from typing import Any
 
-from agents.factory import build_agent
-from agents.temperature import TEMPERATURE_QUESTION
-from agents.tools import asearch_question_templates
-from prompts.agents.question import QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
+from agents.runtime.factory import build_agent
+from agents.runtime.temperature import TEMPERATURE_QUESTION
+from agents.runtime.tools import agenerate_practice_questions, asearch_question_templates
+from prompts.agents.question import (
+    QUESTION_AGENT_SYSTEM_PROMPT,
+    QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
+)
 from prompts.service import build_question_gen_messages
 from schema.questions import GeneratedQuestionSet
+
+# ── 业务真源 ──────────────────────────────────────────────────────────
 
 question_gen_agent: Any = build_agent(
     name="question_gen_agent",
@@ -67,3 +77,13 @@ def format_questions_for_chat(result: GeneratedQuestionSet) -> str:
             f"解析：{q.explanation}"
         )
     return "\n\n".join(blocks) if blocks else "本次未能生成题目，请换一个知识点或稍后再试。"
+
+
+# ── 聊天路径薄壳 ──────────────────────────────────────────────────────
+
+question_agent: Any = build_agent(
+    name="question_agent",
+    tools=[agenerate_practice_questions],
+    system_prompt=QUESTION_AGENT_SYSTEM_PROMPT,
+    temperature=TEMPERATURE_QUESTION,
+)

@@ -33,11 +33,9 @@ from langgraph.graph import END
 from langgraph.types import Command
 from langgraph_supervisor import create_supervisor
 
-from agents.grading_agent import grading_agent
-from agents.knowledge_agent import knowledge_agent
-from agents.question_agent import question_agent
-from agents.state import SupervisorState
-from agents.temperature import TEMPERATURE_SUPERVISOR
+from agents.orchestration.state import SupervisorState
+from agents.runtime.temperature import TEMPERATURE_SUPERVISOR
+from agents.specialists import grading_agent, knowledge_agent, question_agent
 from core import get_model, settings
 from prompts.templates import SUPERVISOR_PROMPT_TEMPLATE as SUPERVISOR_PROMPT
 

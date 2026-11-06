@@ -7,8 +7,8 @@
   再调用模板的 `format_messages()`，返回可直接发给模型的消息列表。
 
 调用点：
-  - build_grade_messages        → agents/grading_core.py
-  - build_question_gen_messages → agents/question_core.py
+  - build_grade_messages        → agents/specialists/grading.py
+  - build_question_gen_messages → agents/specialists/question.py
 """
 
 from __future__ import annotations

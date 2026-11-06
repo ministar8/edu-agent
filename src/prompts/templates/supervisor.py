@@ -3,7 +3,7 @@
 将第1层的静态 System Prompt 与动态对话历史组合，
 构建 LangGraph Supervisor 节点所需的消息列表。
 
-调用点：`agents/supervisor.py` → `create_supervisor(prompt=SUPERVISOR_PROMPT_TEMPLATE)`。
+调用点：`agents/orchestration/supervisor.py` → `create_supervisor(prompt=SUPERVISOR_PROMPT_TEMPLATE)`。
 """
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder

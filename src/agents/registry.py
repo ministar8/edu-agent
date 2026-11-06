@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from langgraph.graph.state import CompiledStateGraph
 
-from agents.teaching_graph import edu_supervisor
+from agents.orchestration.teaching_graph import edu_supervisor
 from schema import AgentInfo
 
 DEFAULT_AGENT = "edu-assistant"

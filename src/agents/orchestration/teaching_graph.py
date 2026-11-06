@@ -22,9 +22,15 @@ from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage, Sys
 from langgraph.graph import END, START, StateGraph
 from langgraph.store.base import BaseStore
 
-from agents.state import TeachingState, has_final_answer, infer_execution
-from agents.supervisor import inner_supervisor
-from agents.task_context import set_context_mode
+from agents.orchestration.state import (
+    SpecialistRunError,
+    SupervisorRunError,
+    TeachingState,
+    has_final_answer,
+    infer_execution,
+)
+from agents.orchestration.supervisor import UnclosedSpecialistOutput, inner_supervisor
+from agents.orchestration.task_context import set_context_mode
 from core import settings
 from memory.runtime import get_store
 from memory.safe import safe_remember_status
@@ -220,7 +226,17 @@ async def run_supervisor(state: TeachingState, config=None) -> dict:
     # ContextVar 未必能跨嵌套图传播：这里再设一次，兜住检索链里的同步读取。
     set_context_mode(state.get("context_mode"))
 
-    result = await inner_supervisor.ainvoke(payload, config=config)
+    # 异常分段（§4.5）：本节点是唯一同时看到内外两层的地方，包装后再上抛，
+    # 服务层 `_mark_failed` 用 `stage_of(exc)` 写 TaskError.stage，不按消息猜。
+    # 专家合约破坏 → specialist；其余内层失败 → supervisor（含未包装的工具冒泡）。
+    try:
+        result = await inner_supervisor.ainvoke(payload, config=config)
+    except (SupervisorRunError, SpecialistRunError):
+        raise  # 已打标，避免二次包装丢 stage
+    except UnclosedSpecialistOutput as e:
+        raise SpecialistRunError(str(e)) from e
+    except Exception as e:
+        raise SupervisorRunError(str(e)) from e
     if not isinstance(result, dict):
         return {}
 

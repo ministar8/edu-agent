@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def _assemble_agent(saver, store):
     """装配 agent：挂 checkpointer + store（与 `service.lifespan` 逐字对齐）。"""
-    from agents.agents import DEFAULT_AGENT, get_agent
+    from agents.registry import DEFAULT_AGENT, get_agent
     from memory.runtime import set_store
 
     set_store(store)

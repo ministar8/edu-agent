@@ -1,8 +1,8 @@
 """测试 src/prompts/structure/fields.py：5 字段骨架与统一组装函数。"""
 
 from prompts.structure.fields import (
-    FIELD_SCHEMA,
     FIELD_ORDER,
+    FIELD_SCHEMA,
     assemble_prompt,
 )
 
@@ -45,8 +45,6 @@ def test_assemble_prompt_full_assembly():
 
 def test_assemble_prompt_field_order_correct():
     """拼接结果必须严格按照 FIELD_ORDER 的顺序。"""
-    result = assemble_prompt(
-        role="R", tools="T", rules="Ru", output="O", examples="E"
-    )
+    result = assemble_prompt(role="R", tools="T", rules="Ru", output="O", examples="E")
     positions = {name: result.index(f"[{name}]") for name in FIELD_ORDER}
     assert list(positions.values()) == sorted(positions.values())

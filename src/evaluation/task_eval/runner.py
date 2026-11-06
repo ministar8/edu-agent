@@ -65,11 +65,11 @@ async def _execute_agent_case(
     episodes / episodes_read_failed / read_status_detail``。
 
     ★ B4 取证单元 ②的「清空」半边：本 case 的读链状态从这里开始收集（`load_memory` 每轮往
-      `agents.teaching_graph` 的模块级通道追加一条）。不 reset 就是「上一条 case 的 Store
+      `agents.orchestration.teaching_graph` 的模块级通道追加一条）。不 reset 就是「上一条 case 的 Store
       故障一路跟着这一条」—— 与 `_query_failures` 同一个失效模式，见
       `vectorstore.reset_query_failures` 的**两个单元边界**。
     """
-    from agents.teaching_graph import memory_read_statuses, reset_memory_read_statuses
+    from agents.orchestration.teaching_graph import memory_read_statuses, reset_memory_read_statuses
 
     reset_memory_read_statuses()
     out: dict[str, Any] = {

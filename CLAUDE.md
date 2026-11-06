@@ -25,7 +25,7 @@
 
 | 路径 | 职责 |
 |---|---|
-| `src/agents/` | `supervisor.py` + 专业 agent（`factory.build_agent`）+ `tools.py` + 出题/批改真源 `*_core.py` + `temperature.py` |
+| `src/agents/` | 多 Agent 编排：`registry.py` + `orchestration/`（teaching_graph / supervisor / state）+ `specialists/`（三专家 + 真源）+ `runtime/`（factory / tools / temperature） |
 | `src/rag/` | 检索流水线：`api.py`（产品门面，含 release）、`retriever.py`（测量入口/门面）、`pipeline/`（编排+阶段）、`postprocess/`（RRF/去重/窗口）、`fusion.py`（证据融合）、`reranker.py`、`hyde.py`、`semantic_cache.py`、`ingest.py` |
 | `src/core/` | `settings.py`（配置单例）、`llm.py`（`get_model` / `get_llm` 工厂） |
 | `src/prompts/` | 提示词集中管理（agents 的 system prompt / supervisor 分派 / rag 单轮模板 / service 出题批改模板），import 期校验变量与花括号 |
@@ -33,7 +33,7 @@
 | `src/schema/` | Pydantic 协议/领域模型（`schema.py` / `models.py` / `auth.py` / `questions.py` / `grading.py` / `evidence.py` 检索对外契约）；`rag/common/schemas.py` 只放检索链内部 LLM 输出 |
 | `src/memory/` | 短期 checkpointer + 消息窗口 `window.trim_conversation` + 长期 Store（工厂/schema/topic/weak_topics/记忆卡） |
 | `src/db/` | SQLAlchemy User 表与建表逻辑 |
-| `src/tools/` | 离线数据清洗工具（**不参与运行时**） |
+| `src/document_processing/` | 离线文档清洗工具（**不参与运行时**；原名 `tools/`，与 `agents/tools.py` 消歧） |
 | `static/` | 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css） |
 | `knowledge/` | 408 知识库（四科讲义 + 题库 + 学习路线） |
 | `src/evaluation/` | 评测。**三套彼此独立的尺子**：① **`task_eval/`** —— **论文效果章的产出器**（5 任务 `qa/generate/grade/verify/memory` × 66 条 demo case；子命令 `run/sanity/calibrate/rejudge/reprobe/backfill`）；② RAGAS Layer-1（`dataset/adapters/ragas_eval/cli`，组件指标，**不是任务指标**）；③ 检索质量门禁（`retrieval_gate` / `probe_gate` / `telemetry_report`）。★ 版本锚点见 `docs/EXPERIMENTS.md` **§20**（效果）与 §18（检索） |
@@ -86,7 +86,7 @@ docker compose up --build                # 容器化启动
   同一模型 ID 可显式选择走不同网关（如 `dashscope:deepseek-v4-flash`），**不按模型名猜**。
   配了哪个网关的 key 就启用哪个网关；模型清单与各网关提供的模型见 `schema/models.py`
   的 `GATEWAY_MODELS`。相关入口：`settings.gateway_for` / `api_base_for_model` / `api_key_for_model`。
-- **注册新 agent 需同步三处**：`src/agents/agents.py` 的 import、`agents` 字典条目、`langgraph.json` 的 `graphs`。
+- **注册新 agent 需同步三处**：`src/agents/registry.py` 的 import、`agents` 字典条目、`langgraph.json` 的 `graphs`。
   注册后可通过 `/api/{agent_id}/invoke|stream|history|threads` 直接寻址；未知 agent 返回 404。
 - **密钥字段用 `SecretStr`**，取值需 `.get_secret_value()`。
 - **LangSmith 追踪**：`LANGCHAIN_*` 由 `Settings.export_langsmith_env()` 在 lifespan 中写入
@@ -138,7 +138,7 @@ docker compose up --build                # 容器化启动
   注意：`semantic_cache._DATA_DIR` / `_JSONL_FILE` 是**模块级常量（import 期固化）**，
   临时重定向须用 `monkeypatch` 指向临时目录，否则会写坏真实的 `chroma_db/semantic_cache/`。
 - Windows 下 `run_service.py` 会把事件循环切到 `WindowsSelectorEventLoopPolicy`（异步 DB 驱动不兼容 Proactor）。
-- `src/rag/` 与 `src/tools/` 的类型注解尚不严格，`pyproject.toml` 中对这两个目录放宽了 pyrefly 检查（技术债）。
+- `src/rag/` 与 `src/document_processing/` 的类型注解尚不严格，`pyproject.toml` 中对这两个目录放宽了 pyrefly 检查（技术债）。
 - **Q&A 原子机制**：真题/例题会产出 `merged_qa` chunk（`section.chunk_role`），
   并填 `qa.question/answer/answer_key`。`_ANSWER_RE` 同时认讲义「答案：」与真题
   「选项行尾 ✅ + **解析**：」。`merged_qa_meta` **专用召回路由已否决**（两轮净负），

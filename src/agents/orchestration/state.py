@@ -11,7 +11,7 @@ MVP 只定义两张 Schema：
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, NotRequired, TypedDict
+from typing import Annotated, Any, ClassVar, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
 from langgraph.graph.message import add_messages
@@ -21,7 +21,8 @@ from schema.task_policy import TaskMode as RetrievalMode
 
 TaskKind = Literal["chat", "question", "grading", "knowledge", "unknown"]
 TaskStatus = Literal["pending", "completed", "failed"]
-ErrorStage = Literal["prepare", "supervisor", "finalize"]
+# specialist 由 run_supervisor 包装异常后产生（§4.5）；memory/service 仍暂缓
+ErrorStage = Literal["prepare", "supervisor", "specialist", "finalize"]
 
 
 class TaskError(TypedDict):
@@ -31,6 +32,29 @@ class TaskError(TypedDict):
     message: str
     stage: ErrorStage
     recoverable: bool
+
+
+class SupervisorRunError(RuntimeError):
+    """内层 supervisor 图整体失败（`run_supervisor` 包装，§4.5）。"""
+
+    stage: ClassVar[ErrorStage] = "supervisor"
+
+
+class SpecialistRunError(RuntimeError):
+    """专家/工具内部失败（`run_supervisor` 包装，含 `UnclosedSpecialistOutput`）。"""
+
+    stage: ClassVar[ErrorStage] = "specialist"
+
+
+def stage_of(exc: BaseException) -> ErrorStage:
+    """从异常类型映射 `TaskError.stage`（服务层 `_mark_failed` 用，§5.4）。
+
+    只认 `run_supervisor` 打过标包装类型；未包装的图运行异常兜底 `supervisor`
+    （与包装前行为一致）。不要让服务层按消息字符串猜。
+    """
+    if isinstance(exc, SpecialistRunError):
+        return "specialist"
+    return "supervisor"
 
 
 class TeachingState(TypedDict):

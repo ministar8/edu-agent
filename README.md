@@ -42,7 +42,7 @@ edu-agent/
 ├── langgraph.json        # LangGraph Studio 入口（teaching_graph）
 ├── compose.yaml          # Docker 部署（Dockerfile 见 docker/）
 ├── src/
-│   ├── agents/           # 编排与业务图：supervisor / teaching_graph / factory / tools / *_core
+│   ├── agents/           # 多 Agent：registry + orchestration/ + specialists/ + runtime/
 │   ├── rag/              # 检索流水线（retriever / fusion / reranker / hyde / cache / ingest）
 │   ├── core/             # Settings + LLM 工厂（get_model / get_llm）
 │   ├── prompts/          # 系统提示词与模板（import 期校验 + PROMPT_SET_VERSION）
@@ -52,7 +52,7 @@ edu-agent/
 │   │                     #      + diagnostics（遥测报表、逐层追踪）
 │   ├── db/               # SQLAlchemy User 表
 │   ├── service/          # FastAPI（service / auth / threads / errors / health）
-│   ├── tools/            # 离线数据清洗（ingest 使用，不参与运行时问答）
+│   ├── document_processing/  # 离线文档清洗（ingest 使用，不参与运行时问答；原 tools/）
 │   └── run_service.py    # 服务入口
 ├── static/               # 静态前端（login.html / index.html / app.js / api.js / auth.js / theme.js / style.css）
 ├── evals/                # 数据集（datasets/）+ 门禁基线（baselines/：6 份检索路由 + probe + policy）

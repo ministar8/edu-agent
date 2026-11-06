@@ -8,10 +8,10 @@
 """
 
 from prompts import (
-    SUPERVISOR_PROMPT,
+    GRADING_AGENT_SYSTEM_PROMPT,
     KNOWLEDGE_AGENT_SYSTEM_PROMPT,
     QUESTION_AGENT_SYSTEM_PROMPT,
-    GRADING_AGENT_SYSTEM_PROMPT,
+    SUPERVISOR_PROMPT,
 )
 
 # 待验证的 Agent Prompt 列表（名称，Prompt 文本）
@@ -29,9 +29,7 @@ def test_each_agent_prompt_contains_all_five_fields():
     """每个 Agent Prompt 的组装结果必须包含全部五个字段标记。"""
     for name, prompt in AGENT_PROMPTS:
         missing = [f for f in REQUIRED_FIELDS if f not in prompt]
-        assert not missing, (
-            f"{name} 缺少字段：{missing}，当前 Prompt 长度 {len(prompt)}"
-        )
+        assert not missing, f"{name} 缺少字段：{missing}，当前 Prompt 长度 {len(prompt)}"
 
 
 def test_each_agent_prompt_has_no_braces():

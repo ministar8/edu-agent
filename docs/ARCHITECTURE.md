@@ -41,10 +41,10 @@
                              │ 图调用（ainvoke / astream）
 ┌────────────────────────────▼─────────────────────────────────────┐
 │  编排层  src/agents/                                              │
-│    teaching_graph.py  外层图：load_memory → supervisor            │
-│    supervisor.py      langgraph-supervisor 多专家路由             │
-│    knowledge_agent / question_agent / grading_agent               │
-│    tools.py           专家可调用的工具（含检索工具）                │
+│    registry.py             对外注册表（DEFAULT_AGENT / get_agent）  │
+│    orchestration/          teaching_graph · supervisor · state     │
+│    specialists/            knowledge · question · grading          │
+│    runtime/                factory · tools · temperature           │
 └────────────────────────────┬─────────────────────────────────────┘
                              │ 工具调用
 ┌────────────────────────────▼─────────────────────────────────────┐
@@ -328,12 +328,13 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 |---|---|---|---|
 | **论文主体** | `rag` + `agents` + `prompts` + `schema` | 15,180 | 46.2% |
 | **产品外壳** | `service` + `memory` + `core` + `db` | 3,598 | 10.9% |
-| **数据处理工具** | `tools` | 2,823 | 8.6% |
+| **数据处理工具** | `document_processing` | 2,823 | 8.6% |
 | **评测设施** | `evaluation` | 11,256 | 34.2% |
 | 顶层入口 | `src/run_service.py` | 30 | 0.1% |
 | | **合计** | **32,887** | 100% |
 
-> `src/tools/` 被 `evaluation/gates/retrieval_gate/` 与 `rag/ingest.py` 依赖（`clean_documents`），
+> `src/document_processing/`（原 `src/tools/`）被 `rag/chunking/cleaner` 依赖（经 `clean_documents`），
+> 与运行时 `src/agents/runtime/tools.py` 同名易混，故改名消歧。
 > **不能单独归档** —— 删它会让门禁与入库链一起崩。
 
 **已移出的工程化设施**：测试套件 / CI（`.github/`）/ codecov / 诊断脚本 / SDK。

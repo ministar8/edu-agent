@@ -27,6 +27,7 @@ from langgraph.types import Command
 
 from agents import DEFAULT_AGENT, get_agent, get_all_agent_info
 from agents import agents as agent_registry
+from agents.orchestration.state import stage_of
 from core import settings
 from db import User, init_db
 from memory import initialize_database, initialize_store
@@ -275,8 +276,8 @@ async def _mark_failed(agent: Any, config: RunnableConfig, task_id: str, exc: Ex
                 "error": {
                     "code": "GRAPH_RUN_FAILED",
                     "message": str(exc)[:500],
-                    # MVP 只有三段：prepare / finalize 由节点自写，服务层兜底记 supervisor
-                    "stage": "supervisor",
+                    # prepare / finalize 由节点自写；图运行失败按包装类型分段（§4.5/§5.4）
+                    "stage": stage_of(exc),
                     "recoverable": False,
                 },
             },
