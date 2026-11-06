@@ -336,11 +336,8 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 > `src/tools/` 被 `evaluation/gates/retrieval_gate/` 与 `rag/ingest.py` 依赖（`clean_documents`），
 > **不能单独归档** —— 删它会让门禁与入库链一起崩。
 
-**已移出的工程化设施**：测试套件 17,540 行 / CI（`.github/`）/ codecov /
-`docs/ENGINEERING.md` / 3 个诊断脚本 / `src/client/` SDK。
-★ 其中 **`.pre-commit-config.yaml` 已取回并适配启用**。
-★ **原归档目录 `../edu-agent-engineering-archive/` 在本机已不存在**（2026-10-03 核实，
-全盘无副本），上述内容**不可取回**。
+**已移出的工程化设施**：测试套件 / CI（`.github/`）/ codecov / 诊断脚本 / SDK。
+★ 原归档目录在本机已不存在，上述内容**不可取回**。
 归档前固化的论文素材（快照，不可复跑）：**1,688 测试用例 / 覆盖率 75.2% / 8,982 语句**。
 
 ---
@@ -367,7 +364,7 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
    「候选被 `_apply_rerank_threshold` 兜底截断到 2 条」这个**连带副作用**。
    `reranker.py` 的 `RERANK_ENABLED` 闸保留为防御网（触达即 warning）。
    门禁新增 `GATE_RERANK_MODE=disabled` 路由 + `rerank_used` 断言防回归。
-   完整分析见 `docs/RERANK_SWITCH_ANALYSIS.md`。
+   完整分析见重排开关分析文档（已归档，不再随仓库同步）。
    另：RAGAS 路径仍显式声明 `settings.RERANK_ENABLED = cfg.use_rerank`，
    跑前用**真实推理请求**探活（不是只看 `/health`），报告写入 `_meta.run_config`。
 5. **配置漂移**（`Settings` 用 `extra="ignore"`，`.env` 里它不认识的键**静默无效**）：
@@ -397,8 +394,8 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 
    **修复**：`_stage_dedup_and_threshold` 末尾加「空结果保底」—— 过阈值后为空、
    但去重后有候选时，返回 **top-1** 并打 warning。
-   **刻意不调阈值**：`RETRIEVAL_ROADMAP.md` 的「不做清单」明确列着「检索阈值微调」（#13/#25，
-   三次实证真实口径零收益或有害）。且该 bug 的本质是**「有候选却返回空」这个独立的降级缺陷** ——
+   **刻意不调阈值**：检索阈值微调已列入「不做清单」（三次实证真实口径零收益或有害）。
+   且该 bug 的本质是**「有候选却返回空」这个独立的降级缺陷** ——
    LLM 拿不到任何上下文 → 必然答错，比返回低分候选更糟。取 top-1 而非 top-k：不假装这些文档
    「合格」，并保留低召回信号（`docs_count<2`）给下游 HyDE。
 

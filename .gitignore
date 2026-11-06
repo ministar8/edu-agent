@@ -1,7 +1,9 @@
 # Edu Agent repository ignore rules.
 # Keep source/docs trackable; ignore local runtime data and generated artifacts.
 
-# ── Python ─────────────────────────────────────────────
+# =============================================================================
+# Python
+# =============================================================================
 __pycache__/
 *.py[cod]
 *.pyo
@@ -12,28 +14,29 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-# 本地运行时产物
+
+# jieba 分词缓存
 jieba.cache
+
+# pytest 相关缓存与覆盖率
 pytest-of-star/
 .pre-commit-cache/
 .coverage
-# 覆盖率数据文件的**自定义名**：本机 safe-delete 层会拦截 pytest-cov 删除默认 `.coverage`，
-# 已验证的绕法是 `COVERAGE_FILE=./_cov_x`（指向新路径，无需删除）。
-# 这种文件既不是目录（`/_*/` 匹配不到）、也不以 .py 结尾（`/_*.py` 匹配不到）——
-# **必须单独忽略**，否则每次跑覆盖率都会在 git status 里留下一个未跟踪项。
 /_cov*
-# pytest --cov-report=xml / json 的产物（CI 也会生成）。.coverage 与 coverage/ 已在上方忽略，
-# 但这两个**文件**不在其中 —— 漏掉会让每次本地跑覆盖率都在 git status 里留下未跟踪项。
 coverage.json
 coverage.xml
 htmlcov/
+
+# 构建产物
 build/
 dist/
 venv/
 .venv/
 env/
 
-# ── Node / Next.js ─────────────────────────────────────
+# =============================================================================
+# Node / Frontend (if any)
+# =============================================================================
 node_modules/
 .next/
 out/
@@ -44,19 +47,25 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# ── Environment / Secrets ──────────────────────────────
+# =============================================================================
+# Environment / Secrets
+# =============================================================================
 .env
 .env.local
 .env.*.local
 !.env.example
 
-# ── Local IDE / Editor ─────────────────────────────────
+# =============================================================================
+# IDE / Editor
+# =============================================================================
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# ── Database / Runtime Storage ─────────────────────────
+# =============================================================================
+# Database / Runtime Storage
+# =============================================================================
 *.db
 *.db-shm
 *.db-wal
@@ -65,66 +74,45 @@ pnpm-debug.log*
 chroma_db*/
 data/
 
-# ── Generated Data / Logs ──────────────────────────────
+# =============================================================================
+# Generated Data / Logs
+# =============================================================================
 backend/data/
 logs/
 *.log
-# ★ 2026-10-10 收紧：原 `!evals/results/**/*.log` 例外与 Task 10 裁定（逐轮 phase1_* 调试
-#   log 不入库）矛盾，导致 status 常年挂未跟踪文件。现存 6 份已归档到本机
-#   ../edu-agent-eval-archive/evals_logs_20261010/；今后确需入库的门禁日志用
-#   `git add -f <具体路径>` 显式添加，不再放宽整类。
-# agent_behavior 逐轮快照：规范名 `agent_behavior_quality.json` 入库，带日期后缀的不入库
-#   （EXPERIMENTS.md §20.7.2 C7 裁定；首份快照已归档 ../edu-agent-eval-archive/）
+
+# 评测产出（可选，按需忽略）
 evals/results/system_validation/agent_behavior/*_*.json
-# 阶段追踪基线：`python -m evaluation.stage_trace --record` 的产物。
-# **不进仓库**（理由见该模块文档串）：它绑定某一次**特定索引构建**，放进来只会变成
-# 一份会过期、偶尔变红的负债。★ 注意与 `evals/` 下的**门禁基线**区分 ——
-# 那几份 `retrieval_baseline*.json` 是**口径基准，必须入库**，只忽略这一个文件。
 /evals/stage_baseline.json
 
-# ── Local Knowledge / Thesis Materials ─────────────────
-# ★ `docs/` 已于 2026-09-22 **移出**忽略名单 —— 它现在放**工程文档**
-# （`docs/ENGINEERING.md` 等）。个人/论文材料请放下面两个已忽略的目录。
+# =============================================================================
+# Local Knowledge / Thesis Materials (not part of source)
+# =============================================================================
 knowledge/general/
 knowledge/answers/
 
-# ── OS Files ───────────────────────────────────────────
+# =============================================================================
+# Temporary / Scratch
+# =============================================================================
+# 忽略以 _ 开头的临时脚本，但保留 __init__.py
+/_*.py
+!__init__.py
+/_*/
+.tmp/
+_e2e_artifacts/
+
+# =============================================================================
+# OS Files
+# =============================================================================
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# ── Temporary / Scratch Scripts ────────────────────────
-# 仅忽略仓库根目录的临时脚本；src/**/_*.py（如 _validate.py、_metadata_spec.py）
-# 是正式模块，必须入库 —— 曾用 `_*.py` 全局匹配导致 clone/CI 缺文件。
-/_*.py
-!__init__.py
-# 根目录下的临时目录：主要是 `pytest --basetemp=./_xxx` 的产物。
-# 不忽略的话，一次本地跑测就会在 git status 里留下上千个 untracked 条目。
-# 注意 CI 里的门禁用 tempfile.mkdtemp()（系统临时目录），不会产生这里的目录。
-/_*/
-
-# ── Claude Code 会话状态 ────────────────────────────────
-# 只忽略 worktrees（每次会话的临时检出，内含整份仓库副本）。
-# ★ 2026-09-23：`.claude/` 下的 hooks / settings / skills 在本项目**不存在**
-# （维护者脚手架属于上游模板，毕设阶段不引入），故不再声明「保留可提交」——
-# 那条注释与实际状态矛盾，会让人以为项目有 .claude 配置。若将来真引入，再放开。
-# ★ 2026-10-07：`.claude/` 现在装的是会话运行态（`launch*.json` / `settings.local.json`），
-# 不是项目配置 ⇒ 整个目录忽略（原先只忽略 `.claude/worktrees/`，是因为当时目录里只有 worktrees）。
+# =============================================================================
+# Claude Code / Agent Config (local only)
+# =============================================================================
 .claude/
 .claude/worktrees/
-# 同类：某些工具会在仓库根建 `.worktrees/` 做临时检出（内含整份仓库副本）。
-# 它通常自带一个内容为 `*` 的 .gitignore 自我隐藏 —— 但那是巧合、不是规则，显式忽略。
 .worktrees/
-
-# ── 本地 Agent 工具运行时数据 ───────────────────────────
-_e2e_artifacts/
-
-# ── 本地 Agent 会话与验证产物（不入库）──────────────────
-# `.scratch-astcmp/`：splitter 精简重构时的一次性差分验证台
-#   （difftest.py / tamper_recheck.py / HEAD 版快照）。属临时工件，
-#   验证结论已写进提交信息，无需随仓库分发。
-# `.workbuddy-ai/`：本机 Agent 的记忆与工作日志，是运行态、非项目配置。
 .scratch-astcmp/
 .workbuddy-ai/
-# `.tmp/`：本机跑门禁时给 TEMP/TMP/TMPDIR 的重定向目标（%TEMP% 不可写）。
-.tmp/

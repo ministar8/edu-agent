@@ -2,10 +2,8 @@
 
 > **本文定位**：**现状总览**，供论文第 3 章与代码定位使用。
 > **读码入口**：先看包内 [`src/rag/README.md`](../src/rag/README.md)（主路径 6 步 + 命名对照 + 三层策略），再回本文 §1–§5。
-> **不重复设计论证** —— 设计依据见 `RETRIEVAL_LAYER_DESIGN.md`（分层设计）、
-> `RETRIEVAL_POLICY.md`（策略契约）；执行方案与实测见 `RETRIEVAL_PLAN.md`；
-> 「不做清单」见 `RETRIEVAL_ROADMAP.md`。
-> 实验数字见 `EXPERIMENTS.md`（§1–§19），可追溯锚点见 §18.0 / 标签 `V-2026-10-02`。
+> **不重复设计论证** —— 设计依据、执行方案与「不做清单」已归档（不再随仓库同步）。
+> 实验数字见 `EXPERIMENTS.md`（已归档，不再随仓库同步）。
 
 ---
 
@@ -20,7 +18,7 @@
 ⑥ 缓存验证   semantic_cache + 规则 verifier + metrics
 ```
 
-易混命名：**retriever**=门面 · **routes**=跑路由 · **recall**=拼路由 · **TaskPolicy**=安全披露 · **RetrievalPlan**=计算预算。`use_rerank` 参数 ≠ 是否执行 `rerank()`（见 `RERANK_SWITCH_ANALYSIS.md`）。
+易混命名：**retriever**=门面 · **routes**=跑路由 · **recall**=拼路由 · **TaskPolicy**=安全披露 · **RetrievalPlan**=计算预算。`use_rerank` 参数 ≠ 是否执行 `rerank()`（重排开关分析文档已归档）。
 
 ---
 
@@ -104,7 +102,7 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 
 > `legacy` 是**资产质量/迁移状态**，不是第四知识层：它由 `legacy_policy` 管**入池**，
 > **不进** `layer_weights`（schema 校验器强制）。
-> 实测依据：真删 legacy 后层精度 0.396 → **1.000**（`EXPERIMENTS.md` §3）。
+> 实测依据：真删 legacy 后层精度 0.396 → **1.000**（实验数据已归档）。
 
 ---
 
@@ -125,7 +123,7 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 - 融合：`rag/postprocess.weighted_rrf_merge` —— **加权 RRF**：`score = Σ w(route,cat) / (k_dyn + rank)`；
   `k_dyn` 随路由数放大（见 `_dynamic_rrf_k`）。
 - ★ **Chroma 的 score 是余弦距离（越小越好）**。`routes._raw_search` 的向量分支**必须按 score 升序取前 k**
-  —— V-2026-10-02 修的就是这里（此前按 `-score` 降序，等于返回最不相似的 k 条，见 `EXPERIMENTS.md` §18.2 #3）。
+  —— V-2026-10-02 修的就是这里（此前按 `-score` 降序，等于返回最不相似的 k 条，见实验数据归档 #3）。
 
 ---
 
@@ -146,7 +144,7 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 **两个易错点（已在代码注释中固化）**：
 
 1. **阈值可能高于 RRF 可达上限**：阈值按 `k=20` 标定，实际 `k_dyn` 在 13 条路由下为 36，量纲错配
-   → 某些类别**必然返回空**。当前处理：只做「空结果保底 top-1」，**不调阈值**（见 `RETRIEVAL_ROADMAP.md` 不做清单）。
+   → 某些类别**必然返回空**。当前处理：只做「空结果保底 top-1」，**不调阈值**（阈值微调已列入「不做清单」）。
 2. **top-up 必须继承资格**：`layer_recall.topup_preferred_layers` 只决定「从哪些层补」，
    **不实现资格规则**；`eligibility_where` 由 policy 提供（V-2026-10-02 修，§18.1）。
 
@@ -161,17 +159,17 @@ Agent（supervisor → 专家 agent）→ 回答 / 出题 / 批改
 | 多路召回 / 单路由 | `rag/retrieval/routes.py` | 393 | §3 |
 | 路由构建 / 权重 / 学科推断 | `rag/retrieval/recall.py` | 654 | §3 |
 | 融合（RRF）/ 去重 / 窗口 | `rag/retrieval/postprocess/` | 782 | §4 |
-| 重排 | `rag/retrieval/reranker.py` | 271 | `RERANK_SWITCH_ANALYSIS.md` |
-| 查询分类 / depth | `rag/retrieval/query_classifier.py` | 457 | `RETRIEVAL_POLICY.md` §4 |
+| 重排 | `rag/retrieval/reranker.py` | 271 | 设计文档已归档 |
+| 查询分类 / depth | `rag/retrieval/query_classifier.py` | 457 | 设计文档已归档 |
 | 查询分解 | `rag/retrieval/query_decomposer.py` | 195 | §4（零增益） |
 | HyDE 兜底 | `rag/retrieval/hyde.py` | 58 | §4（零增益） |
 | 层 top-up | `rag/retrieval/layer_recall.py` | 130 | §4 |
-| 策略真源 | `schema/task_policy.py` | 255 | `RETRIEVAL_POLICY.md` |
-| 策略解析 / 分类 | `rag/retrieval/task_policy.py` | 221 | `RETRIEVAL_POLICY.md` §4 |
+| 策略真源 | `schema/task_policy.py` | 255 | 设计文档已归档 |
+| 策略解析 / 分类 | `rag/retrieval/task_policy.py` | 221 | 设计文档已归档 |
 | 检索计划 | `rag/retrieval/retrieval_plan.py` | 59 | 本文 §1 |
 | 证据契约 | `rag/retrieval/evidence.py` | 100 | 本文 §4 |
-| release 出口 | `rag/retrieval/evidence_policy.py` | 330 | `RETRIEVAL_LAYER_DESIGN.md` |
-| 同义词 / 领域词 | `rag/common/synonyms.py` · `rag/common/rag_utils.py` | 493 · 269 | `EXPERIMENTS.md` §18.2 |
+| release 出口 | `rag/retrieval/evidence_policy.py` | 330 | 设计文档已归档 |
+| 同义词 / 领域词 | `rag/common/synonyms.py` · `rag/common/rag_utils.py` | 493 · 269 | 设计文档已归档 |
 | 入库链 | `rag/ingest.py` · `loader` · `cleaner` · `splitter` · `enhancer` · `knowledge_tagger` | — | `KB_MASTER_DESIGN.md` |
 
 ---
@@ -238,7 +236,7 @@ exams / code + learning_paths），**已覆盖 L1/L2/L3** —— 本节此前记
 
 ## 7. 关键决策（V-2026-10-02）
 
-完整表见 `EXPERIMENTS.md` §19。此处只列**影响架构**的三条：
+完整表见实验数据归档。此处只列**影响架构**的三条：
 
 | 决策 | 内容 | 依据 |
 |---|---|---|

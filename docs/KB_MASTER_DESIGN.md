@@ -2,7 +2,7 @@
 
 > 状态：**定稿整合**（2026-09-28）  
 > 范围：L1 Basic + KP + L2 Advanced + L3 Exams + links + gap inventory  
-> 分册：`BASIC_DESIGN.md` / `ADVANCED_DESIGN.md` / `EXAMS_DESIGN.md`（细节以分册为准，冲突以本总册冻结结论为准）  
+> 分册：L1/L2/L3 细节设计已归档（细节以分册为准，冲突以本总册冻结结论为准）  
 > 学习路径：独立库，本册只定接口，不在本期落地。
 
 ---
@@ -385,7 +385,7 @@ knowledge/
 
 | 项 | 说明 |
 |---|---|
-| L2 扩章 | 按 `ADVANCED_DESIGN.md` 目录继续四科 |
+| L2 扩章 | 按 L2 细节设计目录继续四科 |
 | 集合收口 | `questions` → `exams` |
 | gap 回填 | 按 inventory 补答案/图/KP，定点更新 |
 | 学习路径 | L1/L2/L3 路径库 + `path.kp_ids` |
@@ -398,8 +398,8 @@ knowledge/
 | 文档 | 内容 |
 |---|---|
 | **本册** | 总架构 + 冻结结论 |
-| `BASIC_DESIGN.md` | L1 细节 |
-| `ADVANCED_DESIGN.md` | L2 细节 |
-| `EXAMS_DESIGN.md` | L3 细节（D0–D6） |
+| L1 细节设计 | L1 细节（已归档） |
+| L2 细节设计 | L2 细节（已归档） |
+| L3 细节设计 | L3 细节（D0–D6，已归档） |
 | `knowledge/rules/*` | 写作/切分/元数据/门禁规则 |
 | `knowledge/schema/*` | JSON Schema |

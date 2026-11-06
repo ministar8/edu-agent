@@ -64,7 +64,7 @@
 |---|---|---|
 | **TaskPolicy** | 安全/披露：进不进池（ eligibility ）、包里能不能带答案/题号（ release ） | `schema/task_policy.py` + `rag/retrieval/task_policy.py` |
 | **RetrievalPlan / depth** | 计算预算：k、coarse_k、skip_decompose、skip_rerank | `retrieval/retrieval_plan.py` |
-| **部署开关** | 这个环境是否真跑 rerank | `settings.RERANK_ENABLED`（论证见 `docs/RERANK_SWITCH_ANALYSIS.md`） |
+| **部署开关** | 这个环境是否真跑 rerank | `settings.RERANK_ENABLED`（重排开关分析已归档） |
 
 ## 5. 数据真源表（"一个集合是什么"该查哪）
 
