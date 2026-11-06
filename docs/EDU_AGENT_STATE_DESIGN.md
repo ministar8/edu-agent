@@ -1220,7 +1220,7 @@ ChatPromptValue → 子图 messages
 
 | 步骤 | 状态 | 落点 |
 |------|------|------|
-| M1 | ✅ | `src/agents/state.py`（`TeachingState`）、`src/agents/lifecycle.py`（`prepare_task` / `finalize`）、`teaching_graph.py` 图装配 |
+| M1 | ✅ | `src/agents/state.py`（`TeachingState`）、`src/agents/teaching_graph.py`（`prepare_task` / `finalize` + 图装配） |
 | M2 | ✅ | `SupervisorState` + `create_supervisor(state_schema=...)` + `run_supervisor` 白名单 + `infer_execution()` |
 | M3 | ✅ | 删除 `_THREAD_MODE` / `remember_query_mode` / `load_thread_context`；`_mark_failed` 的 task_id + 终态双守卫 |
 
@@ -1251,8 +1251,8 @@ ChatPromptValue → 子图 messages
 | # | 契约 | 不变量 | 锁定测试 |
 |---|------|--------|---------|
 | 1 | **`task_id` 守卫** | `_mark_failed` 只标记「本请求 + 未闭环」的任务；`completed` / `failed` 永不被覆盖 | `tests/test_mark_failed.py`（4 例） |
-| 2 | **`context_mode` 持久** | 新一轮 `prepare_task` 从旧 checkpoint 读上一轮值；`practice → 答案是 A → grade` 能复现 | `tests/test_state_contracts.py::test_context_mode_survives_checkpoint` |
-| 3 | **Schema 边界** | 边界 A 入参 = `messages` / `task_context` / `context_mode`；出参 = `messages` / `active_agent` / `task_mode`；`SupervisorState` 必含 `messages` + `remaining_steps` | `tests/test_state_contracts.py`（4 例） |
+| 2 | **`context_mode` 持久** | 新一轮 `prepare_task` 从旧 checkpoint 读上一轮值；`practice → 答案是 A → grade` 能复现 | `tests/test_agent_state.py::test_context_mode_survives_checkpoint` |
+| 3 | **Schema 边界** | 边界 A 入参 = `messages` / `task_context` / `context_mode`；出参 = `messages` / `active_agent` / `task_mode`；`SupervisorState` 必含 `messages` + `remaining_steps` | `tests/test_agent_state.py`（4 例） |
 
 > 契约 3 的两个方向都有测试：入参用替身内层图捕获 payload（多一个字段就红），
 > 出参用替身返回值断言键集合（少一个字段就红）。
