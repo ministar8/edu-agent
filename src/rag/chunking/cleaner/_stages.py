@@ -20,7 +20,7 @@ from rag.common.metrics import metrics
 from rag.common.synonyms import normalize_synonyms
 
 if TYPE_CHECKING:
-    from tools.anomaly import AnomalyRecord
+    from document_processing.anomaly import AnomalyRecord
 
 logger = logging.getLogger("rag.chunking.cleaner")
 
@@ -74,7 +74,7 @@ def _clean_by_extension(documents: list[Document]) -> tuple[list[Document], int]
 
 def _run_normalization(cleaned: list[Document]) -> tuple[list[Document], list[dict]]:
     """阶段1：数据转换与标准化（清洗后、填充前执行）"""
-    from tools.normalizer import normalize_documents
+    from document_processing.normalizer import normalize_documents
 
     cleaned, norm_log = normalize_documents(cleaned)
     if norm_log:
@@ -101,7 +101,7 @@ def _run_synonym_normalize(cleaned: list[Document]) -> list[Document]:
 
 def _run_imputation(cleaned: list[Document]) -> tuple[list[Document], list[dict]]:
     """阶段3：缺失值填充（标准化后、去重前执行）"""
-    from tools.imputer import impute_documents
+    from document_processing.imputer import impute_documents
 
     cleaned, impute_log = impute_documents(cleaned)
     if impute_log:
@@ -113,7 +113,7 @@ def _detect_content_anomalies_stage(
     cleaned: list[Document],
 ) -> tuple[list[Document], list[AnomalyRecord], int]:
     """阶段4：异常检测·内容层（去重前，处理乱码型异常）"""
-    from tools.anomaly import detect_content_anomalies
+    from document_processing.anomaly import detect_content_anomalies
 
     cleaned, content_anomaly_records = detect_content_anomalies(cleaned)
     # 过滤全乱码文档（不入库）
@@ -135,7 +135,7 @@ def _run_dedup(
     if not (dedup or fuzzy_dedup):
         return cleaned, []
 
-    from tools.dedup import dedup_documents
+    from document_processing.dedup import dedup_documents
 
     cleaned, dup_records = dedup_documents(
         cleaned,
@@ -153,7 +153,7 @@ def _detect_statistical_anomalies_stage(
     content_anomaly_records: list[AnomalyRecord],
 ) -> tuple[list[Document], int]:
     """阶段6：异常检测·统计层（去重后，统计指标更准确）"""
-    from tools.anomaly import detect_statistical_anomalies
+    from document_processing.anomaly import detect_statistical_anomalies
 
     cleaned, anomaly_records = detect_statistical_anomalies(
         cleaned, prev_records=content_anomaly_records

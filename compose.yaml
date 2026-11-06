@@ -64,9 +64,9 @@ services:
         - path: src/service/
           action: sync+restart
           target: /app/src/service/
-        - path: src/tools/
+        - path: src/document_processing/
           action: sync+restart
-          target: /app/src/tools/
+          target: /app/src/document_processing/
         - path: src/run_service.py
           action: sync+restart
           target: /app/src/run_service.py

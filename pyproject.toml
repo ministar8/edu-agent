@@ -150,5 +150,5 @@ errors = { bad-argument-type = false, missing-attribute = false, not-iterable = 
 # （`unbound-name` 也已开启：查出 `imputer.py` 里 `tokenizer = jieba` 之后
 #   却用 `jieba.cut()` —— 运行时靠 `if tokenizer:` 间接守着，属脆弱写法，已改）
 [[tool.pyrefly.sub-config]]
-matches = "src/tools/**"
+matches = "src/document_processing/**"
 errors = { bad-argument-type = false, missing-attribute = false, not-iterable = false, bad-assignment = false, bad-return = false, not-callable = false, bad-unpacking = false, unsupported-operation = false }
