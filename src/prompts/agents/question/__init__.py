@@ -1,3 +1,9 @@
-from prompts.agents.question.prompt import QUESTION_AGENT_SYSTEM_PROMPT
+from prompts.agents.question.prompt import (
+    QUESTION_AGENT_SYSTEM_PROMPT,
+    QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
+)
 
-__all__ = ["QUESTION_AGENT_SYSTEM_PROMPT"]
+__all__ = [
+    "QUESTION_AGENT_SYSTEM_PROMPT",
+    "QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT",
+]

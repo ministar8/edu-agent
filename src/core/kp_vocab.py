@@ -7,7 +7,7 @@
 是「规范考点名」（canonical name）。它有两个消费方：
 
     ① `memory.topics.normalize_topic` —— 把自由文本**归一**到 canonical；
-    ② `prompts.service.GRADE_PROMPT`   —— 约束**模型产出**必须是 canonical。
+    ② `prompts.templates.GRADE_PROMPT`   —— 约束**模型产出**必须是 canonical。
 
 若两处**各读各的**，就会出现「模型被诱导产出的词表」与「归一化认的词表」
 **不同源** —— 这正是缺陷 E 的成因：模型产出 `图的基本性质` / `堆的定义`，

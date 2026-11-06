@@ -32,7 +32,7 @@
   而非别名表覆盖 —— 不要据此高估本函数的确定性。
 
 ★ 2026-10-06（缺陷 E 收敛）：词表解析**已迁至 `core.kp_vocab`**。
-  本模块**不再自行解析 jsonl** —— 因为 `prompts.service.GRADE_PROMPT` 需要同一份
+  本模块**不再自行解析 jsonl** —— 因为 `prompts.templates.GRADE_PROMPT` 需要同一份
   词表去约束模型输出；两处各读各的会重新制造「产出词表 ≠ 归一化词表」的错配
   （即缺陷 E：模型产出 `图的基本性质`，而 canonical 只有 `图`）。
 
@@ -48,7 +48,7 @@ import unicodedata
 
 # canonical 词表的**唯一事实源**在 `core.kp_vocab`（2026-10-06 缺陷 E 收敛）。
 # ★ 不要在本模块重新解析 `knowledge/knowledge_points/*.jsonl` ——
-#   `prompts.service.GRADE_PROMPT` 也从同一模块取词表，两处一旦各读各的，
+#   `prompts.templates.GRADE_PROMPT` 也从同一模块取词表，两处一旦各读各的，
 #   就会出现「模型产出词表 ≠ 归一化词表」的错配（缺陷 E 的成因）。
 from core.kp_vocab import canonical_names as _kp_canonical_names
 

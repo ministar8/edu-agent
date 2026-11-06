@@ -7,7 +7,7 @@
 调用点是否更新仍靠人；但模板一改，登记表不匹配就会在 import 期直接报错，不会静默。
 """
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 _DRY_RUN_VALUE = "x"

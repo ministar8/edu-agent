@@ -1,13 +1,15 @@
-"""RAG 层单轮任务模板。
+"""RAG 检索层单轮任务模板。
 
-四者都是**单轮调用**（无对话历史），统一把「指令」放 SystemMessage、「数据」放 HumanMessage ——
+三者都是**单轮调用**（无对话历史），统一把「指令」放 SystemMessage、「数据」放 HumanMessage ——
 检索证据属于不可信输入，结构上必须与指令分属不同角色。
 
 调用点：
-  - HYDE_PROMPT       → rag/hyde.py
-  - CLASSIFY_PROMPT   → rag/query_classifier.py
-  - DECOMPOSE_PROMPT  → rag/query_decomposer.py
-  - RELEVANCE_PROMPT  → rag/verifier.py
+  - HYDE_PROMPT       → rag/retrieval/hyde.py
+  - CLASSIFY_PROMPT   → rag/retrieval/query_classifier.py
+  - DECOMPOSE_PROMPT  → rag/retrieval/query_decomposer.py
+
+注：证据相关性校验已改为纯规则层（见 `rag/retrieval/verifier.py` 顶部裁定 B5），
+不再有 LLM 相关性 Prompt。
 """
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -54,18 +56,5 @@ DECOMPOSE_PROMPT = ChatPromptTemplate.from_messages(
             '子问题：["Cache写回法的工作原理", "虚拟存储器写回策略的工作原理", "两者异同对比"]',
         ),
         ("human", "问题：{query}"),
-    ]
-)
-
-RELEVANCE_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "判断检索证据是否与用户查询相关。\n"
-            "只输出 JSON，不要其他内容，格式：\n"
-            '{{"relevant_count": 数字, "irrelevant_count": 数字, '
-            '"completeness": 0-1浮点数, "reason": "简短说明"}}',
-        ),
-        ("human", "用户查询：{query}\n\n检索证据（前5条）：\n{evidence_list}"),
     ]
 )

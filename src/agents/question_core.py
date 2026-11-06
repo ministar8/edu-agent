@@ -9,7 +9,8 @@ from typing import Any
 from agents.factory import build_agent
 from agents.temperature import TEMPERATURE_QUESTION
 from agents.tools import asearch_question_templates
-from prompts import QUESTION_GEN_PROMPT, QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
+from prompts.agents.question import QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
+from prompts.service import build_question_gen_messages
 from schema.questions import GeneratedQuestionSet
 
 question_gen_agent: Any = build_agent(
@@ -40,7 +41,7 @@ async def agenerate_question_set(
 
     structured output 偶发失败（模型输出不满足 schema）时重试一次，再失败才抛错。
     """
-    messages = QUESTION_GEN_PROMPT.format_messages(count=count, topic=topic, difficulty=difficulty)
+    messages = build_question_gen_messages(topic=topic, count=count, difficulty=difficulty)
     state = await question_gen_agent.ainvoke({"messages": messages})
     result: GeneratedQuestionSet | None = state.get("structured_response")
     if result is None:

@@ -1,4 +1,9 @@
-"""统一结构规范：所有 Prompt 必须遵守的 5 字段骨架。
+"""统一结构规范：所有 **Agent Prompt** 必须遵守的 5 字段骨架。
+
+适用范围：四个聊天 Agent（Supervisor / Knowledge / Question / Grading）的
+静态 System Prompt。RAG 单轮模板与 service 结构化模板按各自任务形态设计，
+不套用 5 字段（它们没有「角色/工具/示例」这类对话语义）。
+
 
 [角色]  明确身份、职责和能力边界
 [工具]  说明可用工具及调用时机

@@ -9,10 +9,10 @@
 
 按消费方分模块：
   - `prompts.supervisor`  Supervisor Prompt（路由主管，第1层纯字符串）
-  - `prompts.agents`      三个专业 Agent Prompt（第1层纯字符串）
-  - `prompts.templates`   Supervisor Prompt 模板（第2层 ChatPromptTemplate）
-  - `prompts.rag`         RAG 层单轮任务模板（ChatPromptTemplate）
-  - `prompts.service`     service 层出题与批改模板（ChatPromptTemplate）
+  - `prompts.agents`      三个专业 Agent Prompt + 结构化出题 Prompt（第1层纯字符串）
+  - `prompts.templates`   Prompt 模板（第2层 ChatPromptTemplate：supervisor / 批改 / 出题）
+  - `prompts.rag.retrieval` RAG 检索层单轮任务模板（ChatPromptTemplate）
+  - `prompts.service`     提示词服务层（变量准备 + 模板调用）
   - `prompts.common`      公共行为规则（各 Prompt 自行按需导入，不强制统一拼接）
   - `prompts.structure`   统一结构规范（5 字段骨架 + 统一组装函数）
 """
@@ -33,11 +33,15 @@ from prompts.supervisor import SUPERVISOR_PROMPT
 from prompts.agents import (
     KNOWLEDGE_AGENT_SYSTEM_PROMPT,
     QUESTION_AGENT_SYSTEM_PROMPT,
+    QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
     GRADING_AGENT_SYSTEM_PROMPT,
 )
-from prompts.templates import SUPERVISOR_PROMPT_TEMPLATE
-from prompts.rag import CLASSIFY_PROMPT, DECOMPOSE_PROMPT, HYDE_PROMPT, RELEVANCE_PROMPT
-from prompts.service import GRADE_PROMPT, QUESTION_GEN_PROMPT, QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT
+from prompts.templates import (
+    GRADE_PROMPT,
+    QUESTION_GEN_PROMPT,
+    SUPERVISOR_PROMPT_TEMPLATE,
+)
+from prompts.rag import CLASSIFY_PROMPT, DECOMPOSE_PROMPT, HYDE_PROMPT
 
 __all__ = [
     "SAFETY_RULES",
@@ -47,6 +51,7 @@ __all__ = [
     "JSON_ONLY_RULE",
     "CLASSIFY_PROMPT",
     "DECOMPOSE_PROMPT",
+    "GRADE_PROMPT",
     "GRADING_AGENT_SYSTEM_PROMPT",
     "HYDE_PROMPT",
     "KNOWLEDGE_AGENT_SYSTEM_PROMPT",
@@ -54,7 +59,6 @@ __all__ = [
     "QUESTION_AGENT_SYSTEM_PROMPT",
     "QUESTION_GEN_PROMPT",
     "QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT",
-    "RELEVANCE_PROMPT",
     "SUPERVISOR_PROMPT",
     "SUPERVISOR_PROMPT_TEMPLATE",
 ]
@@ -64,21 +68,20 @@ _STATIC_PROMPTS = {
     "prompts.agents.KNOWLEDGE_AGENT_SYSTEM_PROMPT": KNOWLEDGE_AGENT_SYSTEM_PROMPT,
     "prompts.agents.GRADING_AGENT_SYSTEM_PROMPT": GRADING_AGENT_SYSTEM_PROMPT,
     "prompts.agents.QUESTION_AGENT_SYSTEM_PROMPT": QUESTION_AGENT_SYSTEM_PROMPT,
-    "prompts.service.QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT": QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
+    "prompts.agents.QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT": QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT,
     "prompts.supervisor.SUPERVISOR_PROMPT": SUPERVISOR_PROMPT,
 }
 
 # 带变量的模板 → 期望变量（集中登记；改模板必须同步这里）
 _TEMPLATES: dict = {
-    "prompts.rag.HYDE_PROMPT": (HYDE_PROMPT, {"query", "max_chars"}),
-    "prompts.rag.CLASSIFY_PROMPT": (CLASSIFY_PROMPT, {"query"}),
-    "prompts.rag.DECOMPOSE_PROMPT": (DECOMPOSE_PROMPT, {"query", "max_subs"}),
-    "prompts.rag.RELEVANCE_PROMPT": (RELEVANCE_PROMPT, {"query", "evidence_list"}),
-    "prompts.service.GRADE_PROMPT": (
+    "prompts.rag.retrieval.HYDE_PROMPT": (HYDE_PROMPT, {"query", "max_chars"}),
+    "prompts.rag.retrieval.CLASSIFY_PROMPT": (CLASSIFY_PROMPT, {"query"}),
+    "prompts.rag.retrieval.DECOMPOSE_PROMPT": (DECOMPOSE_PROMPT, {"query", "max_subs"}),
+    "prompts.templates.GRADE_PROMPT": (
         GRADE_PROMPT,
         {"stem", "standard_answer", "user_answer"},
     ),
-    "prompts.service.QUESTION_GEN_PROMPT": (
+    "prompts.templates.QUESTION_GEN_PROMPT": (
         QUESTION_GEN_PROMPT,
         {"count", "topic", "difficulty"},
     ),

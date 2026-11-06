@@ -1,17 +1,22 @@
 """Prompt 模板层（第2层）。
 
-将第1层的纯字符串 System Prompt 与动态业务变量组合成
-ChatPromptTemplate，负责把静态提示词与运行时上下文
-（如对话历史）结合成消息列表。
+集中存放 ChatPromptTemplate：把第1层的静态 System Prompt 与动态业务变量
+组合成消息列表。使用方式分两种：
 
-说明：三个专业 Agent 的动态数据由 LangGraph 以 messages 直接传入，
-不需要额外的 HumanMessage 模板；批改/出题的动态模板由
-`prompts.service`（GRADE_PROMPT / QUESTION_GEN_PROMPT）在 core 节点中
-用 `format_messages()` 组装，避免在此重复定义。
+- Supervisor 模板由 `create_supervisor(prompt=...)` 直接消费，消息由 LangGraph 填充；
+- 批改 / 出题模板由 `prompts.service` 准备变量后调用 `format_messages()`。
+
+- `supervisor.py`：Supervisor 路由模板（对话历史）
+- `grading.py`   ：批改模板（题干 / 标准答案 / 学生答案）
+- `question.py`  ：出题模板（主题 / 数量 / 难度）
 """
 
+from prompts.templates.grading import GRADE_PROMPT
+from prompts.templates.question import QUESTION_GEN_PROMPT
 from prompts.templates.supervisor import SUPERVISOR_PROMPT_TEMPLATE
 
 __all__ = [
+    "GRADE_PROMPT",
+    "QUESTION_GEN_PROMPT",
     "SUPERVISOR_PROMPT_TEMPLATE",
 ]

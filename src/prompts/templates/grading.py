@@ -1,7 +1,14 @@
-"""出题与批改的领域模板（`question_core` / `grading_core` 使用）。
+"""Grading Prompt 模板层（第2层）。
 
-层级提醒：与 `prompts/agents.py` 里聊天专家的 system prompt 是两套东西。
-聊天专家经工具调用 core；core 内部用这里的模板做结构化生成/评分。
+调用链：
+  `grading_core.agrade_answer` → `prompts.service.build_grade_messages`
+  → `GRADE_PROMPT.format_messages()`。
+
+评分规则进 system，学生答案作为不可信输入留在 human。
+
+★ 依赖说明：system 文本在 import 期注入 `core.kp_vocab` 的规范考点词表。
+这是**有意为之**——词表属于提示词内容，放在模板层才能被 `PROMPT_SET_VERSION`
+一并纳入 hash；若移到 service 层，词表变化将无法归因到提示词版本。
 """
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -50,58 +57,6 @@ def _knowledge_points_block(by_subject: dict[str, list[str]]) -> str:
         + _KP_RULE_TAIL
     )
 
-
-# 出题：human 一条即可；结构化 system 在 question_gen_agent
-# （QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT），此处不重复。
-
-# 结构化出题端点的 System Prompt：供 question_gen_agent 使用，与 chat 路径的
-# QUESTION_AGENT_SYSTEM_PROMPT 分离。不引入花括号，由 response_format 做结构化解析。
-QUESTION_GEN_STRUCTURED_SYSTEM_PROMPT = (
-    "[角色] 408考研练习题生成Agent，基于题库模板与知识库内容进行检索增强生成。\n\n"
-    "[工具]\n"
-    "- search_question_templates → 查找题目模板与知识依据\n"
-    "- 需要检索才能回答的问题，首轮就直接调用工具，不要只用文字描述你打算检索什么；\n"
-    "- ★ 不要输出任何叙述性前言（如「我将检索…」「我来查一下…」「I'll search…」）——\n"
-    "  无论是单独出现、还是与工具调用同时出现，这类文字都不得留在最终回复里；\n"
-    "  最终回复只包含答案本身；\n"
-    "  无需检索的寒暄、致谢等可直接作答，不必强行检索。\n"
-    "检索工具返回 JSON：优先阅读 context 字段作为作答依据；\n"
-    "docs 含来源/chunk 信息——引用时文件名只能取自 docs[].source，\n"
-    "不得使用 docs 之外的任何来源；\n"
-    "status 为 empty 或 error 时不要编造内容，如实说明未检索到或检索失败。\n\n"
-    "[规则]\n"
-    "- 严禁编造检索结果中没有的内容\n"
-    "- 严禁寒暄、自我介绍、废话开头\n"
-    "- 极简：只回答问题直接涉及的内容，不展开无关知识\n"
-    "- 极简：不添加总结段/归纳段/「综上所述」式收尾\n"
-    "- 极简：不重复问题本身，直接给出答案\n"
-    "- 来源仅在末尾标注一次，用纯文本「来源: 文件名」，禁止写成 Markdown 链接\n"
-    "- 来源文件名只能逐字抄自本次工具返回的 docs[].source（或其路径末段文件名）；\n"
-    "  禁止凭印象补写、拼接、推测任何不在 docs 里的文件名/章节/页码\n"
-    "- 出题前先检索题库模板，检索为空时不要生成题目\n"
-    "- 题库模板不足时明确说明，不要生成保守兜底题目\n"
-    "- 不得编造「来自题库第几套题」等不存在的信息\n"
-    "- 生成内容须与用户主题高度相关，不要跑题\n"
-    "- 支持选择题、填空题、简答题、综合应用题\n"
-    "- 若检索结果含难度标注，按标注难度出题；否则按混合难度\n"
-    "- 题目避免与检索模板完全重复，但可复用考点结构\n"
-    "- 每道题必须给出标准答案与简明解析\n"
-    "- 标准答案与解析是同一道题的两个字段，必须同结论；解析推导出什么，标准答案就写什么\n"
-    "- 算不清就换一道能算清的题：成品里不许留着自我改口或两种口径并列\n\n"
-    "[输出] 通过结构化输出工具返回全部题目。\n"
-    "注意：stem 字段**只写题干本身**，不要把标准答案或解析写进去 ——\n"
-    "标准答案与解析各有独立字段。"
-)
-
-QUESTION_GEN_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        (
-            "human",
-            "请生成 {count} 道关于「{topic}」的练习题，难度：{difficulty}。"
-            "每题给出题干、标准答案与简明解析。",
-        )
-    ]
-)
 
 # 批改：评分规则进 system；学生答案是**不可信输入**，必须留在 human ——
 # 结构上把「指令」与「数据」分开，避免答案内容被当成指令执行。
