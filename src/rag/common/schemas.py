@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -23,7 +25,7 @@ class DecomposeResult(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _wrap_bare_list(cls, data):
+    def _wrap_bare_list(cls: type[DecomposeResult], data: Any) -> Any:
         """LLM 有时直接返回 list 而非 {"sub_queries": list}，自动包装"""
         if isinstance(data, list):
             return {"sub_queries": data}

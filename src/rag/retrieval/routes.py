@@ -12,6 +12,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from langchain_core.documents import Document
 
@@ -265,12 +267,12 @@ def _route_timeout_seconds(route_name: str) -> float:
 
 async def _safe_to_thread(
     name: str,
-    func,
-    *args,
+    func: Callable[..., Any],
+    *args: Any,
     timeout: float,
-    default=None,
-    **kwargs,
-):
+    default: Any = None,
+    **kwargs: Any,
+) -> Any:
     """把一次同步路由调用包成「**不抛出** + **必留痕**」。
 
     ★★ 这里就是 B7 的**覆盖面收口点**（v1.3）：探针层永远收不到异常（异常在本函数
@@ -351,7 +353,7 @@ async def _search_one_route(
     target_collection, route_name, route_query, route_filter = spec
     route_id = f"{target_collection}:{route_name}"
 
-    def _run():
+    def _run() -> tuple[str, Any]:
         route_k = _route_adaptive_k(k, use_rerank, route_name)
         result = _raw_search(
             route_query,

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import math
+from typing import Any
 
 from langchain_core.documents import Document
 
@@ -35,7 +36,7 @@ def _candidate_limit(k: int) -> int:
     return max(k * settings.BM25_CANDIDATE_FACTOR, settings.BM25_CANDIDATE_FLOOR)
 
 
-def _open_collection(collection_name: str):
+def _open_collection(collection_name: str) -> Any:
     """取 Chroma collection；整条词法路由坏掉时记录失败并 raise（不伪装成空结果）。"""
     try:
         from infra.vectorstore import get_vector_store_manager
@@ -53,7 +54,7 @@ def _open_collection(collection_name: str):
         raise  # 交给调用方收敛为 status="error"；不再伪装成空结果
 
 
-def _sample_avgdl(collection, total_docs: int) -> float:
+def _sample_avgdl(collection: Any, total_docs: int) -> float:
     """采样 ≤500 篇估计平均文档长度（无样本时回退 100.0）。"""
     sample_size = min(total_docs, 500)
     sample_result = collection.get(limit=sample_size, include=["documents"])
@@ -62,7 +63,7 @@ def _sample_avgdl(collection, total_docs: int) -> float:
 
 
 def _score_term(
-    collection,
+    collection: Any,
     term: str,
     k: int,
     filter: dict | None,

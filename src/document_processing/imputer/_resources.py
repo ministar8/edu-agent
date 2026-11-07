@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from functools import wraps
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ _QUOTA_CONFIG = {
 class _ResourceGuard:
     """资源配额监控器：跟踪昂贵操作调用次数，超限时自动降级"""
 
-    def __init__(self, config: dict | None = None):
+    def __init__(self, config: dict | None = None) -> None:
         self._config = config or _QUOTA_CONFIG
         self._counters: dict[str, int] = {}
         self._degraded: set[str] = set()  # 已降级的操作集合
@@ -78,12 +80,12 @@ class _ResourceGuard:
 _resource_guard = _ResourceGuard()
 
 
-def _with_timeout(timeout: float):
+def _with_timeout(timeout: float) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """超时装饰器：超时则返回 None 并降级"""
 
-    def decorator(func):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             start = time.perf_counter()
             try:
                 result = func(*args, **kwargs)

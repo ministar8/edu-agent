@@ -352,7 +352,7 @@ def _impute_section_headings(doc: Document) -> list[dict]:
         profile = _resolve_segment_profile(doc)
 
         @_with_timeout(_QUOTA_CONFIG["semantic_segment"]["timeout"])
-        def _semantic():
+        def _semantic() -> list[dict]:
             return _semantic_segment(
                 text,
                 min_chunk=profile.min_chunk,

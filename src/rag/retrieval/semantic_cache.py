@@ -18,6 +18,7 @@ import time
 from typing import Any
 
 from core.settings import settings
+from infra.vectorstore import VectorStoreManager
 from rag.retrieval._semantic_cache_codec import (
     _COLLECTION_NAME,
     _DATA_DIR,
@@ -49,7 +50,7 @@ class SemanticCache(_EvidenceIoMixin):
         similarity_threshold: float = _SIMILARITY_THRESHOLD,
         ttl: int = _TTL,
         max_entries: int = _MAX_ENTRIES,
-    ):
+    ) -> None:
         self._similarity_threshold = similarity_threshold
         self._ttl = ttl
         self._max_entries = max_entries
@@ -75,7 +76,7 @@ class SemanticCache(_EvidenceIoMixin):
 
     # ── 惰性初始化 ─────────────────────────────────────────
 
-    def _build_collection_sync(self, mgr) -> None:
+    def _build_collection_sync(self, mgr: VectorStoreManager) -> None:
         """同步取/建缓存集合 + 触发可读性校验 + 载入 JSONL 元数据（happy path）。"""
         self._embedding_fn = mgr.embeddings
 
@@ -96,7 +97,7 @@ class SemanticCache(_EvidenceIoMixin):
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._load_meta_from_jsonl()
 
-    def _recover_corrupt_sync(self, mgr) -> None:
+    def _recover_corrupt_sync(self, mgr: VectorStoreManager) -> None:
         """HNSW 损坏的同步恢复：删集合 + 清 JSONL + 清内存索引（调用方随后立即重试）。"""
         if mgr is None:
             # manager 都拿不到，删集合无从谈起 —— 如实记录并继续，
@@ -123,7 +124,7 @@ class SemanticCache(_EvidenceIoMixin):
         self._meta.clear()
         self._jsonl_offsets.clear()
 
-    def _ensure_init(self):
+    def _ensure_init(self) -> None:
         """惰性初始化 ChromaDB 集合与 JSONL 存储。"""
         if self._collection is not None:
             return
@@ -163,7 +164,7 @@ class SemanticCache(_EvidenceIoMixin):
                     )
                     self._collection = None
 
-    async def _build_collection_async(self, mgr) -> None:
+    async def _build_collection_async(self, mgr: VectorStoreManager) -> None:
         """异步取/建缓存集合 + 可读性校验 + 载入 JSONL 元数据（happy path）。"""
         self._embedding_fn = mgr.embeddings
         self._collection = await asyncio.to_thread(
@@ -180,7 +181,7 @@ class SemanticCache(_EvidenceIoMixin):
         await asyncio.to_thread(self._data_dir.mkdir, parents=True, exist_ok=True)
         await asyncio.to_thread(self._load_meta_from_jsonl)
 
-    async def _recover_corrupt_async(self, mgr) -> None:
+    async def _recover_corrupt_async(self, mgr: VectorStoreManager) -> None:
         """HNSW 损坏的异步恢复：删集合 + 清 JSONL + 清内存索引（调用方随后立即重试）。"""
         if mgr is None:
             logger.warning(
@@ -202,7 +203,7 @@ class SemanticCache(_EvidenceIoMixin):
         self._meta.clear()
         self._jsonl_offsets.clear()
 
-    async def _aensure_init(self):
+    async def _aensure_init(self) -> None:
         """异步惰性初始化包装：重试等待不阻塞事件循环。"""
         if self._collection is not None:
             return
@@ -240,7 +241,7 @@ class SemanticCache(_EvidenceIoMixin):
                     )
                     self._collection = None
 
-    def _load_meta_from_jsonl(self):
+    def _load_meta_from_jsonl(self) -> None:
         """启动时从 JSONL 文件加载元数据条目。
 
         `time.monotonic()` 重启后会归零，故**不可信**存储的单调时间戳；

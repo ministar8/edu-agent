@@ -95,7 +95,7 @@ def _non_stopword_ratio(text: str) -> float:
         return 1.0
 
     @_with_timeout(_QUOTA_CONFIG["jieba_stopword"]["timeout"])
-    def _compute():
+    def _compute() -> float:
         try:
             import jieba
 
@@ -223,7 +223,7 @@ def _heading_from_original(text: str, source_ext: str) -> tuple[str, str, str] |
     if source_ext == ".pdf" and _resource_guard.check_and_record("pdf_feature"):
 
         @_with_timeout(_QUOTA_CONFIG["pdf_feature"]["timeout"])
-        def _pdf_detect():
+        def _pdf_detect() -> tuple[str, str, str] | None:
             return _extract_pdf_heading_by_features(text)
 
         result = _pdf_detect()
@@ -258,7 +258,7 @@ def _impute_heading_medium_low(
     if text and min_level >= 2 and _resource_guard.check_and_record("jieba_keyword"):
 
         @_with_timeout(_QUOTA_CONFIG["jieba_keyword"]["timeout"])
-        def _keyword_extract():
+        def _keyword_extract() -> str | None:
             try:
                 import jieba.analyse
 

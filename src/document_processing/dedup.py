@@ -168,7 +168,7 @@ class _SimpleMinHash:
     使用多个哈希函数模拟 MinHash 签名。
     """
 
-    def __init__(self, ngrams: set[str], num_perm: int = 128):
+    def __init__(self, ngrams: set[str], num_perm: int = 128) -> None:
         self._signatures: list[int] = []
         for i in range(num_perm):
             min_hash = float("inf")
@@ -382,7 +382,7 @@ def _lsh_batch(
 
 
 def _lsh_query_and_record(
-    lsh,
+    lsh: "MinHashLSH",  # noqa: UP037,F821
     documents: list[Document],
     minhashes: list[object],
     query_index: int,

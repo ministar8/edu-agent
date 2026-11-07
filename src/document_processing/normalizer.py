@@ -142,21 +142,21 @@ def _normalize_dates(text: str) -> str:
     """
 
     # 先处理完整日期（含日）
-    def _cn_date_full(m):
+    def _cn_date_full(m: re.Match[str]) -> str:
         y, mth, d = m.group(1), int(m.group(2)), int(m.group(3))
         return f"{y}-{mth:02d}-{d:02d}"
 
     text = _DATE_CN_RE.sub(_cn_date_full, text)
 
     # 中文年月（无日）
-    def _cn_date_month(m):
+    def _cn_date_month(m: re.Match[str]) -> str:
         y, mth = m.group(1), int(m.group(2))
         return f"{y}-{mth:02d}"
 
     text = _DATE_CN_MONTH_RE.sub(_cn_date_month, text)
 
     # 斜杠/横杠日期
-    def _slash_date(m):
+    def _slash_date(m: re.Match[str]) -> str:
         y, mth, d = m.group(1), int(m.group(2)), int(m.group(3))
         return f"{y}-{mth:02d}-{d:02d}"
 
@@ -171,7 +171,7 @@ def _normalize_times(text: str) -> str:
     "12点30分" / "12时30分" → "12:30"
     """
 
-    def _time_replace(m):
+    def _time_replace(m: re.Match[str]) -> str:
         h, minute = int(m.group(1)), int(m.group(2))
         return f"{h:02d}:{minute:02d}"
 
@@ -187,7 +187,7 @@ _opencc_converter = None
 _opencc_available: bool | None = None
 
 
-def _get_opencc_converter():
+def _get_opencc_converter() -> "OpenCC | None":  # noqa: UP037,F821
     """获取 OpenCC 转换器单例
 
     首次调用时初始化并缓存，后续调用直接复用。
@@ -242,7 +242,7 @@ def _normalize_list_markers(text: str) -> str:
     """
 
     # ①②③ → [1] [2] [3]
-    def _circled_replace(m):
+    def _circled_replace(m: re.Match[str]) -> str:
         ch = m.group(0)
         num = _CIRCLED_NUM_MAP.get(ch, ch)
         return f"[{num}]"

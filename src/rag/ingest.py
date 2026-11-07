@@ -15,7 +15,7 @@ import time
 
 from core.settings import settings
 from infra.metrics import metrics
-from infra.vectorstore import get_vector_store_manager
+from infra.vectorstore import VectorStoreManager, get_vector_store_manager
 from rag.chunking.cleaner import clean_documents
 from rag.chunking.enhancer import enhance_documents
 from rag.chunking.loader import SUPPORTED_EXTENSIONS, load_single_file
@@ -68,7 +68,7 @@ def _collect_category_files(dir_path: str) -> list[str]:
 
 
 def _ingest_one_file(
-    filepath: str, dir_path: str, category: str, vector_store_manager
+    filepath: str, dir_path: str, category: str, vector_store_manager: VectorStoreManager
 ) -> tuple[int, int]:
     """单文件全链：load → clean → split → enhance → tag → 入库 + 指标。返回 (chunks, indexed)。"""
     filename = os.path.relpath(filepath, dir_path)
@@ -107,7 +107,7 @@ def _ingest_one_file(
     return len(chunks), len(ids)
 
 
-def _await_category_ready(vsm, category: str, total_chunks: int) -> tuple[int, bool]:
+def _await_category_ready(vsm: VectorStoreManager, category: str, total_chunks: int) -> tuple[int, bool]:
     """就绪屏障：等 HNSW 落盘。返回 (重试次数, 是否仍不可查询)。
 
     调用方（`ingest_all`）紧接着会跑检索 smoke；不等就可能 smoke 全落空，
@@ -271,7 +271,7 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
         )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="智能教学系统 - 全量索引构建")
     parser.add_argument("--category", "-c", type=str, default=None, help="只处理指定分类")
     parser.add_argument("--rebuild", "-r", action="store_true", default=False, help="全量重建")

@@ -13,6 +13,8 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
+from langchain_core.documents import Document
+
 from rag.retrieval.collections import EXAMS_COLLECTION, SUBJECT_COLLECTIONS
 from rag.retrieval.evidence import FusedEvidence, TextEvidence
 from rag.retrieval.topic_relevance import is_topic_relevant, topic_relevance_score
@@ -20,7 +22,7 @@ from rag.retrieval.topic_relevance import is_topic_relevant, topic_relevance_sco
 logger = logging.getLogger(__name__)
 
 
-def _doc_to_evidence(doc, score: float, collection: str) -> TextEvidence:
+def _doc_to_evidence(doc: Document, score: float, collection: str) -> TextEvidence:
     meta = dict(getattr(doc, "metadata", None) or {})
     meta.setdefault("kb_depth", meta.get("kb_depth") or "")
     chunk_id = str(meta.get("chunk_id") or meta.get("section.chunk_id") or "")
