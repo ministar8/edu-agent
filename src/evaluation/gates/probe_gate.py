@@ -67,7 +67,14 @@ import time
 from pathlib import Path
 from typing import Any
 
-from evaluation.gates import retrieval_gate as RG
+from evaluation.gates.retrieval_gate import (
+    build_index,
+    configure_for_gate,
+    embedding_mode,
+    rerank_backend,
+    rerank_mode,
+    wait_for_index_ready,
+)
 from evaluation.probe_tracing import DROP_REASONS, load_probes, trace_probe
 
 logger = logging.getLogger(__name__)
@@ -110,11 +117,11 @@ def run_probes(probe_path: str, *, k: int = 5) -> list[dict[str, Any]]:
     但出问题时靠它定位「是哪一层变了」。
     """
     tmp_dir = tempfile.mkdtemp(prefix="probe_gate_")
-    RG.configure_for_gate(tmp_dir)
-    counts = RG.build_index()
+    configure_for_gate(tmp_dir)
+    counts = build_index()
     if not counts:
         raise RuntimeError("临时索引为空 —— knowledge/ 目录缺失或全部解析失败")
-    RG.wait_for_index_ready(sorted(counts))
+    wait_for_index_ready(sorted(counts))
 
     probes = load_probes(probe_path)
     if not probes:
@@ -140,13 +147,13 @@ def run_probes(probe_path: str, *, k: int = 5) -> list[dict[str, Any]]:
 def _meta() -> dict[str, str]:
     """本次运行的口径。基线必须与之一致，否则数字不可比。"""
     return {
-        "embedding_mode": RG.embedding_mode(),
-        "rerank_mode": RG.rerank_mode(),
-        "rerank_backend": RG.rerank_backend(),
+        "embedding_mode": embedding_mode(),
+        "rerank_mode": rerank_mode(),
+        "rerank_backend": rerank_backend(),
     }
 
 
-def load_baseline(path: Path) -> dict[int, str] | None:
+def load_probe_baseline(path: Path) -> dict[int, str] | None:
     """读基线并**校验口径**；文件不存在返回 None。
 
     口径（embedding / rerank 三态 / rerank 实现）不一致时直接拒绝 ——
@@ -166,7 +173,7 @@ def load_baseline(path: Path) -> dict[int, str] | None:
     return {int(item["id"]): str(item["dropped_by"]) for item in payload.get("probes", [])}
 
 
-def build_baseline_payload(observations: list[dict[str, Any]]) -> dict[str, Any]:
+def build_probe_baseline_payload(observations: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "_meta": {
             **_meta(),
@@ -178,7 +185,7 @@ def build_baseline_payload(observations: list[dict[str, Any]]) -> dict[str, Any]
     }
 
 
-def compare_to_baseline(observations: list[dict[str, Any]], baseline: dict[int, str]) -> list[str]:
+def compare_probe_baseline(observations: list[dict[str, Any]], baseline: dict[int, str]) -> list[str]:
     """返回退化项的人类可读描述；空列表表示通过。**纯函数**。
 
     判据：**目标不得在比基线更早的层丢失**（`_stage_index` 不得变小）。
@@ -241,7 +248,7 @@ def _assert_rerank_scored(observations: list[dict[str, Any]]) -> list[str]:
     里防的那类静默回退，本门禁此前没有）。`rerank_scored` 是 ``trace_probe`` 抓到的
     「rerank_topn 快照里有没有 rerank_score > 0」的直接信号。
     """
-    if RG.rerank_mode() != "on":
+    if rerank_mode() != "on":
         return []
     unscored = sorted(o["id"] for o in observations if not o.get("rerank_scored", True))
     if unscored:
@@ -303,7 +310,7 @@ def _print_report(
 def _write_baseline(baseline_path: Path, observations: list[dict[str, Any]]) -> int:
     """落盘基线并返回退出码。"""
     baseline_path.write_text(
-        json.dumps(build_baseline_payload(observations), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(build_probe_baseline_payload(observations), ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
     print(f"基线已更新: {baseline_path}")
@@ -322,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
     baseline: dict[int, str] | None = None
     if not args.update_baseline:
         try:
-            baseline = load_baseline(baseline_path)
+            baseline = load_probe_baseline(baseline_path)
         except ValueError as exc:
             print(f"[拒绝] {exc}", file=sys.stderr)
             return 2
@@ -343,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.json:
-        print(json.dumps(build_baseline_payload(observations), ensure_ascii=False, indent=2))
+        print(json.dumps(build_probe_baseline_payload(observations), ensure_ascii=False, indent=2))
         return 0
 
     _print_report(observations, baseline, args.k)
@@ -358,7 +365,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    regressions = compare_to_baseline(observations, baseline)
+    regressions = compare_probe_baseline(observations, baseline)
     jitter = jitter_warnings(observations, baseline)
     if jitter:
         print(
