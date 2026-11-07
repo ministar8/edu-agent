@@ -7,8 +7,6 @@
 **EDU-Agent** —— 408 考研智能教学辅导多 Agent 系统。基于 LangGraph + FastAPI + RAG，
 支持知识问答、智能出题与答案批改。工程骨架对齐 [agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit)。
 
-## 架构
-
 ```
 用户提问 → Supervisor（langgraph-supervisor create_supervisor 路由）
   ├─ knowledge_agent   知识讲解（RAG 检索）
@@ -16,7 +14,7 @@
   └─ grading_agent     批改（结构化打分 + 对话修饰）
         │
    RAG 检索管线：查询归一 → 分类 → 多路召回(语义 + BM25 + 元数据 + 同义词)
-                 → RRF 融合 → Reranker → HyDE → 语义缓存
+                → RRF 融合 → Reranker → HyDE → 语义缓存
 ```
 
 **存储**：ChromaDB（向量检索 + 语义缓存）｜SQLite（`data/sqlite/` 下：用户 `edu_agent.db` + 会话 `checkpoints.db` + 长期记忆 `store.db`）
@@ -55,9 +53,7 @@ PYTHONPATH=src uv run python -m evaluation.task_eval reprobe      # 只重跑检
 PYTHONPATH=src uv run python -m evaluation.task_eval backfill     # 回填机械可算字段（零 LLM）
 
 # Memory 链路 Gate 与效果探针（★ 本机必须带 PYTHONIOENCODING=utf-8，否则 GBK 打印 ✅ 时崩）
-PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_step2_gate.py
-PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_step4fix_gate.py
-PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/mem/memory_e5_probe.py --reanalyse --write  # 零 LLM 重析
+PYTHONIOENCODING=utf-8 PYTHONPATH=src uv run python scripts/ops/verify_memory_loop.py
 uv run python src/run_service.py         # 启动服务 → http://127.0.0.1:8000
 # 知识库入库：`rag.ingest` 自 2026-10-10 起**只负责 learning_paths**
 # （四科 / exams / code 已迁到 `ingest_layers`，逐层脚本见 `scripts/ingest/`）
@@ -97,121 +93,13 @@ docker compose up --build                # 容器化启动
 
 ## 工作区边界
 
-本仓库是**运行时 + 论文核心**的裁剪版：
+- **测试套件**：`tests/` 目录下单测约 **300 例**（`tests/test_memory/` 205 例 + `tests/test_document_processing/` 101 例 + 其他），纯本地 I/O、无网络无密钥、不碰真 Store/Chroma。
+- **CI**：只有两条 job（`.github/workflows/ci.yml`），① `ruff check` + `ruff format --check` + `pyrefly check` + `pytest -q`；② 检索质量门禁（只跑默认路由，假 embedding / 重排 off）。`task_eval` 与 Memory Gate 刻意不进 CI（要真密钥、按 token 计费、且模型输出有随机性），改动后需本机手动重跑。
+- **保留的自研门禁**：`evaluation.gates.retrieval_gate` / `probe_gate`（检索）+ Memory Gate（效果）。
 
-- **测试套件于 2026-10-14 恢复**（`tests/`，目前只有**遥测采样口径**的 19 例：采样三条性质、
-  报表两份计数、`core.settings` 导出旋钮）。**代码覆盖率与结构规模棘轮门禁仍未恢复** ——
-  原归档目录 `../edu-agent-engineering-archive/` **在本机已不存在**（2026-10-03 核实，
-  2026-10-14 复核仍无），无本地副本可取回。新增测试请继续走「反向验证」证明其能抓 bug。
-- **有 CI，但只有两条 job**（`.github/workflows/ci.yml`，2026-10-06 加）：
-  ① `ruff check` + `ruff format --check` + `pyrefly check` + `pytest -q`（2026-10-14 加，
-  纯本地 I/O、无网络无密钥，由 `[tool.pytest_env]` 供假环境）；
-  ② 检索质量门禁 —— **只跑默认路由**（假 embedding / 重排 off），比对的只是
-  `evals/baselines/retrieval_baseline.json` **这 1 份**。★ 门禁整体按 `(embedding, rerank)`
-  组合登记了 **6 份基线**，但其余 5 条（含唯一能答语义质量问题的**真 TEI 路由**）
-  **不在 CI 里**，须本机手跑（见 `README.md` 的路由口径说明）。
-  另支持 `workflow_dispatch` —— 答辩时可现场触发一次。
-- ★ **`task_eval` 与三个 Memory Gate 刻意不进 CI**：要真密钥、按 token 计费、且模型输出有随机性。
-  ⇒ **论文效果章的数字没有任何自动兜底**，改动批改链 / Memory 写链 / 评测器后，
-  **必须本机手动重跑** `scripts/memory_step*_gate.py`（带 `PYTHONIOENCODING=utf-8`）。
-- **保留**的自研门禁：`evaluation.gates.retrieval_gate` / `probe_gate`（检索）+ 上述 Memory Gate（效果）。
-- 检索数字的版本归属见 `docs/EXPERIMENTS.md` §18（`V-2026-10-02`），
-  效果数字见 **§20**（`V-2026-10-07`，标签对象 `abc115b` → 落点提交 `0f24891`）；两处都列了「已知偏离」，引用前先核对归属矩阵。
+## 注意事项（精简版）
 
-## 注意事项
-
-- 检索依赖两个本地 TEI 容器：`tei-embedding`（`localhost:11435`）与 `tei-rerank`（`localhost:11436`）。
-  部署入口只有 `scripts/tei_deploy.ps1`；日常 `docker start tei-embedding tei-rerank`。
-  就绪以 `scripts/ops/tei_ready.py` 为准（`/health` 200 ≠ 模型加载完成）。细节见 `docs/DOCKER.md`「TEI」。
-- **假 embedding 模式**：`pyproject.toml` 的 `[tool.pytest_env]` 设 `USE_FAKE_EMBEDDING=true` 后，
-  `get_embeddings()` 返回本地确定性哈希实现（`rag.common.embeddings.HashingEmbeddings`）——
-  **检索质量门禁靠它在无 TEI 时做可复现比对**（★ 严格说**不是逐位确定**：哈希 embedding 本身
-  确定，但**并列打破**不确定 —— 下游仍有按分数单键排序处（如 `dedup_same_section`），其并列
-  次序受**并发路由完成次序**影响；`docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b) 已实测归因，
-  同一节也实测 **HNSW 图本身是确定的**，别把这笔账记到 HNSW 上 ⇒ 实测 `fake/off` 多次复跑中
-  `category_precision` 取到 0.8871 / 0.8873 / 0.8875、`mean_evidence_count` 取到（证据：`src/evaluation/gates/retrieval_gate/_data.py` 的 `_METRIC_SPECS` 与 `data/metrics/rag_metrics.jsonl`）
-  4.4872 / 4.4936 / 4.5000；抖动 ±0.0002 ≪ 容差 0.02（`_data.py:_METRIC_SPECS`，（证据：`src/evaluation/gates/retrieval_gate/_data.py` 的 `_METRIC_SPECS`）
-  `mean_evidence_count` 更宽为 0.5）⇒ 不会翻门禁。比对是**双向**的：`cur > base + tolerance`
-  同样记退化，所以这个抖动两头都可能触发，只是当前幅度差两个数量级）。
-  该实现**只保留词汇重叠信号、
-  没有语义泛化能力，严禁用于生产**。
-  注意：`semantic_cache._DATA_DIR` / `_JSONL_FILE` 是**模块级常量（import 期固化）**，
-  临时重定向须用 `monkeypatch` 指向临时目录，否则会写坏真实的 `chroma_db/semantic_cache/`。
-- Windows 下 `run_service.py` 会把事件循环切到 `WindowsSelectorEventLoopPolicy`（异步 DB 驱动不兼容 Proactor）。
-- `src/rag/` 与 `src/document_processing/` 的类型注解尚不严格，`pyproject.toml` 中对这两个目录放宽了 pyrefly 检查（技术债）。
-- **Q&A 原子机制**：真题/例题会产出 `merged_qa` chunk（`section.chunk_role`），
-  并填 `qa.question/answer/answer_key`。`_ANSWER_RE` 同时认讲义「答案：」与真题
-  「选项行尾 ✅ + **解析**：」。`merged_qa_meta` **专用召回路由已否决**（两轮净负），
-  但 merged_qa 仍会经基础路由被大量召回。
-- **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑
-  `PYTHONPATH=src uv run python -m evaluation.gates.retrieval_gate`。
-  它用确定性哈希 embedding + 临时索引跑 156 条黄金集 query（`evals/datasets/golden/sample_408.jsonl`），与 `evals/baselines/retrieval_baseline.json`
-  对比，任一指标退化即失败。**它衡量的是检索管线是否退化，不是语义质量**（语义质量用
-  `evaluation.ragas.cli` 的 RAGAS）。改动导致指标变化时，用 `--update-baseline` 重录，
-  但**必须在 PR 里说明为什么这个变化是可接受的**。
-- **探针门禁（细粒度补充）**：`PYTHONPATH=src uv run python -m evaluation.gates.probe_gate`。
-  `retrieval_gate` 的 `kp_*` 是**章级**（只看文件名），测不到「**小节级细节是否进了证据**」；
-  本门禁用 `evals/datasets/golden/retrieval_probes.jsonl` 的 5 条 probe，记录每条 probe 的**目标 chunk 在
-  哪一层丢失**（`dropped_by`），与 `evals/baselines/probe_baseline.json` 比较 ——
-  **拦「后退」、放行「前进」**（层级序见 `probe_tracing.DROP_REASONS`）。
-  ★ **退 1 级只告警、不判退化**（`_STAGE_JITTER_TOLERANCE=1`，2026-10-13 加）：`dropped_by` 是
-  **离散标签**，拿不到 `retrieval_gate` 那种连续容差，而坐在层边界上的目标会被检索侧的
-  **并列打破**推过阈值（归因见 `docs/ARCHITECTURE_RETRIEVAL.md` §6.3(b)：下游按分数单键排序处
-  如 `dedup_same_section`，并列次序受**并发路由完成次序**影响；该节实测 **HNSW 图本身确定**）
-  —— 实测同码、同语料、同基线连跑 3 次，`#18` 出现 1 次
-  `rerank_topn(3) → rrf_threshold(2)`（恰好退 1 级）⇒ 假红 exit 1。故退 ≤1 级只走 stderr 告警，
-  退 ≥2 级才判退化。代价：真实的「退一级」会被放过，靠告警行留痕。
-  （★ 这次翻动只做了现象取证，**未单独归因**到 §6.3(b) 那条链。）
-  跑在**临时索引 + 就绪屏障**上；权威路由为
-  `GATE_USE_REAL_EMBEDDING=1 GATE_RERANK_MODE=on GATE_USE_REAL_RERANK=1`。
-  **不要**用 `candidate_trace` 当门禁 —— 它跑生产索引、无就绪屏障、无退出码。
-- **遥测报表（只读，不是门禁）**：`PYTHONPATH=src uv run python -m evaluation.diagnostics.telemetry_report`。
-  它给 `data/metrics/rag_metrics.jsonl`（由 `rag.common.metrics` 写入、此前**无任何读方**）
-  补上读方：流量构成、逐阶段漏斗（按 `query_type`）、有效阈值分布、入库交叉校验。
-  **无基线、无判定**；`--output <path>` 落盘归档（建议 `evals/results/`）。
-  ★ 三条使用纪律：① 用 `query_preview ∩ 黄金集` 判定流量来源 —— 评测占比**随窗口变**，
-  不是常数：09-27 之前的窗口 99.3%，含此后流量的整份日志只有 **93.9%**（2026-10-14 实测）。
-  ⇒ 它回答「管线各层在黄金集上的行为分布」，**不是**线上统计，别拿它推断生产表现。
-  ② **日志混了多个代码版本**（Step 1~10 各轮实验都写进同一份），必须用
-  `--since` / `--until`（ISO 或 `6h`/`3d`）把窗口钉到单一版本，否则读到的是**混合口径**
-  —— 实测 `generate` 过阈率在 09-27 15:00 前后为 0.075 → 0.187（窗口边界取法不同会复现成（证据：`data/metrics/rag_metrics.jsonl`（telemetry 日志，`--since/--until` 窗口复现））
-  0.1955，量级与结论不变）。（证据：`data/metrics/rag_metrics.jsonl`）
-  ③ 高频簿记事件（`chroma_query` / `embedding_batch` / `embed_documents`）自 2026-10-14 起
-  在**写侧**就按 1/100 采样 ⇒ `event_counts` 只能读作「日志行数」，「发生多少次」要读
-  `event_counts_estimated`（按每条自带的 `sampled_every` 还原）。`status != "ok"` **永不采样**
-  （同窗口 `chroma_query` 有 2,852 条 error，那是向量库读失败的唯一现场证据）。
-  要全量：`METRICS_SAMPLE_EVERY=1`。`event_counts_estimated` 是**下界**：模 100 的最后一个不满周期
-  没有代表行，四类合计少 128 条（每类误差上界 99），要精确数只能回未采样的原件。
-  同一规则也**追溯**整理过 10-10→10-14 这段历史：473,478 行 → 61,114 行、188.6 MB → 50.3 MB
-  （比写侧多削一类 `split_documents`，写侧对它仍全量）；原件 gz、前后 sha256、逐类残差
-  登记在 `../edu-agent-eval-archive/telemetry/MANIFEST.json` 的 `sampling_trim_2026-10-14`。
-- **门禁里的索引就绪屏障**：ChromaDB `add_documents` 之后立即查询会**间歇性**抛
-  `Error creating hnsw segment reader: Nothing found on disk` —— 每次命中的集合不同，
-  命中后该集合整轮不可查询（检索结果全错但不报错），会被误报成"检索退化"。
-  在临时索引上跑检索前，务必先调 `evaluation.gates.retrieval_gate.wait_for_index_ready()`
-  （`repair=True` 会对不可查询的集合只重建它自己后重试）。
-- **这个故障进程内无法恢复**（实测结论，别再试了）：丢弃 `_stores` 缓存句柄无效、
-  重开 `chromadb.PersistentClient` 无效，**只有 `delete_collection` + 重新入库有效**。
-  `VectorStoreManager.wait_until_ready` 因此是**检测器而非修复器** ——
-  它把静默错误变成入库期显式失败，并在错误信息里给出补救命令。
-  生产路径不要自动重建（删集合 = 真实数据丢失），必须人工确认。
-- **评测器口径四条硬规则**（2026-10-07 一轮 review 里全部实测踩到，改评测器前先读这几句）：
-  ① **「测不到」记 `None`（N/A，不进分母），绝不记 `False`** —— 旧 `category_hit` 用
-  `.get(subject, subject)` 把学科码 `cn` 拿去比类目名，恒 False，
-  系统性压低了 `grade`/`verify` 各 4 条（而 `qa`/`generate` 用 `network` 所以一直没暴露）；
-  ② **`case_invalid` 不进失败率**（分母 = 有效 n）—— 方案 §2.B「validity ≠ product failure」；
-  ③ **`used` 必须有记忆卡的事实前提**（`recalled_actual`），且 `correct_use` **按样本极性定义**
-  —— 旧口径下负样本「什么都没做」判失败、「碰巧提到」判通过，两个方向都错；
-  ④ **gold 一律用可接受集**（`expected_any`）并**逐题查 `kp_index`** ——
-  `堆` 不在表里、`排序` 与 `快速排序` 是并存两个节点，单值 gold 必产生假阴性。
-  ★ ①~④ 分别由 `memory_step4fix_gate.py` 的 **③j / ③i / ③d~③h** 锁定，不是靠文档自觉。
-- **建临时索引前必须把临时目录指到可写路径**（2026-11-05 实测）：本机 `%TEMP%`
-  （`C:\Users\star\AppData\Local\Temp`）**不可写**，而 SQLite 建库/压实要写临时文件 ⇒
-  `retrieval_gate` / `probe_gate` 建临时索引时报
-  `chromadb.errors.InternalError: ... (code: 14) unable to open database file`。
-  迷惑点是**能打开已存在的库、不能建新库、不能删集合**，极易误判成 chromadb 坏或 HNSW 段缺失。
-  处置：先 `export TMPDIR=$PWD/data/tmp TEMP=... TMP=... SQLITE_TMPDIR=$PWD/data/tmp` 再跑。
-- **Memory 三 gate 依赖 11 份 phase0/phase1 归档**（`phase0_baseline_final.jsonl`、
-  `phase1_baseline_v2.jsonl`、`phase1_e5_prompt_following.jsonl`、
-  `phase1_memory_step5_store_{on,off}.jsonl`、`*_step9_{d8,d8b,kp}.jsonl`）。它们是**门禁夹具**不是论文数字：
-  删掉后 `memory_step4fix_gate` 的 11 项判据变「未执行」、`㉔d` 直接红。清理旧效果数据时**不要**连带删除。
+- **假 embedding 模式**：`USE_FAKE_EMBEDDING=true` 时 `get_embeddings()` 返回本地确定性哈希实现，**只保留词汇重叠信号、没有语义泛化能力，严禁用于生产**。
+- **Windows 下**：`run_service.py` 会把事件循环切到 `WindowsSelectorEventLoopPolicy`（异步 DB 驱动不兼容 Proactor）。
+- **检索质量门禁**：改动检索链（阈值、RRF 权重、切分策略、去重、集合路由）后，必须跑 `evaluation.gates.retrieval_gate`，与 `evals/baselines/retrieval_baseline.json` 对比，任一指标退化即失败。
+- **临时索引建库**：本机 `%TEMP%`（`C:\Users\star\AppData\Local\Temp`）**不可写**，SQLite 建库/压实要写临时文件，`retrieval_gate` / `probe_gate` 建临时索引前须先设 `export TMPDIR=$PWD/data/tmp TEMP=... TMP=... SQLITE_TMPDIR=$PWD/data/tmp`。
