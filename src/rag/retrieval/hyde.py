@@ -4,9 +4,9 @@ import hashlib
 import logging
 
 from core.cache import BoundedCache
+from core.llm_calls import call_text_sync
 from core.settings import settings
-from prompts import HYDE_PROMPT
-from rag.retrieval.llm_calls import call_text_sync
+from prompts import HYDE_PROMPT, PROMPT_SET_VERSION
 from rag.retrieval.query_classifier import QueryCategory
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,12 @@ def _build_hyde_text(normalized_query: str) -> str:
         query=normalized_query, max_chars=settings.HYDE_MAX_CHARS
     )
     # 失败降级为"不使用 HyDE"（空串），由调用方跳过 HyDE 分支
-    text = call_text_sync(messages, temperature=settings.TEMP_DEFAULT, stage="hyde") or ""
+    text = call_text_sync(
+        messages,
+        temperature=settings.TEMP_DEFAULT,
+        stage="hyde",
+        prompt_set_version=PROMPT_SET_VERSION,
+    ) or ""
     if len(text) > settings.HYDE_MAX_CHARS:
         text = text[: settings.HYDE_MAX_CHARS]
     return text

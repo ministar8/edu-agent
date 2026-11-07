@@ -44,7 +44,7 @@ def configure_for_gate(persist_dir: str) -> None:
     那件事与 embedding 无关，且 CI/本地都不该为了跑门禁去打真实模型。
     """
     from core.settings import GATEWAY_DEFAULT_MODEL, Gateway, make_model_ref, settings
-    from rag.common import vectorstore as vs
+    from infra import vectorstore as vs
     from rag.retrieval import semantic_cache as sc
 
     settings.USE_FAKE_EMBEDDING = not GATE_USE_REAL_EMBEDDING
@@ -85,7 +85,7 @@ def wait_for_index_ready(
 
     生产路径**不做**自动重建 —— 那里删除集合意味着真实数据丢失，必须人工确认。
     """
-    from rag.common import vectorstore as vs
+    from infra import vectorstore as vs
 
     manager = vs.get_vector_store_manager()
     ready: dict[str, int] = {}
@@ -114,7 +114,7 @@ def build_index(categories: list[str] | None = None) -> dict[str, int]:
     逐位相等**（此前走通用 ``load → clean → split`` 链路、chunk 数与生产不等，见
     ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3）。
     """
-    from rag.common import vectorstore as vs
+    from infra import vectorstore as vs
     from rag.ingest_layers import build_all
     from rag.ingest_layers import code as code_layer
 

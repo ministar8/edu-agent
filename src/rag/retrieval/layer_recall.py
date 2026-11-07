@@ -69,7 +69,7 @@ async def _collect_topup_candidates(
     eligibility_where: dict | None,
 ) -> list[TextEvidence]:
     """对每个缺口层逐集合定向召回，滤掉已存在/错域项，返回带 `topic_relevance` 的候选。"""
-    from rag.common.vectorstore import get_vector_store_manager
+    from infra.vectorstore import get_vector_store_manager
     from schema.task_policy import merge_where_filters
 
     mgr = get_vector_store_manager()

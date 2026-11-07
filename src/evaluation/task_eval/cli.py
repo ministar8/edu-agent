@@ -276,7 +276,7 @@ async def _reprobe(args: argparse.Namespace) -> int:
     而 agent/judge 的产物（reply、final_quality）仍然有效。
     重跑探针只打 TEI embedding，不调用任何 LLM ⇒ 可放心重算。
     """
-    from rag.common.vectorstore import get_vector_store_manager
+    from infra.vectorstore import get_vector_store_manager
 
     records = _load_all_records(args.records)
     if not records:

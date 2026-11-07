@@ -14,10 +14,19 @@ from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel
 
 from core.settings import settings
-from rag.common.errors import RagInternalError, RetrievalUnavailable
-from rag.common.metrics import metrics
+from infra.errors import RagInternalError, RetrievalUnavailable
+from infra.metrics import metrics
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "OpenAICompatibleEmbeddings",
+    "HashingEmbeddings",
+    "get_embeddings",
+    "query_cache_stats",
+    "clear_query_cache",
+    "similarity_from_distance",
+]
 
 # 单批请求数量（本地 TEI / 远程 API 均适用）
 # 64 在部分 TEI 部署上会触发 413 Payload Too Large，降到 16 提高兼容性
@@ -179,6 +188,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
         # 截断超长文本 + 过滤空文本，防止 400 错误
         truncated, truncated_count, original_lengths = _truncate_texts(texts)
 
+        results: list[list[float]] = []
         with metrics.timer(
             "embedding_batch", stage="embeddings", tags={"model": self.model, "mode": "sync"}
         ) as mt:
@@ -195,24 +205,23 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 sorted_data = sorted(data["data"], key=lambda x: x["index"])
                 mt.set("embeddings_count", len(sorted_data))
                 results = [item["embedding"] for item in sorted_data]
+
+                # 检查 NaN，逐条回退
+                nan_indices = [i for i, v in enumerate(results) if self._has_nan(v)]
+                if nan_indices:
+                    logger.warning(
+                        "NaN detected in %d/%d embeddings, retrying individually",
+                        len(nan_indices),
+                        len(results),
+                    )
+                    for i in nan_indices:
+                        results[i] = self._embed_single(truncated[i])
             except Exception as e:
                 logger.warning("Batch embedding failed: %s, falling back to single", e)
                 results = [self._embed_single(t) for t in truncated]
                 mt.set("embeddings_count", len(results))
-                return results
 
-            # 检查 NaN，逐条回退
-            nan_indices = [i for i, v in enumerate(results) if self._has_nan(v)]
-            if nan_indices:
-                logger.warning(
-                    "NaN detected in %d/%d embeddings, retrying individually",
-                    len(nan_indices),
-                    len(results),
-                )
-                for i in nan_indices:
-                    results[i] = self._embed_single(truncated[i])
-
-            return results
+        return results
 
     async def _aembed_single(
         self, text: str, client: httpx.AsyncClient | None = None
@@ -251,6 +260,7 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 return await self._aembed_batch(texts, client=scoped_client)
         truncated, truncated_count, original_lengths = _truncate_texts(texts)
 
+        results: list[list[float]] = []
         with metrics.timer(
             "embedding_batch", stage="embeddings", tags={"model": self.model, "mode": "async"}
         ) as mt:
@@ -266,26 +276,25 @@ class OpenAICompatibleEmbeddings(BaseModel, Embeddings):
                 sorted_data = sorted(data["data"], key=lambda x: x["index"])
                 mt.set("embeddings_count", len(sorted_data))
                 results = [item["embedding"] for item in sorted_data]
+
+                # 检查 NaN，逐条回退
+                nan_indices = [i for i, v in enumerate(results) if self._has_nan(v)]
+                if nan_indices:
+                    logger.warning(
+                        "NaN detected in %d/%d async embeddings, retrying individually",
+                        len(nan_indices),
+                        len(results),
+                    )
+                    for i in nan_indices:
+                        results[i] = await self._aembed_single(truncated[i], client=client)
             except Exception as e:
                 logger.warning("Async batch embedding failed: %s, falling back to single", e)
                 results = []
                 for t in truncated:
                     results.append(await self._aembed_single(t, client=client))
                 mt.set("embeddings_count", len(results))
-                return results
 
-            # 检查 NaN，逐条回退
-            nan_indices = [i for i, v in enumerate(results) if self._has_nan(v)]
-            if nan_indices:
-                logger.warning(
-                    "NaN detected in %d/%d async embeddings, retrying individually",
-                    len(nan_indices),
-                    len(results),
-                )
-                for i in nan_indices:
-                    results[i] = await self._aembed_single(truncated[i], client=client)
-
-            return results
+        return results
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """分批 Embedding，每批 BATCH_SIZE 条（同步，并发请求）"""

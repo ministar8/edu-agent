@@ -169,7 +169,7 @@ def _vector_raw_search(
     collection_name: str, query: str, k: int, filter: dict | None
 ) -> list[tuple[Document, float]]:
     """向量路由：过采样 + 确定性截断（理由见下注释）。"""
-    from rag.common.vectorstore import get_vector_store_manager
+    from infra.vectorstore import get_vector_store_manager
 
     # 走 manager 的检索方法而**不是**直接调 store —— 前者持有 `_rw_lock` 读锁。
     # 直接调 store 会绕过读锁，与 `add_documents` 的写锁形不成互斥：
@@ -292,13 +292,13 @@ async def _safe_to_thread(
         )
     except TimeoutError as e:
         logger.warning("Async route timed out: %s after %.1fs", name, timeout)
-        from rag.common.vectorstore import get_vector_store_manager
+        from infra.vectorstore import get_vector_store_manager
 
         get_vector_store_manager().record_query_failure(f"{name}: {e.__class__.__name__}", exc=e)
         return default
     except Exception as e:
         logger.warning("Async route failed: %s: %s", name, e)
-        from rag.common.vectorstore import get_vector_store_manager
+        from infra.vectorstore import get_vector_store_manager
 
         get_vector_store_manager().record_query_failure(f"{name}: {e.__class__.__name__}", exc=e)
         return default
@@ -365,7 +365,7 @@ async def _search_one_route(
     async with sem:
         if route_name != "keyword_bm25":
             try:
-                from rag.common.vectorstore import get_vector_store_manager
+                from infra.vectorstore import get_vector_store_manager
 
                 route_k = _route_adaptive_k(k, use_rerank, route_name)
                 result = await get_vector_store_manager().asimilarity_search_with_score(
@@ -386,7 +386,7 @@ async def _search_one_route(
                 #   但必须**留下证据**，否则「坏了」与「没查到」不可区分。
                 #   ★ 局部 import：`try` 里那次 import 若本身失败，except 里就不能
                 #   依赖那个还没绑定的名字（否则 UnboundLocalError 会把证据一起吞掉）。
-                from rag.common.vectorstore import get_vector_store_manager as _mgr
+                from infra.vectorstore import get_vector_store_manager as _mgr
 
                 _mgr().record_query_failure(
                     f"{target_collection}: vector_route {e.__class__.__name__}", exc=e

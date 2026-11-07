@@ -305,7 +305,7 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 
 | 存储 | 路径 | 内容 | 由谁读写 |
 |---|---|---|---|
-| **向量库** | `chroma_db/` | 41 篇知识文档的向量索引 | `rag/common/vectorstore.py`、`rag/retrieval/semantic_cache.py` |
+| **向量库** | `chroma_db/` | 41 篇知识文档的向量索引 | `infra/vectorstore.py`、`rag/retrieval/semantic_cache.py` |
 | **会话状态** | `data/sqlite/checkpoints.db` | LangGraph checkpoint（thread 级对话状态） | `SQLITE_DB_PATH` |
 | **长期记忆** | `data/sqlite/store.db` | Store 向量索引（学生画像、错题） | `memory/sqlite.py`（`SQLITE_STORE_PATH`） |
 | **业务库** | `data/sqlite/edu_agent.db` | 用户、认证 | `db/session.py`（SQLAlchemy） |

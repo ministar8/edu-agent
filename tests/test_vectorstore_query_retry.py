@@ -14,7 +14,7 @@ import asyncio
 
 import pytest
 
-from rag.common._vectorstore_query import _retry_async
+from infra._vectorstore_query import _retry_async
 
 
 def test_retries_transient_failure_then_succeeds() -> None:
@@ -49,7 +49,7 @@ def test_raises_last_error_after_all_attempts() -> None:
 
 
 def test_health_exposes_query_failure_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
-    from rag.common import vectorstore as vs
+    from infra import vectorstore as vs
     from service import health
 
     class _Manager:

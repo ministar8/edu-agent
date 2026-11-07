@@ -12,7 +12,12 @@
 选项合理性、解析准确性、不超纲等质量约束。
 """
 
-from prompts.common import SAFETY_RULES, OUTPUT_FORMAT_RULES, LENGTH_LIMIT_RULE, STRUCTURED_OUTPUT_RULE
+from prompts.common import (
+    LENGTH_LIMIT_RULE,
+    OUTPUT_FORMAT_RULES,
+    SAFETY_RULES,
+    STRUCTURED_OUTPUT_RULE,
+)
 from prompts.structure.fields import assemble_prompt
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

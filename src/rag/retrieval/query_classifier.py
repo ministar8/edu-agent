@@ -7,10 +7,10 @@ import re
 from dataclasses import dataclass
 
 from core.cache import BoundedCache
+from core.llm_calls import call_structured
 from core.settings import settings
-from prompts import CLASSIFY_PROMPT
+from prompts import CLASSIFY_PROMPT, PROMPT_SET_VERSION
 from rag.common.synonyms import SYNONYM_MAP
-from rag.retrieval.llm_calls import call_structured
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +314,7 @@ async def _classify_by_llm(query: str) -> QueryCategory | None:
         temperature=0.0,
         timeout=settings.PRE_RETRIEVAL_TIMEOUT,
         stage="classify",
+        prompt_set_version=PROMPT_SET_VERSION,
     )
     if result is None:
         return None

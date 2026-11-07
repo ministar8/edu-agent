@@ -107,7 +107,7 @@ def test_backlink() -> list[str]:
 async def test_negative() -> list[str]:
     """负向：L2 不含整题/书商话术；方法问能召到 advanced；答案问 top1 非 L2 方法。"""
     fails: list[str] = []
-    from rag.retrieval.retriever import aretrieve_evidence_raw
+    from rag.ingest_adapter import aretrieve_evidence_raw
 
     async def top(query: str, k: int = 5):
         fused, _ = await aretrieve_evidence_raw(query=query, k=k)

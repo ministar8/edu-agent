@@ -38,14 +38,14 @@ def _candidate_limit(k: int) -> int:
 def _open_collection(collection_name: str):
     """取 Chroma collection；整条词法路由坏掉时记录失败并 raise（不伪装成空结果）。"""
     try:
-        from rag.common.vectorstore import get_vector_store_manager
+        from infra.vectorstore import get_vector_store_manager
 
         return get_vector_store_manager().client.get_collection(collection_name)
     except Exception as e:
         # 词法路由整条坏掉时，旧实现返回 [] 且不记失败 ⇒ retrieval_gate 的
         # unexpected_query_failures 看不见它，所有指标照常「健康」；更糟的是探针会把
         # 「坏了」写成 status="empty"，于是归因层永远没有 `error` 这个证据可用。
-        from rag.common.vectorstore import get_vector_store_manager
+        from infra.vectorstore import get_vector_store_manager
 
         get_vector_store_manager().record_query_failure(
             f"{collection_name}: bm25 {e.__class__.__name__}", exc=e

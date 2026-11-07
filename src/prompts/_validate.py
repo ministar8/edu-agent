@@ -18,7 +18,7 @@ def _dry_run_values(variables: set[str]) -> dict:
 
     MessagesPlaceholder 变量需要传入消息列表，普通字符串变量传入占位符字符串。
     """
-    values = {}
+    values: dict[str, object] = {}
     for var in variables:
         if var == "messages":
             values[var] = [HumanMessage(content="dry run message")]

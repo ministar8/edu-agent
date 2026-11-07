@@ -12,7 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from core.settings import settings
-from rag.common.metrics import metrics
+from infra.metrics import metrics
 from rag.retrieval.evidence import FusedEvidence
 from rag.retrieval.query_classifier import QueryCategory, RetrievalDepth
 

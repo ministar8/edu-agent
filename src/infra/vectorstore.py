@@ -9,13 +9,15 @@ from __future__ import annotations
 import logging
 import time
 
-from rag.common._vectorstore_base import (
+__all__ = ["VectorStoreManager", "get_vector_store_manager"]
+
+from infra._vectorstore_base import (
     _HNSW_COLLECTION_METADATA,
     _LEGACY_HNSW_KEYS,
     _READINESS_PROBE_QUERY,
 )
-from rag.common._vectorstore_ingest import _IngestMixin
-from rag.common._vectorstore_query import _QueryMixin
+from infra._vectorstore_ingest import _IngestMixin
+from infra._vectorstore_query import _QueryMixin
 
 logger = logging.getLogger(__name__)
 

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
 
+from infra.metrics import metrics
 from rag.chunking.cleaner._exam import (
     _clean_markdown_text,
     _is_exam_markdown_source,
@@ -16,7 +17,6 @@ from rag.chunking.cleaner._exam import (
 )
 from rag.chunking.cleaner._pdf import _clean_pdf_text, _dedupe_pdf_edges, _pdf_source_key
 from rag.chunking.cleaner._text import _clean_plain_text, _get_source_ext, _get_source_path
-from rag.common.metrics import metrics
 from rag.common.synonyms import normalize_synonyms
 
 if TYPE_CHECKING:

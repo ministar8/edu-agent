@@ -24,7 +24,7 @@ def _store_index_config() -> Any | None:
     """向量索引配置：复用 RAG TEI embedding；未启用时返回 None。"""
     if not settings.MEMORY_STORE_VECTOR_ENABLED:
         return None
-    from rag.common.embeddings import get_embeddings
+    from infra.embeddings import get_embeddings
 
     return {
         "dims": int(settings.EMBEDDING_DIM),

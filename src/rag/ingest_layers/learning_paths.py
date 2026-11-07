@@ -8,11 +8,11 @@ from __future__ import annotations
 
 from langchain_core.documents import Document
 
+from infra.vectorstore import get_vector_store_manager
 from rag.chunking.cleaner import clean_documents
 from rag.chunking.enhancer import enhance_documents
 from rag.chunking.loader import SUPPORTED_EXTENSIONS, load_single_file
 from rag.chunking.splitter import split_documents
-from rag.common.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
 from rag.knowledge_tagger import tag_chunks_with_knowledge_points
 

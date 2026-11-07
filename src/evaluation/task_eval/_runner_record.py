@@ -127,7 +127,7 @@ class CaseRecord:
     #   空串 = 该归档跑在写这个字段之前的代码上 = **未知**，不得按 `off`/`not_attempted` 猜。
     rerank_status: str = ""
     memory_read_status: str = ""
-    # ★ 修复轮 F5：**聚合之前**的逐轮原样留痕（`agents.teaching_graph` 的读链明细，按轮序）。
+    # ★ 修复轮 F5：**聚合之前**的逐轮原样留痕（`agents.orchestration.teaching_graph` 的读链明细，按轮序）。
     #   为什么聚合之外还要留明细：`aggregate_memory_read_status` 的第 1 条规则是
     #   「有卡 ⇒ `success`」（正面物证优先），它**会压掉**其它轮报上的 `failed` ——
     #   只看聚合值就再也问不出「这一 case 里到底有没有哪一轮读过链坏过」。

@@ -41,6 +41,8 @@ Chunk 级字段（section.* 续）：
 
 from __future__ import annotations
 
+__all__ = ["sanitize_for_chroma"]
+
 # ── 字段定义 ──────────────────────────────────────────
 # (字段名, 类型注解, 说明, 写入模块)
 

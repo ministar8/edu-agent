@@ -1,4 +1,4 @@
-"""RAG 层统一的 LLM 调用入口。
+"""统一的 LLM 调用入口（全局模型基建，2026-11-07 从 ``rag.retrieval.llm_calls`` 迁出）。
 
 此前 7 处调用各写一遍「取客户端 → 调用 → 解析 → 失败兜底」，导致两个问题：
 超时只有 decomposer 显式施加，失败语义有三种（返回空串 / 返回原顺序 / 抛 500）。
@@ -9,6 +9,13 @@
   不再由被调方替调用方决定"失败就该给空串"。
 - 异步版本统一用 ``asyncio.wait_for`` 施加超时；同步版本供同步上下文（如 ingest
   后的缓存预热）使用，超时由客户端级 ``request_timeout`` 兜底。
+- **提示词集版本由调用方注入**（``prompt_set_version``）：本模块身处 ``core``，
+  不得反向依赖 ``prompts``（``prompts`` 自己依赖 ``core.kp_vocab``）。
+  未传版本时 trace metadata 省略该键，功能不受影响。
+- **业务专用兜底走 ``salvage`` 钩子**：通用 JSON 清洗在本模块完成；批改专用的
+  ``score: ...`` 裸文本解析在 ``agents.specialists.grading_salvage``，
+  由调用方显式传入，避免把领域字段名写进通用基建（历史缺陷：``_KV_*``
+  与 ``GradingResult`` 逐字段耦合）。
 """
 
 from __future__ import annotations
@@ -16,19 +23,33 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Callable
 
 from langchain_core.messages import BaseMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, ValidationError
 
 from core.llm import get_llm
 from core.settings import settings
-from prompts import PROMPT_SET_VERSION
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "PromptInput",
+    "SalvageFn",
+    "call_structured",
+    "call_text",
+    "call_text_sync",
+    "salvage_json_from_raw",
+    "strip_tool_markup",
+]
 
 # 既接受裸字符串（会被包成单条 HumanMessage），也接受 ChatPromptTemplate
 # 产出的消息列表（指令进 SystemMessage、数据进 HumanMessage）。
 type PromptInput = str | list[BaseMessage]
+
+# 业务侧兜底钩子：拿「最后一次原始输出 + 目标 schema」，能救回就返回实例。
+type SalvageFn[T: BaseModel] = Callable[[str, type[T]], T | None]
 
 # ★ 2026-10-06（Step 5 实测）：模型在 function_calling 模式下**格式飘移**时，会把
 #   工具调用的参数标记直接吐进自然语言文本，实测见过三种形态：
@@ -47,7 +68,7 @@ _TOOL_MARKUP_RE = re.compile(
 )
 
 
-def _strip_tool_markup(text: str) -> str:
+def strip_tool_markup(text: str) -> str:
     """剥掉泄漏进自然语言输出里的工具调用标记（含其后的孤立闭合标记）。"""
     if not text or "<" not in text:
         return text
@@ -59,12 +80,16 @@ def _as_text(raw: object) -> str:
     return str(content).strip()
 
 
-def _trace_config(stage: str) -> dict:
+def _trace_config(stage: str, prompt_set_version: str) -> RunnableConfig:
     """把提示词阶段与提示词集版本写进 run metadata。
 
     LangSmith 据此按提示词分组 —— 改过提示词后输出质量变化可直接归因。
+    ``prompt_set_version`` 由调用方注入（本模块不 import ``prompts``，见模块头）。
     """
-    return {"metadata": {"prompt_stage": stage, "prompt_set_version": PROMPT_SET_VERSION}}
+    metadata = {"prompt_stage": stage}
+    if prompt_set_version:
+        metadata["prompt_set_version"] = prompt_set_version
+    return {"metadata": metadata}
 
 
 def _log_failure(stage: str, exc: BaseException) -> None:
@@ -77,12 +102,13 @@ async def call_text(
     temperature: float,
     timeout: float,
     stage: str,
+    prompt_set_version: str = "",
 ) -> str | None:
     """调用 LLM 取纯文本。超时或异常返回 None。"""
     llm = get_llm(streaming=False, temperature=temperature)
     try:
         raw = await asyncio.wait_for(
-            llm.ainvoke(prompt, config=_trace_config(stage)), timeout=timeout
+            llm.ainvoke(prompt, config=_trace_config(stage, prompt_set_version)), timeout=timeout
         )
     except Exception as exc:
         _log_failure(stage, exc)
@@ -95,6 +121,7 @@ def call_text_sync(
     *,
     temperature: float,
     stage: str,
+    prompt_set_version: str = "",
 ) -> str | None:
     """``call_text`` 的同步版本，**仅供同步上下文使用**（如 ingest 的缓存预热）。
 
@@ -103,7 +130,7 @@ def call_text_sync(
     """
     llm = get_llm(streaming=False, temperature=temperature)
     try:
-        raw = llm.invoke(prompt, config=_trace_config(stage))
+        raw = llm.invoke(prompt, config=_trace_config(stage, prompt_set_version))
     except Exception as exc:
         _log_failure(stage, exc)
         return None
@@ -120,12 +147,20 @@ def _bind_structured(llm, schema: type):
         return llm.with_structured_output(schema)
 
 
-async def _await_structured(llm, prompt: PromptInput, schema: type, timeout: float, stage: str):
+async def _await_structured(
+    llm,
+    prompt: PromptInput,
+    schema: type,
+    timeout: float,
+    stage: str,
+    prompt_set_version: str,
+):
     """单次结构化调用：成功返回 ``(result, None)``，异常返回 ``(None, exc)``。"""
     try:
         structured = _bind_structured(llm, schema)
         result = await asyncio.wait_for(
-            structured.ainvoke(prompt, config=_trace_config(stage)), timeout=timeout
+            structured.ainvoke(prompt, config=_trace_config(stage, prompt_set_version)),
+            timeout=timeout,
         )
         return result, None
     except Exception as exc:
@@ -139,6 +174,7 @@ async def _structured_attempts[T: BaseModel](
     timeout: float,
     stage: str,
     attempts: int,
+    prompt_set_version: str,
 ) -> tuple[T | None, BaseException | None, str]:
     """重试循环：成功即返回 ``(result, None, last_raw)``，耗尽则 ``(None, last_exc, last_raw)``。
 
@@ -148,7 +184,9 @@ async def _structured_attempts[T: BaseModel](
     last_exc: BaseException | None = None
     last_raw: str = ""
     for attempt in range(attempts):
-        result, exc = await _await_structured(llm, prompt, schema, timeout, stage)
+        result, exc = await _await_structured(
+            llm, prompt, schema, timeout, stage, prompt_set_version
+        )
         if exc is not None:
             last_exc = exc
             # 格式飘移时异常里带的是「原始文本」，取回留作兜底素材。
@@ -190,6 +228,8 @@ async def call_structured[T: BaseModel](
     temperature: float,
     timeout: float,
     stage: str,
+    prompt_set_version: str = "",
+    salvage: SalvageFn[T] | None = None,
 ) -> T | None:
     """调用 LLM 并解析为结构化结果。超时、异常或结构不符均返回 None。
 
@@ -210,23 +250,30 @@ async def call_structured[T: BaseModel](
     ``(1 + STRUCTURED_OUTPUT_RETRIES) * timeout``；调用方如需严格总预算，
     应在外层再包一层 ``asyncio.wait_for``。
 
-    ★ 兜底清洗：若重试耗尽仍失败，且**最后一次的原始输出可拿到**，则尝试
-      ``_strip_tool_markup`` + 重新解析（§ ``_salvage_from_raw``）。仅当该次失败
-      确实是「工具标记污染了文本字段」时才可能救回；救不回仍返回 ``None``。
+    ★ 兜底清洗：若重试耗尽仍失败，且**最后一次的原始输出可拿到**，则先做
+      通用清洗（``strip_tool_markup`` + JSON 重解析，§ ``salvage_json_from_raw``）；
+      若调用方传了 ``salvage`` 钩子，再交给它做领域专用解析（如批改的
+      ``score: 40`` 裸文本）。仅当该次失败确实是「工具标记污染文本」时才可能救回；
+      救不回仍返回 ``None``。
     """
     llm = get_llm(streaming=False, temperature=temperature)
     attempts = max(1, 1 + int(settings.STRUCTURED_OUTPUT_RETRIES))
     result, last_exc, last_raw = await _structured_attempts(
-        llm, prompt, schema, timeout, stage, attempts
+        llm, prompt, schema, timeout, stage, attempts, prompt_set_version
     )
     if result is not None:
         return result
 
     # ── 兜底：清洗工具标记后重新解析 ──────────────────────────────
     if last_raw:
-        salvaged = _salvage_from_raw(last_raw, schema, stage)
+        salvaged = salvage_json_from_raw(last_raw, schema, stage=stage)
         if salvaged is not None:
             return salvaged
+        if salvage is not None:
+            custom = salvage(last_raw, schema)
+            if custom is not None:
+                logger.info("领域专用兜底解析成功 [%s]", stage)
+                return custom
 
     if last_exc is not None:
         _log_failure(stage, last_exc)
@@ -251,21 +298,20 @@ def _raw_from_validation_error(exc: BaseException) -> str:
     return best
 
 
-def _salvage_from_raw[T: BaseModel](raw: str, schema: type[T], stage: str) -> T | None:
-    """清洗工具标记后，用原始文本重建结构化对象。
+def salvage_json_from_raw[T: BaseModel](raw: str, schema: type[T], *, stage: str = "") -> T | None:
+    """清洗工具标记后，把原始文本按 **JSON** 重建为结构化对象。
 
-    只在**清洗确实改变了内容**时才尝试；且必须解析成 **dict** 再走 schema 校验
-    （与 ``_bind_structured`` 同一条路径），避免把自然语言散文硬塞进字段。
+    只在**清洗确实改变了内容**时才尝试；且必须解析成 **dict** 再走 schema 校验，
+    避免把自然语言散文硬塞进字段。
 
-    支持两种实测见过的形态：
-    1. 纯 JSON（字段内含 ``<parameter=...>`` 标记）→ 清洗后直接校验；
-    2. 裸文本 ``score: 40\\nfeedback: ...`` → 按行首 ``key:`` 拆字段。
+    ★ 只处理 JSON 形态。领域专用的裸文本解析（如批改的 ``score: 40``）
+      由调用方通过 ``call_structured(..., salvage=...)`` 钩子提供。
     """
-    cleaned = _strip_tool_markup(raw)
+    cleaned = strip_tool_markup(raw)
     if cleaned == raw:
         return None  # 没有标记污染，不属于本兜底能治的情形
 
-    payload = _try_json_dict(cleaned) or _try_kv_dict(cleaned)
+    payload = _try_json_dict(cleaned)
     if not payload:
         return None
     try:
@@ -298,107 +344,3 @@ def _extract_json_object(text: str) -> str | None:
     if start < 0 or end <= start:
         return None
     return text[start : end + 1]
-
-
-def _scan_kv_fields(text: str) -> dict[str, str]:
-    """规则 ①②：逐行扫描定位起点，并按字段分类决定是否并入续行。
-
-    遇到第一个合法字段 key 才开始解析；进入解析后的非 key 行，**仅**多行字段
-    （`_KV_MULTILINE_FIELDS`）允许续行，其余（score / is_wrong / knowledge_points）丢弃。
-    """
-    kv_re = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*[:：]\s*(.*)$")
-    fields: dict[str, str] = {}
-    current: str | None = None
-    started = False  # 是否已遇到第一个合法 key
-    for line in text.splitlines():
-        m = kv_re.match(line)
-        if m and m.group(1) in _KV_ALL_FIELDS:
-            # ① 进入解析（首个合法 key）
-            started = True
-            current = m.group(1)
-            fields[current] = m.group(2).strip()
-        elif not started:
-            # ① 尚未进入解析：忽略前言/空行/解释文字
-            continue
-        elif current is not None and current in _KV_MULTILINE_FIELDS:
-            # ② 仅多行字段允许续行
-            #   ★ `current is not None` 是**显式收窄**，不是行为变化：`None` 本就不属于
-            #     `_KV_MULTILINE_FIELDS`（`frozenset[str]`），旧写法在运行时同义，
-            #     但成员测试无法让 pyrefly 把 `current` 从 `str | None` 收成 `str`。
-            fields[current] = (fields[current] + "\n" + line).strip()
-        else:
-            # ② 其余字段（score / is_wrong / knowledge_points）：丢弃该行
-            continue
-    return fields
-
-
-def _parse_kv_fields(fields: dict[str, str]) -> dict[str, object]:
-    """规则 ③：按字段分类解析 —— scalar 按标量语义，list 按分隔符切分。"""
-    out: dict[str, object] = {}
-    for key, val in fields.items():
-        if key == "score":
-            num = re.search(r"-?\d+(?:\.\d+)?", val)
-            if num:
-                # 整数值给 int（`GradingResult.score` 是 int，浮点会被 pydantic 拒；
-                # 而 40.0 这类无小数部分的 float 虽被接受，仍以 int 表达更贴 schema）。
-                f = float(num.group())
-                out[key] = int(f) if f.is_integer() else f
-        elif key == "is_wrong":
-            out[key] = val.strip().lower() in {"true", "1", "yes", "是"}
-        elif key in _KV_LIST_FIELDS:
-            # ③ list 字段：按分隔符切分（顿号 / 逗号 / 分号 / 换行），并去空去重保序
-            items = [p.strip().strip("[]\"'") for p in re.split(r"[、,，;；\n]", val)]
-            out[key] = [p for p in (i for i in items) if p]
-        else:
-            if val:
-                out[key] = val
-    return out
-
-
-def _try_kv_dict(text: str) -> dict | None:
-    """解析裸文本形态 ``score: 40`` / ``feedback: ...`` 为 dict。
-
-    ★ 2026-10-06 第二轮 review 重写（原实现有 3 个缺陷，见下）。
-
-    原实现的 3 个缺陷：
-
-    1. **`is_wrong` 语义反转**：任何**非白名单行**（`knowledge_points:` / `topic:` /
-       `reason:` / `# 备注` …）都会被拼进**上一字段**：
-       ``is_wrong = "true\\nknowledge_points: [...]"`` ⇒ 判定 ``in {"true",…}`` 失败
-       ⇒ **`True` 变 `False`**（语义反转，不是丢失）。
-    2. **首行有前言即全盘放弃**：首行非 ``key:`` 形态直接 ``return None``
-       ⇒ ``'好的，批改如下：\\nscore: 40…'`` 连 ``score`` 都救不回。
-       而模型飘移的典型形态恰是「前面带一句话」（实测日志有 ``Let's output.``）。
-    3. **`knowledge_points` 静默丢失**：它在 schema 里却是 5 个字段，但白名单只有 4 个
-       ⇒ ``schema 支持的字段集合 ≠ 本兜底支持的字段集合``（协议不一致）。
-
-    重写后的规则（三条，顺序敏感）：
-
-    ┌─ ① 扫描定位起点 ────────────────────────────────────────────
-    │  逐行扫，**遇到第一个合法字段 key 才开始解析**。
-    │  之前的行（前言 / 空行 / 解释文字）一律忽略 —— 但**不是**「所有非 key 行都忽略」，
-    │  而是「进入解析前忽略、进入解析后按 ② 处理」，避免把真正的异常输出静默吞掉。
-    ├─ ② 续行规则（严格） ───────────────────────────────────────
-    │  非 key 行**仅当**当前字段 ∈ `_KV_MULTILINE_FIELDS`（feedback / error_analysis，
-    │  它们本来就是多行文本）时，才作为**续行**并入上一字段；
-    │  否则**直接丢弃该行**（绝不拼进 is_wrong / score / knowledge_points）。
-    └─ ③ 字段分类解析 ───────────────────────────────────────────
-       scalar（score / is_wrong / feedback / error_analysis）按标量语义解析；
-       list（knowledge_points）按**分隔符切分**为 ``list[str]`` ——
-       绝不把整个字符串硬塞进一个 list 字段。
-
-    规则 ①② 见 `_scan_kv_fields`，③ 见 `_parse_kv_fields`。
-    """
-    fields = _scan_kv_fields(text)
-    if not fields:
-        return None
-    return _parse_kv_fields(fields)
-
-
-# ③ 字段分类（协议与 `GradingResult` 对齐；由 gate `⑨g` 断言**覆盖 schema 全部字段**）
-_KV_SCALAR_FIELDS = frozenset({"score", "feedback", "is_wrong", "error_analysis"})
-_KV_LIST_FIELDS = frozenset({"knowledge_points"})
-_KV_ALL_FIELDS = _KV_SCALAR_FIELDS | _KV_LIST_FIELDS
-# ② 允许**多行续行**的字段（它们本来就是多行自由文本）。
-#   ★ 不含 is_wrong / score / knowledge_points —— 避免「续行污染导致语义反转」。
-_KV_MULTILINE_FIELDS = frozenset({"feedback", "error_analysis"})

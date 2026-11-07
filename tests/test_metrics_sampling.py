@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from rag.common.metrics import MetricsWriter
+from infra.metrics import MetricsWriter
 
 # `core/__init__.py` 把 `settings` **实例**绑定成了同名属性，`from core import settings`
 # 拿到的是实例而不是模块 ⇒ 要 reload 模块级导出，只能用 import_module 取模块对象。

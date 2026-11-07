@@ -80,7 +80,7 @@ from evaluation.diagnostics._telemetry_common import (
 )
 from evaluation.diagnostics._telemetry_format import format_report  # noqa: F401
 from evaluation.diagnostics._telemetry_ingest import build_ingest_summary
-from rag.common.metrics import DEFAULT_METRICS_PATH
+from infra.metrics import DEFAULT_METRICS_PATH
 
 logger = logging.getLogger(__name__)
 

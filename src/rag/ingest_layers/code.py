@@ -13,7 +13,7 @@ import json
 
 from langchain_core.documents import Document
 
-from rag.common.vectorstore import get_vector_store_manager
+from infra.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
 
 CODE_DIR = _shared.KNOWLEDGE_DIR / "code"

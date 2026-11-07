@@ -145,7 +145,7 @@ def preflight_check() -> list[str]:
             # ★ 关键的一步：health 通过 ≠ 能推理。真发一次 embedding 请求。
             infer_problem: str | None = None
             try:
-                from rag.common.embeddings import get_embeddings
+                from infra.embeddings import get_embeddings
 
                 vec = get_embeddings().embed_query("预检")
                 if not vec or len(vec) < 8:

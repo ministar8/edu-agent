@@ -26,7 +26,7 @@
 
 | # | 调用方 | 位置 | 性质 |
 |---|---|---|---|
-| 1 | Agent 检索工具 `_retrieve_payload()` | `agents/tools.py` | 生产 |
+| 1 | Agent 检索工具 `_retrieve_payload()` | `agents/runtime/tools.py` | 生产 |
 | 2 | 检索门禁 | `evaluation/gates/retrieval_gate/_gate.py` | 门禁 |
 | 3 | RAGAS 质量评测 | `evaluation/ragas/adapters.py` | 评测 |
 | 4 | 任务评测探针 | `evaluation/task_eval/retrieval_probe.py` | 评测 |
@@ -42,7 +42,7 @@
 | ② 召回·拼 | `retrieval/recall.py` + `recall_collections.py` | 这一查发哪几路、各查什么、查哪个集合 | **不查库**；只产出"规格" |
 | ② 召回·跑 | `retrieval/routes.py` + `bm25.py` | 并发执行单路，碰 Chroma/BM25 的**唯一地方** | 不做 RRF；不做权限判断 |
 | ③ 融合 | `retrieval/postprocess/`（`_rrf.py`） | 按路由秩加权 RRF，不拼原始分 | 不看 TaskPolicy |
-| ④ 收紧 | `retrieval/pipeline/_stages.py`（orchestrator 编排）+ `reranker.py` + `hyde.py` + `postprocess/_window.py`、`_dedup.py` | 去重→阈值→重排→HyDE/窗口兜底 | 兜底触发条件写在 stage 内，不在门面 |
+| ④ 收紧 | `retrieval/pipeline/_stages.py`（orchestrator 编排）+ `reranker.py` + `hyde.py` + `postprocess/_window.py`、`_dedup.py` + `retrieval/fusion.py` | 去重→阈值→重排→HyDE/窗口兜底→证据裁剪（dedup/sort/source-diversity/token-budget/interleave） | 兜底触发条件写在 stage 内，不在门面；fusion 不做 RRF，只裁剪已融合的证据列表 |
 | ⑤ 出包 | `retrieval/evidence.py`（契约）+ `evidence_policy.py`（策略）+ `layer_recall.py` | 资格 eligibility 与披露 release 分离 | **release 全仓唯一出口 = `apply_evidence_policy()`**（§6-I3） |
 | ⑥ 缓存验证 | `retriever_io.py` + `semantic_cache.py` + `verifier.py` + `common/metrics.py` | 查缓存→回写→规则校验→指标 | 缓存命中必须浅拷贝（§6-I5）；只缓存检索层，不缓存 LLM 生成 |
 
@@ -55,8 +55,8 @@
 | 单文件流水 | `rag/ingest.py`（现只管 `learning_paths`）：loader→cleaner→splitter→enhancer→knowledge_tagger→vectorstore |
 | 分层构建 | `rag/ingest_layers/`：`build()`（纯函数，不落库）+ `ingest()`（落库+写 links）；生产顺序 basic→advanced→exams→exam_practice→code→learning_paths |
 | 脚本 | `scripts/ingest/*`（调 ingest_layers）；`ingest_basic_all.py` / `ingest_advanced.py` / `ingest_exams.py` / `ingest_exam_practice.py` / `ingest_code.py` |
-| 存储门面 | `rag/common/vectorstore.py`（含 HNSW 元数据校验 `needs_rebuild`；"集合终坏只能重建"见 `wait_until_ready` 注释） |
-| Embedding | `rag/common/embeddings.py`：bge-m3/TEI，批 16、单条 ≤3000 字符 |
+| 存储门面 | `infra/vectorstore.py`（含 HNSW 元数据校验 `needs_rebuild`；"集合终坏只能重建"见 `wait_until_ready` 注释） |
+| Embedding | `infra/embeddings.py`：bge-m3/TEI，批 16、单条 ≤3000 字符 |
 
 ## 4. 三层策略对照（不回答"到底谁管 k"就用这张表）
 
@@ -127,3 +127,76 @@
 > 安全上 TaskPolicy 负责资格与披露，裁剪在 `apply_evidence_policy` 唯一出口发生；
 > 相似度换算全仓单点、每步带漏斗指标与溯源标记，且由检索门禁与 RAGAS 复用生产路径闭环验证。
 > 已知技术债（出口签约、文件粒度、门禁收口）已记入边界地图台账，属于工程收口问题，不影响架构正确性。
+
+---
+
+## 10. 实测审计（2026-11-07 · import 图数据版）
+
+> 对 `rag/` 全部 75 个 py 按 §2/§3 职责区逐文件标注，用 AST 静态扫描算出
+> 区内/跨区/跨包边（`.tmp/rag_zone_audit.py` 一次性脚本，跑完已清理）。
+> 本节是 §1-§8 的**实测层**：文档为真 → 数据佐证；文档未覆盖 → 补记。
+
+### 10.1 职责区体量（区内出边 = 本区文件对本区模块的 import 次数）
+
+| 职责区 | 文件 | LOC | 区内出边 | 对照 |
+|---|---|---|---|---|
+| 离线入库（ingest + ingest_layers + chunking + 知识打标） | 28 | 3,930 | 43 | §3 |
+| 通用基建（common：vectorstore*/embeddings/synonyms/rag_utils/schemas/metrics/…） | 13 | 2,702 | 13 | §8-3 记录的"未拆"区 |
+| 编排/收紧（pipeline + reranker + hyde + postprocess + fusion） | 12 | 2,929 | 8 | §2-④ |
+| 出包/门面（api + retriever + retriever_io + evidence + verifier） | 6 | 1,623 | 12 | §2-⑥ |
+| 理解/预算（query_classifier + query_decomposer + task_policy + retrieval_plan） | 4 | 951 | 3 | §2-① |
+| 缓存/指标（semantic_cache + codec + io + topic_relevance） | 4 | 898 | 3 | §2-⑥ |
+| 召回执行（routes + bm25 + layer_recall） | 3 | 829 | 1 | §2-③ |
+| 召回规格（recall + recall_collections） | 2 | 727 | 1 | §2-② |
+| **未归类**：`retrieval/llm_calls.py`（已迁至 `core/llm_calls.py`，横切基建不再在 rag 内） | 0 | 0 | 0 | 已迁出 |
+| `__init__` ×2 | 2 | 27 | — | |
+
+**读法**：跨区边合计 34 条，全部是"下位区消费上位区数据类型/基建"的合法方向
+（如 召回→规格、编排→召回、出包→缓存）。唯一值得注意的反向观感：
+
+- `召回执行 → 出包/门面` 1 条：`layer_recall.py → rag.retrieval.evidence`（构造 Evidence 结构体）；
+- `离线入库 → 出包/门面` 2 条：`ingest.py → rag.retrieval.retriever`（复用门面）
+  与 `ingest.py → rag.retrieval.semantic_cache`（入库后失效缓存）——**离线唯一两处摸在线模块**，语义正当；
+- `__init__ → 出包/门面` 3 条：`retrieval/__init__.py` only re-export api/evidence/retriever——纯门面。
+
+### 10.2 遗漏补记（文档未覆盖、实测必录）
+
+| # | 发现 | 说明 | 处置 |
+|---|---|---|---|
+| G1 | `retrieval/fusion.py`（243 行）不在职责区表 | 融合 RRF 在编排层，实文件独立存在 | **已收口**：归入 §2-④（编排/收紧），与 `postprocess/_rrf.py` 并列——_rrf.py 负责多路→排序列表，fusion.py 负责排序列表→FusedEvidence，边界清晰 |
+| G2 | `retrieval/llm_calls.py`（404 行）不在职责区表 | 所有在线 LLM 调用的唯一出口 | **已收口**：已迁至 `core/llm_calls.py`（横切基建，与 `core/llm.py` 同层），批改专用 KV 解析拆至 `agents/specialists/grading_salvage.py`，详见 `docs/INFRA_MIGRATION_PLAN.md` Batch A |
+| G3 | §1 调用方表旧路径 `agents/tools.py` | 实为 `agents/runtime/tools.py` | **已纠正（本版）** |
+| G4 | 跨包边实测：rag→document_processing **6 条全在**`chunking/cleaner/_stages.py`；rag→prompts **4 条**（hyde/llm_calls/query_classifier/query_decomposer 的提示词） | 方向单向、用途集中：离线清洗 + 在线提示词 | 登记，无需动 |
+| G5 | rag→agents/service/evaluation/db 实测 **0 条** | §6 不变量 I 集的数据佐证 | 由 `tests/test_rag_boundaries.py` 锁住 |
+
+### 10.3 越界通道登记（跨包合法通道，含语义）
+
+除 rag 自身外，实测时还确认了外层消费 rag 的**全部**入口（非仅上文 §1 的检索
+5 调用方），已落护栏测试 `tests/test_rag_boundaries.py`（AST 静态扫描，任一
+新文件加 import 即失败）：
+
+| 边 | 允许文件（其余一律禁止） | 语义 |
+|---|---|---|
+| rag → agents/service/evaluation/db | **无一例**（0 条） | rag 是被消费方，不反向依赖 |
+| memory → rag | `memory/topics.py`（SYNONYM_MAP 兜底，canonical 过滤子集 69 条）、`memory/sqlite.py`（Store 向量索引复用 TEI） | 两个已知设计通道 |
+| agents → rag | `agents/runtime/tools.py`（检索主通道）、`agents/orchestration/teaching_graph.py`（prepare_task 的任务分类）、`agents/specialists/grading.py`（结构化批改的 LLM 基建） | 3 个各有明确语义 |
+| document_processing → rag | **无一例**（0 条） | 封闭纯计算层 |
+
+### 10.4 迁移路标（与 §8 台账对接，仅方向、不动代码）
+
+实测数据把「RAG 重量失衡」精化成三组可独立开工的碎片：
+
+1. **横切基建抽离**：`retrieval/llm_calls.py` + `common/{embeddings,errors,metrics,_vectorstore_*,_metadata_spec}`
+   是跨包基建，**不是 `rag/infra/`**——四问取证后判定为「模型骨架进 `core`、存储底座进独立
+   `infra/`、批改专用解析归位 `agents`」。文件级清单、兼容壳与分批顺序见
+   **`docs/INFRA_MIGRATION_PLAN.md`**（2026-11-07，计划已定、代码未动）。
+2. **融合层归位（已完成）**：`retrieval/fusion.py` 与 `postprocess/_rrf.py` 的边界已确认
+   —— `_rrf.py` 负责多路召回→排序列表（RRF 融合），`fusion.py` 负责排序列表→`FusedEvidence`
+  （去重/排序/来源多样化/token 预算裁剪/首尾交错），两者同属 §2-④（编排/收紧）。
+   fusion.py 已编入文档 §2 第 ④ 行，§10.1 体量表已更新（编排/收紧 12 文件/2,929 LOC）。
+3. **离线入库自治（已完成）**：`ingest.py` 原直接 import `rag.retrieval.retriever.warmup_query_cache`
+   与 `rag.retrieval.semantic_cache.get_semantic_cache`，现通过
+   `rag/ingest_adapter.py` 的薄接口中转（`clear_semantic_cache()` /
+   `run_warmup_smoke()`），`ingest` 与 `retrieval/` 已完全解耦，
+   离线入库成为独立子系统。`src/rag/ingest_adapter.py` 新增，承载 adapter 契约；
+   `python -m rag.ingest` CLI 入口不受影响。

@@ -13,7 +13,7 @@ import asyncio
 
 import pytest
 
-from rag.common.embeddings import (
+from infra.embeddings import (
     OpenAICompatibleEmbeddings,
     clear_query_cache,
     query_cache_stats,

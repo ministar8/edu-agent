@@ -124,7 +124,7 @@ def _write_agent_fields(record: CaseRecord, case: TaskCase, agent_out: dict[str,
 
 async def _run_probe(case: TaskCase, *, k: int, use_rerank: bool):
     """B7：reset → 跑检索探针 → 读回路由失败并归状态（只升不降）。"""
-    from rag.common.vectorstore import get_vector_store_manager
+    from infra.vectorstore import get_vector_store_manager
 
     # ★ B7 的 reset 调用点 ②（两个独立取证单元边界之一）：每次检索探针之前清空
     #   ⇒ 探针期间记录的查询故障**只属于这次探针**，紧接着在下面被消费。

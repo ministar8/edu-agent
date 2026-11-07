@@ -23,14 +23,11 @@ import logging
 import re
 
 from core.cache import BoundedCache
+from core.llm_calls import call_structured, call_text
 from core.settings import settings
-from prompts import DECOMPOSE_PROMPT
+from prompts import DECOMPOSE_PROMPT, PROMPT_SET_VERSION
 from rag.common.parse_utils import parse_llm_json
 from rag.common.schemas import DecomposeResult
-from rag.retrieval.llm_calls import (
-    call_structured,
-    call_text,
-)
 from rag.retrieval.query_classifier import QueryCategory
 
 logger = logging.getLogger(__name__)
@@ -178,6 +175,7 @@ async def decompose(query: str, cat: QueryCategory | None = None) -> list[str]:
         temperature=settings.TEMP_DEFAULT,
         timeout=settings.PRE_RETRIEVAL_TIMEOUT,
         stage="decompose",
+        prompt_set_version=PROMPT_SET_VERSION,
     )
     if structured is not None:
         sub_queries = structured.sub_queries
@@ -187,6 +185,7 @@ async def decompose(query: str, cat: QueryCategory | None = None) -> list[str]:
             temperature=settings.TEMP_DEFAULT,
             timeout=settings.PRE_RETRIEVAL_TIMEOUT,
             stage="decompose_fallback",
+            prompt_set_version=PROMPT_SET_VERSION,
         )
         sub_queries = _parse_sub_queries(text or "")
 

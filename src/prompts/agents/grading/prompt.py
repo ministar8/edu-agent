@@ -7,7 +7,12 @@ Grading Agent 的核心是批改学生作答，给出公平、准确的分数与
 与 Supervisor 的路由分发不同，不负责知识讲解或出题，专注批改任务。
 """
 
-from prompts.common import SAFETY_RULES, OUTPUT_FORMAT_RULES, LENGTH_LIMIT_RULE, STRUCTURED_OUTPUT_RULE
+from prompts.common import (
+    LENGTH_LIMIT_RULE,
+    OUTPUT_FORMAT_RULES,
+    SAFETY_RULES,
+    STRUCTURED_OUTPUT_RULE,
+)
 from prompts.structure.fields import assemble_prompt
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

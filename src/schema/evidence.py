@@ -34,7 +34,7 @@ class EvidenceDoc(BaseModel):
         default=0.0,
         description=(
             "综合得分；★ B1（§1.5 R4）契约：**相似度语义，数值越高越相似**（唯一换算点 "
-            "`embeddings.similarity_from_distance`，距离→相似度）。主路径取 rerank_score，"
+            "`infra.embeddings.similarity_from_distance`，距离→相似度）。主路径取 rerank_score，"
             "回退取 RRF recall_score，top-up 取向量相似度——三者均为「越高越好」的同向量。"
         ),
     )

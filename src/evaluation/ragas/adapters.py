@@ -196,7 +196,7 @@ def build_embeddings_for_relevancy() -> Embeddings | None:
     langchain `Embeddings` 原生满足，包装只会引入 deprecated 警告与易错的 kwarg 名。
     """
     try:
-        from rag.common.embeddings import get_embeddings
+        from infra.embeddings import get_embeddings
 
         return get_embeddings()
     except Exception:

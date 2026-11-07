@@ -13,7 +13,7 @@ import pytest
 
 from evaluation.diagnostics._telemetry_format import _fmt_header
 from evaluation.diagnostics.telemetry_report import build_report, scan_log
-from rag.common.metrics import MetricsWriter
+from infra.metrics import MetricsWriter
 
 
 @pytest.fixture

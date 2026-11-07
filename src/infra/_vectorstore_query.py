@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+__all__ = ["_retry_async"]
+
 import asyncio
 import logging
 import time
+from typing import Any
 
 from langchain_core.documents import Document
 
 from core.settings import settings
-from rag.common._vectorstore_base import _VectorStoreBase
-from rag.common.metrics import metrics
+from infra._vectorstore_base import _VectorStoreBase
+from infra.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +57,7 @@ class _QueryMixin(_VectorStoreBase):
         filter: dict | None = None,
     ):
         store = self.get_store(collection_name)
-        search_kwargs = {"k": k}
+        search_kwargs: dict[str, Any] = {"k": k}
         if filter:
             search_kwargs["filter"] = filter
         if self.client_mode == "persistent":
@@ -73,12 +76,12 @@ class _QueryMixin(_VectorStoreBase):
         # ★ B1（§1.5 R4）：距离→相似度的**唯一**换算点。space 从集合元数据读，**不给默认值**
         #   （`"l2"` 那种默认就是猜）；未知 space 由 `similarity_from_distance` 抛错。
         #   放在 try 外 ⇒ 方向未知时是**硬失败**，不会被下面的 `except` 静默折成 0.0。
-        from rag.common.embeddings import similarity_from_distance
+        from infra.embeddings import similarity_from_distance
 
         space = (collection.metadata or {}).get("hnsw:space")
         if not space:
             raise ValueError(f"{collection_name}: 集合元数据里没有 hnsw:space，方向无法确定")
-        query_kwargs = {
+        query_kwargs: dict[str, Any] = {
             "query_embeddings": [embedding],
             "n_results": max(1, int(k)),
             "include": ["documents", "metadatas", "distances"],

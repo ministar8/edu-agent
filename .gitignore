@@ -19,7 +19,7 @@ __pycache__/
 jieba.cache
 
 # pytest 相关缓存与覆盖率
-pytest-of-star/
+pytest-of-*/
 .pre-commit-cache/
 .coverage
 /_cov*

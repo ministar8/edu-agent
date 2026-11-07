@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+__all__ = []
+
 import hashlib
 import logging
 import socket
@@ -15,7 +17,7 @@ import chromadb
 from langchain_chroma import Chroma
 
 from core.settings import settings
-from rag.common.embeddings import get_embeddings
+from infra.embeddings import get_embeddings
 
 logger = logging.getLogger(__name__)
 

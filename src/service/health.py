@@ -102,7 +102,7 @@ def _query_failure_snapshot() -> dict[str, Any]:
     但 `/health` 的 status 语义仍是「依赖当前是否可用」。
     """
     try:
-        from rag.common import vectorstore as vs
+        from infra import vectorstore as vs
 
         manager = vs._vector_store_manager
         if manager is None:

@@ -10,7 +10,7 @@ import time
 
 from langchain_core.documents import Document
 
-from rag.common.metrics import metrics
+from infra.metrics import metrics
 from rag.retrieval.query_classifier import QueryCategory, RetrievalDepth
 from rag.retrieval.routes import _cache_stats_fields
 

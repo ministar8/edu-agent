@@ -152,7 +152,7 @@ async def run_gate(
     指标，并在最后单独列出错误、由调用方判为失败。这条路径是真实存在的：CI 无 LLM 凭据时
     40 条里有 6 条会抛 ``openai.OpenAIError: Missing credentials``（见 core.llm.get_llm）。
     """
-    from rag.common.vectorstore import get_vector_store_manager
+    from infra.vectorstore import get_vector_store_manager
 
     queries = load_golden_queries(golden_path, limit=limit)
     outcomes: list[QueryOutcome] = []

@@ -7,7 +7,7 @@
 与 Supervisor 的意图识别和路由决策不同，不复制 Supervisor 的规则结构。
 """
 
-from prompts.common import SAFETY_RULES, OUTPUT_FORMAT_RULES, LENGTH_LIMIT_RULE
+from prompts.common import LENGTH_LIMIT_RULE, OUTPUT_FORMAT_RULES, SAFETY_RULES
 from prompts.structure.fields import assemble_prompt
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

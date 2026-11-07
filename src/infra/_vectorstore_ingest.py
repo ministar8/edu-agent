@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+__all__ = []
+
 import logging
 import time
 
 from langchain_core.documents import Document
 
-from rag.common._metadata_spec import sanitize_for_chroma
-from rag.common._vectorstore_base import _content_hash, _VectorStoreBase
-from rag.common.metrics import metrics
+from infra._metadata_spec import sanitize_for_chroma
+from infra._vectorstore_base import _content_hash, _VectorStoreBase
+from infra.metrics import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ class _IngestMixin(_VectorStoreBase):
                 for meta in result.get("metadatas", []) or []:
                     h = meta.get("content_hash") if meta else None
                     if h:
-                        hashes.add(h)
+                        hashes.add(str(h))
         except Exception:
             hashes = set()
         self._hash_cache[collection_name] = (hashes, now)

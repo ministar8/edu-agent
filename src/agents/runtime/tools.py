@@ -16,7 +16,7 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 
 from agents.runtime.utils import CustomData
-from rag.common.errors import RetrievalUnavailable, classify_retrieval_error
+from infra.errors import RetrievalUnavailable, classify_retrieval_error
 from rag.retrieval.api import retrieve_for_task
 from rag.retrieval.evidence import FusedEvidence
 from rag.retrieval.query_classifier import TEXT_ONLY_DEPTH
@@ -127,7 +127,7 @@ def _stage_sink() -> StageSink | None:
     """把「检索阶段进度」接到 SSE 的回调；拿不到 writer 时返回 None。
 
     为什么放在这里而不是 `rag/`：检索链是纯计算层，不该知道 SSE 的存在。
-    由这一层（已经依赖 `agents.utils`）把回调注入进去，UI 关注点就留在上层。
+    由这一层（已经依赖 `agents.runtime.utils`）把回调注入进去，UI 关注点就留在上层。
 
     ⚠️ **必须守卫 `get_stream_writer()`** —— 它内部读的是 runnable 上下文，
     在没有 graph 上下文时（直接调用工具、离线评测、脚本）会抛

@@ -12,7 +12,7 @@ from pathlib import Path
 
 from langchain_core.documents import Document
 
-from rag.common.vectorstore import get_vector_store_manager
+from infra.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
 from rag.ingest_layers._shared import SUBJECT_CODE, SUBJECT_TO_COLLECTION
 

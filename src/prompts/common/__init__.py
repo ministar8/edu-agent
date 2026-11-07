@@ -14,10 +14,10 @@ Supervisor 作为路由主管，不输出面向用户文本，仅引入 `SAFETY_
 不引入 `OUTPUT_FORMAT_RULES` 或 `LENGTH_LIMIT_RULE`，避免被强制套用不适合的规则。
 """
 
-from prompts.common.safety import SAFETY_RULES
-from prompts.common.output_format import OUTPUT_FORMAT_RULES
 from prompts.common.length import LENGTH_LIMIT_RULE
-from prompts.common.structured import STRUCTURED_OUTPUT_RULE, JSON_ONLY_RULE
+from prompts.common.output_format import OUTPUT_FORMAT_RULES
+from prompts.common.safety import SAFETY_RULES
+from prompts.common.structured import JSON_ONLY_RULE, STRUCTURED_OUTPUT_RULE
 
 __all__ = [
     "SAFETY_RULES",

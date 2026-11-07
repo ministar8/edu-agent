@@ -11,7 +11,7 @@ import re
 
 from langchain_core.documents import Document
 
-from rag.common.vectorstore import get_vector_store_manager
+from infra.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
 from rag.ingest_layers._shared import SUBJECT_TO_COLLECTION, SUBJECTS
 

@@ -135,7 +135,7 @@ class SemanticCache(_EvidenceIoMixin):
         mgr = None
         for attempt in range(3):
             try:
-                from rag.common.vectorstore import get_vector_store_manager
+                from infra.vectorstore import get_vector_store_manager
 
                 mgr = get_vector_store_manager()
                 self._build_collection_sync(mgr)
@@ -211,7 +211,7 @@ class SemanticCache(_EvidenceIoMixin):
         mgr = None
         for attempt in range(3):
             try:
-                from rag.common.vectorstore import get_vector_store_manager
+                from infra.vectorstore import get_vector_store_manager
 
                 mgr = await asyncio.to_thread(get_vector_store_manager)
                 await self._build_collection_async(mgr)
@@ -298,7 +298,7 @@ class SemanticCache(_EvidenceIoMixin):
         #   本类恒按 cosine 建集合（见 :154/:233 `metadata={"hnsw:space": "cosine"}`），
         #   故 `or "cosine"` 是**与本类自身创建口径对齐**，不是跨未知集合的瞎猜；
         #   cosine 下 `max(0,1-d)` 与旧 `1-d` 对「是否过阈值」的判定完全等价。
-        from rag.common.embeddings import similarity_from_distance
+        from infra.embeddings import similarity_from_distance
 
         distance = results["distances"][0][0]
         _space = (self._collection.metadata or {}).get("hnsw:space") or "cosine"
@@ -571,7 +571,7 @@ class SemanticCache(_EvidenceIoMixin):
             self._jsonl_offsets.clear()
             self._collection = None
             try:
-                from rag.common.vectorstore import get_vector_store_manager
+                from infra.vectorstore import get_vector_store_manager
 
                 get_vector_store_manager().delete_collection(_COLLECTION_NAME)
             except Exception as e:

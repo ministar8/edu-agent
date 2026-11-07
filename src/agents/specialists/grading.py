@@ -10,10 +10,12 @@ from typing import Any
 from agents.runtime.factory import build_agent
 from agents.runtime.temperature import TEMPERATURE_GRADING
 from agents.runtime.tools import agrade_student_answer, asearch_standard_answer
+from agents.specialists.grading_salvage import salvage_grading
 from core import settings
+from core.llm_calls import call_structured
+from prompts import PROMPT_SET_VERSION
 from prompts.agents.grading import GRADING_AGENT_SYSTEM_PROMPT
 from prompts.service import build_grade_messages
-from rag.retrieval.llm_calls import call_structured
 from schema.grading import GradingResult
 
 # ── 业务真源 ──────────────────────────────────────────────────────────
@@ -32,6 +34,8 @@ async def agrade_answer(stem: str, user_answer: str, standard_answer: str = "") 
         temperature=TEMPERATURE_GRADING,
         timeout=settings.LLM_TIMEOUT,
         stage="grading",
+        prompt_set_version=PROMPT_SET_VERSION,
+        salvage=salvage_grading,
     )
     if result is None:
         raise RuntimeError("批改失败")

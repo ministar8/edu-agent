@@ -14,12 +14,13 @@ import os
 import time
 
 from core.settings import settings
+from infra.metrics import metrics
+from infra.vectorstore import get_vector_store_manager
 from rag.chunking.cleaner import clean_documents
 from rag.chunking.enhancer import enhance_documents
 from rag.chunking.loader import SUPPORTED_EXTENSIONS, load_single_file
 from rag.chunking.splitter import split_documents
-from rag.common.metrics import metrics
-from rag.common.vectorstore import get_vector_store_manager
+from rag.ingest_adapter import clear_semantic_cache, run_warmup_smoke
 from rag.knowledge_tagger import tag_chunks_with_knowledge_points
 
 logger = logging.getLogger(__name__)
@@ -191,9 +192,7 @@ def _log_index_status() -> None:
 def _run_warmup_smoke(not_ready_categories: list[str]) -> None:
     """入库后跑 1 条检索冒烟，写指标并判定。"""
     logger.info("\n[SMOKE] 入库后检索冒烟（1 条）...")
-    from rag.retrieval.retriever import warmup_query_cache
-
-    warmup_result = warmup_query_cache(quiet=True)
+    warmup_result = run_warmup_smoke(quiet=True)
     warmup_ok, warmup_verdict = evaluate_warmup(warmup_result, settings.WARMUP_MIN_SUCCESS_RATE)
     warmup_total = int(warmup_result.get("total", 0) or 0)
     metrics.emit(
@@ -226,9 +225,7 @@ def ingest_all(categories: list[str] | None = None, rebuild: bool = False) -> No
 
     if rebuild:
         # 全量重建时清空语义缓存，避免旧知识残留导致跨版本缓存命中
-        from rag.retrieval.semantic_cache import get_semantic_cache
-
-        get_semantic_cache().clear()
+        clear_semantic_cache()
         logger.info("  已清空语义缓存")
 
     logger.info("=" * 60)

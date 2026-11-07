@@ -169,7 +169,7 @@ def _fetch_section_details(
 
     返回 ``{section_id: [(chunk_index, Document), ...]}``；查询失败时返回全空表（不抛）。
     """
-    from rag.common.vectorstore import get_vector_store_manager
+    from infra.vectorstore import get_vector_store_manager
 
     details: dict[str, list[tuple[int, Document]]] = {sid: [] for sid in sec_ids}
     try:
