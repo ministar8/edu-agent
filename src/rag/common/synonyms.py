@@ -3,11 +3,15 @@
 单一数据源（Single Source of Truth），供以下模块复用：
 - recall.py：查询扩展（正向 + 反向映射）
 - cleaner.py：入库时同义词归一
+- memory/topics.py：weak_topics 归一化的 SYNONYM_MAP 兜底通道（canonical 过滤子集 69 条，
+  已在 tests/test_rag_boundaries.py §10.3 越界通道登记）
 
 映射关系：
   SYNONYM_MAP   — 原始映射：{变体/标准词: 标准词}（含自映射，cleaner 用）
   SYNONYM_FORWARD — 正向映射：{变体: 标准词}（不含自映射，recall 用）
   SYNONYM_REVERSE — 反向映射：{标准词: [所有变体]}（recall 扩展用）
+
+归属：检索词表（rag/common/synonyms.py），属 RAG 检索语义的一部分。
 """
 
 from __future__ import annotations

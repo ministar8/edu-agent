@@ -52,7 +52,7 @@
 
 | 步 | 停靠点 |
 |---|---|
-| 单文件流水 | `rag/ingest.py`（现只管 `learning_paths`）：loader→cleaner→splitter→enhancer→knowledge_tagger→vectorstore |
+| 单文件流水 | `rag/ingest.py`（现只管 `learning_paths`）：loader→**chunking（cleaner/splitter/enhancer）**→tagger→vectorstore。**chunking/ 是离线入库的文档处理组件，不依赖 rag.retrieval.*，与在线检索策略层完全解耦。** |
 | 分层构建 | `rag/ingest_layers/`：`build()`（纯函数，不落库）+ `ingest()`（落库+写 links）；生产顺序 basic→advanced→exams→exam_practice→code→learning_paths |
 | 脚本 | `scripts/ingest/*`（调 ingest_layers）；`ingest_basic_all.py` / `ingest_advanced.py` / `ingest_exams.py` / `ingest_exam_practice.py` / `ingest_code.py` |
 | 存储门面 | `infra/vectorstore.py`（含 HNSW 元数据校验 `needs_rebuild`；"集合终坏只能重建"见 `wait_until_ready` 注释） |
@@ -166,8 +166,10 @@
 | G1 | `retrieval/fusion.py`（243 行）不在职责区表 | 融合 RRF 在编排层，实文件独立存在 | **已收口**：归入 §2-④（编排/收紧），与 `postprocess/_rrf.py` 并列——_rrf.py 负责多路→排序列表，fusion.py 负责排序列表→FusedEvidence，边界清晰 |
 | G2 | `retrieval/llm_calls.py`（404 行）不在职责区表 | 所有在线 LLM 调用的唯一出口 | **已收口**：已迁至 `core/llm_calls.py`（横切基建，与 `core/llm.py` 同层），批改专用 KV 解析拆至 `agents/specialists/grading_salvage.py`，详见 `docs/INFRA_MIGRATION_PLAN.md` Batch A |
 | G3 | §1 调用方表旧路径 `agents/tools.py` | 实为 `agents/runtime/tools.py` | **已纠正（本版）** |
-| G4 | 跨包边实测：rag→document_processing **6 条全在**`chunking/cleaner/_stages.py`；rag→prompts **4 条**（hyde/llm_calls/query_classifier/query_decomposer 的提示词） | 方向单向、用途集中：离线清洗 + 在线提示词 | 登记，无需动 |
-| G5 | rag→agents/service/evaluation/db 实测 **0 条** | §6 不变量 I 集的数据佐证 | 由 `tests/test_rag_boundaries.py` 锁住 |
+| G4 | 跨包边实测：rag→document_processing **6 条全在**`chunking/cleaner/_stages.py`；rag→prompts **4 条**（hyde/llm_calls/query_classifier/query_decomposer 的提示词） | 方向单向、用途集中：离线清洗 + 在线提示词 | **登记，无需动**：`chunking/` 是离线入库组件，`document_processing` 是其下游纯计算层，方向正确 |
+| G5 | rag→agents/service/evaluation/db 实测 **0 条** | §6 不变量 I 集的数据佐证 | **由 `tests/test_rag_boundaries.py` 锁住** |
+| G6 | `common/synonyms.py` 归属模糊 | 被 memory/topics.py + rag/retrieval/* 双向消费，是检索词表 | **已明确**：`rag/common/synonyms.py` 是检索词表（SYNONYM_MAP / SYNONYM_FORWARD / SYNONYM_REVERSE），`memory/topics.py` 的消费已在 §10.3 越界通道登记（memory→rag 唯一允许通道），语义清晰 |
+| G7 | `retrieval/semantic_cache.py` 是缓存还是策略 | 在 retrieval/ 下，做缓存读写 | **已明确**：属于 §2-⑥（缓存/指标），只负责语义缓存读写与回写，不做检索策略决策 |
 
 ### 10.3 越界通道登记（跨包合法通道，含语义）
 
@@ -200,3 +202,7 @@
    `run_warmup_smoke()`），`ingest` 与 `retrieval/` 已完全解耦，
    离线入库成为独立子系统。`src/rag/ingest_adapter.py` 新增，承载 adapter 契约；
    `python -m rag.ingest` CLI 入口不受影响。
+4. **模糊地带已明确（已完成）**：`common/synonyms.py` 确认为检索词表（memory 消费已登记在 §10.3）；
+   `chunking/` 确认为离线入库文档处理组件（§3 已标注，不依赖 rag.retrieval.*）；
+   `retrieval/semantic_cache.py` 确认为缓存层（§2-⑥，不做检索策略决策）；
+   `retrieval/fusion.py` 与 `postprocess/_rrf.py` 边界已确认（§2-④，_rrf.py 负责 RRF 融合，fusion.py 负责证据裁剪，无需合并）。
