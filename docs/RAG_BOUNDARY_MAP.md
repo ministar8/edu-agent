@@ -44,7 +44,7 @@
 | ③ 融合 | `retrieval/postprocess/`（`_rrf.py`） | 按路由秩加权 RRF，不拼原始分 | 不看 TaskPolicy |
 | ④ 收紧 | `retrieval/pipeline/_stages.py`（orchestrator 编排）+ `reranker.py` + `hyde.py` + `postprocess/_window.py`、`_dedup.py` + `retrieval/fusion.py` | 去重→阈值→重排→HyDE/窗口兜底→证据裁剪（dedup/sort/source-diversity/token-budget/interleave） | 兜底触发条件写在 stage 内，不在门面；fusion 不做 RRF，只裁剪已融合的证据列表 |
 | ⑤ 出包 | `retrieval/evidence.py`（契约）+ `evidence_policy.py`（策略）+ `layer_recall.py` | 资格 eligibility 与披露 release 分离 | **release 全仓唯一出口 = `apply_evidence_policy()`**（§6-I3） |
-| ⑥ 缓存验证 | `retriever_io.py` + `semantic_cache.py` + `verifier.py` + `common/metrics.py` | 查缓存→回写→规则校验→指标 | 缓存命中必须浅拷贝（§6-I5）；只缓存检索层，不缓存 LLM 生成 |
+| ⑥ 缓存验证 | `retriever_io.py` + `semantic_cache.py` + `verifier.py` + `infra/metrics.py` | 查缓存→回写→规则校验→指标 | 缓存命中必须浅拷贝（§6-I5）；只缓存检索层，不缓存 LLM 生成 |
 
 两个"融合"词要分清：`postprocess`（②③ 之间，多路→排序列表）≠ `fusion.py`（⑤ 之前，排序列表→FusedEvidence，`afuse_documents`）。
 
@@ -72,7 +72,7 @@
 |---|---|---|
 | 集合名 ↔ 学科 | `recall_collections.py`（`SUBJECT_COLLECTIONS`/`_CODE_COLLECTION`） | `ingest_layers/*`、`scripts/ingest/*` |
 | 集合目录 → 采集 | `ingest_layers/__init__.py::build_all()` | `rag/ingest.py DEFAULT_CATEGORIES` |
-| 层 / doc_role 元数据 | `ingest_layers/_shared.py` + `common/_metadata_spec.py` | `evidence_policy.py` 读取字段 |
+| 层 / doc_role 元数据 | `ingest_layers/_shared.py` + `infra/_metadata_spec.py` | `evidence_policy.py` 读取字段 |
 | 距离→相似度 | `embeddings.similarity_from_distance()`（**全仓唯一换算点** §6-I1） | 无 |
 | 缓存常量 | `retrieval/_semantic_cache_codec.py` | `routes._query_cache`（另一层缓存，非同一物） |
 
@@ -112,7 +112,7 @@
 |---|---|---|---|
 | T1 | 出口契约劈两半 | `_semantic_cache_codec.py:44-52` 明文警告 | **已收口（2026-11-04）**：新增产品门面 `retrieve_for_task`（含 finalize+apply）；测量路径保持未裁剪包；`finalize/apply` 仍在缓存之上 |
 | T2 | 双重编排（理解段两份实现） | §7-3 | **已收口（2026-11-04）**：pipeline 独占 classify/plan/decompose，门面经 `_PlanSink` 旁路取结果 |
-| T3 | 文件机械拆分：`_support/_helpers/_types/_constants/_log` 到处是 | 拆分标记 docstring 全仓 15+ 处 | **部分收口（2026-11-04）**：`_constants/_types/_support` → `_internals`；`retriever_retry` 并入 `retriever`；`postprocess/_log` 删除。剩余 `chunking/` 与 `common/_vectorstore_*` 未动 |
+| T3 | 文件机械拆分：`_support/_helpers/_types/_constants/_log` 到处是 | 拆分标记 docstring 全仓 15+ 处 | **部分收口（2026-11-04）**：`_constants/_types/_support` → `_internals`；`retriever_retry` 并入 `retriever`；`postprocess/_log` 删除。剩余 `chunking/` 与 `infra/_vectorstore_*` 未动 |
 | T4 | 集合身份 3 处散装 | §5 | P2：建唯一 `collections.py` 登记处，ingest/recall 双消费 |
 | T5 | 门禁重复收口处：retrieval_gate 自携 `_index/_golden/_modes/_baseline`，另有 probe_gate / task_eval probe / ragas adapters / diagnostics 5 套并存 | `evaluation/` 目录 | P3：门禁做索引+golden 唯一生产者，其余消费者化；被覆盖者标 deprecated |
 | T6 | 双缓存（`routes._query_cache` vs `SemanticCache`）语义不同但同名易混 | §2 注 | 仅文档/命名澄清，不动逻辑 |
@@ -155,8 +155,7 @@
 （如 召回→规格、编排→召回、出包→缓存）。唯一值得注意的反向观感：
 
 - `召回执行 → 出包/门面` 1 条：`layer_recall.py → rag.retrieval.evidence`（构造 Evidence 结构体）；
-- `离线入库 → 出包/门面` 2 条：`ingest.py → rag.retrieval.retriever`（复用门面）
-  与 `ingest.py → rag.retrieval.semantic_cache`（入库后失效缓存）——**离线唯一两处摸在线模块**，语义正当；
+- `离线入库 → 出包/门面`：已通过 `rag/ingest_adapter.py` 薄接口中转，不再直接 import `rag.retrieval.*`；
 - `__init__ → 出包/门面` 3 条：`retrieval/__init__.py` only re-export api/evidence/retriever——纯门面。
 
 ### 10.2 遗漏补记（文档未覆盖、实测必录）
@@ -188,10 +187,10 @@
 
 实测数据把「RAG 重量失衡」精化成三组可独立开工的碎片：
 
-1. **横切基建抽离**：`retrieval/llm_calls.py` + `common/{embeddings,errors,metrics,_vectorstore_*,_metadata_spec}`
-   是跨包基建，**不是 `rag/infra/`**——四问取证后判定为「模型骨架进 `core`、存储底座进独立
-   `infra/`、批改专用解析归位 `agents`」。文件级清单、兼容壳与分批顺序见
-   **`docs/INFRA_MIGRATION_PLAN.md`**（2026-11-07，计划已定、代码未动）。
+1. **横切基建抽离（已完成）**：`retrieval/llm_calls.py` 已迁至 `core/llm_calls.py`；
+   `common/{embeddings,errors,metrics,_vectorstore_*,_metadata_spec}` 已迁至
+   `infra/{embeddings,errors,metrics,_vectorstore_*,_metadata_spec}`。横切基建不再在 rag 内，
+   文件级清单、兼容壳与分批顺序见 **`docs/INFRA_MIGRATION_PLAN.md`**（2026-11-07，Batch A-E 全部执行完毕）。
 2. **融合层归位（已完成）**：`retrieval/fusion.py` 与 `postprocess/_rrf.py` 的边界已确认
    —— `_rrf.py` 负责多路召回→排序列表（RRF 融合），`fusion.py` 负责排序列表→`FusedEvidence`
   （去重/排序/来源多样化/token 预算裁剪/首尾交错），两者同属 §2-④（编排/收紧）。
