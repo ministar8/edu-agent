@@ -6,19 +6,15 @@
 - importance = 知识体系中的地位，不是真题频次
 - question_types = typical_question_types（典型考法，非历史统计）
 
-★ 四科骨架数据已按科拆出（`_kp_ds/_kp_co/_kp_os/_kp_cn.py`），构造原语在 `_kp_node.py`；
+★ 四科骨架数据已按科拆出（`scripts/kg/_kp_ds/_kp_co/_kp_os/_kp_cn.py`），构造原语在 `scripts/kg/_kp_node.py`；
   本文件只留编排：写盘 + 入口。
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
-
-from _kp_cn import cn
-from _kp_co import co
-from _kp_ds import ds
-from _kp_os import os
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "knowledge" / "knowledge_points"
@@ -34,6 +30,11 @@ def write_subject(code: str, nodes: list[dict]) -> None:
 
 
 def main() -> int:
+    sys.path.insert(0, str(ROOT / "scripts" / "kg"))
+    from _kp_cn import cn  # noqa: E402
+    from _kp_co import co  # noqa: E402
+    from _kp_ds import ds  # noqa: E402
+    from _kp_os import os  # noqa: E402
     write_subject("ds", ds)
     write_subject("co", co)
     write_subject("os", os)
