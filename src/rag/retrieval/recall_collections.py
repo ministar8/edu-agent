@@ -6,7 +6,13 @@ import re
 
 from rag.common.rag_utils import extract_query_terms, normalize_query_text
 from rag.common.synonyms import expand_query_with_synonyms
-from rag.retrieval.collections import CODE_COLLECTION, COLLECTION_KEYWORDS, SUBJECT_COLLECTIONS
+from rag.retrieval.collections import (
+    CODE_COLLECTION,
+    COLLECTION_KEYWORDS,
+    EXAMS_COLLECTION,
+    LEARNING_PATHS_COLLECTION,
+    SUBJECT_COLLECTIONS,
+)
 from rag.retrieval.query_classifier import QueryCategory, classify_query
 
 
@@ -54,14 +60,14 @@ def resolve_collection_routes(
     collections = _infer_subject_collections(normalized) or list(SUBJECT_COLLECTIONS)
 
     if cat.is_exercise:
-        collections.append("exams")
+        collections.append(EXAMS_COLLECTION)
     # ★ 原先这里要求 `cat.is_structured and 含路径类词` —— **条件过严**：
     # 纯学习路径查询（如「408 应该怎么学」）`is_learning_path=True` 但 `is_structured=False`，
     # 于是拿不到 `learning_paths` 集合（24 chunk 对这类查询**完全不可达**）。
     # 正确的信号是 `cat.is_learning_path`（由 `_RULE_MARKERS["learning_path"]` 判定）；
     # 额外保留「路径 / 路线 / 学习计划」三个标记，是为了覆盖规则表未收录的写法（不丢原有覆盖面）。
     if cat.is_learning_path or any(marker in normalized for marker in ("路径", "路线", "学习计划")):
-        collections.append("learning_paths")
+        collections.append(LEARNING_PATHS_COLLECTION)
 
     # 代码类查询：额外命中代码库（`code_<科>`），与四科讲义并列召回。
     # （原 `is_code` 曾指向从未创建的 `answers` 集合，见下方注释；现改为指向 code 库。）

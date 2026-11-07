@@ -13,9 +13,10 @@ from langchain_core.documents import Document
 
 from infra.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
+from rag.retrieval.collections import EXAMS_COLLECTION
 
 EXAMS_DIR = _shared.KNOWLEDGE_DIR / "exams"
-COLLECTION = "exams"
+COLLECTION = EXAMS_COLLECTION
 
 # 文件名（stem）→ subject 短码
 SUBJECT_CODE = _shared.SUBJECT_CODE
