@@ -13,18 +13,11 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
+from rag.retrieval.collections import EXAMS_COLLECTION, SUBJECT_COLLECTIONS
 from rag.retrieval.evidence import FusedEvidence, TextEvidence
 from rag.retrieval.topic_relevance import is_topic_relevant, topic_relevance_score
 
 logger = logging.getLogger(__name__)
-
-SUBJECT_COLLECTIONS = (
-    "data_structure",
-    "computer_organization",
-    "operating_system",
-    "computer_network",
-    "exams",
-)
 
 
 def _doc_to_evidence(doc, score: float, collection: str) -> TextEvidence:
@@ -77,7 +70,9 @@ async def _collect_topup_candidates(
     for layer in missing:
         # 层约束 + 资格约束（policy 真源）；layer_recall 不实现资格规则
         filt = merge_where_filters({"kb_depth": layer}, eligibility_where)
-        for coll in SUBJECT_COLLECTIONS:
+        # 集合身份来自唯一登记处；`exams` 集合补进循环以保持旧 5 元组的 L3 等价行为
+        # （真题 chunk 只在 `exams` 集合里，L3 top-up 少了它就定向不可达）。
+        for coll in (*SUBJECT_COLLECTIONS, EXAMS_COLLECTION):
             try:
                 hits = await mgr.asimilarity_search_with_score(coll, query, per_layer, filter=filt)
             except Exception:

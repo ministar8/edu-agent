@@ -15,8 +15,9 @@ from rag.chunking.loader import SUPPORTED_EXTENSIONS, load_single_file
 from rag.chunking.splitter import split_documents
 from rag.ingest_layers import _shared
 from rag.knowledge_tagger import tag_chunks_with_knowledge_points
+from rag.retrieval.collections import LEARNING_PATHS_COLLECTION
 
-COLLECTION = "learning_paths"
+COLLECTION = LEARNING_PATHS_COLLECTION
 LP_DIR = _shared.KNOWLEDGE_DIR / "learning_paths"
 
 

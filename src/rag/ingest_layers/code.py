@@ -15,16 +15,12 @@ from langchain_core.documents import Document
 
 from infra.vectorstore import get_vector_store_manager
 from rag.ingest_layers import _shared
+from rag.retrieval.collections import CODE_COLLECTION
 
 CODE_DIR = _shared.KNOWLEDGE_DIR / "code"
 
 # 目录名 → 目标集合名（按科分，与检索路由一致）★ 代码库专用（≠ 四科集合名）
-SUBJECT_TO_COLLECTION = {
-    "data_structure": "code_ds",
-    "computer_organization": "code_co",
-    "operating_system": "code_os",
-    "computer_network": "code_cn",
-}
+SUBJECT_TO_COLLECTION = CODE_COLLECTION
 SUBJECT_CODE = _shared.SUBJECT_CODE
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 from langchain_core.documents import Document
 
 from rag.ingest_layers import _shared, advanced, basic, code, exam_practice, exams, learning_paths
+from rag.retrieval.collections import EXAMS_COLLECTION, LEARNING_PATHS_COLLECTION
 
 __all__ = [
     "_shared",
@@ -48,14 +49,14 @@ def build_all(kp_ids: set[str] | None = None) -> dict[str, list[Document]]:
         _merge(collection, chunks)
 
     exam_chunks, _, _ = exams.build_all(kp_ids)
-    _merge("exams", exam_chunks)
+    _merge(EXAMS_COLLECTION, exam_chunks)
     practice_chunks, _, _ = exam_practice.build(kp_ids)
-    _merge("exams", practice_chunks)
+    _merge(EXAMS_COLLECTION, practice_chunks)
 
     for subject, collection in code.SUBJECT_TO_COLLECTION.items():
         chunks, _, _ = code.build(subject, kp_ids)
         _merge(collection, chunks)
 
     lp_chunks, _, _ = learning_paths.build()
-    _merge(learning_paths.COLLECTION, lp_chunks)
+    _merge(LEARNING_PATHS_COLLECTION, lp_chunks)
     return by_col

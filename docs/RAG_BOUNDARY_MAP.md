@@ -70,7 +70,7 @@
 
 | 数据 | 单一真源 | 同步的影子（改动须查） |
 |---|---|---|
-| 集合名 ↔ 学科 | `recall_collections.py`（`SUBJECT_COLLECTIONS`/`_CODE_COLLECTION`） | `ingest_layers/*`、`scripts/ingest/*` |
+| 集合名 ↔ 学科 | `retrieval/collections.py`（唯一登记处：`SUBJECT_COLLECTIONS`/`COLLECTION_KEYWORDS`/`CODE_COLLECTION`）；`recall_collections.py` 等全部改 import | `ingest_layers/*`、`scripts/ingest/*`（经 `rag/ingest_adapter.py` 中转） |
 | 集合目录 → 采集 | `ingest_layers/__init__.py::build_all()` | `rag/ingest.py DEFAULT_CATEGORIES` |
 | 层 / doc_role 元数据 | `ingest_layers/_shared.py` + `infra/_metadata_spec.py` | `evidence_policy.py` 读取字段 |
 | 距离→相似度 | `embeddings.similarity_from_distance()`（**全仓唯一换算点** §6-I1） | 无 |
@@ -113,8 +113,8 @@
 | T1 | 出口契约劈两半 | `_semantic_cache_codec.py:44-52` 明文警告 | **已收口（2026-11-04）**：新增产品门面 `retrieve_for_task`（含 finalize+apply）；测量路径保持未裁剪包；`finalize/apply` 仍在缓存之上 |
 | T2 | 双重编排（理解段两份实现） | §7-3 | **已收口（2026-11-04）**：pipeline 独占 classify/plan/decompose，门面经 `_PlanSink` 旁路取结果 |
 | T3 | 文件机械拆分：`_support/_helpers/_types/_constants/_log` 到处是 | 拆分标记 docstring 全仓 15+ 处 | **部分收口（2026-11-04）**：`_constants/_types/_support` → `_internals`；`retriever_retry` 并入 `retriever`；`postprocess/_log` 删除。剩余 `chunking/` 与 `infra/_vectorstore_*` 未动 |
-| T4 | 集合身份 3 处散装 | §5 | P2：建唯一 `collections.py` 登记处，ingest/recall 双消费 |
-| T5 | 门禁重复收口处：retrieval_gate 自携 `_index/_golden/_modes/_baseline`，另有 probe_gate / task_eval probe / ragas adapters / diagnostics 5 套并存 | `evaluation/` 目录 | P3：门禁做索引+golden 唯一生产者，其余消费者化；被覆盖者标 deprecated |
+| T4 | 集合身份 3 处散装 | §5 | **已收口（2026-11-07）**：新增 `src/rag/retrieval/collections.py` 唯一登记处（4 学科集合 + `EXAMS_COLLECTION` + `LEARNING_PATHS_COLLECTION` + 代码库映射 + 关键词表），双消费方改 import；`layer_recall` L3 top-up 按 `(*SUBJECT_COLLECTIONS, EXAMS_COLLECTION)` 显式保持旧 5 元组等价行为 |
+| T5 | 门禁重复收口处：retrieval_gate 自携 `_index/_golden/_modes/_baseline`，另有 probe_gate / task_eval probe / ragas adapters / diagnostics 5 套并存 | `evaluation/` 目录 | **部分收口（2026-11-07）**：实测 `probe_gate` 本就是索引三件套（`configure_for_gate/build_index/wait_for_index_ready`）的消费者，其 `load_baseline/…` 与 `retrieval_gate` 同名但**数据形态不同**（probe 丢层 `dict[int,str]` vs 指标字典），非重复实现——已改名 `load_probe_baseline/build_probe_baseline_payload/compare_probe_baseline` 消除同名遮蔽；`stage_trace` 同为消费者。剩余：ragas adapters / task_eval probe 与 retrieval_gate 的并存待后续按同法审计 |
 | T6 | 双缓存（`routes._query_cache` vs `SemanticCache`）语义不同但同名易混 | §2 注 | 仅文档/命名澄清，不动逻辑 |
 | T7 | 溯源走 metadata 字符串键（I6） | `_orchestrator.py` | 远期：抽 typed `Provenance` 字段；动它 dout 会牵动所有门禁断言，必须最后做 |
 | T8 | 类型注解放宽 | `pyproject.toml:135` 自认 | 随 T1/T2 收敛后逐步收紧 |

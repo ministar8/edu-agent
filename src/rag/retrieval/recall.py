@@ -14,8 +14,8 @@ import re
 
 from rag.common.rag_utils import extract_query_terms, get_bm25_stop_words, normalize_query_text
 from rag.common.synonyms import expand_query_with_synonyms
+from rag.retrieval.collections import COLLECTION_KEYWORDS
 from rag.retrieval.query_classifier import QueryCategory, classify_query
-from rag.retrieval.recall_collections import _COLLECTION_KEYWORDS
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ def _rank_terms_by_specificity(terms: list[str]) -> list[str]:
     for term in terms:
         matched = sum(
             1
-            for kw_list in _COLLECTION_KEYWORDS.values()
+            for kw_list in COLLECTION_KEYWORDS.values()
             if any(term.lower() in kw.lower() for kw in kw_list)
         )
         # 匹配集合越少 → 越有区分度 → 权重越高

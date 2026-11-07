@@ -25,6 +25,9 @@
    放行；深层路径（`rag.retrieval.evidence_policy`、`rag.retrieval.task_policy`、
    猴子补丁 `rag.retrieval.pipeline._stages` 等）须在
    ``EVALUATION_RAG_ALLOWED`` 登记语义背景。
+7. 集合身份（``SUBJECT_COLLECTIONS`` 等）**唯一定义于** ``rag/retrieval/collections.py``
+   （T4 收口，2026-11-07）：其他文件只允许 import / 别名引用，不得另行赋值——
+   原两处散装定义（``recall_collections`` 与 ``layer_recall`` 的含 exams 5 元组）曾各自漂移。
 """
 
 from __future__ import annotations
@@ -201,3 +204,55 @@ def test_evaluation_imports_rag_only_via_registered() -> None:
                     f"evaluation 使用 {full} 须登记（未登记文件 {rel}）",
                 )
     assert not VIOLATIONS, "\n".join(VIOLATIONS)
+
+
+# ── 8. 集合身份唯一登记处（T4，2026-11-07）─────────────────────────────
+
+# 这些名字只允许在 `rag/retrieval/collections.py` 里被赋值；其他文件 import 可以，赋值不行。
+COLLECTION_IDENTITY_NAMES = {
+    "SUBJECT_COLLECTIONS",
+    "EXAMS_COLLECTION",
+    "LEARNING_PATHS_COLLECTION",
+    "CODE_COLLECTION",
+    "COLLECTION_KEYWORDS",
+    "ALL_COLLECTIONS",
+}
+_REGISTRY_PATH = SRC / "rag" / "retrieval" / "collections.py"
+
+
+def _assigned_names(path: Path) -> set[str]:
+    """AST 找出文件中所有对集合身份名字的赋值目标（含 AnnAssign / 元组展开目标）。"""
+    tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    names: set[str] = set()
+
+    def _targets(t: ast.expr) -> None:
+        if isinstance(t, ast.Name):
+            names.add(t.id)
+        elif isinstance(t, ast.Tuple | ast.List):
+            for el in t.elts:
+                _targets(el)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for t in node.targets:
+                _targets(t)
+        elif isinstance(node, ast.AnnAssign):
+            _targets(node.target)
+        elif isinstance(node, ast.AugAssign):
+            _targets(node.target)
+    return names
+
+
+def test_collection_identities_defined_only_in_collections() -> None:
+    """集合身份单点定义（T4 锁）：任何其他文件的赋值都说明登记处被绕开。
+
+    import / 别名引用（如 ``SUBJECT_TO_COLLECTION = CODE_COLLECTION`` 的消费侧改名）
+    不算赋值违规——只拦字面重新定义。"""
+    offenders: list[str] = []
+    for p in sorted(SRC.rglob("*.py")):
+        if p == _REGISTRY_PATH:
+            continue
+        hit = _assigned_names(p) & COLLECTION_IDENTITY_NAMES
+        if hit:
+            offenders.append(f"{p.relative_to(SRC)}: {'、'.join(sorted(hit))}")
+    assert not offenders, "集合身份必须只在 rag/retrieval/collections.py 定义：\n" + "\n".join(offenders)
