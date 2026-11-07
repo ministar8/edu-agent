@@ -384,17 +384,19 @@ def _process_content_anomaly(doc: Document) -> AnomalyRecord:
             record.actions_taken.append(f"隔离{len(garbled_paras)}个乱码段落")
 
     # ── 词频异常检测 ──
-    is_anomaly, anomaly_words = _detect_word_freq_anomaly(text)
+    # 对已隔离乱码的 page_content 做检测，避免重复词清理覆写乱码隔离结果（保留可追溯性）
+    current_text = doc.page_content
+    is_anomaly, anomaly_words = _detect_word_freq_anomaly(current_text)
     if is_anomaly:
         record.word_freq_anomaly = True
         record.word_freq_anomaly_words = anomaly_words
         doc.metadata["word_freq_anomaly"] = True
         doc.metadata["word_freq_anomaly_words"] = anomaly_words
 
-        # 清理连续重复词
-        cleaned_text = _clean_repetitions(text)
-        if len(cleaned_text) < len(text):
-            reduction = len(text) - len(cleaned_text)
+        # 清理连续重复词（作用于已隔离的 page_content）
+        cleaned_text = _clean_repetitions(current_text)
+        if len(cleaned_text) < len(current_text):
+            reduction = len(current_text) - len(cleaned_text)
             doc.page_content = cleaned_text
             doc.metadata["repetition_cleaned"] = reduction
             record.actions_taken.append(f"清理重复词(减少{reduction}字符)")
