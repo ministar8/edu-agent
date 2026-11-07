@@ -60,7 +60,7 @@ edu-agent/
 ├── knowledge/            # 408 知识库（四科讲义 + 题库 + 学习路线）
 ├── docker/               # Dockerfile.service
 ├── scripts/              # 运维/诊断/实验脚本，按域分子包（ops · mem · gates · exp · lib · ingest · datasets）
-├── tests/                # 单测（遥测采样口径，19 例；CI 的 lint job 会跑 pytest）
+├── tests/                # 单测（306 例，1 跳过：memory 205 + document_processing 101；CI 的 lint job 会跑 pytest）
 └── docs/                 # 工程文档（ARCHITECTURE / RETRIEVAL_PLAN / RETRIEVAL_ROADMAP / DOCKER 等）
 ```
 
