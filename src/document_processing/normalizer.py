@@ -123,7 +123,9 @@ def _fullwidth_to_halfwidth(text: str) -> str:
     """全角数字/字母 → 半角
 
     "１２３" → "123"，"ＡＢＣ" → "ABC"
-    保留全角标点（由 cleaner.py 处理）。
+    ★ 实现怪点：转换表 range(0xFF10, 0xFF1A + 1) 会连带覆盖 U+FF1A=全角冒号，
+    将其转成半角 ":"，与 docstring「保留全角标点」不符。其余全角标点（如 ！）
+    不受影响，由 cleaner.py 处理。后续如收口需连动文档与测试。
     使用预编译 str.maketrans 表，O(N) 单次扫描，比逐字符判断快 5-10x。
     """
     return text.translate(_FULLWIDTH_TO_HALFWIDTH_TABLE)
@@ -302,6 +304,7 @@ def _apply_text_transforms(
     """对单篇正文依次执行第 1~4 步文本转换
 
     步骤：全角→半角 → 日期/时间 → 繁简 → 列表编号。
+    第 5 步标题跳跃检测（仅 .md 文件）在 _normalize_one_doc 中单独处理。
     仅在文本真正发生变化时记录对应的变更标签。
 
     Returns:
