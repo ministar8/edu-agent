@@ -8,67 +8,34 @@
 
 实验输入数据。
 
-- `golden/` — 检索黄金集、probe queries
-- `ragas/` — 生成质量评估样本
-- `analysis/` — 知识库统计分析
+- `golden/` — 检索黄金集、探针 queries（156 条黄金 query + 5 条探针，见 `evals/datasets/golden/README.md`）
+- `corrections/` — 真题答案键人工修正表 `exam_answer_corrections.json`（被 `evaluation.task_eval.assets.load_answer_corrections()` 只读消费）
+
+以下目录在 README 早期版本中有承诺，但对应数据/产物尚未补全，**不在本仓当前版本中存在**，不在此列：
+
+- `ragas/`、`analysis/`（`datasets/` 下，缺 RAGAS 配对样本与语料覆盖对照）
+- `demo/`、`probes/`、`probes_phase1/`（引用纪律里提及的跨目录同名文件，实际目录不存在）
 
 ### baselines
 
 固定回归基线。
 
-用于验证：
+存在：
 
-- 检索策略变化
-- policy 修改
-- evidence 行为
+- `probe_baseline.json` — `probe_gate` 小节级探针基线
+- `retrieval_baseline.json` — `retrieval_gate` 默认路由基线
 
-### experiments
+_constants.py 中还定义了 5 条组合基线路径（`_rerank`、`_real_embed`、`_fake_disabled`、`_real_disabled`、`_real_rerank`），对应文件尚未补全，缺失时门禁跑对应组合会找不到基线文件，列为已知问题，待实验补全批次重录。
 
-实验配置。
+### experiments / configs / results / reports
 
-`configs/` 保存实验开关：
+实验配置与运行产物目录（`configs/`、`results/`、`reports/`）：
 
-- `full.yaml`
-- `vector_only.yaml`
-- `no_bm25.yaml`
-- `no_metadata.yaml`
-- `ragas.yaml`
+- `experiments/configs/` — 实验开关 yaml（full / vector_only / no_bm25 / no_metadata / ragas），文件由实验补全批次填入
+- `results/retrieval/{ablation,layer_policy,legacy_runtime}` — 检索相关实验产物
+- `results/generation/ragas/` — 生成质量实验产物（RAGAS 读数与样本）
+- `results/system_validation/` — 系统正确性验证产物（LangGraph state / agent behavior / leakage）
+- `results/archive/` — 开发期调参历史归档
+- `reports/` — 整理后的实验报告（`paper_tables.md`、`figures/`）
 
-### results
-
-实验运行产物。
-
-#### retrieval
-
-检索相关实验：
-
-- `ablation/`
-- `layer_policy/`
-- `legacy_runtime/`
-
-#### generation
-
-生成质量实验：
-
-- `ragas/`
-  - `ragas_freeze20261105.json` / `_samples.jsonl` — 现行读数与样本（2026-11-05）
-  - 旧代际数据与 `summary.md` 已于 2026-11-05 删除
-
-#### system_validation
-
-系统正确性验证：
-
-- LangGraph state
-- agent behavior
-- leakage
-
-#### archive
-
-开发期调参历史归档。
-
-### reports
-
-整理后的实验报告：
-
-- `paper_tables.md`
-- `figures/`
+以上目录均为**运行时产出目录**：首次运行相应实验/门禁脚本时由脚本自动 `mkdir -p` 创建，**不入 git，不随仓库克隆预置**。克隆后首次跑门禁或实验前，如代码未自建目录，请先按需 `mkdir -p` 对应子目录。

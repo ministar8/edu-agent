@@ -91,7 +91,7 @@ def load_answer_corrections() -> dict[str, str]:
       若不修正，Grade 的 `score_tolerance` 测的是「gold 质量」而非「系统能力」。
       修正表只被本模块（评测侧）读取 —— **不触碰 KB 与检索链**。
     """
-    path = ROOT / "evals" / "datasets" / "exam_answer_corrections.json"
+    path = ROOT / "evals" / "datasets" / "corrections" / "exam_answer_corrections.json"
     if not path.exists():
         return {}
     try:
