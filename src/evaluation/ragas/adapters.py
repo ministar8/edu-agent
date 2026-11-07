@@ -9,8 +9,7 @@ from langchain_core.embeddings import Embeddings
 
 from core.llm import get_llm
 from evaluation.ragas.dataset import EvalSample
-from rag.retrieval.evidence import FusedEvidence, TextEvidence
-from rag.retrieval.retriever import aretrieve_evidence_raw
+from rag.retrieval import FusedEvidence, TextEvidence, aretrieve_evidence_raw
 
 logger = logging.getLogger(__name__)
 

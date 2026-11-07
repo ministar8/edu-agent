@@ -182,6 +182,7 @@
 | memory → rag | `memory/topics.py`（SYNONYM_MAP 兜底，canonical 过滤子集 69 条）、`memory/sqlite.py`（Store 向量索引复用 TEI） | 两个已知设计通道 |
 | agents → rag | `agents/runtime/tools.py`（检索主通道）、`agents/orchestration/teaching_graph.py`（prepare_task 的任务分类）、`agents/specialists/grading.py`（结构化批改的 LLM 基建） | 3 个各有明确语义 |
 | document_processing → rag | **无一例**（0 条） | 封闭纯计算层 |
+| evaluation → rag | `evaluation/diagnostics/_stage_trace_core.py`（猴子补丁 rag.retrieval.retriever）、`evaluation/diagnostics/candidate_trace.py`（模块级消费 rag.retrieval.semantic_cache）、`evaluation/probe_tracing.py`（猴子补丁 rag.retrieval.pipeline._stages / rag.retrieval.retriever）、`evaluation/task_eval/retrieval_probe.py`（策略函数 apply_evidence_policy / finalize_with_layer_ranking / resolve_task_policy） | 4 个文件各有明确语义，经护栏测试登记 |
 
 ### 10.4 迁移路标（与 §8 台账对接，仅方向、不动代码）
 

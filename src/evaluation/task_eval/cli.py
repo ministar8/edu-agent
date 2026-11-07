@@ -19,14 +19,16 @@ from pathlib import Path
 
 from core.settings import settings
 from evaluation.task_eval import judge as judge_mod
+from evaluation.task_eval._runner_io import (
+    append_record,
+    load_done_ids,
+    write_jsonl,
+)
+from evaluation.task_eval._runner_support import preflight_check
 from evaluation.task_eval.cases import TASKS, load_demo
 from evaluation.task_eval.report import build_report, render_markdown
 from evaluation.task_eval.runner import (
-    append_record,
-    load_done_ids,
-    preflight_check,
     run_case,
-    write_jsonl,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")

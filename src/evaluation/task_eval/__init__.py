@@ -14,8 +14,9 @@
 
 from __future__ import annotations
 
+from evaluation.task_eval._runner_io import dump_records
 from evaluation.task_eval.cases import TaskCase, load_cases, load_demo
-from evaluation.task_eval.runner import CaseRecord, dump_records, run_case
+from evaluation.task_eval.runner import CaseRecord, run_case
 
 __all__ = [
     "CaseRecord",

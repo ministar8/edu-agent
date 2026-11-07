@@ -19,6 +19,12 @@
 5. ``agents`` 使用 ``rag`` 的文件**登记制**：
    ``tools`` 是检索主通道；``teaching_graph`` 只取任务分类——每一个都有明确语义。
    ``grading.py`` 已改走 ``core.llm_calls``，不再 import rag，故从清单移除。
+6. ``evaluation`` 使用 ``rag.retrieval.*`` 的文件**登记制**：
+   从 ``rag.retrieval`` 顶层门面导入（contract symbols：`EvidenceBundle` /
+   `FusedEvidence` / `TextEvidence` / `aretrieve_evidence_raw` / `retrieve_for_task`）
+   放行；深层路径（`rag.retrieval.evidence_policy`、`rag.retrieval.task_policy`、
+   猴子补丁 `rag.retrieval.pipeline._stages` 等）须在
+   ``EVALUATION_RAG_ALLOWED`` 登记语义背景。
 """
 
 from __future__ import annotations
@@ -42,6 +48,15 @@ AGENTS_RAG_ALLOWED = {
     # 编排任务分类：prepare_task 需要 task mode（懒加载单点）
     "agents/orchestration/teaching_graph.py",
 }
+EVALUATION_RAG_ALLOWED = {
+    # 猴子补丁：阶段追踪需在 rag 内部命名空间打补丁（边界地图 §7-3/§7-4 已明文登记）
+    "evaluation/diagnostics/_stage_trace_core.py",
+    "evaluation/probe_tracing.py",
+    # 模块级消费：诊断/门禁直接操作 rag 内部语义单元
+    "evaluation/diagnostics/candidate_trace.py",
+    # 策略函数：不进 rag.retrieval 顶层门面，留在 deep import 登记
+    "evaluation/task_eval/retrieval_probe.py",
+}
 
 VIOLATIONS: list[str] = []
 
@@ -56,11 +71,29 @@ def _top_package(node: ast.Ast, imports: list[str]) -> None:
 
 
 def _imports_of(path: Path) -> list[str]:
+    """收集一条 import 语句的顶层包名（兼容旧调用）。"""
+    return [top for top, _, _ in _imports_detail_of(path)]
+
+
+def _imports_detail_of(path: Path) -> list[tuple[str, str | None, str | None]]:
+    """收集 import 的 (顶层包, 子模块, 完整模块路径)。
+
+    例如：
+    - ``from rag.retrieval import X`` → ("rag", "retrieval", "rag.retrieval")
+    - ``from rag.retrieval.evidence import X`` → ("rag", "retrieval.evidence", "rag.retrieval.evidence")
+    - ``import rag.retrieval.retriever as R`` → ("rag", "retrieval.retriever", "rag.retrieval.retriever")
+    """
     tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
-    tops: list[str] = []
+    out: list[tuple[str, str | None, str | None]] = []
     for node in ast.walk(tree):
-        _top_package(node, tops)
-    return tops
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                parts = alias.name.split(".")
+                out.append((parts[0], ".".join(parts[1:]) if len(parts) > 1 else None, alias.name))
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            parts = node.module.split(".")
+            out.append((parts[0], ".".join(parts[1:]) if len(parts) > 1 else None, node.module))
+    return out
 
 
 def _collect(pkg: str) -> list[Path]:
@@ -141,4 +174,30 @@ def test_core_does_not_import_business_layers() -> None:
                 top not in CORE_FORBIDDEN,
                 f"core 不得 import {top}（{rel}）",
             )
+    assert not VIOLATIONS, "\n".join(VIOLATIONS)
+
+
+def test_evaluation_imports_rag_only_via_registered() -> None:
+    """evaluation 使用 rag.retrieval.* 的文件须登记。
+
+    从 ``rag.retrieval`` 顶层门面导入（contract symbols：EvidenceBundle /
+    FusedEvidence / TextEvidence / aretrieve_evidence_raw / retrieve_for_task）
+    放行；深层路径（submodule 或猴子补丁，如 rag.retrieval.pipeline._stages、
+    rag.retrieval.task_policy）须在 ``EVALUATION_RAG_ALLOWED`` 登记。
+    """
+    for p in _collect("evaluation"):
+        rel = p.relative_to(SRC).as_posix()
+        for top, sub, full in _imports_detail_of(p):
+            if top != "rag":
+                continue
+            # 从 rag.retrieval 顶层门面导入：放行（contract symbols）
+            if sub == "retrieval" and full == "rag.retrieval":
+                continue
+            # 深层路径：须登记
+            if full and full.startswith("rag.retrieval."):
+                _check(
+                    rel,
+                    rel in EVALUATION_RAG_ALLOWED,
+                    f"evaluation 使用 {full} 须登记（未登记文件 {rel}）",
+                )
     assert not VIOLATIONS, "\n".join(VIOLATIONS)

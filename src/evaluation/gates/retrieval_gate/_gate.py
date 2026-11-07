@@ -100,7 +100,7 @@ async def _run_one_query(
       每条都从第 1 条开始重复计数。`_query_failures` 是 append-only 的进程级列表，
       不 reset 就无法定位「到底是哪条 query 把集合查坏了」。
     """
-    from rag.retrieval.retriever import aretrieve_evidence_raw
+    from rag.retrieval import aretrieve_evidence_raw
 
     mgr.reset_query_failures()
     try:

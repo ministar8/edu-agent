@@ -32,18 +32,13 @@ from evaluation.task_eval._runner_agent import (
     aggregate_memory_read_status,
 )
 from evaluation.task_eval._runner_record import CaseRecord
-from evaluation.task_eval._runner_support import (  # noqa: F401  兼容消费方从 runner 取这些名
+from evaluation.task_eval._runner_support import (
     _all_kp,
-    append_record,
-    dump_records,
     generation_ok,
     is_env_error,
-    load_done_ids,
     map_route_failures,
     mechanical_failures,
     memory_write_missing,
-    preflight_check,
-    write_jsonl,
 )
 from evaluation.task_eval.cases import TaskCase
 from evaluation.task_eval.retrieval_probe import probe_retrieval

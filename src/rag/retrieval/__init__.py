@@ -7,12 +7,14 @@
 """
 
 from rag.retrieval.api import EvidenceBundle, retrieve_for_task
-from rag.retrieval.evidence import FusedEvidence
+from rag.retrieval.evidence import FusedEvidence, TextEvidence, parse_knowledge_points
 from rag.retrieval.retriever import aretrieve_evidence_raw
 
 __all__ = [
     "EvidenceBundle",
     "FusedEvidence",
+    "TextEvidence",
+    "parse_knowledge_points",
     "aretrieve_evidence_raw",
     "retrieve_for_task",
 ]

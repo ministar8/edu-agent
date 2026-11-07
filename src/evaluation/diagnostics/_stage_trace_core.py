@@ -13,7 +13,7 @@ from typing import Any
 
 from langchain_core.documents import Document
 
-from rag.retrieval.evidence import TextEvidence
+from rag.retrieval import TextEvidence
 
 logger = logging.getLogger(__name__)
 
