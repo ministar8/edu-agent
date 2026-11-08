@@ -1,0 +1,89 @@
+{
+  "_meta": {
+    "n": 156,
+    "run_config": {
+      "dataset": "evals/datasets/golden/sample_408.jsonl",
+      "limit": null,
+      "generation_model": "dashscope:qwen3.8-max-0902",
+      "judge_model": "deepseek:deepseek-flash",
+      "sample_per_type": null,
+      "query_type_distribution": {
+        "code": 32,
+        "concept": 60,
+        "generate": 32,
+        "grade": 32
+      },
+      "retrieval_k": 5,
+      "requested_use_rerank": false,
+      "effective_rerank_enabled": false,
+      "embedding_fake": false,
+      "embedding_model": "BAAI/bge-m3",
+      "metrics_requested": [
+        "faithfulness",
+        "context_precision",
+        "context_recall",
+        "answer_relevancy"
+      ],
+      "ragas_run_config": {
+        "timeout": 120,
+        "max_retries": 1,
+        "max_wait": 3,
+        "max_workers": 2,
+        "batch_size": 2,
+        "answer_relevancy_strictness": 1
+      },
+      "include_details": false,
+      "n_filled": 156,
+      "n_loaded": 156,
+      "generated_samples_path": "evals/results/generation/ragas/ragas_freeze20261105_samples.jsonl"
+    }
+  },
+  "faithfulness": {
+    "mean": 0.7238,
+    "n": 156
+  },
+  "context_precision": {
+    "mean": 0.7405,
+    "n": 156
+  },
+  "context_recall": {
+    "mean": 0.4764,
+    "n": 156
+  },
+  "answer_relevancy": {
+    "mean": 0.6598,
+    "n": 156
+  },
+  "recorded_at": "2026-11-05T13:25:38.754911+00:00",
+  "provenance": {
+    "recorded_at": "2026-11-05T13:25:38.754911+00:00",
+    "code_version": "cd6a871-dirty",
+    "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
+    "script": "src/evaluation/ragas/ragas_eval.py",
+    "argv": [
+      "--reuse-samples",
+      "evals/results/generation/ragas/ragas_freeze20261105_samples.jsonl",
+      "--tag",
+      "freeze20261105",
+      "--no-rerank",
+      "--answer-relevancy-strictness",
+      "1",
+      "--ragas-max-workers",
+      "2",
+      "--ragas-batch-size",
+      "2"
+    ],
+    "model_refs": {
+      "agent": "deepseek:deepseek-flash",
+      "rag_chain": "dashscope:qwen3.8-max-0902",
+      "judge": "deepseek:deepseek-flash"
+    },
+    "sampling": {
+      "temp_precise": 0.0,
+      "temp_creative": 0.3,
+      "temp_default": 0.3
+    },
+    "experiment_config_hash": "9c07313cce27",
+    "dependency_lock_hash": "881607c7955b"
+  }
+}
