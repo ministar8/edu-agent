@@ -10,7 +10,7 @@ CLAIM_UNMEASURED = "未测量"
 
 # tier 声明的是「这个数字由谁决定」，不是可随手改的样式（Task 6 评审 I-2 的根因就是这个数由人
 # 手写、且没人检查它凭什么）。锚点必须是文档/裁定记录里查得到的**实名**，自由文本不算依据。
-# ★ 这张白名单**只有一份**（Task 7 Step 4b 从 `scripts/lib/build_claim_ledger.py` 上移）：
+# ★ 这张白名单**只有一份**（Task 7 Step 4b 从 ledger 生成器上移）：
 #   ledger 行侧与 registry 判据侧共用 ⇒ 两处不可能各自漂移，而「两套现实」正是本计划要消灭的。
 TIER_ANCHORS = frozenset(
     {
@@ -85,7 +85,7 @@ def boundary_calibrated(human: list[float], *, threshold: float = 4.0, min_each:
     """judge 在**门槛边界两侧**都见过人工分，才算校准过。
 
     ★ 门槛一律是 `final_quality ≥ 4`，所以只有 5 分的校准集证明不了「3 分该判不过」。
-      实测 `evals/datasets/demo/calibration_30.jsonl` 的 human 分布 = {5×28, 2×1, 0×1}
+      此前的 30 条校准样本（已不在仓库中）human 分布 = {5×28, 2×1, 0×1}
       ⇒ below=2 < 3 ⇒ False。这不是缺陷，是**尚未做过的事**，必须如实进状态词。
     """
     below = sum(1 for h in human if h < threshold)

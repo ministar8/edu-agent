@@ -8,7 +8,7 @@
     4) 机械收集 `failure_reason`      → 检索/工具层可自动判的部分
     5) （可选）LLM judge              → `final_quality` 与生成侧 failure_reason
 
-★ 与 `agent_behavior_gate.py` 的边界：本模块**不复制**它的硬安全检查，
+★ 与**安全/行为门禁**的边界：本模块**不复制**它的硬安全检查，
   只透传 `CaseResult.hard_fails` 作为 `generation_ok` 的一个否决项；
   安全门禁仍由 gate 负责（决策 #2：职责不混）。
 
@@ -385,7 +385,7 @@ def _write_env_and_provenance(record: CaseRecord, probe: RetrievalProbe, started
     _inner = prov.get("provenance") or {}
     record.code_version = str(_inner.get("code_version") or "")
     record.golden_sha256 = str(_inner.get("golden_sha256") or "")
-    # ★ 主从关系：上面的标量仍是现有消费者（report/reprobe/freeze_precheck）的权威，
+    # ★ 主从关系：上面的标量仍是现有消费者（report/reprobe）的权威，
     #   record.provenance 是完整证据副本；两者必须来自**同一次** build_provenance() 调用。
     record.provenance = dict(_inner)
     # ★ 修 #3：`-dirty` 区分不了一次改造里的多轮 ⇒ 直接把提示词内容 hash 落到每条 record

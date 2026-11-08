@@ -120,7 +120,7 @@ class CaseRecord:
     #   `run_case` 用它经 `map_route_failures` 把 `retrieval_status` 升为 `error`，
     #   清单本身**只作凭据**：与 `judge_failure_reasons` 同构 ——
     #   **不进**任何比率的分子/分母、**不进** `pick_primary_failure`、
-    #   **不参与** `report.py`/`metrics.py`/`build_claim_ledger.py` 的任何计算路径（Task 8 修复轮 F2 已核查）。
+    #   **不参与** `report.py`/`metrics.py` 的任何计算路径（Task 8 修复轮 F2 已核查）。
     #   ★ 老归档**没有**这个键 ⇒ 读它时按「未消费过的旧口径」处理，不许回填。
     route_failure_notes: list[str] = field(default_factory=list)
     # ★ 状态枚举取代自报布尔（EVIDENCE_CHAIN.md §5 B2/B4）。

@@ -2,7 +2,7 @@
 
     PYTHONPATH=src uv run python -m evaluation.task_eval run --limit 3
     PYTHONPATH=src uv run python -m evaluation.task_eval run --task verify --no-judge
-    PYTHONPATH=src uv run python -m evaluation.task_eval calibrate --input evals/datasets/demo/_calibration.jsonl
+    PYTHONPATH=src uv run python -m evaluation.task_eval calibrate --input <cases.jsonl>
 
 ★ 默认**不写论文归档**：`--out` 不给就只打印报告。归档请显式指定
   `evals/results/task_eval/phase0_<date>.jsonl`。
@@ -88,7 +88,7 @@ def _emit_results(all_records: list[dict], out: str) -> None:
 async def _run(args: argparse.Namespace) -> int:
     cases = load_demo(args.task, limit=args.limit, demo_dir=getattr(args, "demo_dir", None))
     if not cases:
-        logger.error("没有加载到 case —— 先建 evals/datasets/demo/（见 README.md）")
+        logger.error("没有加载到 case —— 默认目录 evals/datasets/demo/ 需自行提供，可用 --demo-dir 指定")
         return 2
     logger.info("加载 %d 条 case（tasks=%s, limit=%s）", len(cases), args.task or "all", args.limit)
 
@@ -443,7 +443,7 @@ def _add_run_parser(sub: Any) -> None:
     p_run.add_argument(
         "--demo-dir",
         default=None,
-        help="case 目录（默认 evals/datasets/demo）——探针 case 用，避免污染正式集",
+        help="case 目录（默认 evals/datasets/demo，需自行提供）——探针 case 用，避免污染正式集",
     )
     p_run.add_argument(
         "--no-resume",

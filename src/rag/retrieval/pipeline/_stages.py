@@ -1,7 +1,7 @@
 """检索流水线的各阶段函数（从 pipeline.py 拆出，行为等价）。
 
 ★ 这些阶段函数**必须**住在本模块：`aretrieve_documents` 经由本模块命名空间调用它们，
-  而 `probe_tracing` / `evidence_chain_gate` / `threshold_sensitivity` 通过 `setattr`
+  而 `probe_tracing` 等诊断/实验入口通过 `setattr`
   在本模块上打猴子补丁来拦截真实调用。因此 `_apply_rerank_threshold` / `dedup_same_section`
   / `rerank` 也须在本模块可见（被阶段函数以模块全局方式调用）——前者的**定义**住在
   `_helpers`，但 import 进本模块后，`setattr(_stages, "_apply_rerank_threshold", w)` 仍有效。

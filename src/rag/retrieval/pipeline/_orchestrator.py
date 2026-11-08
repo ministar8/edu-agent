@@ -319,7 +319,7 @@ def _emit_error_metrics(
 #   —— 包空时没有文档可挂，
 #   ``_stage_rerank`` 已算出的 ``off``/``degraded``/``failed`` 在 retriever 桥接这一跳被
 #   **整包丢弃**。异常发生在重排阶段**之前** ⇒ 写入 ``""``（未知，不回填）。
-#   写入点放在 `finally` ⇒ 异常路径同样要送达（回归锁见 `evidence_chain_gate.py` 的 `9m`）。
+#   写入点放在 `finally` ⇒ 异常路径同样要送达。
 async def aretrieve_documents(
     query: str,
     collection_name: str = "",

@@ -1,6 +1,6 @@
 """task_eval：Phase 0 任务级效果评测（QA / Generate / Grade / Verify / Memory）。
 
-与 `agent_behavior_gate.py` 的分工（决策 #2：职责不混）：
+与**安全/行为门禁**的分工（决策 #2：职责不混）：
 - gate     → 「有没有越过安全/行为边界？」（PASS / FAIL）
 - task_eval→ 「这个系统到底答得好不好？」（rubric / metrics）
 

@@ -28,7 +28,7 @@ class CalibrationReport:
     passed: bool = False
     failed_on: list[str] = field(default_factory=list)
     # ★ D6（2026-10-07，登记为 §20.5 #19）：**秩相关的信息量必须自己说出来**。
-    #   实测 `calibration_30.jsonl` 的 `human_score` 分布 = `{5: 28, 0: 1, 2: 1}` ⇒
+    #   此前的 30 条校准样本（已不在仓库中）`human_score` 分布 = `{5: 28, 0: 1, 2: 1}` ⇒
     #   众数占 93.3%，`spearman` 的判别力全在**那 2 行**上（把任一条改成 5 就掉到 ~0.5 FAIL；
     #   把那两行的 judge 分改成 0 却**仍然 PASS**，因为秩相关只看排序不看量级）。
     #   ⇒ 「PASS」可以是真的，但引用它当「judge 与人工秩相关良好」就是过度声称。
