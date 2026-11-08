@@ -2,7 +2,7 @@
 
 > 408 考研智能教学辅导系统 · 多 Agent + RAG
 > 本文用途：**把系统讲清楚**。每一节都可以独立作为答辩/论文的一小节。
-> 数字均为 2026-10-10 实测（`src/` 共 32,887 行 / 140 个 .py 文件）。
+> 数字均为实测（`src/` 约 230 个 .py 文件，行数随拆分/合并持续变动，此处不列具体行数）。
 
 ---
 
@@ -331,7 +331,7 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 | **数据处理工具** | `document_processing` | 2,823 | 8.6% |
 | **评测设施** | `evaluation` | 11,256 | 34.2% |
 | 顶层入口 | `src/run_service.py` | 30 | 0.1% |
-| | **合计** | **32,887** | 100% |
+| | **合计** | **约 3.3 万** | 100% |
 
 > `src/document_processing/`（原 `src/tools/`）被 `rag/chunking/cleaner` 依赖（经 `clean_documents`），
 > 与运行时 `src/agents/runtime/tools.py` 同名易混，故改名消歧。
@@ -349,8 +349,8 @@ PYTHONPATH=src GATE_USE_REAL_EMBEDDING=1 uv run python -m evaluation.gates.retri
 
 1. **检索门禁的类目指标已饱和**（`category_hit_at_k = 1.0000`，40/40）。
    它能防回归，但**证明不了语义质量** —— 后者要靠 RAGAS 与真实 embedding 路由。
-2. **`pipeline.py` 单文件偏大**（1,139 行，8 个阶段函数与编排同处），可读性差；
-   `retriever.py` 已收敛为门面（465 行）。阶段函数进一步下沉未做。
+2. **检索阶段已拆分为 `retrieval/pipeline/` 子包**（`_orchestrator.py` 编排 + `_stages.py` 阶段 + `_helpers.py` 辅助 + `_internals.py` 常量，约 1,500 行），可读性已可接受；
+   `retriever.py` 收敛为门面（465 行）。
 3. **`verifier.py` 的 LLM 校验层实际未启用**（`use_llm_verify` 全为 False）。
    「有代码 ≠ 在用」，判据只能是调用链。
 4. **~~`rerank_used` 语义不准~~ —— ✅ 已修（2026-09-24）**。

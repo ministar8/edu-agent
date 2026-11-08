@@ -347,8 +347,8 @@ HTTP POST /invoke
 
 | 环节 | 位置 |
 |------|------|
-| 外层图装配 | `src/agents/orchestration/teaching_graph.py:177` |
-| 外层节点 `run_supervisor` | `src/agents/orchestration/teaching_graph.py:167` |
+| 外层图装配 | `src/agents/orchestration/teaching_graph.py:265` |
+| 外层节点 `run_supervisor` | `src/agents/orchestration/teaching_graph.py:218` |
 | 内层 supervisor 装配 | `src/agents/orchestration/supervisor.py:180` |
 | 专家终答短路 | `src/agents/orchestration/supervisor.py:103` |
 | 服务层入口 | `src/service/service.py:196` |
@@ -474,7 +474,7 @@ flowchart TD
 
 | 字段 | 类型 | 用途 | 生命周期 | 写入者 | 读取方 |
 |------|------|------|---------|--------|--------|
-| `messages` | `Annotated[list[AnyMessage], add_messages]` | 对话主线 | 对话线程 | 各节点追加 | 全部 |
+| `messages` | `Annotated[list[AnyMessage], add_messages]` | 对话主线 | 对话线程 | **仅入口节点写入用户消息（HumanMessage，稳定 ID `user-{request_id}`，同 ID upsert）；AIMessage/ToolMessage 由 LangGraph 框架自动追加；外层节点（`prepare_task` / `run_supervisor` / `finalize` 以外）不手动拼接消息** | 全部 |
 | `task_id` | `str` | 业务任务标识 | 单次业务任务 | `prepare_task` | 日志 / tracing |
 | `task_mode` | `TaskKind` | **业务**任务类型 | 单次业务任务 | `run_supervisor` 事后推断（`task_result.kind` 优先 → 专家名 → 直答 / `unknown`）；入口置 `unknown` | 出口节点 / 日志 |
 | `active_agent` | `str \| None` | 最近执行过的**专家**名 | 单次业务任务 | `run_supervisor` | 日志 / 诊断 |
@@ -487,7 +487,8 @@ flowchart TD
 **`active_agent` 的值域**：`knowledge_agent` / `question_agent` / `grading_agent` / `None`。
 `None` 表示本轮**没有可识别的专家执行**——可能 supervisor 直答、可能是未注册的专家名、
 也可能压根没有 AI 消息。**具体是哪种由 `task_mode` 区分**，不要用 `None` 本身表达原因。
-`"supervisor"` 永远不是合法值。
+`"supervisor"` **永远不是合法值**：supervisor 直答的 AIMessage 若带 `name="supervisor"`，
+在 `infer_execution` 中必须被归为 `None`（视为"无专家执行"），不能把 `"supervisor"` 当作专家名写入。
 
 **`active_agent` 与 `task_mode` 同源不同义**：
 
@@ -637,6 +638,8 @@ TaskResult = GradingTaskResult | QuestionTaskResult
 | 用 `kind` 标签 | 消费方 `match result["kind"]` | 判别不依赖 `task_mode`，字段自描述 |
 | 存 `dict` 不存 Pydantic 实例 | `model_dump()` 后写入 | checkpoint 序列化只保证原始类型可靠；Pydantic 实例进 state 有反序列化风险 |
 | 不再用 v3 的 `{mode, payload}` | `mode` 与 `kind` 合并为一个标签 | 少一层嵌套 |
+| **运行时判别约定（必须）** | 消费方必须先 `if result is not None`，再按 `result["kind"]` narrowing 访问对应字段；`kind` 以外的值按 `unknown` 处理，不推断 | TypedDict 联合在运行时**不做自动 narrowing**，`mypy`/`pyrefly` 的类型守卫仅在静态检查期生效，运行期必须显式校验 |
+| `None` 含义 | `task_result` 为 `None` 表示"本轮尚未产出结构化结果"，不等于"失败"；失败用 `error` 字段表达 | 避免把"无结果"误判为"任务失败" |
 
 > `GradingResult` / `GeneratedQuestionSet` 的字段镜像可以先写 `dict[str, Any]`，
 > 等 §12 步骤 3 落地时再补成完整 TypedDict（那一步本来就要改工具契约）。
@@ -913,25 +916,32 @@ task_id = f"{thread_id}:{request_id}"      # 与 prepare_task 的算法完全一
 
 ### 5.5 `task_status` 状态机
 
-| 状态 | 唯一写入者 | 合法来源 | 备注 |
-|------|-----------|---------|------|
-| `pending` | `prepare_task` | —（初始 / replay 不写） | 涵盖执行中 |
-| `completed` | `finalize` | `pending` | 必须校验有产出 |
-| `failed` | 服务层 / `finalize` | `pending`，且 `task_id` 必须是本请求的 | **不可覆盖 `completed`**；`prepare_task` 之前失败不记录 |
+| 状态 | 唯一写入者 | 合法来源 | 终态？ | 备注 |
+|------|-----------|---------|--------|------|
+| `pending` | `prepare_task` | —（初始；replay 不写） | 否 | 涵盖"已创建、排队、执行中"；图执行到哪一步不由本字段表达（读 `state.next` / stream） |
+| `completed` | `finalize` | `pending`，**且必须校验有产出**（终答消息或 `task_result`） | **是** | 一旦写入，后续任何节点/服务层都不得覆盖；`finalize` 无产出时改写 `failed` |
+| `failed` | 服务层 `_mark_failed` / `finalize` | `pending`，且 `task_id` 必须是本请求的 | **是** | **不可覆盖 `completed`**；`prepare_task` 之前失败不记录 |
+
+状态机转移图：
 
 ```mermaid
 stateDiagram-v2
     [*] --> pending: prepare_task
-    pending --> completed: finalize（有产出）
-    pending --> failed: finalize（无产出）/ 服务层异常
-    completed --> [*]
-    failed --> [*]
+    pending --> completed: finalize（有产出：终答或 task_result）
+    pending --> failed: finalize（无产出）/ 服务层异常（_mark_failed）
+    completed --> [*]: 终态，不可再转移
+    failed --> [*]: 终态，不可再转移
 ```
 
-> **replay 不是一次状态转移**：同 `request_id` 重试时 `prepare_task` 直接 `Command(goto=END)`，
-> 不写任何字段，`task_status` 保持 `completed`（§5.3.3）。
+**闭环保证规则：**
 
-`interrupted` **不在枚举里**：没有 `interrupt()` 就没有这个状态。
+1. **只有一条入口**：所有任务从 `prepare_task` 的 `pending` 开始，没有其他节点能把状态写成 `pending`。
+2. **两条出口**：`pending` 只能转 `completed`（由 `finalize` 校验产出后写入）或 `failed`（由 `finalize` 无产出或服务层异常写入）。
+3. **终态不可逆**：`completed` 和 `failed` 都是终态，后续任何路径（包括 replay、retry、SSE 发送异常）都不得覆盖。`_mark_failed` 的终态守卫正是为此（§5.4）。
+4. **replay 不是转移**：同 `request_id` 重试时 `prepare_task` 直接 `Command(goto=END)`，不写任何字段，`task_status` 保持 `completed`（§5.3.3）。
+5. **图执行状态不混入**：图下一步执行哪个节点、是否有挂起的 interrupt，由 LangGraph 原生提供（`state.next` / `state.tasks[].interrupts` / stream），不写进 `task_status`。
+
+`interrupted` **不在枚举里**：没有 `interrupt()` 就没有这个状态（§5.6 预留）。
 
 ### 5.6 未来 `resume_task` 的接入点（预留，不实现）
 
@@ -955,12 +965,17 @@ pending = [t for t in state.tasks if t.interrupts]
 
 | 场景 | 策略 |
 |------|------|
-| `prepare_task` | **整体重置为 `{}`** |
-| 同一任务内 | 授权节点**浅合并**（只合并一级键），未提及的键保留 |
-| 显式清空某键 | 把值设为 `None` / `[]` |
-| 不更新 | **省略该键** |
+| `prepare_task`（`new_task`） | **整体重置为 `{}`**，不保留上一任务的任何字段（如 `question_type`、`difficulty`、`student_answer` 等） |
+| 跨任务类型切换（如出题 → 批改） | **必须整体重置**，`task_context` 不跨任务类型残留字段；`context_mode`（线程级）不受影响 |
+| 同一任务内 | 授权节点**浅合并**（只合并一级键），未提及的一级键保留 |
+| 显式清空某一级键 | 把该键的值设为 `None` / `[]` / `{}` |
+| 不更新某键 | **省略该键**（不要传 `None` 表示"不更新"，`None` 与"清空"语义不同，v4 已废弃） |
 
-> v4 已删掉"`None` 表示不更新"——它与"`null` 表示清空"抢语义。
+> **跨任务隔离是硬约束**：`task_context` 的生命周期是"单个业务任务"，不是"对话线程"。
+> 用户先问"出一道进程调度题"（`task_context` 里有 `topic` / `count` / `difficulty`），
+> 再问"批改这道题"，新任务的 `prepare_task` 必须把 `task_context` 重置为 `{}`，
+> 再由新任务的解析节点填入批改所需的字段（`standard_answer` / `student_answer` 等）。
+> 上一轮的 `topic` / `count` 不得残留。
 
 ### 6.2 不挂 Reducer 时，默认是**整值覆盖**
 
@@ -969,16 +984,27 @@ pending = [t for t in state.tasks if t.interrupts]
 > 节点返回 `{"task_context": {"count": 10}}` 会把整个字典替换掉，
 > 原来的 `knowledge_points` **直接丢失**。
 
-所以"未提及的键保留"必须由节点自己算：
+所以"未提及的键保留"必须由节点自己算，且合并只作用于**一级键**：
 
 ```python
 def merge_task_context(old: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    """浅合并：只合并一级键，嵌套字典/列表整个替换，不做深度合并。"""
     return {**old, **patch}
 
 
-# 节点里
-return {"task_context": merge_task_context(state.get("task_context") or {}, patch)}
+# 节点里（三步硬规则）
+old = state.get("task_context") or {}            # ① 读完整旧值
+new = merge_task_context(old, patch)              # ② 经统一合并函数生成完整新值
+return {"task_context": new}                      # ③ 返回完整新值，不是局部 patch
 ```
+
+**浅合并边界示例：**
+
+| 旧值 | patch | 合并后 | 说明 |
+|------|-------|--------|------|
+| `{"topic": "进程", "count": 5}` | `{"count": 10}` | `{"topic": "进程", "count": 10}` | 一级键 `count` 替换，`topic` 保留 |
+| `{"params": {"difficulty": "medium"}}` | `{"params": {"count": 3}}` | `{"params": {"count": 3}}` | **嵌套字典整个替换**，`difficulty` 丢失（浅合并不递归） |
+| `{"tags": ["os"]}` | `{"tags": ["cpu"]}` | `{"tags": ["cpu"]}` | 列表整个替换，不做数组合并 |
 
 这是 `merge_task_context` 的保证，**不是 State 的保证**。
 
@@ -1147,8 +1173,8 @@ ChatPromptValue → 子图 messages
 
 | 现位置 | 当前做法 | v5 改动 |
 |--------|---------|---------|
-| `src/agents/orchestration/teaching_graph.py:177` | `StateGraph(MessagesState)` | 改 `StateGraph(TeachingState)`，新增 `prepare_task` / `finalize` |
-| `src/agents/orchestration/teaching_graph.py:167` | 只传/只返回 `messages` | 按 §3.2 白名单显式搬运 |
+| `src/agents/orchestration/teaching_graph.py:265` | `StateGraph(MessagesState)` | 改 `StateGraph(TeachingState)`，新增 `prepare_task` / `finalize` |
+| `src/agents/orchestration/teaching_graph.py:218` | 只传/只返回 `messages` | 按 §3.2 白名单显式搬运 |
 | `src/agents/orchestration/supervisor.py:180` | `create_supervisor(...)` 无 `state_schema` | 加 `state_schema=SupervisorState`（**继承 prebuilt `AgentState`**） |
 | `src/agents/runtime/factory.py:42` | 无 `state_schema` / `context_schema` | 加 `state_schema=SpecialistState`；L3 走 `context_schema=AgentContext` |
 | `src/agents/runtime/tools.py:363` / `:413` | 工具返回字符串 | 改 `Command(update={...})`（先冒烟，§4.6） |

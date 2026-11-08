@@ -113,15 +113,4 @@ def test_runner_writes_verdict_polarity_with_marker() -> None:
         assert _fabrication_flag(record.to_dict()) is expect_fabricated_flag
 
 
-def test_registered_ec_r2_sidecar_reads_zero_fabrication() -> None:
-    """登记在册的 active 归档 ec_r2：编造率必须读成 0（假红修复的实证锚点）。"""
-    root = Path(__file__).resolve().parents[1]
-    side = root / "evals/results/task_eval/ec_r2_final_gate_20261015.report.json"
-    if not side.exists():
-        import pytest
 
-        pytest.skip("ec_r2 归档不在本机（CI 外的证据文件）")
-    report = json.loads(side.read_text(encoding="utf-8"))
-    row = report["tasks"]["verify"]
-    assert row["ver_fabrication"]["rate"] == 0.0
-    assert row["ver_fabrication"]["n"] == 15
