@@ -25,7 +25,7 @@
 这条上限截断（实测确认）。因此它是一个全局护栏，而非只管 supervisor 往返。
 """
 
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 
 from langchain_core.messages import AIMessage, ToolMessage
@@ -63,7 +63,7 @@ _HANDOFF_BACK_FLAG = "__is_handoff_back"
 AI 消息误认成「专家未闭环」而 fail-fast 误伤正常终答。"""
 
 
-def _is_handoff_back(message) -> bool:
+def _is_handoff_back(message: AIMessage) -> bool:
     """判断是否为库生成的「交还控制权」控制消息。"""
     metadata = getattr(message, "response_metadata", None) or {}
     return bool(metadata.get(_HANDOFF_BACK_FLAG))
@@ -99,7 +99,7 @@ def _inspect_tail(messages: list, names: frozenset[str]) -> _TailInspection:
     return _TailInspection(True, None)
 
 
-def make_forward_after_agent(agent_names: Collection[str]):
+def make_forward_after_agent(agent_names: Collection[str]) -> Callable[[dict], dict | Command]:
     """构造 pre_model_hook：专家已给出最终回答时，进入 supervisor LLM 前直接结束。
 
     langgraph-supervisor 中专家节点完成后固定回流 supervisor 节点；本 hook 检查
@@ -157,7 +157,7 @@ def _specialist_names(specialists: tuple) -> frozenset[str]:
     return frozenset(names)
 
 
-def _assert_hook_covers_specialists(hook, specialists: tuple) -> None:
+def _assert_hook_covers_specialists(hook: Callable[[dict], dict | Command], specialists: tuple) -> None:
     """装配期校验：hook 白名单必须与真实挂载的专家集合严格一致。
 
     ``forward_after_agent`` 用 name 字符串匹配，若白名单与 ``_SPECIALISTS`` 脱节

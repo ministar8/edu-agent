@@ -11,11 +11,12 @@ import asyncio
 import json
 import logging
 import sys
+from typing import Any
 
 from evaluation.ragas.config import EvaluationConfig
 
 
-def _probe_rerank(cfg, settings) -> list[tuple[bool, str]]:
+def _probe_rerank(cfg: EvaluationConfig, settings: Any) -> list[tuple[bool, str]]:
     """重排可用性探活：请求了重排就实测 ``/rerank``；未请求则记一条**非阻塞**提示。"""
     if not cfg.use_rerank:
         return [
@@ -40,7 +41,7 @@ def _probe_rerank(cfg, settings) -> list[tuple[bool, str]]:
     return []
 
 
-def _probe_embedding(settings) -> list[tuple[bool, str]]:
+def _probe_embedding(settings: Any) -> list[tuple[bool, str]]:
     """embedding 可用性探活：真 embedding 就实测；假 embedding 记一条**非阻塞**提示。"""
     if settings.USE_FAKE_EMBEDDING:
         return [(False, "USE_FAKE_EMBEDDING=true：检索走确定性哈希向量，**语义质量结论无效**")]
@@ -80,7 +81,7 @@ def _probe_llm(
     return []
 
 
-def _preflight(cfg) -> list[tuple[bool, str]]:
+def _preflight(cfg: EvaluationConfig) -> list[tuple[bool, str]]:
     """跑前探活：把「静默降级」变成「明确失败」。
 
     返回 ``[(是否阻塞, 说明)]``。★ 用**显式布尔**而不是「消息里含某关键词」判定阻塞：

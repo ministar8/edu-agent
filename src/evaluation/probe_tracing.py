@@ -36,6 +36,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -196,14 +197,14 @@ class _StagePatcher:
     故用两个开关把内部漏斗限定在各自的外层阶段内。
     """
 
-    def __init__(self, module):
+    def __init__(self, module: Any) -> None:
         self._R = module
         self.events: list[tuple[str, Any]] = []
         self.plan_box: dict[str, Any] = {}
         self._originals: dict[str, Any] = {}
         self._flags = {"in_dedup_stage": False, "in_rerank_stage": False}
 
-    def wrap_stage(self, attr: str, on_enter, on_exit, record_key: str | None) -> None:
+    def wrap_stage(self, attr: str, on_enter: Callable[[], None], on_exit: Callable[[], None], record_key: str | None) -> None:
         """包裹一个阶段函数：进出时调 on_enter/on_exit，可选记录其返回值。"""
         original = getattr(self._R, attr, None)
         if original is None:
@@ -212,7 +213,7 @@ class _StagePatcher:
         self._originals[attr] = original
         events = self.events
 
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args, **kwargs) -> Any:
             on_enter()
             try:
                 out = await original(*args, **kwargs)
@@ -234,7 +235,7 @@ class _StagePatcher:
 
         if inspect.iscoroutinefunction(original):
 
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args, **kwargs) -> Any:
                 out = await original(*args, **kwargs)
                 if flags[flag]:
                     events.append((record_key, _extract(record_key, out)))
@@ -242,7 +243,7 @@ class _StagePatcher:
 
         else:
 
-            def wrapper(*args, **kwargs):
+            def wrapper(*args, **kwargs) -> Any:
                 out = original(*args, **kwargs)
                 if flags[flag]:
                     events.append((record_key, _extract(record_key, out)))
@@ -259,7 +260,7 @@ class _StagePatcher:
         self._originals[plan_attr] = orig_plan
         plan_box = self.plan_box
 
-        def plan_wrapper(*args, **kwargs):
+        def plan_wrapper(*args, **kwargs) -> Any:
             out = orig_plan(*args, **kwargs)
             plan_box.update(
                 {
@@ -304,7 +305,7 @@ class _StagePatcher:
 
 
 @contextmanager
-def _capture():
+def _capture() -> Iterator[tuple[list[tuple[str, Any]], dict[str, Any]]]:
     """在上下文内替换阶段函数，把每次调用的输出记进列表；yield `(events, plan_box)`。
 
     补丁打在 `rag.retrieval.pipeline._stages` 上（编排层经该模块命名空间调用阶段函数；

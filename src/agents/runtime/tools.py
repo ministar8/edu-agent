@@ -19,7 +19,7 @@ from agents.runtime.utils import CustomData
 from infra.errors import RetrievalUnavailable, classify_retrieval_error
 from rag.retrieval.api import retrieve_for_task
 from rag.retrieval.evidence import FusedEvidence
-from rag.retrieval.query_classifier import TEXT_ONLY_DEPTH
+from rag.retrieval.query_classifier import TEXT_ONLY_DEPTH, RetrievalDepth
 from rag.retrieval.retriever import StageSink
 from rag.retrieval.verifier import VerificationResult
 from schema.evidence import EvidenceDoc, RetrievalResult, excerpt
@@ -228,7 +228,7 @@ def _resolve_context_mode(context_mode: str | None) -> str | None:
 async def _retrieve_payload(
     query: str,
     *,
-    depth=None,
+    depth: RetrievalDepth | None = None,
     k: int = 5,
     task_mode: str | None = None,
     agent_prior: str = "",
@@ -279,10 +279,10 @@ def _make_search_tool(
     name: str,
     doc: str,
     *,
-    depth: Any = None,
+    depth: RetrievalDepth | None = None,
     agent_prior: str = "",
     task_mode: str | None = None,
-):
+) -> Any:
     """生成检索类 @tool（同一 _retrieve_payload 封装）。
 
     `agent_prior`：专家默认倾向（knowledge→learn, question→practice, grading→grade），

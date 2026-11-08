@@ -12,8 +12,12 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
+
+if TYPE_CHECKING:
+    from datasketch import MinHashLSH
 
 logger = logging.getLogger(__name__)
 
@@ -382,7 +386,7 @@ def _lsh_batch(
 
 
 def _lsh_query_and_record(
-    lsh: "MinHashLSH",  # noqa: UP037,F821
+    lsh: MinHashLSH,
     documents: list[Document],
     minhashes: list[object],
     query_index: int,

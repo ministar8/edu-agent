@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def _assemble_agent(saver, store):
+def _assemble_agent(saver: Any, store: Any) -> Any:
     """装配 agent：挂 checkpointer + store（与 `service.lifespan` 逐字对齐）。"""
     from agents.registry import DEFAULT_AGENT, get_agent
     from memory.runtime import set_store
@@ -29,14 +29,14 @@ def _assemble_agent(saver, store):
 
 
 async def _run_with_agent(
-    agent,
+    agent: Any,
     turns: list[str],
     *,
     task: str,
     case_id: str,
     sessions: list[list[str]] | None,
     store_enabled: bool,
-):
+) -> Any:
     """按 task 分派：``memory`` 走跨会话的 `run_sessions`，其余走会话内的 `run_turns`。"""
     from lib.agent_behavior_smoke import (  # type: ignore[import-not-found]
         make_user_id,
@@ -65,7 +65,7 @@ async def _run_agent(
     case_id: str = "",
     sessions: list[list[str]] | None = None,
     store_enabled: bool = True,
-):
+) -> Any:
     """跑真实 agent。惰性导入 `scripts/` 下的 smoke 封装（与 gate 同一套调用链）。
 
     ★★ **必须自行装配 checkpointer / store**（2026-10-05 实测教训）：

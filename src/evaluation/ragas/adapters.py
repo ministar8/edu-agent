@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
@@ -140,7 +141,7 @@ async def fill_sample(
     return sample
 
 
-def build_judge_llm(timeout: int | None = None):
+def build_judge_llm(timeout: int | None = None) -> Any:
     """RAGAS judge：复用项目 LLM（ChatOpenAI → LangchainLLMWrapper）。
 
     模型取 ``settings.ragas_judge_model``（未配则跟随 ``LLM_MODEL``）——

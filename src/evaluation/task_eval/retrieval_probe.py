@@ -21,6 +21,8 @@ import logging
 import time
 from dataclasses import dataclass, field
 
+from rag.retrieval.evidence import TextEvidence
+
 logger = logging.getLogger(__name__)
 
 # 与 retrieval_gate 同源（那里是学科→类目的单一真源）
@@ -77,7 +79,7 @@ class RetrievalProbe:
         return self.items[:k]
 
 
-def _to_item(ev) -> RetrievedItem:
+def _to_item(ev: TextEvidence) -> RetrievedItem:
     meta = ev.metadata or {}
     # ★ #27 / D12 选 (B)：`layer_recall._doc_to_evidence`（top-up 路径）把
     #   `knowledge_points` 写死成 `[]`，而同一份 metadata 里就带着 JSON 字符串 ⇒

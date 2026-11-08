@@ -16,6 +16,7 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import Any
 
 from core.settings import settings
 from evaluation.task_eval import judge as judge_mod
@@ -35,7 +36,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(messag
 logger = logging.getLogger("task_eval")
 
 
-async def _run_cases(args: argparse.Namespace, cases) -> tuple[list, int, int]:
+async def _run_cases(args: argparse.Namespace, cases: list[Any]) -> tuple[list, int, int]:
     """跑全部 case（含 judge），逐条落盘；返回 ``(records, env_blocked, 已跳过条数)``。"""
     records = []
     env_blocked = 0
@@ -242,7 +243,7 @@ def _reprobe_cfg(args: argparse.Namespace) -> dict:
     }
 
 
-async def _reprobe_one(rec: dict, case, args: argparse.Namespace, cfg: dict, mgr) -> None:
+async def _reprobe_one(rec: dict, case: Any, args: argparse.Namespace, cfg: dict, mgr: Any) -> None:
     """对一条 record 重跑检索探针并就地更新其检索侧字段。"""
     from evaluation.task_eval.retrieval_probe import probe_retrieval
     from evaluation.task_eval.runner import map_route_failures
@@ -322,8 +323,8 @@ def _current_code_version() -> str:
 
 def _update_retrieval_fields(
     rec: dict,
-    case,
-    probe,
+    case: Any,
+    probe: Any,
     *,
     k: int,
     cfg: dict,
@@ -426,7 +427,7 @@ def _backfill(args: argparse.Namespace) -> int:
     return 0
 
 
-def _add_run_parser(sub) -> None:
+def _add_run_parser(sub: Any) -> None:
     """``run`` 子命令的解析器（参数最多，单列）。"""
     p_run = sub.add_parser("run", help="跑 demo 集并出报告")
     p_run.add_argument("--task", choices=list(TASKS), default=None, help="只跑单个任务")

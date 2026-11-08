@@ -39,7 +39,7 @@ def _patch_ragas_json_fallback() -> None:
 
     original = PydanticPrompt.generate_multiple
 
-    async def generate_multiple_safe(self, *args: Any, **kwargs: Any):
+    async def generate_multiple_safe(self, *args: Any, **kwargs: Any) -> Any:
         try:
             return await original(self, *args, **kwargs)
         except Exception:

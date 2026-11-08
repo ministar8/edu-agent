@@ -186,7 +186,7 @@ def _user_response(user: User) -> UserResponse:
 
 
 @router.post("/register", response_model=TokenResponse)
-def register(req: RegisterRequest, response: Response, db: Session = Depends(get_db)):
+def register(req: RegisterRequest, response: Response, db: Session = Depends(get_db)) -> TokenResponse:
     """用户注册（同步 def，DB 调用走线程池）。"""
     existing = db.query(User).filter(User.username == req.username).first()
     if existing:
@@ -215,7 +215,7 @@ def register(req: RegisterRequest, response: Response, db: Session = Depends(get
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)) -> TokenResponse:
     """用户登录（同步 def，PBKDF2 与 DB 调用走线程池）。"""
     user = db.query(User).filter(User.username == req.username).first()
     if not user:
@@ -241,12 +241,12 @@ def login(req: LoginRequest, response: Response, db: Session = Depends(get_db)):
 
 
 @router.get("/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)):
+def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
     """获取当前用户信息。"""
     return _user_response(current_user)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(response: Response):
+def logout(response: Response) -> None:
     _clear_auth_cookie(response)
     return None

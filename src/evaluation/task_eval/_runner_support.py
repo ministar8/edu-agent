@@ -249,7 +249,7 @@ def mechanical_failures(
     return reasons
 
 
-def _all_kp(items) -> list[str]:
+def _all_kp(items: Any) -> list[str]:
     out: list[str] = []
     for it in items:
         out.extend(it.knowledge_points)

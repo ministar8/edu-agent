@@ -7,13 +7,14 @@ import inspect
 import json
 import logging
 import math
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.documents import Document
 
-from rag.retrieval import TextEvidence
+from rag.retrieval import FusedEvidence, TextEvidence
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,7 @@ class StageTrace:
 
 
 @contextmanager
-def trace_stages():
+def trace_stages() -> Iterator[list[StageStep]]:
     """在上下文内拦截检索链的阶段函数，把调用记录进 yield 出的列表。
 
     目标写法见 ``STAGE_TARGETS``：裸名 → ``rag.retrieval.retriever.<name>``；
@@ -168,7 +169,9 @@ def trace_stages():
 
         if inspect.iscoroutinefunction(original):
 
-            async def wrapper(*args, _s=stage, _f=original, **kwargs):
+            async def wrapper(
+                *args, _s: str = stage, _f: Callable[..., Any] = original, **kwargs
+            ) -> Any:
                 ins = signature((args, kwargs))
                 out = await _f(*args, **kwargs)
                 steps.append(StageStep(_s, ins, signature(out)))
@@ -176,7 +179,9 @@ def trace_stages():
 
         else:
 
-            def wrapper(*args, _s=stage, _f=original, **kwargs):
+            def wrapper(
+                *args, _s: str = stage, _f: Callable[..., Any] = original, **kwargs
+            ) -> Any:
                 ins = signature((args, kwargs))
                 out = _f(*args, **kwargs)
                 steps.append(StageStep(_s, ins, signature(out)))
@@ -191,7 +196,7 @@ def trace_stages():
             setattr(module, attr, original)
 
 
-async def _retrieve_fused(query: str, *, k: int, use_rerank: bool):
+async def _retrieve_fused(query: str, *, k: int, use_rerank: bool) -> FusedEvidence:
     """从**证据层**入口检索 —— 与检索门禁（`retrieval_gate.run_gate`）**同一个入口**。
 
     为什么不能从 `aretrieve_documents` 进入：那是文档层，`afuse_documents` /

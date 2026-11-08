@@ -204,7 +204,7 @@ def _coerce_judge_output(raw: object) -> JudgeOutput | None:
         return None
 
 
-async def _invoke_judge(llm, messages: list[dict[str, str]]) -> JudgeOutput | None:
+async def _invoke_judge(llm: Any, messages: list[dict[str, str]]) -> JudgeOutput | None:
     """优先结构化输出；失败则退回「纯文本 + 宽容解析」。两种都失败 → None。"""
     try:
         structured = llm.with_structured_output(JudgeOutput)
@@ -311,7 +311,7 @@ def split_retrieval_layer_reasons(
     return allowed, quarantined
 
 
-def _sync_generate_correctness(record) -> None:
+def _sync_generate_correctness(record: Any) -> None:
     """judge 写入 `final_quality` 后，**同步刷新** Generate 的「内容正确率」。
 
     ★ 「谁写 `final_quality`，谁负责刷新依赖它的派生指标」这条归属规则保留（2026-10-06 修：
@@ -364,7 +364,7 @@ def _judge_memory_diagnostics(output: JudgeOutput) -> dict[str, Any]:
     }
 
 
-def apply_judge(record, output: JudgeOutput | None) -> None:
+def apply_judge(record: Any, output: JudgeOutput | None) -> None:
     """把 judge 结果并回 record：质量分 + 生成侧 failure_reason。
 
     ★ Memory 三维**不在此写入** —— 由 `memory_scorer` 机械判定（见

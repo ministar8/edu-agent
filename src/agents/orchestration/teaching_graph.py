@@ -11,15 +11,15 @@ add_messages reducer 对同 ID 消息做 upsert，因此每轮只替换不累积
 不会随对话轮数把多张不同时刻的快照全部塞进模型上下文。
 """
 
-from __future__ import annotations
-
 import logging
 import uuid
 from collections import deque
 from typing import Any
 
 from langchain_core.messages import AnyMessage, HumanMessage, RemoveMessage, SystemMessage
+from langgraph.config import RunnableConfig
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.store.base import BaseStore
 
 from agents.orchestration.state import (
@@ -149,7 +149,7 @@ def _classify(query: str, previous: RetrievalMode | None) -> RetrievalMode | Non
         return previous
 
 
-async def prepare_task(state: TeachingState, config=None) -> dict:
+async def prepare_task(state: TeachingState, config: RunnableConfig | None = None) -> dict:
     """每次 invoke 开一个新任务：生成 task_id，重置任务字段；messages 不动。
 
     ``context_mode`` 是线程级字段：从恢复的 state 读上一轮值，分类后写回，不随任务重置。
@@ -177,7 +177,7 @@ async def prepare_task(state: TeachingState, config=None) -> dict:
     }
 
 
-async def load_memory(state: TeachingState, config=None) -> dict:
+async def load_memory(state: TeachingState, config: RunnableConfig | None = None) -> dict:
     """读 Store 生成记忆卡（超时/失败则空），以固定 ID SystemMessage 注入 messages。
     同时清理历史 checkpoint 里累积的旧 SystemMessage（旧版本无固定 ID，
     每轮追加一张卡），保证 state 里至多存在一张当前卡。
@@ -216,7 +216,7 @@ async def load_memory(state: TeachingState, config=None) -> dict:
 _INBOUND_KEYS = ("task_context", "context_mode")
 
 
-async def run_supervisor(state: TeachingState, config=None) -> dict:
+async def run_supervisor(state: TeachingState, config: RunnableConfig | None = None) -> dict:
     raw = state.get("messages") or []
     # 只裁剪「本轮送给模型的输入」；state/checkpointer 仍保留完整历史
     trimmed = trim_conversation(raw, max_messages=settings.MEMORY_HISTORY_MAX_MESSAGES)
@@ -248,7 +248,7 @@ async def run_supervisor(state: TeachingState, config=None) -> dict:
     }
 
 
-async def finalize(state: TeachingState, config=None) -> dict:
+async def finalize(state: TeachingState, config: RunnableConfig | None = None) -> dict:
     """正常路径收尾：有终答才算 completed，否则记 EMPTY_RESULT。"""
     if has_final_answer(state.get("messages") or []):
         return {"task_status": "completed"}
@@ -263,7 +263,7 @@ async def finalize(state: TeachingState, config=None) -> dict:
     }
 
 
-def build_teaching_graph():
+def build_teaching_graph() -> CompiledStateGraph:
     builder: StateGraph = StateGraph(TeachingState)
     builder.add_node("prepare_task", prepare_task)
     builder.add_node("load_memory", load_memory)

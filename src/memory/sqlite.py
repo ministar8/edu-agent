@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -34,7 +35,7 @@ def _store_index_config() -> Any | None:
 
 
 @asynccontextmanager
-async def get_sqlite_store():
+async def get_sqlite_store() -> AsyncIterator[AsyncSqliteStore]:
     """长期记忆 store：独立 SQLite 文件（SQLITE_STORE_PATH），重启不丢。
 
     向量索引启用时写入会多一次 TEI embed（失败由 safe_remember 吞掉）。

@@ -23,8 +23,12 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import TYPE_CHECKING
 
 from langchain_core.documents import Document
+
+if TYPE_CHECKING:
+    from opencc import OpenCC
 
 logger = logging.getLogger(__name__)
 
@@ -187,7 +191,7 @@ _opencc_converter = None
 _opencc_available: bool | None = None
 
 
-def _get_opencc_converter() -> "OpenCC | None":  # noqa: UP037,F821
+def _get_opencc_converter() -> OpenCC | None:
     """获取 OpenCC 转换器单例
 
     首次调用时初始化并缓存，后续调用直接复用。

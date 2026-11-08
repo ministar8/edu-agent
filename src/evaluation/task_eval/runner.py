@@ -41,7 +41,11 @@ from evaluation.task_eval._runner_support import (
     memory_write_missing,
 )
 from evaluation.task_eval.cases import TaskCase
-from evaluation.task_eval.retrieval_probe import probe_retrieval
+from evaluation.task_eval.retrieval_probe import (
+    RetrievalProbe,
+    RetrievedItem,
+    probe_retrieval,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +121,7 @@ def _write_agent_fields(record: CaseRecord, case: TaskCase, agent_out: dict[str,
     )
 
 
-async def _run_probe(case: TaskCase, *, k: int, use_rerank: bool):
+async def _run_probe(case: TaskCase, *, k: int, use_rerank: bool) -> tuple[RetrievalProbe, str, list[str]]:
     """B7：reset → 跑检索探针 → 读回路由失败并归状态（只升不降）。"""
     from infra.vectorstore import get_vector_store_manager
 
@@ -141,8 +145,8 @@ async def _run_probe(case: TaskCase, *, k: int, use_rerank: bool):
 
 def _write_retrieval_fields(
     record: CaseRecord,
-    probe,
-    top,
+    probe: RetrievalProbe,
+    top: list[RetrievedItem],
     *,
     k: int,
     use_rerank: bool,
@@ -184,7 +188,7 @@ def _write_retrieval_fields(
     ]
 
 
-def _write_retrieval_metrics(record: CaseRecord, case: TaskCase, top, k: int) -> None:
+def _write_retrieval_metrics(record: CaseRecord, case: TaskCase, top: list[RetrievedItem], k: int) -> None:
     """落盘检索侧指标（kp / category / exam）。
 
     ★ 2026-10-06 修：**检索到的 chunk 没有任何 KP 元数据时，`kp_hit` 记 N/A 而非 False** ——
@@ -218,7 +222,7 @@ def _write_retrieval_metrics(record: CaseRecord, case: TaskCase, top, k: int) ->
 def _write_scoring_fields(
     record: CaseRecord,
     case: TaskCase,
-    probe,
+    probe: RetrievalProbe,
     *,
     reply: str,
     hard_fails: list[str],
@@ -265,12 +269,12 @@ def _write_scoring_fields(
 
 def _apply_write_missing_gate(
     record: CaseRecord,
-    validity,
+    validity: memory_scorer.ValidityResult,
     grade_scores: list[dict[str, Any]],
     episodes: list[dict[str, Any]],
     episodes_read_failed: bool,
     store_enabled: bool,
-) -> bool:
+) -> bool | None:
     """写入证据缺失 ⇒ 把 validity 降为 False（**未归因**）；返回最终 validity 值。
 
     ★ 写入证据缺失（2026-10-07 事故驱动；2026-10-08 review 修正**位置**与**归因**）
@@ -351,7 +355,7 @@ def _write_memory_fields(
         ]
 
 
-def _write_env_and_provenance(record: CaseRecord, probe, started: float) -> None:
+def _write_env_and_provenance(record: CaseRecord, probe: RetrievalProbe, started: float) -> None:
     """环境类错误判定 + `primary_failure` + provenance / 模型 / 延迟落盘。"""
     # ★ 环境类错误优先判定：命中则**不**把它计入 case 级 failure_reason，
     #   由调用方中止整轮（见 cli._run），避免「账号没额度」被记成「工具报错」。
