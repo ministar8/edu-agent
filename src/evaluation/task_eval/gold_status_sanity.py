@@ -1,10 +1,9 @@
 """gold 侧 `gold_answer_status` 校验（P−1-4 冻结清单 ① / EVIDENCE_CHAIN.md §4.4.7）。
 
-为什么不并进 `gold_sanity.py`
-----------------------------
-`gold_sanity.py` 现 595 行、仓库自设 600 行上限 —— 与 Task 7 同一条裁定：
-**宁可新建文件，也不把 600 行的文件撑爆**。本模块只做「答案状态」这一族检查，
-错误形状与 `_check_gold_source_ref` 完全同构（`SanityIssue(case_id, task, ERROR, field, msg)`），
+与 `gold_sanity.py` 的关系
+--------------------------
+本模块只做「答案状态」这一族检查，错误形状与 `_check_gold_source_ref` 完全同构
+（`SanityIssue(case_id, task, ERROR, field, msg)`），
 由 `gold_sanity.run_sanity` 在 `_check_gold_source_ref` 之后调用（同一条通道）。
 
 三条检查（批 1 交付 2，逐字对应规格）

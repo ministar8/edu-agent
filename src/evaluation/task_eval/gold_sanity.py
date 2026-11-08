@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 
 def run_sanity(cases: list[TaskCase]) -> SanityReport:
     """对全部 case 跑检查。资产解析与生成器同源（`task_eval.assets`）。"""
-    # 局部导入防成环 + 600 行上限（Task 7 裁定：宁可新建文件，不撑爆本文件）
+    # 局部导入防成环
     from evaluation.task_eval.gold_status_sanity import check_gold_answer_status
 
     report = SanityReport(n_cases=len(cases))

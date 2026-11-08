@@ -1,7 +1,6 @@
 """入库侧聚合（从 `telemetry_report` 拆出，2026-10-14）。
 
-拆出原因：`telemetry_report.py` 本周因采样同步从 556 行涨到 602 行，越过「单文件 ≤600 行」
-红线。`build_ingest_summary` 是自成一块的入库口径（与检索侧的 scan / funnel 无共享状态），
+拆出原因：`build_ingest_summary` 是自成一块的入库口径（与检索侧的 scan / funnel 无共享状态），
 按仓内既有的 `_telemetry_*` 兄弟模块模式拆出。**行为零变化**：函数体逐字搬移，
 `telemetry_report` 经 import 继续沿用同一个名字。
 """
