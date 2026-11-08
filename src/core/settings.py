@@ -148,7 +148,7 @@ class Settings(BaseSettings):
     HYDE_MAX_CHARS: int = 500
 
     # ── 检索阈值（可经 `.env` 覆盖）─────────────────
-    # 这几项此前硬编码在 `retriever.py` 里，注释写着「基于采样校准」。
+    # 这几项此前硬编码在 `rag/retrieval/retriever.py` 里，注释写着「基于采样校准」。
     # 硬编码的问题不是"不好看"，而是：**调参必须改代码** ——
     # 于是调参变成"在代码里试数"，试完容易忘记清理，或试了没记下原因。
     # 提到 settings 后调参只改 `.env`，代码保持干净。
@@ -214,7 +214,7 @@ class Settings(BaseSettings):
     # 同时仍比默认值早约 125 倍终止异常循环。
     AGENT_RECURSION_LIMIT: int = 80
 
-    # ── Agent / LLM Temperature 分级（语义槽见 agents/temperature.py）──
+    # ── Agent / LLM Temperature 分级（语义槽见 agents/runtime/temperature.py）──
     # TEMP_PRECISE   批改评分：可复现
     # TEMP_CREATIVE  出题：多样性
     # TEMP_DEFAULT   知识讲解 / supervisor / 检索链多数步骤

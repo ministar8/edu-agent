@@ -226,7 +226,7 @@ def content_key(doc: Document) -> str:
 def detect_content_type(text: str, metadata: dict) -> str:
     """检测 chunk 内容类型
 
-    供 enhancer.py 和 splitter.py 共用，避免跨模块循环依赖。
+    供 rag/chunking/enhancer.py 和 rag/chunking/splitter/ 共用，避免跨模块循环依赖。
     """
     stripped = text.strip()
     if not stripped:

@@ -2,7 +2,7 @@
 
 每层暴露：
 - ``build(...)`` → 纯函数，返回 chunk（不落库、不写 links）—— 检索门禁据此走**生产入库路径**；
-- ``ingest(...)`` → ``build()`` + 落库 + 写 links（``scripts/ingest_*.py`` 调）。
+- ``ingest(...)`` → ``build()`` + 落库 + 写 links（``scripts/ingest/ingest_*.py`` 调）。
 
 ``build_all()`` 按生产顺序（basic → advanced → exams 年 → exam_practice → code → 路径）
 汇总所有集合的 chunk，返回 ``{collection: [Document, ...]}``。

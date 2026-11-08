@@ -84,7 +84,7 @@ class TaskPolicy(BaseModel):
 
     # ★ 本对象**只管安全/披露**，不含任何算力预算字段（depth/k/use_rerank）。
     #   算力预算的唯一真源是 `rag.retrieval.query_classifier.RetrievalDepth`，
-    #   由 `pipeline` 在阶段 ③ 解析；边界由 `tests/test_policy_layers.py` 锁定。
+    #   由 `pipeline` 在阶段 ③ 解析；边界由 `tests/test_rag/test_policy_layers.py` 锁定。
 
     # —— 安全（release / 缓存）——
     allow_question_id_leak: bool = False

@@ -324,7 +324,7 @@ def scan_default_masking(pkg: str) -> tuple[list[str], int]:
 
     判据必须显式区分「没有这个字段」与「有字段且值为假」，否则 V0 就形同虚设。
     ★ 扫描范围是**整个 predicates 包，零豁免名单**（§8①）：包里没有「特殊文件」，
-      `registry.py` 也不是例外 —— 它原先的 `_BY_TASK.get(task, [])` 已改写成显式分支。
+      `predicates/registry.py` 也不是例外 —— 它原先的 `_BY_TASK.get(task, [])` 已改写成显式分支。
 
     ★ 评审 I-1（静默空扫）：`Path.rglob` 对**不存在的目录**不报错、直接返回空迭代器 ⇒
       只要 `schema_gate.py` 挪一层目录、或包被改名，判据 `7b` 就会以「0 命中」的形态假装真绿。

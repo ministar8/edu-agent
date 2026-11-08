@@ -89,7 +89,7 @@ def memory_write_missing(
       `memory.safe` 只打一行 WARNING「长期记忆写入超时（grade，>1.5s），已忽略」就丢弃写入。
       后果不是「跑失败」而是**跑出错的东西**：画像为空 ⇒ B 段召不回 ⇒ 被记成 Memory 产品失败
       （我们当天刚把这类现象归因给 #22 的 KP 阈值）。⇒ 这种样本不进 Memory 分母。
-    ★ 与 `MIN_HITS` 无关：这里看的是**原始 episode 是否落库**，不是画像有没有值。
+    ★ 与 `settings.MEMORY_WEAK_MIN_HITS` 无关：这里看的是**原始 episode 是否落库**，不是画像有没有值。
     ★★ 两条边界（2026-10-08 review C1/I2/I3，都是当初真踩的）：
       ① **本函数不指认原因。** 「没落库」既可能是环境（TEI 挂），也可能是产品
          （缺陷 C：工具拿不到 config ⇒ `record_grade` 被静默跳过 —— 本仓真实发生过）。

@@ -47,7 +47,7 @@ async def retrieve_for_task(
 ) -> EvidenceBundle:
     """产品路径：策略解析 → 检索 → 层排序 → 安全裁剪。
 
-    异常**不在这里吞**：调用方（`agents/tools.py`）负责把异常映射成
+    异常**不在这里吞**：调用方（`agents/runtime/tools.py`）负责把异常映射成
     `status=error` 的对外载荷，并区分 `unavailable` / `internal`。
     """
     policy = resolve_task_policy(

@@ -179,7 +179,7 @@ def fuse_evidence(
 
     - `kg_evidences` / `agent_evidences`：`retriever.aretrieve_evidence` 从不传值，
       且 KG 本体早已下线（原 `KGEvidence` 的 docstring 自己写着「KG 已移除」）；
-    - `student_profile`：三个调用方（`agents/tools.py`、`evaluation/ragas/adapters.py`、
+    - `student_profile`：三个调用方（`agents/runtime/tools.py`、`evaluation/ragas/adapters.py`、
       `evaluation/gates/retrieval_gate/`）都没传，恒为 `""`。
 
     **移除是行为等价的**，逐项核对过：

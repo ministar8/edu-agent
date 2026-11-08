@@ -16,7 +16,7 @@ Chroma「Nothing found on disk」）、没有基线、没有退出码 —— **�
 ★ **语料边界（2026-10-13 重测 —— 旧版「索引全是 legacy、零 L1/L2/L3」自 2026-10-10 起已失效）**：
 **索引侧已经覆盖分层**：``retrieval_gate.build_index()`` 改用 ``rag.ingest_layers.build_all()``，
 按生产顺序聚合 basic(L1) → advanced(L2) → exams+exam_practice(L3) → code → learning_paths
-（``ingest_layers/__init__.py:29-59``），实测 2026 chunk，与生产库**逐位相等**
+（``src/rag/ingest_layers/__init__.py:30-62``），实测 2026 chunk，与生产库**逐位相等**
 （``chroma_db/chroma.sqlite3`` 的 ``count(embeddings)`` 同为 2026）。
 但**探针侧没跟上**：5 条 probe 的 ``expect_source`` = 4 条 L1 ``basic/``
 （``data_structure/08_search.md`` · ``operating_system/04_file.md`` ×2 ·

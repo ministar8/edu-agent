@@ -13,7 +13,7 @@
 
 段数不足时以「最细的一级」充当第 3 段，保证调用方总能拿到追踪粒度。
 
-字段名与格式的约定见 ``rag/_metadata_spec.py``；消费方是 ``rag/evidence.py``。
+字段名与格式的约定见 ``infra/_metadata_spec.py``；消费方是 ``rag/retrieval/evidence.py``。
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _parse_heading_path(heading_path: str) -> tuple[str, str, str]:
     """解析 ``section.path`` → ``(第 1 段, 第 2 段, 第 3 段)``，缺失的层级返回空串。
 
     ``section.path`` 由 ``splitter._build_heading_context`` 产出，**格式带外层方括号、
-    且不含学科前缀**（见 ``rag/_metadata_spec.py`` 中 ``section.path`` 的定义）：
+    且不含学科前缀**（见 ``infra/_metadata_spec.py`` 中 ``section.path`` 的定义）：
 
         "[绪论 > 2.数据结构三要素 > 四种存储结构对比]"
             → ("绪论", "2.数据结构三要素", "四种存储结构对比")
@@ -125,10 +125,10 @@ def tag_chunks_with_knowledge_points(
     Returns:
         原地修改 chunks 的 metadata，返回同一列表
 
-    写入的字段见 ``rag/_metadata_spec.py``：``knowledge_points`` / ``difficulty`` /
+    写入的字段见 ``infra/_metadata_spec.py``：``knowledge_points`` / ``difficulty`` /
     ``difficulty_source``。
 
-    ★ 字段名必须是 ``knowledge_points`` —— ``rag/evidence.py`` 正是按这个名字读的
+    ★ 字段名必须是 ``knowledge_points`` —— ``rag/retrieval/evidence.py`` 正是按这个名字读的
     （``meta.get("knowledge_points")``）。此前这里写的是 ``knowledge_point_names``，
     **无任何消费方**，导致 ``EvidenceDoc.knowledge_points`` 恒为空、标注结果从未进入
     检索链（2026-09-24 修复）。改名后**需重新入库**，既有索引才会带上该字段。

@@ -57,10 +57,9 @@ MEMORY_CARD_MESSAGE_ID = "edu_memory_card"
 #   ① **有界**：`deque(maxlen=...)` —— 取证单元的 reset 只有两个边界（`retrieval_gate`、
 #      `task_eval.runner.run_case`），**产品侧**（service / CLI 真用户会话）没人调 reset
 #      ⇒ 原来的 `list` 会在长跑进程里无界增长（每轮一条，永不回收）。
-#      容量取 `_MEMORY_READ_STATUS_CAPACITY = 64`：实测一个取证单元最多 **3** 条
-#      （`evals/datasets/demo` 全部 66 条 case 的 `len(all_turns)` 上限 = 3，
-#      一条 memory case = 2 段会话 / 3 轮 ⇒ `load_memory` 每轮各调一次），
-#      64 = 该上限的 20 倍以上余量，够覆盖 supervisor 重入 / 重试的最坏情况，
+#      容量取 `_MEMORY_READ_STATUS_CAPACITY = 64`：一个取证单元通常约 **3** 条
+#      （一条 memory case 为 2 段会话 / 3 轮 ⇒ `load_memory` 每轮各调一次），
+#      64 = 该量级的 20 倍以上余量，够覆盖 supervisor 重入 / 重试的最坏情况，
 #      又把「一个进程最多攒多少条」钉成常数（≈64 个短字符串，可忽略的驻留）。
 #      ★ 满容量时 `deque` 丢**最旧**一条 ⇒ 写入口在满时先打 ERROR（丢证据必须是**可见**事件）。
 #   ② **取值有界**：只有四态字符串能进这条通道（`""` 只是**读取侧**的「未记录」默认值，

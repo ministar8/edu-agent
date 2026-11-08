@@ -8,7 +8,7 @@
   那边 → **计算预算**（RetrievalStrategy/depth 的 k、skip_*）。不要混称「Plan」。
 ★ 三层勿混（`docs/RETRIEVAL_POLICY.md` §3.2）：安全/披露（TaskPolicy）·
   计算预算（RetrievalDepth）· 部署开关（settings）。边界由
-  `tests/test_policy_layers.py` 锁定：本模块不接收、TaskPolicy 也不携带 depth/k/use_rerank。
+  `tests/test_rag/test_policy_layers.py` 锁定：本模块不接收、TaskPolicy 也不携带 depth/k/use_rerank。
 """
 
 from __future__ import annotations
@@ -221,7 +221,7 @@ def resolve_task_policy(
     """入口：显式 task_mode 优先，否则按 §4.0 优先级分类。
 
     ★ 不接收 depth / k / use_rerank —— 算力预算是 `RetrievalDepth` 的职责，
-      策略解析不得顺手改写它（边界由 `tests/test_policy_layers.py` 锁定）。
+      策略解析不得顺手改写它（边界由 `tests/test_rag/test_policy_layers.py` 锁定）。
     """
     mode = task_mode or classify_task_mode(
         query, context_mode=context_mode, agent_prior=agent_prior

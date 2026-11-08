@@ -442,7 +442,7 @@ async def _amulti_route_search(
     #   原判据「reset 有三个调用点」的第三点（本函数每轮开头清空）已**撤销**，理由是它
     #   **净降低**故障检测能力：`reset` 只允许在**独立取证单元的边界**（`retrieval_gate`
     #   每条 query 前、`task_eval.runner.run_case` 每次探针前）；单元**内部**的清空会
-    #   销毁本单元尚未被消费的失败证据 —— 一条 query 在 `rag/pipeline.py` 会跑**多轮**
+    #   销毁本单元尚未被消费的失败证据 —— 一条 query 在 `rag/retrieval/pipeline/` 会跑**多轮**
     #   （HyDE 恰在第一轮空/差之后才跑），后一轮的 reset 会把前一轮路由记下的失败抹掉，
     #   于是 `run_case` 读到时是 `[]`（实测：注入 BM25 全线故障 ⇒ 读取时失败记录为空）。
     #   失败证据必须**活到被消费之后**才清。回归锁见 `scripts/gates/evidence_chain_gate.py` 的 `8k`。

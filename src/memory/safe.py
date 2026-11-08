@@ -27,7 +27,7 @@ async def safe_remember[T](
 
     ★ 写侧继续用本函数（状态无消费者）；**读侧**要用 `safe_remember_status` ——
       这里返回的 `None` 把「超时/异常」和「读到空值」压成同一个值，
-      正是 B4 要消除的折叠（`teaching_graph.py` 曾在此 `or ""`，于是一次 Store 超时
+      正是 B4 要消除的折叠（`agents/orchestration/teaching_graph.py` 曾在此 `or ""`，于是一次 Store 超时
       与「画像确实是空的」在下游不可区分，而后者是真缺陷、前者是 `missing_premise`）。
     """
     value, _status = await safe_remember_status(factory, label=label)

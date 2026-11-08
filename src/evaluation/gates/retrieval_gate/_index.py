@@ -110,7 +110,7 @@ def build_index(categories: list[str] | None = None) -> dict[str, int]:
     """用**生产同源**的 ``rag.ingest_layers.build_all()`` 把知识库索引进当前（临时）向量库。
 
     覆盖 L1(basic) / L2(advanced) / L3(exams 年 + 章节例题) / code / learning_paths。
-    ★ 2026-10-10 起改为调用 ``scripts/ingest_*.py`` **同源**的构建逻辑 ⇒ chunk 数**与生产
+    ★ 2026-10-10 起改为调用 ``scripts/ingest/ingest_*.py`` **同源**的构建逻辑 ⇒ chunk 数**与生产
     逐位相等**（此前走通用 ``load → clean → split`` 链路、chunk 数与生产不等，见
     ``docs/ARCHITECTURE_RETRIEVAL.md`` §6.3）。
     """

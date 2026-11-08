@@ -13,7 +13,7 @@ from evaluation.task_eval.predicates.registry import Predicate, register
 
 # ★ 修复轮 F6：`not_applicable` **只**留给「样本本身不适用」——即 gold 不是可机械判定的
 #   memory 样本。判定用**既有谓词** `Gold.memory_mechanizable()`（= `ExpectedMemory.is_valid()`
-#   ∧ `ExpectedAnswerProperty.is_valid()`，`cases.py:117/146/278`），**不**用字段真值猜。
+#   ∧ `ExpectedAnswerProperty.is_valid()`，`cases.py:158/187`），**不**用字段真值猜。
 #   旧写法 `... if rec.get("memory_read_status") in ("failed","not_attempted","") else
 #   "not_applicable"` 把「**键不存在**」（老归档从没写过这个字段，`get` 返回 `None`）
 #   划进了 `else` ⇒ 「没有这个证据」被说成「这个样本不适用」，与同包

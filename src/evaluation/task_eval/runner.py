@@ -204,8 +204,8 @@ def _write_retrieval_metrics(record: CaseRecord, case: TaskCase, top: list[Retri
     ⇒ 归档里 Generate 那 **8 条 N/A** 曾有两条候选解释，都**不能定论**（记录没存
       `evidence_id` ⇒ 分不清某块走的是哪条路径）：
         ① 旧说「当时索引未打完标签」—— 现索引下裸向量重查 15/15 的 top-5 均带 KP；
-        ② 新说 **#27**：`rag/layer_recall.py` 的 top-up 路径把 `knowledge_points`
-           **写死成 `[]`**（主路径 `rag/evidence.py` 是用解析器读的）⇒ 某题 top-5
+        ② 新说 **#27**：`rag/retrieval/layer_recall.py` 的 top-up 路径把 `knowledge_points`
+           **写死成 `[]`**（主路径 `rag/retrieval/evidence.py` 是用解析器读的）⇒ 某题 top-5
            若全走 top-up，`_all_kp(top)` 就是空 ⇒ 判 N/A，与索引有没有标签无关。
       ② 有按构造的实证，且能解释 Step 9 探针归档里 13 条「索引明明有标、`kp` 却为空」
       的 method 块 ⇒ 比 ① 更可能。处置见 `docs/EXPERIMENTS.md` §20.5 #27 / D12。

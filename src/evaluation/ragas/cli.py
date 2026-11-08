@@ -92,7 +92,7 @@ def _preflight(cfg: EvaluationConfig) -> list[tuple[bool, str]]:
     而 `EvaluationConfig.use_rerank` 默认 `True`。两者不一致时，
     `reranker.rerank()` 会在 `if not settings.RERANK_ENABLED: return documents[:top_k]`
     处**提前返回原序**（一行重排都没跑），于是报告会把「未重排」标成「已重排」。
-    ★ 2026-09-24：该「谎报」缺陷已在 `retriever.py` 侧修复（`_stage_rerank` 现在
+    ★ 2026-09-24：该「谎报」缺陷已在 `rag/retrieval/retriever.py` 侧修复（`_stage_rerank` 现在
     返回真实的 `rerank_used`，关闭时整段短路）。此处保留**显式声明开关** +
     **真实推理探活**，作为口径自描述的双保险 —— 不依赖下游字段语义不变。
     这类「没报错但口径变了」最难排查，所以探活不看 /health，不通就**退出码 2**。

@@ -148,7 +148,7 @@ def _derive_rerank_status(docs: list, *, active: bool, raised: bool, empty_resul
     """重排阶段状态的**唯一真源**（tier-0 枚举：off / success / degraded / failed）。
 
     ★ 判「有没有 `rerank_score` 这个**键**」而不是「分数是否 > 0」：
-      `reranker.py:246` 有合法写 `0.0` 的补齐路径，用真值会把假重排 `on` 路由的自报值
+      `reranker.py:200` 有合法写 `0.0` 的补齐路径，用真值会把假重排 `on` 路由的自报值
       误翻成 False —— 等于借修诚实度偷偷换基线。
     ★ 先挡空 docs 再 `all(...)`：Python 的 `all([])` 是 True，不先守卫就会把
       `docs=[]` 判成 success（四态判据不能依赖「调用方保证 docs 非空」这种口头前提）。

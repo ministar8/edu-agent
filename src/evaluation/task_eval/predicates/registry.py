@@ -26,7 +26,7 @@ class Predicate:
     fn: Callable[[Any], Verdict]
     falsifier: str
     optional: bool = False
-    # ★ tier 不许裸写（Task 7 Step 4b，与 ledger 行侧的 `LITERAL_TIER_REASONS` 同一道锁）：
+    # ★ tier 不许裸写（Task 7 Step 4b，与 ledger 行侧共用同一份白名单）：
     #   每个锚点都要能在 `claims.TIER_ANCHORS`（唯一一份白名单）里查到实名。
     #   `tier == 0` 同样要带 —— 白拿的 0 和手滑的 2 是同一种病。
     #   两个 optional 机械替身用债标记 `TIER-DEBT-task3`（登记待偿，不是「已证明为 tier 2」）。

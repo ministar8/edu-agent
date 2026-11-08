@@ -83,7 +83,7 @@ def golden_sha256(path: str | Path | None = None) -> str:
         return "missing"
 
 
-# ★ 全部是 settings.py 里**真实存在**的字段名（`RERANK_MODE` 不存在，别写进白名单 ——
+# ★ 全部是 core/settings.py 里**真实存在**的字段名（`RERANK_MODE` 不存在，别写进白名单 ——
 #   白名单里一个不存在的键会静默变成 None，config_hash 就永远测不出它变了）。
 CONFIG_KEYS: tuple[str, ...] = (
     "DEFAULT_MODEL",

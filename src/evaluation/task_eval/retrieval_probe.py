@@ -2,7 +2,7 @@
 
 为什么单独一个模块、而不是从 agent 的 tool payload 取
 ----------------------------------------------------
-`agents/tools.py` 下发的 `EvidenceDoc` 只暴露
+`agents/runtime/tools.py` 下发的 `EvidenceDoc` 只暴露
 `source / section_path / chunk_id / score / knowledge_points / excerpt`
 —— **不含 `kb_depth` / `doc_role` / `category`**（见 `schema/evidence.py`）。
 而 Phase 0 要判「真题有没有进包」（`exam_hit@5`）与「学科对不对」（`category_hit`），
@@ -85,7 +85,7 @@ def _to_item(ev: TextEvidence) -> RetrievedItem:
     #   `knowledge_points` 写死成 `[]`，而同一份 metadata 里就带着 JSON 字符串 ⇒
     #   只看 `ev.knowledge_points` 会把「索引有标签、经这条路进来」的证据当成没标，
     #   `kp_hit` / `kp_mrr` / Generate 的 `coverage` 因此**系统性低估**。
-    #   ⇒ 评测侧从 metadata 兜底解析。产品契约（`agents/tools.py` 给 agent 的那份）
+    #   ⇒ 评测侧从 metadata 兜底解析。产品契约（`agents/runtime/tools.py` 给 agent 的那份）
     #     **不改** —— 那条路的 KP 仍然缺失，属已披露的产品侧偏差（见 §20.5 #27）。
     kps = list(ev.knowledge_points or [])
     if not kps:

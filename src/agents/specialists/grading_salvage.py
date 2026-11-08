@@ -143,7 +143,7 @@ def _try_kv_dict(text: str) -> dict | None:
     return _parse_kv_fields(fields)
 
 
-# ③ 字段分类（协议与 `GradingResult` 对齐；由 `tests/test_grading_salvage.py`
+# ③ 字段分类（协议与 `GradingResult` 对齐；由 `tests/test_agents/test_grading_salvage.py`
 #    断言**覆盖 schema 全部字段** —— 原注释声称的 gate `⑨g` 在全仓并不存在）
 _KV_SCALAR_FIELDS = frozenset({"score", "feedback", "is_wrong", "error_analysis"})
 _KV_LIST_FIELDS = frozenset({"knowledge_points"})

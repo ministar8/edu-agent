@@ -81,7 +81,7 @@ async def retrieve_contexts(
 
     ⚠️ 这里**不返回 `fused.final_context`**，这是刻意的口径选择：
 
-    `final_context` 在 `rag/fusion.py` 里是
+    `final_context` 在 `rag/retrieval/fusion.py` 里是
     ``"\\n\\n".join(parts)``，而 `parts` 就是各条 evidence 的格式化文本。
     若把它与各条 evidence
     **一起**作为 contexts 交给 RAGAS，指标会因「拼接体 vs 成员」的
