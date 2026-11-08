@@ -1,0 +1,89 @@
+{
+  "_meta": {
+    "note": "由 evaluation.gates.retrieval_gate 生成；改动检索链后请用 --update-baseline 重录并在 PR 说明原因",
+    "embedding_mode": "fake",
+    "embedding": "USE_FAKE_EMBEDDING (deterministic hashing)",
+    "rerank_mode": "disabled",
+    "rerank_backend": "fake",
+    "kp_granularity": "chapter(file)",
+    "route_contributions": {
+      "operating_system:focus": 141,
+      "operating_system:keyword_bm25": 136,
+      "operating_system:semantic": 148,
+      "computer_organization:keyword_bm25": 169,
+      "computer_organization:semantic": 181,
+      "code_os:focus": 21,
+      "code_os:keyword_bm25": 21,
+      "code_os:semantic": 21,
+      "operating_system:expanded": 63,
+      "data_structure:focus": 187,
+      "data_structure:keyword_bm25": 184,
+      "data_structure:semantic": 193,
+      "data_structure:expanded": 111,
+      "computer_network:expanded": 139,
+      "computer_network:focus": 207,
+      "computer_network:keyword_bm25": 191,
+      "computer_network:semantic": 207,
+      "computer_organization:expanded": 79,
+      "computer_organization:focus": 175,
+      "exams:exercise_meta": 3,
+      "exams:expanded": 33,
+      "exams:semantic": 47,
+      "exams:focus": 44,
+      "exams:keyword_bm25": 46,
+      "data_structure:exercise_meta": 6,
+      "operating_system:exercise_meta": 11,
+      "computer_network:answer_meta": 7,
+      "computer_organization:answer_meta": 8,
+      "code_ds:focus": 12,
+      "code_ds:keyword_bm25": 12,
+      "code_ds:semantic": 12,
+      "learning_paths:code_meta": 1,
+      "learning_paths:focus": 5,
+      "learning_paths:keyword_bm25": 5,
+      "learning_paths:semantic": 5,
+      "learning_paths:section_meta": 4
+    },
+    "k": 5,
+    "golden_path": "evals/datasets/golden/sample_408.jsonl",
+    "indexed_chunks": 2026,
+    "recorded_at": "2026-10-14",
+    "rerank_status_counts": {
+      "off": 156
+    }
+  },
+  "metrics": {
+    "n_queries": 156,
+    "category_hit_at_1": 0.8782,
+    "category_hit_at_k": 0.9679,
+    "category_mrr": 0.9145,
+    "category_precision": 0.9092,
+    "empty_result_rate": 0.0,
+    "mean_evidence_count": 5.2949,
+    "kp_hit_at_k": 0.9423,
+    "kp_mrr": 0.8001,
+    "kp_annotated": 156.0
+  },
+  "recorded_at": "2026-10-14T12:17:15.863533+00:00",
+  "provenance": {
+    "recorded_at": "2026-10-14T12:17:15.863533+00:00",
+    "code_version": "d54d3de-dirty",
+    "golden_sha256": "783e78ff747e07c47985f1ab43442e5dfae0e752c61714fb18f73a62a1eae305",
+    "script": "src/evaluation/gates/retrieval_gate/_baseline.py",
+    "argv": [
+      "--update-baseline"
+    ],
+    "model_refs": {
+      "agent": "fake:fake",
+      "rag_chain": "fake:fake",
+      "judge": "dashscope:qwen3.8-flash"
+    },
+    "sampling": {
+      "temp_precise": 0.0,
+      "temp_creative": 0.3,
+      "temp_default": 0.3
+    },
+    "experiment_config_hash": "9e44b0267601",
+    "dependency_lock_hash": "881607c7955b"
+  }
+}

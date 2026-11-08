@@ -25,7 +25,15 @@
 - `probe_baseline.json` — `probe_gate` 小节级探针基线
 - `retrieval_baseline.json` — `retrieval_gate` 默认路由基线
 
-_constants.py 中还定义了 5 条组合基线路径（`_rerank`、`_real_embed`、`_fake_disabled`、`_real_disabled`、`_real_rerank`），对应文件未随非核心评测一起归档，列为已知问题。缺失时门禁不会崩溃：`load_baseline` 返回 `None`，运行结束打印提示、**跳过退化比对并返回退出码 0** —— 该组合此刻等于未受回归保护，需要时用 `--update-baseline` 重录。
+下列 5 条组合基线已补全（`_constants.py` 中对应路径均有文件）：
+
+- `retrieval_baseline_rerank.json` — fake embedding + rerank on
+- `retrieval_baseline_real_embed.json` — real embedding + rerank off
+- `retrieval_baseline_fake_disabled.json` — fake embedding + rerank disabled
+- `retrieval_baseline_real_disabled.json` — real embedding + rerank disabled
+- `retrieval_baseline_real_rerank.json` — real embedding + rerank on
+
+缺失时门禁不会崩溃：`load_baseline` 返回 `None`，运行结束打印提示、**跳过退化比对并返回退出码 0** —— 该组合此刻等于未受回归保护，需要时用 `--update-baseline` 重录。
 
 ### experiments / configs / results / reports
 
